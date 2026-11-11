@@ -34,8 +34,8 @@ describe("learner responsive shell rules", () => {
     expect(css).toMatch(/\.app-learner-page\.home-page\s+\.home-context\s*>\s*\.card\s*\+\s*\.card\s*\{[^}]*margin-top:\s*4px/s);
   });
 
-  it("uses the same accent color on both sides of the active lesson card", () => {
-    expect(css).toMatch(/\.home-page\s+\.home-primary-lesson\s*\{[^}]*border-right:\s*4px\s+solid\s+var\(--secondary\)/s);
+  it("keeps the active lesson card free of side accent borders", () => {
+    expect(css).not.toMatch(/\.home-page\s+\.home-primary-lesson\s*\{[^}]*border-(?:left|right)\s*:/s);
   });
 
   it("stacks the profile assessment score before its skill progress rows on narrow screens", () => {
@@ -73,9 +73,8 @@ describe("learner responsive shell rules", () => {
 
   it("keeps profile label/value rows readable on narrow screens", () => {
     expect(css).toMatch(/\.profile-page\s+\.profile-details\s*\{[^}]*gap:\s*8px/s);
-    expect(css).toMatch(/\.profile-page\s+\.profile-detail-row\s*\{[^}]*gap:\s*10px[^}]*line-height:\s*1\.4/s);
-    expect(css).toMatch(/\.profile-page\s+\.profile-detail-label\s*\{[^}]*flex:\s*0\s+0\s+120px[^}]*min-width:\s*0\s*!important/s);
-    expect(css).toMatch(/\.profile-page\s+\.profile-detail-value\s*\{[^}]*min-width:\s*0[^}]*overflow-wrap:\s*anywhere/s);
+    expect(css).toMatch(/\.profile-page\s+\.profile-detail-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, \.8fr\) minmax\(0, 1\.2fr\)[^}]*line-height:\s*1\.4/s);
+    expect(css).toMatch(/\.profile-detail-label,\s*\.profile-page\s+\.profile-detail-value\s*\{[^}]*min-width:\s*0[^}]*overflow-wrap:\s*anywhere/s);
   });
 
   it("keeps learner buttons and icons from collapsing or overflowing their primitives", () => {

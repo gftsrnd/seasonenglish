@@ -1826,3 +1826,51 @@ export const assessmentGradingOutputJsonSchema = {
     rationale: { type: "string" }, monthlyGoal: { type: "string" }
   }
 } satisfies Record<string, unknown>;
+
+export const productiveAssessmentGradingInputSchema = z.object({
+  kind: z.enum(["final", "pass-course"]),
+  writing: z.array(z.object({ taskKey: z.string(), prompt: z.string(), answer: z.string() })).min(1),
+  speaking: z.array(z.object({ taskKey: z.string(), prompt: z.string(), answer: z.string(), evidenceType: z.string() })).min(1),
+  rubric: z.array(z.object({
+    code: z.string(),
+    skill: z.enum(["writing", "speaking"]),
+    maxScore: z.number().positive().max(25),
+    description: z.string(),
+    manualOnly: z.boolean()
+  })).min(1),
+  gradingContext: z.string()
+});
+export const productiveAssessmentGradingOutputSchema = z.object({
+  componentScores: z.array(z.object({ code: z.string(), score: z.number().min(0).max(25) })),
+  rationale: z.string().trim().min(1).max(2_000)
+});
+export const productiveAssessmentGradingOutputJsonSchema = {
+  type: "object", additionalProperties: false, required: ["componentScores", "rationale"],
+  properties: {
+    componentScores: { type: "array", items: { type: "object", additionalProperties: false, required: ["code", "score"], properties: { code: { type: "string" }, score: { type: "number", minimum: 0, maximum: 25 } } } },
+    rationale: { type: "string", minLength: 1, maxLength: 2_000 }
+  }
+} satisfies Record<string, unknown>;
+
+export function validateProductiveAssessmentGrading(
+  output: z.infer<typeof productiveAssessmentGradingOutputSchema>,
+  input: z.infer<typeof productiveAssessmentGradingInputSchema>
+) {
+  const issues: Array<{ path: string; message: string }> = [];
+  const expected = new Map(input.rubric.filter(item => !item.manualOnly).map(item => [item.code, item]));
+  const seen = new Set<string>();
+  for (const [index, { code, score }] of output.componentScores.entries()) {
+    const criterion = expected.get(code);
+    const writing = criterion?.skill === "writing"
+      ? input.writing.find(task => task.taskKey === code || (input.kind === "final" && task.taskKey === "W"))
+      : undefined;
+    if (!criterion || seen.has(code) || score > criterion.maxScore || (criterion.skill === "writing" && !writing?.answer.trim() && score > 0)) {
+      issues.push({ path: `componentScores.${index}`, message: `Invalid, repeated or above-maximum score for ${code}.` });
+    }
+    seen.add(code);
+  }
+  for (const code of expected.keys()) {
+    if (!seen.has(code)) issues.push({ path: "componentScores", message: `Missing score for ${code}.` });
+  }
+  return issues;
+}

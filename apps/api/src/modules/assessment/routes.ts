@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   AssessmentDeletionRequestView,
   AssessmentAttemptView,
@@ -19,8 +20,7 @@ import type {
   AssessmentSectionCode,
   AssessmentSectionStatus,
   AssessmentView,
-  CefrLevel,
-  ManualAssessmentScoreInput
+  CefrLevel
 } from "@e4s/contracts";
 import { assessmentGradingOutputSchema, levelFormOutputSchema, type AiTaskRunner, type LevelFormTaskOutput } from "@e4s/ai";
 import {
@@ -43,6 +43,7 @@ import type { EdgeTtsRunner } from "./edge-tts.js";
 import { registerMonthlyFinalRoutes } from "./monthly-final-routes.js";
 import { createRoleGuard } from "../identity/policy.js";
 import { monthlyExamEligibility } from "../learning/routes.js";
+import { gradeProductiveAssessment } from "./productive-grading.js";
 
 const kindParam = z.object({ kind: z.enum(["placement", "levelup", "level-up", "monthly", "final", "pass-course", "passcourse"]) });
 const formPreviewKindParam = z.object({ kind: z.enum(["placement", "level_up", "final", "pass_course"]) });
@@ -99,7 +100,7 @@ const manualScoreInput = z.object({
       grammar: writingManualScoreValue,
       workplaceRegister: writingManualScoreValue
     }).strict()
-  }).strict()).length(2),
+  }).strict()).max(10),
   speakingTasks: z.array(z.object({
     taskKey: z.string().trim().min(1).max(80),
     evidenceType: z.enum(["audio", "transcript", "typed_proxy", "technical_failure", "skipped"]),
@@ -109,18 +110,23 @@ const manualScoreInput = z.object({
       coherenceClarity: speakingManualScoreValue,
       interactionProfessionalRegister: speakingManualScoreValue
     }).strict().nullable()
-  }).strict()).length(4),
+  }).strict()).max(10),
+  rubricScores: z.array(z.object({ code: z.string().trim().min(1).max(80), score: z.number().min(0).max(25) }).strict()).min(1).max(50).optional(),
   comment: z.string().trim().max(5_000)
 }).superRefine((value, context) => {
+  if (value.rubricScores) {
+    if (value.writingTasks.length || value.speakingTasks.length) context.addIssue({ code: "custom", path: ["rubricScores"], message: "Send only one scoring format" });
+    return;
+  }
   const writingKeys = new Set(value.writingTasks.map((task) => task.taskKey));
   const speakingKeys = new Set(value.speakingTasks.map((task) => task.taskKey));
-  if (writingKeys.size !== 2 || !writingKeys.has("W1") || !writingKeys.has("W2")) context.addIssue({ code: "custom", path: ["writingTasks"], message: "Writing tasks must be W1 and W2" });
-  if (speakingKeys.size !== 4 || ["S1", "S2", "S3", "S4"].some((key) => !speakingKeys.has(key))) context.addIssue({ code: "custom", path: ["speakingTasks"], message: "Speaking tasks must be S1 through S4" });
+  if (value.writingTasks.length !== 2 || writingKeys.size !== 2 || !writingKeys.has("W1") || !writingKeys.has("W2")) context.addIssue({ code: "custom", path: ["writingTasks"], message: "Writing tasks must be W1 and W2" });
+  if (value.speakingTasks.length !== 4 || speakingKeys.size !== 4 || ["S1", "S2", "S3", "S4"].some((key) => !speakingKeys.has(key))) context.addIssue({ code: "custom", path: ["speakingTasks"], message: "Speaking tasks must be S1 through S4" });
   value.speakingTasks.forEach((task, index) => {
     if (task.evidenceType === "technical_failure" && task.criteria !== null) context.addIssue({ code: "custom", path: ["speakingTasks", index, "criteria"], message: "Technical failures cannot be scored" });
     if (task.evidenceType !== "technical_failure" && task.evidenceType !== "skipped" && task.criteria === null) context.addIssue({ code: "custom", path: ["speakingTasks", index, "criteria"], message: "Speaking evidence requires criteria" });
   });
-}) satisfies z.ZodType<ManualAssessmentScoreInput>;
+});
 const violationInput = z.object({
   requestId: z.string().trim().min(1).max(160),
   reason: z.enum(["visibility_hidden", "window_blur", "context_menu", "copy", "paste", "new_window", "logout"]),
@@ -344,7 +350,10 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const saved = await repositories.assessments.saveManualAssessmentScore({
       actorId: request.e4sSession!.user.id,
       attemptId: params.data.attemptId,
-      ...body.data
+      writingTasks: body.data.writingTasks,
+      speakingTasks: body.data.speakingTasks,
+      comment: body.data.comment,
+      ...(body.data.rubricScores ? { rubricScores: body.data.rubricScores } : {})
     });
     if (!saved) return reply.code(409).send({ code: "ASSESSMENT_MANUAL_SCORE_NOT_ALLOWED" });
     const view = await repositories.assessments.getReviewAttempt(request.e4sSession!.user.id, params.data.attemptId);
@@ -390,14 +399,8 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       return reply.code(409).send({ code: "ASSESSMENT_PRODUCTIVE_SECTIONS_MISSING" });
     }
     try {
-      const result = await runner.runTask("assessment_scoring", assessmentGradingInput(context.definition, context.attempt), { systemPrompt: task.prompt });
-      const parsed = assessmentGradingOutputSchema.safeParse(result.output);
-      if (!parsed.success) return failScoring("AI_OUTPUT_INVALID");
-      const output = {
-        ...parsed.data,
-        writingScore: Math.min(writing.maxScore, parsed.data.writingScore),
-        speakingScore: Math.min(speaking.maxScore, parsed.data.speakingScore)
-      };
+      const { output, metadata } = await gradeAssessment(runner, context.definition, context.attempt, task.prompt, artifactKey =>
+        assessmentAudioTranscript(repositories.files, actorId, context.attempt, artifactKey));
       const saved = await repositories.assessments.saveAssessmentRescore({
         actorId,
         attemptId: params.data.attemptId,
@@ -407,12 +410,12 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
         promptVersionId: task.promptVersionId,
         output,
         metadata: {
-          traceId: result.metadata.traceId,
-          provider: result.metadata.provider,
-          model: result.metadata.model,
-          inputHash: result.metadata.inputHash,
-          usage: result.metadata.usage,
-          latencyMs: result.metadata.latencyMs
+          traceId: metadata.traceId,
+          provider: metadata.provider,
+          model: metadata.model,
+          inputHash: metadata.inputHash,
+          usage: metadata.usage,
+          latencyMs: metadata.latencyMs
         }
       });
       if (saved === null) {
@@ -915,11 +918,58 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     return updated ? assessmentView(definition, updated) : reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_EDITABLE" });
   });
 
+  const scoringWorkerId = `assessment-api:${randomUUID()}`;
+  let scoringWork: Promise<void> | undefined;
+  let scoringTimer: ReturnType<typeof setInterval> | undefined;
+  function processQueuedAssessment() {
+    if (scoringWork) return;
+    scoringWork = (async () => {
+      const job = await repositories.jobs.leaseNext(scoringWorkerId, 600, ["assessment.ai-score-auto"]);
+      if (!job) return;
+      try {
+        const { learnerId, attemptId } = z.object({ learnerId: z.uuid(), attemptId: z.uuid() }).parse(job.payload);
+        const attempt = await repositories.assessments.findAttempt(learnerId, attemptId);
+        if (attempt?.status === "pending_review") {
+          const definition = await definitionForAttempt(repositories.assessments, attempt);
+          const runner = await runnerFor(learnerId);
+          if (!runner) throw Object.assign(new Error("AI is unavailable"), { code: "AI_UNAVAILABLE" });
+          const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "assessment_scoring");
+          if (!task) throw Object.assign(new Error("Missing assessment prompt"), { code: "AI_PROMPT_NOT_READY" });
+          if (!definition || !sectionByCode(definition.blueprint, "writing") || !sectionByCode(definition.blueprint, "speaking")) {
+            throw Object.assign(new Error("Missing productive sections"), { code: "ASSESSMENT_PRODUCTIVE_SECTIONS_MISSING" });
+          }
+          if (!await repositories.aiRuns.requestExists(learnerId, attemptId, "assessment_scoring")) {
+            const { output, metadata } = await gradeAssessment(runner, definition.blueprint, attempt, task.prompt, artifactKey =>
+              assessmentAudioTranscript(repositories.files, learnerId, attempt, artifactKey));
+            await repositories.assessments.saveAssessmentRescore({
+              actorId: learnerId, automatic: true, attemptId, requestId: attemptId, aiRequestKey: attemptId,
+              taskId: task.taskId, promptVersionId: task.promptVersionId, output, metadata
+            });
+          }
+        }
+        await repositories.jobs.markSucceeded(job.id, scoringWorkerId);
+      } catch (error) {
+        const code = assessmentErrorCode(error, "ASSESSMENT_SCORING_FAILED");
+        await repositories.jobs.markFailed(job.id, scoringWorkerId, code, false);
+        app.log.warn({ jobId: job.id, code }, "Assessment AI grading failed; review remains pending");
+      }
+    })().catch((error) => {
+      app.log.error({ code: assessmentErrorCode(error, "ASSESSMENT_SCORING_QUEUE_FAILED") }, "Could not process assessment queue");
+    }).finally(() => { scoringWork = undefined; });
+  }
+  app.addHook("onReady", async () => {
+    scoringTimer = setInterval(processQueuedAssessment, 1_000);
+    scoringTimer.unref();
+  });
+  app.addHook("onClose", async () => {
+    clearInterval(scoringTimer);
+    await scoringWork;
+  });
+
   app.post("/api/v1/assessment-attempts/:attemptId/submit", { preHandler: learnerOnly }, async (request, reply) => {
     const params = attemptParam.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_ATTEMPT" });
     const learnerId = request.e4sSession!.user.id;
-    const runner = await runnerFor(learnerId);
     let attempt = await repositories.assessments.findAttempt(learnerId, params.data.attemptId);
     if (!attempt) {
       return reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_SUBMITTABLE" });
@@ -937,40 +987,13 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     }
 
     await ensureObjectiveSectionScores(repositories.assessments, learnerId, definition, attempt);
-    const initialScoring = await repositories.assessments.beginAssessmentAiScoring(learnerId, attempt.id, attempt.id);
-    if (!runner) {
-      if (initialScoring?.started) await repositories.assessments.failAssessmentAiScoring(learnerId, attempt.id, attempt.id, "AI_UNAVAILABLE");
-    } else if (await repositories.aiRuns.requestExists(learnerId, attempt.id, "assessment_scoring")) {
-      if (initialScoring?.started) await repositories.assessments.completeAssessmentAiScoring(learnerId, attempt.id, attempt.id);
-    } else if (initialScoring?.started) {
-      const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "assessment_scoring");
-      const writing = sectionByCode(definition.blueprint, "writing");
-      const speaking = sectionByCode(definition.blueprint, "speaking");
-      if (task && writing && speaking) {
-        try {
-          const result = await runner.runTask("assessment_scoring", assessmentGradingInput(definition.blueprint, attempt), { systemPrompt: task.prompt });
-          const output = assessmentGradingOutputSchema.safeParse(result.output);
-          if (output.success) {
-            await repositories.assessments.upsertSectionScore({ learnerId, attemptId: attempt.id, section: "writing", score: Math.min(writing.maxScore, output.data.writingScore), criteria: { rationale: output.data.rationale, monthlyGoal: output.data.monthlyGoal }, source: "ai" });
-            await repositories.assessments.upsertSectionScore({ learnerId, attemptId: attempt.id, section: "speaking", score: Math.min(speaking.maxScore, output.data.speakingScore), criteria: { rationale: output.data.rationale, evidencePolicy: "AI scores only supported content; it does not score pronunciation or infer fluency or real-time interaction from text-only evidence." }, source: "ai" });
-            await repositories.assessments.saveSuggestedDecision({ attemptId: attempt.id, learnerId, suggestedLevel: output.data.suggestedLevel, reason: output.data.rationale });
-            await repositories.aiRuns.recordSucceeded({ userId: learnerId, requestId: attempt.id, taskId: task.taskId, promptVersionId: task.promptVersionId, output: output.data, metadata: result.metadata });
-            await repositories.assessments.completeAssessmentAiScoring(learnerId, attempt.id, attempt.id);
-          } else {
-            await repositories.assessments.failAssessmentAiScoring(learnerId, attempt.id, attempt.id, "AI_OUTPUT_INVALID");
-          }
-        } catch (error) {
-          const code = assessmentErrorCode(error, "ASSESSMENT_SCORING_FAILED");
-          await repositories.assessments.failAssessmentAiScoring(learnerId, attempt.id, attempt.id, code);
-          request.log.warn({ error, code }, "Assessment AI grading failed; review remains pending");
-        }
-      } else {
-        const code = task ? "ASSESSMENT_PRODUCTIVE_SECTIONS_MISSING" : "AI_PROMPT_NOT_READY";
-        await repositories.assessments.failAssessmentAiScoring(learnerId, attempt.id, attempt.id, code);
-      }
+    const submitted = await repositories.assessments.submitAssessmentAttempt({
+      learnerId, attemptId: attempt.id, queueAiScoring: true
+    });
+    if (submitted) {
+      processQueuedAssessment();
+      return assessmentView(definition, submitted);
     }
-    const submitted = await repositories.assessments.submitAttempt(learnerId, attempt.id);
-    if (submitted) return assessmentView(definition, submitted);
     const raced = await repositories.assessments.findAttempt(learnerId, attempt.id);
     return raced && (raced.status === "pending_review" || raced.status === "approved")
       ? assessmentView(definition, raced)
@@ -1317,6 +1340,33 @@ async function ensureObjectiveSectionScores(
     }) || changed;
   }
   return changed;
+}
+
+async function gradeAssessment(
+  runner: AiTaskRunner, definition: StoredAssessmentDefinition, attempt: AssessmentAttemptRecord, prompt: string,
+  transcriptFor: (artifactKey: string) => Promise<string | null>
+): Promise<{
+  metadata: Awaited<ReturnType<AiTaskRunner["runTask"]>>["metadata"];
+  output: { writingScore: number; speakingScore: number | null; rationale: string; suggestedLevel?: CefrLevel; monthlyGoal?: string; writingCriteria?: Record<string, unknown>; speakingCriteria?: Record<string, unknown> };
+}> {
+  if (definition.kind === "final" || definition.kind === "pass-course") return gradeProductiveAssessment(runner, definition, attempt, transcriptFor);
+  const result = await runner.runTask("assessment_scoring", assessmentGradingInput(definition, attempt), { systemPrompt: prompt });
+  const parsed = assessmentGradingOutputSchema.safeParse(result.output);
+  if (!parsed.success) throw new Error("AI_OUTPUT_INVALID");
+  return { metadata: result.metadata, output: {
+    ...parsed.data,
+    writingScore: Math.min(sectionByCode(definition, "writing")!.maxScore, parsed.data.writingScore),
+    speakingScore: Math.min(sectionByCode(definition, "speaking")!.maxScore, parsed.data.speakingScore)
+  } };
+}
+
+async function assessmentAudioTranscript(
+  files: ReturnType<typeof createRepositories>["files"], viewerId: string, attempt: AssessmentAttemptRecord, artifactKey: string
+) {
+  const file = await files.findAssessmentAudioForViewer(viewerId, artifactKey);
+  return file?.sourceEntityId === attempt.id && file.ownerUserId === attempt.learnerId && !file.deletedAt
+    ? file.transcript
+    : null;
 }
 
 function assessmentGradingInput(definition: StoredAssessmentDefinition, attempt: AssessmentAttemptRecord) {

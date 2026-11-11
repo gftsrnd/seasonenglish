@@ -806,8 +806,9 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .profile-page .profile-completion-heading h2{margin:2px 0 0;font-size:1.15rem;line-height:1.25}
 .learner-support-page{max-width:860px}
 @media (max-width:520px) {
-  .learner-support-page .request-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
-  .learner-support-page .request-tabs > a{min-height:44px;min-width:0;padding-inline:6px}
+  .learner-support-page .request-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+  .learner-support-page .request-tabs > a{min-height:44px;min-width:0;padding-inline:2px;font-size:.8rem;line-height:1.2}
+  .learner-support-page .learner-support-tab-suffix{display:none}
 }
 .learner-support-page > .monthly-survey-stack{margin-bottom:14px}
 .app-learner-page .learner-support-entry{
@@ -825,6 +826,43 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .learner-support-entry:hover h2{text-decoration:underline;text-underline-offset:3px}
 .test-page>section+.card{margin-top:12px}
 .learner-support-page .card h2{font-size:1rem;margin:0}
+.learner-support-page .learner-support-action{margin-bottom:12px}
+.learner-support-page .request-table th:nth-child(2){width:40%}
+.learner-support-page .request-table th:nth-child(5){width:16%}
+.learner-support-request-detail{display:grid;gap:14px;padding:12px;background:var(--surface-soft);border-radius:10px}
+.learner-support-request-detail h3{margin:0 0 4px;font-size:.9rem}
+.learner-support-request-detail p{margin:0 0 8px}
+.learner-support-request-detail a{min-height:40px}
+@media (min-width:721px) {
+  .learner-support-request-detail:has(> div + div){grid-template-columns:minmax(0,1.35fr) minmax(0,1fr)}
+}
+@container (max-width:640px) {
+  .learner-support-page .request-table .request-record:has(+ .request-expanded-row){border-bottom:0}
+  .learner-support-page .request-record:has(.request-commands button[aria-expanded]){
+    display:grid;grid-template-columns:minmax(0,1fr) auto;
+    grid-template-areas:"title state" "kind action" "date action";gap:4px 8px;
+  }
+  .learner-support-page .request-record .request-content{grid-area:title}
+  .learner-support-page .request-record .request-state{grid-area:state;justify-self:end}
+  .learner-support-page .request-record .request-kind{grid-area:kind}
+  .learner-support-page .request-record .request-date{grid-area:date}
+  .learner-support-page .request-record .request-commands{grid-area:action;justify-self:end}
+  .learner-support-page .request-record .request-commands button{min-height:44px}
+  .learner-support-page .request-table .request-expanded-row td{padding:0 4px 10px}
+}
+.learner-support-action > .learner-support-form{margin-top:12px}
+.learner-support-page .learner-support-history-header{flex-wrap:nowrap}
+.learner-support-history-header > button{flex:none}
+.learner-support-form .learner-support-form-actions{justify-content:flex-end;flex-wrap:nowrap}
+@media (min-width:721px) {
+  .learner-support-action > .learner-support-form{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+  .learner-support-action > .learner-support-form > :not(label:nth-child(-n+2)){grid-column:1/-1}
+  .learner-support-action > .learner-support-form > .request-evidence-upload .request-evidence-upload__actions{justify-content:flex-end}
+}
+@media (max-width:520px) {
+  .learner-support-form .learner-support-form-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr)}
+  .learner-support-form-actions > button,.learner-support-history-header > button{min-height:44px}
+}
 .learner-support-page > .banner{margin-bottom:12px}
 .learner-support-page li h3{margin:0 0 6px}
 .learner-support-page .request-history-items{margin:4px 0 12px}
@@ -1540,31 +1578,78 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
     padding: 14px;
   }
 
-  .lesson-page .ltabs {
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    scrollbar-width: thin;
-  }
-
   .lesson-page .ltabs button {
-    flex: 1 0 auto;
+    flex: 1 1 0;
+    padding-inline: 8px;
     white-space: normal;
   }
 }
 .app-learner-page.home-page .stats{margin-top:16px}
 
-/* Keep essentials visible when the profile opens. Preferences expand in place. */
-.profile-page .profile-identity-details { display: grid; justify-items: start; gap: 8px; padding-block-start: 16px; }
-.profile-page .profile-details { display: grid; width: 100%; gap: 6px 20px; margin: 0; }
+.profile-page .profile-identity-header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px}
+.profile-page .profile-avatar-button{display:grid;place-items:center;padding:0;border:0;background:transparent}
+.profile-page .profile-avatar-button svg{max-width:58%;height:auto}
+.profile-page .profile-identity-title h2{margin:0 0 4px;overflow-wrap:break-word}
+.profile-page .profile-identity-actions{display:flex;flex-wrap:wrap;gap:8px}
+.profile-page .profile-identity-actions button{min-height:44px}
+.profile-page .profile-identity-details { display: grid; justify-items: start; gap: 12px; width: 100%; max-width: 48rem; margin: 14px auto 0; padding-block-start: 12px; border-top:1px solid var(--line); }
+.profile-page .profile-details { display: grid; width: 100%; gap: 8px 16px; margin: 0; }
 .profile-page > .settings-personal-preferences { margin-top: 16px; }
-.profile-page .profile-detail-row { display: grid; grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr); gap: 8px; align-items: baseline; }
+.profile-page .profile-detail-row { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 8px; align-items: baseline; line-height:1.4; padding: 2px 0; }
 .profile-page .profile-detail-label, .profile-page .profile-detail-value { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .profile-page .profile-preferences { width: 100%; border-block: 1px solid var(--line); }
 .profile-page .profile-preferences summary { align-content: center; min-height: 44px; cursor: pointer; font-weight: 600; }
-.profile-page .profile-preferences .profile-details { padding-block-end: 10px; }
+.profile-page .profile-preferences .profile-details { padding-block-end: 12px; }
 .profile-page .profile-edit-link { min-height: 44px; }
-@media (min-width: 640px) {
-  .profile-page .profile-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.avatar-dialog-backdrop{padding:10px}
+.avatar-dialog-backdrop .avatar-dialog{display:flex;flex-direction:column;width:min(100%,420px);max-height:calc(100dvh - 20px);padding:0;overflow:hidden;box-sizing:border-box}
+.avatar-dialog-preview{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.avatar-dialog-preview h2{font-size:1.1rem;margin:0}
+.avatar-dialog-preview p{font-size:.85rem;margin:2px 0 0;overflow-wrap:anywhere}
+.avatar-dialog-options{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:10px 14px 12px;display:grid;gap:10px}
+.avatar-dialog-options fieldset{border:0;min-width:0;margin:0;padding:0}
+.avatar-dialog-options legend{padding:0;margin-bottom:4px;font-weight:600;font-size:.85rem}
+.avatar-dialog-options legend span{font-weight:400;color:var(--muted)}
+.avatar-symbol-options,.avatar-swatch-options{display:grid;gap:4px}
+.avatar-symbol-options{grid-template-columns:repeat(4,minmax(0,1fr))}
+.avatar-swatch-options{grid-template-columns:repeat(6,minmax(0,1fr))}
+.avatar-dialog-options button{min-width:0;min-height:44px;padding:3px;display:grid;place-items:center;align-content:center;gap:2px;font-size:.7rem;line-height:1.15;white-space:normal}
+.avatar-dialog-options button[aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--text);border-color:var(--text)}
+.avatar-symbol-initials{font-size:1rem;font-weight:700}
+.avatar-swatch-options button>span{width:23px;height:23px;border-radius:50%;box-shadow:inset 0 0 0 1px #0003}
+.avatar-dialog-actions{display:flex;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:1px solid var(--line)}
+.avatar-dialog-actions button{min-height:44px}
+@media(max-width:520px){
+  .avatar-dialog-backdrop .avatar-dialog{width:min(100%,350px)}
+  .avatar-dialog-preview{--profile-avatar-size:40px;gap:8px;padding:8px 12px}
+  .avatar-dialog-options{gap:6px;padding:6px 12px 8px}
+  .avatar-dialog-options legend{margin-bottom:2px}
+  .avatar-dialog-actions{padding:6px 12px}
+}
+@media(max-width:335px){
+  .avatar-dialog-options{padding-inline:8px}
+  .avatar-swatch-options{gap:3px}
+}
+@media(min-width:961px){
+  .avatar-dialog-backdrop .avatar-dialog{width:min(100%,520px);max-height:calc(100dvh - 40px)}
+  .avatar-dialog-preview,.avatar-dialog-actions{padding:14px 20px}
+  .avatar-dialog-preview{--profile-avatar-size:64px;gap:12px}
+  .avatar-dialog-preview .app-avatar svg{width:36px;height:36px}
+  .avatar-dialog-options{padding:14px 20px;gap:14px}
+  .avatar-symbol-options,.avatar-swatch-options{gap:8px}
+  .avatar-symbol-options button{min-height:52px;font-size:.82rem;grid-auto-flow:column;justify-content:center;gap:5px}
+  .avatar-swatch-options button>span{width:26px;height:26px}
+}
+@media (min-width: 700px) {
+  .profile-page .profile-detail-row{grid-template-columns:minmax(0,1fr) minmax(0,2fr);column-gap:16px}
+}
+@media (max-width: 699px) {
+  .profile-page .profile-identity-header{grid-template-columns:auto minmax(0,1fr);row-gap:10px}
+  .profile-page .profile-avatar-button{--profile-avatar-size:52px}
+  .profile-page .profile-avatar-button .app-avatar{font-size:1.1rem}
+  .profile-page .profile-identity-title h2{font-size:1rem}
+  .profile-page .profile-identity-actions{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .profile-page .profile-identity-actions button{padding-inline:6px;white-space:normal}
 }
 
 /* Profile progress hierarchy: keep the lower page readable instead of
@@ -1781,8 +1866,9 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
   .coach-page .coach-surface>.chat{min-height:130px!important;max-height:clamp(130px,23dvh,168px)!important}
 }
 .learner-month-calendar-card{margin-top:16px;min-width:0}
-.monthly-learner-calendar-scroll{overflow-x:auto;padding:3px}
-.monthly-learner-calendar{display:grid;grid-template-columns:repeat(7,minmax(70px,1fr));gap:6px}
+.monthly-learner-calendar-header{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px;justify-content:space-between}
+.monthly-learner-calendar-header h3{margin:0}
+.monthly-learner-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;padding:3px}
 .monthly-learner-calendar-heading{text-align:center;color:var(--muted);font-size:.78rem;padding:4px 0}
 .monthly-learner-calendar-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:8px 0 4px;padding:0;list-style:none;font-size:.75rem}
 .monthly-learner-calendar-legend li::before{display:inline-block;width:9px;height:9px;margin-right:5px;border:1px solid var(--border);border-radius:50%;background:var(--calendar-tone,var(--surface));content:""}
@@ -1798,73 +1884,55 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
 .monthly-learner-calendar-day small{color:var(--text);font-size:.67rem;line-height:1.15}
 .monthly-learner-calendar-label,.monthly-learner-calendar-link{font-size:.77rem;line-height:1.2;overflow-wrap:anywhere}
 .monthly-learner-calendar-link{font-weight:700}
-@media(max-width:640px){.monthly-learner-calendar{gap:4px}.monthly-learner-calendar-day{min-height:66px;padding:5px}}
+.monthly-learner-calendar-week{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:4px;max-width:12rem;text-align:center;margin:10px auto 6px}
+.monthly-learner-calendar-week button{width:44px;height:44px;padding:0;display:grid;place-items:center}
+.monthly-learner-calendar--agenda{grid-template-columns:minmax(0,1fr);gap:4px;padding:0}
+.monthly-learner-calendar--agenda .monthly-learner-calendar-day{display:grid;grid-template-columns:54px minmax(0,1fr) auto;align-items:center;gap:0 8px;min-height:44px;padding:0 9px}
+.monthly-learner-calendar--agenda time{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.monthly-learner-calendar--agenda time span,.monthly-learner-calendar--agenda .outside-month .monthly-learner-calendar-label{color:var(--muted);font-size:.75rem}
+.monthly-learner-calendar--agenda .monthly-learner-calendar-label,.monthly-learner-calendar--agenda .monthly-learner-calendar-link{font-size:.875rem;overflow-wrap:normal}
+.monthly-learner-calendar--agenda .monthly-learner-calendar-link{min-height:44px;display:flex;align-items:center}
+.monthly-learner-calendar--agenda .monthly-learner-calendar-holiday{grid-column:2 / -1;margin-bottom:6px}
+@media(max-width:700px){
+  .app-learner-page.home-page .monthly-home-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .app-learner-page.home-page .monthly-home-metrics .stat{min-height:0;align-items:flex-start;gap:3px;padding:9px 10px;text-align:left}
+  .monthly-home-metrics .stat .ring,.monthly-home-metrics .stat .ring>b{width:auto;height:auto;border-radius:0;background:none}
+  .monthly-home-metrics .stat .ring>b{font-size:1rem}
+}
 
-/* Compact learner monthly assessment landing. */
-.monthly-assessment-page{max-width:860px!important}
-.monthly-assessment-landing{display:grid;gap:18px;padding:22px 24px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(135deg,var(--surface),var(--surface-2));box-shadow:0 8px 28px rgba(57,72,55,.08)}
-.monthly-assessment-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding-bottom:16px;border-bottom:1px solid var(--line)}
-.monthly-assessment-header h2{margin:3px 0;font-size:1.35rem}.monthly-assessment-header p{margin:0;color:var(--muted);font-size:.9rem}
-.monthly-eligibility-summary{display:grid;gap:14px}.monthly-eligibility-state{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.monthly-eligibility-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.monthly-eligibility-metrics .stat{min-height:138px;padding:14px 10px;background:color-mix(in srgb,var(--surface) 70%,transparent);box-shadow:inset 0 0 0 1px var(--line)}
-.monthly-eligibility-metrics .ring{width:66px;height:66px;font-size:.78rem}.monthly-eligibility-metrics .lbl{font-size:.78rem}
-.monthly-eligibility-rules{border-top:1px solid var(--line);padding-top:12px;color:var(--muted);font-size:.84rem;line-height:1.5}.monthly-eligibility-rules summary{cursor:pointer;color:var(--text);font-weight:700}.monthly-eligibility-rules ul{margin:9px 0 0;padding-left:18px}.monthly-eligibility-rules li+li{margin-top:4px}
-.monthly-assessment-form-state{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 16px;border-radius:12px;background:var(--primary-soft);border:1px solid var(--primary-line)}
-.monthly-assessment-form-state>div{display:grid;gap:3px}.monthly-assessment-form-state span{font-size:.84rem;line-height:1.45;color:var(--muted)}.monthly-assessment-inline-note{margin:0;color:var(--muted);font-size:.9rem}
-@media(max-width:640px){.monthly-assessment-landing{padding:18px}.monthly-eligibility-metrics{grid-template-columns:1fr}.monthly-eligibility-metrics .stat{min-height:unset;display:grid;grid-template-columns:66px 1fr;justify-items:start;align-items:center;gap:12px;text-align:left}.monthly-assessment-form-state{align-items:flex-start;flex-direction:column}.monthly-assessment-header{flex-direction:column;gap:8px}}
-
-/* Refine monthly assessment landing alignment and reading space. */
-.monthly-assessment-page{max-width:960px!important;margin-left:0!important;margin-right:auto!important}
-.monthly-assessment-page>.page-title{padding-left:0!important}
-.monthly-assessment-landing{gap:22px;padding:30px 32px;min-height:420px}
-.monthly-assessment-header{padding-bottom:20px}.monthly-assessment-header h2{font-size:1.55rem}
-.monthly-eligibility-summary{gap:18px}.monthly-eligibility-metrics{gap:16px}.monthly-eligibility-metrics .stat{min-height:170px;padding:20px 14px;gap:12px}.monthly-eligibility-metrics .ring{width:82px;height:82px;font-size:.9rem}.monthly-eligibility-metrics .lbl{font-size:.9rem}
-.monthly-eligibility-rules{padding-top:16px;font-size:.9rem}.monthly-assessment-form-state{padding:18px 20px}
-@media(max-width:640px){.monthly-assessment-page{margin-left:auto!important;margin-right:auto!important}.monthly-assessment-landing{padding:20px;min-height:0}.monthly-eligibility-metrics{gap:10px}.monthly-eligibility-metrics .stat{min-height:unset;padding:14px}.monthly-eligibility-metrics .ring{width:66px;height:66px;font-size:.78rem}.monthly-eligibility-metrics .lbl{font-size:.78rem}}
-
-/* Use explicit rendered dimensions for the three monthly eligibility rings. */
-.monthly-assessment-page .monthly-eligibility-metrics .stat{min-height:218px;padding:24px 16px}
-.monthly-assessment-page .monthly-eligibility-metrics .ring{width:108px;height:108px;min-width:108px;min-height:108px;font-size:1rem;line-height:1.2}
-.monthly-assessment-page .monthly-eligibility-metrics .ring b{max-width:78px;line-height:1.18;text-align:center}
-.monthly-assessment-page .monthly-eligibility-metrics .lbl{font-size:.95rem;margin-top:4px}
-@media(max-width:640px){.monthly-assessment-page .monthly-eligibility-metrics .stat{min-height:unset;padding:14px}.monthly-assessment-page .monthly-eligibility-metrics .ring{width:76px;height:76px;min-width:76px;min-height:76px;font-size:.82rem}.monthly-assessment-page .monthly-eligibility-metrics .ring b{max-width:56px}.monthly-assessment-page .monthly-eligibility-metrics .lbl{font-size:.8rem;margin-top:0}}
-
-/* Final compact metric proportion: central group, readable core number. */
-.monthly-assessment-page .monthly-assessment-landing{min-height:0;padding:26px 28px;gap:18px}
-.monthly-assessment-page .monthly-eligibility-metrics{gap:12px}
-.monthly-assessment-page .monthly-eligibility-metrics .stat{min-height:158px;padding:16px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center}
-.monthly-assessment-page .monthly-eligibility-metrics .ring{width:88px;height:88px;min-width:88px;min-height:88px;font-size:1.16rem;line-height:1.22}
-.monthly-assessment-page .monthly-eligibility-metrics .ring>b{width:68px;height:68px;max-width:68px;font-size:1.16rem;line-height:1.22}
-.monthly-assessment-page .monthly-eligibility-metrics .lbl{font-size:.9rem;margin:0;line-height:1.35}
-@media(max-width:640px){.monthly-assessment-page .monthly-assessment-landing{padding:20px}.monthly-assessment-page .monthly-eligibility-metrics .stat{min-height:unset}.monthly-assessment-page .monthly-eligibility-metrics .ring{width:76px;height:76px;min-width:76px;min-height:76px;font-size:1rem}.monthly-assessment-page .monthly-eligibility-metrics .ring>b{width:58px;height:58px;max-width:58px;font-size:1rem}}
+/* Monthly exam landing keeps the date and entry action above progress. */
+.monthly-assessment-landing{display:grid;gap:16px;padding:24px 28px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(135deg,var(--surface),var(--surface-2))}
+.monthly-assessment-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px 16px;flex-wrap:wrap}
+.monthly-assessment-header h2{margin:3px 0;font-size:1.35rem}
+.monthly-assessment-header p{margin:0;color:var(--muted);font-size:.85rem}
+.monthly-assessment-form-state{display:flex;justify-content:space-between;align-items:center;gap:8px 16px;flex-wrap:wrap;padding:10px 12px;border-radius:10px;background:var(--primary-soft)}
+.monthly-assessment-form-state p,.monthly-assessment-inline-note{margin:0;color:var(--muted);font-size:.875rem}
+.monthly-assessment-form-state .btn{min-height:44px}
+.monthly-eligibility-summary{display:grid;gap:8px;border-top:1px solid var(--line);padding-top:12px;min-width:0}
+.monthly-eligibility-summary h3{margin:0}
+.monthly-eligibility-state{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap}
+.monthly-eligibility-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.monthly-eligibility-metrics .stat{min-width:0;min-height:104px;padding:10px;gap:4px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.monthly-eligibility-metrics .metric-pending{display:grid;place-items:center;min-height:64px;text-align:center;font-size:.85rem;color:var(--muted)}
+.monthly-eligibility-metrics .metric-secondary{color:var(--muted);line-height:1.35}
+.monthly-eligibility-rules{color:var(--muted);font-size:.875rem;line-height:1.5}
+.monthly-eligibility-rules summary{cursor:pointer;color:var(--text);font-weight:600;min-height:44px;align-content:center}
+.monthly-eligibility-rules ul{margin:0;padding-left:18px}
+.monthly-eligibility-rules li+li{margin-top:4px}
+@media(max-width:640px){
+  .monthly-assessment-landing{padding:14px;gap:10px}
+  .monthly-assessment-form-state .btn{width:100%}
+  .monthly-eligibility-metrics{grid-template-columns:minmax(0,1fr);gap:0}
+  .monthly-eligibility-metrics .stat{display:grid;grid-template-columns:minmax(0,1fr) auto;justify-items:start;align-items:center;min-height:44px;border-bottom:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none;text-align:start;padding:6px 0}
+  .monthly-eligibility-metrics .stat .lbl{grid-column:1;grid-row:1}
+  .monthly-eligibility-metrics .stat .ring,.monthly-eligibility-metrics .metric-pending{grid-column:2;grid-row:1;justify-self:end}
+  .monthly-eligibility-metrics .stat .ring,.monthly-eligibility-metrics .stat .ring>b{width:auto;height:auto;border-radius:0;background:none}
+  .monthly-eligibility-metrics .metric-pending{min-height:0;text-align:end}
+  .monthly-eligibility-metrics .metric-secondary{grid-column:1/-1;font-size:.75rem}
+}
 
 /* Keep the standalone Season title on the learner content gutter. */
 .coach-page > .page-title{width:auto;align-self:stretch;margin-inline:0;padding-inline:0;text-align:left}
-
-/* Five monthly gates: compact, equal cards with a centered 3+2 arrangement. */
-.monthly-assessment-page .monthly-eligibility-metrics{grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:stretch}
-.monthly-assessment-page .monthly-eligibility-metrics .stat{grid-column:span 2;min-height:128px;padding:11px 8px;gap:7px;border-radius:12px}
-.monthly-assessment-page .monthly-eligibility-metrics .stat:nth-child(4){grid-column:2 / span 2}
-.monthly-assessment-page .monthly-eligibility-metrics .stat:nth-child(5){grid-column:4 / span 2}
-.monthly-assessment-page .monthly-eligibility-metrics .ring{width:64px;height:64px;min-width:64px;min-height:64px;font-size:.88rem;line-height:1.15}
-.monthly-assessment-page .monthly-eligibility-metrics .ring>b{width:52px;height:52px;max-width:52px;font-size:.88rem;line-height:1.15}
-.monthly-assessment-page .monthly-eligibility-metrics .lbl{font-size:.78rem;line-height:1.25}
-.monthly-assessment-page .monthly-eligibility-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
-.monthly-assessment-page .monthly-eligibility-metrics .stat,.monthly-assessment-page .monthly-eligibility-metrics .stat:nth-child(4),.monthly-assessment-page .monthly-eligibility-metrics .stat:nth-child(5){grid-column:auto}
-.monthly-assessment-page .monthly-eligibility-metrics .metric-secondary{display:block;margin-top:2px;font-size:.7rem;line-height:1.15;color:var(--muted);white-space:nowrap}
-.monthly-assessment-page .monthly-eligibility-metrics .stat{min-height:170px;padding:14px 12px;gap:8px}
-.monthly-assessment-page .monthly-eligibility-metrics .ring{width:92px;height:92px;min-width:92px;min-height:92px;font-size:1rem;line-height:1.15}
-.monthly-assessment-page .monthly-eligibility-metrics .ring>b{width:76px;height:76px;max-width:76px;font-size:1rem;line-height:1.15}
-.monthly-assessment-page .monthly-eligibility-metrics .stat.is-pending{gap:8px;color:var(--muted)}
-.monthly-assessment-page .monthly-eligibility-metrics .metric-pending{display:grid;place-items:center;min-height:92px;padding:8px 10px;border:1px dashed var(--line);border-radius:10px;font-size:.8rem;line-height:1.25;text-align:center}
-@media(max-width:640px){
-  .coach-page > .page-title{width:auto;margin-inline:0}
-  .monthly-assessment-page .monthly-eligibility-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .monthly-assessment-page .monthly-eligibility-metrics .stat,.monthly-assessment-page .monthly-eligibility-metrics .stat:nth-child(4),.monthly-assessment-page .monthly-eligibility-metrics .stat:nth-child(5){grid-column:auto;min-height:150px;padding:12px 7px}
-  .monthly-assessment-page .monthly-eligibility-metrics .ring{width:76px;height:76px;min-width:76px;min-height:76px}
-  .monthly-assessment-page .monthly-eligibility-metrics .ring>b{width:62px;height:62px;max-width:62px}
-  .monthly-assessment-page .monthly-eligibility-metrics .metric-pending{min-height:76px;padding:7px 8px;font-size:.76rem}
-}
 
 /* Shared learner page rhythm: headings and direct content share one left edge. */
 .app-learner-page > .page-title{

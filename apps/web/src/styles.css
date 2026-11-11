@@ -242,7 +242,7 @@ textarea { min-height: 70px; resize: vertical; }
 .certificate-row { display: grid; grid-template-columns: minmax(130px, .65fr) 1.5fr .45fr; gap: 8px; align-items: end; padding: 5px 0; }
 .certificate-check { display: flex; align-items: center; gap: 6px; min-height: 38px; border: 1px solid var(--line); border-radius: 9px; background: #fff; padding: 7px 9px; }
 .certificate-check input { width: 14px; min-height: 14px; }
-.form-actions { display: flex; justify-content: flex-start; gap: 7px; padding: 2px 0; }
+.form-actions { display: flex; gap: 7px; padding: 2px 0; }
 
 .profile-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .profile-overview { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; }

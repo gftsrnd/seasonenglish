@@ -1,3 +1,4 @@
+import type { AiTaskRunner } from "@e4s/ai";
 import { EVIDENCE_BUCKET, MEDIA_BUCKET, type ObjectStorage } from "@e4s/storage";
 import { createRepositories } from "@e4s/database";
 import type { OrganisationExperienceView } from "@e4s/contracts";
@@ -16,7 +17,7 @@ export function registerSystemRoutes(
   aiAvailable = false,
   maintenanceEnabled = false,
   imageProviders = { pexels: false, pixabay: false },
-  aiRuntimeEnabled = false
+  aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>
 ): void {
   const repositories = createRepositories(pool);
   const authenticated = createRoleGuard(pool, ["learner", "operator", "manager"]);
@@ -144,7 +145,9 @@ export function registerSystemRoutes(
     const providerRow = provider.rows[0];
     const aiConfigured = Boolean(providerRow?.configured);
     const aiTestDisabled = providerRow?.ai_test_disabled === true;
-    const ai = !aiTestDisabled && (aiAvailable || (aiRuntimeEnabled && aiConfigured && ["openai", "claude"].includes(providerRow?.provider ?? "")));
+    const ai = !aiTestDisabled && (aiRunnerFactory
+      ? Boolean(await aiRunnerFactory(request.e4sSession!.user.id))
+      : aiAvailable);
     return {
       api: true,
       database: true,
@@ -163,12 +166,6 @@ export function registerSystemRoutes(
   app.get("/api/readiness", async (_request, reply) => {
     try {
       await pool.query("select 1");
-      const encryptedSettings = await pool.query<{ secret_ciphertext: string | null }>(
-        "select secret_ciphertext from provider_configurations where secret_ciphertext is not null limit 1"
-      );
-      if (encryptedSettings.rowCount && !validSettingsEncryptionKey()) {
-        throw new Error("Provider settings encryption key is unavailable");
-      }
       if (!await objectStorageAvailable(storage)) throw new Error("Object storage is unavailable");
       return { status: "ready" };
     } catch {
@@ -196,10 +193,4 @@ async function objectStorageAvailable(storage: ObjectStorage | undefined): Promi
   } catch {
     return false;
   }
-}
-
-function validSettingsEncryptionKey(): boolean {
-  const encoded = process.env.E4S_SETTINGS_ENCRYPTION_KEY?.trim();
-  if (!encoded || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) return false;
-  return Buffer.from(encoded, "base64").length === 32;
 }

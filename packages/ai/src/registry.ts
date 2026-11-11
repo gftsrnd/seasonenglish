@@ -31,6 +31,7 @@ import {
   monthlyResourcePlanInputSchema, monthlyResourcePlanOutputJsonSchema, monthlyResourcePlanOutputSchema,
   weeklyLessonPlanBlueprintInputSchema, weeklyLessonPlanBlueprintOutputJsonSchema, weeklyLessonPlanBlueprintOutputSchema,
   assessmentGradingInputSchema, assessmentGradingOutputJsonSchema, assessmentGradingOutputSchema,
+  productiveAssessmentGradingInputSchema, productiveAssessmentGradingOutputJsonSchema, productiveAssessmentGradingOutputSchema, validateProductiveAssessmentGrading,
   microLessonInputSchema, microLessonOutputJsonSchema, microLessonOutputSchema,
   microGradingInputSchema, microGradingOutputJsonSchema, microGradingOutputSchema,
   weeklyPracticeInputSchema, weeklyPracticeOutputJsonSchema, weeklyPracticeOutputSchema
@@ -88,6 +89,11 @@ export const AI_TASKS = new AiTaskRegistry([
   {
     id: "assessment_scoring", promptKey: "assessment_scoring", inputSchema: assessmentGradingInputSchema,
     outputSchema: assessmentGradingOutputSchema, outputJsonSchema: assessmentGradingOutputJsonSchema
+  },
+  {
+    id: "productive_assessment_scoring", promptKey: "assessment_scoring", inputSchema: productiveAssessmentGradingInputSchema,
+    outputSchema: productiveAssessmentGradingOutputSchema, outputJsonSchema: productiveAssessmentGradingOutputJsonSchema,
+    validateOutput: (output, input) => validateProductiveAssessmentGrading(productiveAssessmentGradingOutputSchema.parse(output), productiveAssessmentGradingInputSchema.parse(input))
   },
   {
     id: "week_suggestions", promptKey: "week_suggestions", inputSchema: weekSuggestionsInputSchema,

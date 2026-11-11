@@ -21,7 +21,8 @@ import { cancelAllExclusiveAudio } from "../features/experience/audio-precedence
 
 const authChangeStorageKey = "e4s:auth:changed";
 const staffEntryStorageKey = "e4s:manager-entry";
-const separateStaffEntry = import.meta.env.VITE_E4S_STAFF_DIRECT_ENTRY === "1";
+const staffDirectEntrySetting = import.meta.env.VITE_E4S_STAFF_DIRECT_ENTRY;
+const separateStaffEntry = staffDirectEntrySetting === "1" || (import.meta.env.DEV && staffDirectEntrySetting !== "0");
 
 /**
  * New E4S presentation root. It intentionally owns authentication and the

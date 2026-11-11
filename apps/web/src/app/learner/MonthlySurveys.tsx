@@ -1,16 +1,14 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ChevronDown } from "lucide-react";
 import type { LearnerMonthlySurveysView, MonthlySurveyPublished, MonthlySurveySubmission } from "@e4s/contracts";
 import { monthlySurveyApi } from "../../api/monthly-surveys.js";
 import { ApiError } from "../../api/runtime.js";
-import { MonthlySurveyAnswers, MonthlySurveyFields, surveyMonthLabel } from "../shared/MonthlySurveyFields.js";
+import { MonthlySurveyFields, surveyMonthLabel } from "../shared/MonthlySurveyFields.js";
 
 export function useLearnerMonthlySurveys() {
   const [view, setView] = useState<LearnerMonthlySurveysView>();
   const [loadError, setLoadError] = useState(false);
   const [notice, setNotice] = useState("");
   const [reload, setReload] = useState(0);
-  const [submittedMonth, setSubmittedMonth] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -27,7 +25,6 @@ export function useLearnerMonthlySurveys() {
       ...current,
       surveys: current.surveys.map(item => item.form.month === month ? { ...item, submission } : item)
     }));
-    setSubmittedMonth(month);
     setNotice("Đã gửi phản hồi. Cảm ơn bạn!");
   }
 
@@ -35,7 +32,6 @@ export function useLearnerMonthlySurveys() {
     const next = await monthlySurveyApi.getLearner();
     setView(next);
     if (next.surveys.some(item => item.form.month === month && item.submission)) {
-      setSubmittedMonth(month);
       setNotice("Bạn đã gửi phản hồi cho tháng này. Xem câu trả lời trong lịch sử.");
     } else {
       setNotice("Khảo sát vừa được cập nhật. Vui lòng xem lại các câu hỏi trước khi gửi.");
@@ -44,7 +40,7 @@ export function useLearnerMonthlySurveys() {
 
   const available = view?.surveys.filter(item => item.submission === null && item.form.month <= view.currentMonth) ?? [];
   const submitted = view?.surveys.flatMap(item => item.submission ? [{ form: item.form, submission: item.submission }] : []) ?? [];
-  return { available, submitted, view, loadError, notice, submittedMonth, recordSubmission, refreshAfterConflict, retry: () => setReload(value => value + 1) };
+  return { available, submitted, view, loadError, notice, recordSubmission, refreshAfterConflict, retry: () => setReload(value => value + 1) };
 }
 
 export function LearnerMonthlySurveys({ surveys, month }: { surveys: ReturnType<typeof useLearnerMonthlySurveys>; month?: string | null }) {
@@ -76,16 +72,6 @@ export function LearnerMonthlySurveys({ surveys, month }: { surveys: ReturnType<
 
     </>}
   </div>;
-}
-
-export function LearnerSurveyHistoryEntry({ form, submission, expanded }: { form: MonthlySurveyPublished; submission: MonthlySurveySubmission; expanded: boolean }) {
-  return <details className="monthly-survey-details support-survey-entry" open={expanded || undefined}>
-    <summary>
-      <span><strong>{form.title}</strong><small className="muted">{surveyMonthLabel(form.month)}</small></span>
-      <ChevronDown size={18} aria-hidden="true" />
-    </summary>
-    <MonthlySurveyAnswers questions={form.questions} answers={submission.answers} />
-  </details>;
 }
 
 function LearnerSurveyForm({ form, onSubmitted, onConflict }: {
@@ -130,7 +116,7 @@ function LearnerSurveyForm({ form, onSubmitted, onConflict }: {
     <fieldset className="monthly-survey-fieldset monthly-survey-stack" disabled={busy}>
       <MonthlySurveyFields questions={form.questions} answers={answers} onAnswer={(index, value) => setAnswers(current => ({ ...current, [index]: value }))} />
       {error ? <p role="alert" className="monthly-survey-error">{error}</p> : null}
-      <div className="row"><button type="submit" className="btn btn-primary">{busy ? "Đang gửi…" : "Gửi phản hồi"}</button></div>
+      <div className="form-actions"><button type="submit" className="btn btn-primary">{busy ? "Đang gửi…" : "Gửi phản hồi"}</button></div>
     </fieldset>
   </form>;
 }

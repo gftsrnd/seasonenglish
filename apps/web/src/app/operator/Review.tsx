@@ -6,7 +6,7 @@ import type { Cefr, OperatorReviewActions, OperatorReviewView, ReviewActionKey, 
 import type { ContentReviewAssessmentDetailView, LessonExerciseCorrectionInput } from "@e4s/contracts";
 import type { PromptOptions } from "../shared/ModalProvider.js";
 import { operatorDateTime } from "./adapters.js";
-import { AssessmentManualScore, type ManualScoreInput } from "./AssessmentManualScore.js";
+import { AssessmentManualScore, AssessmentMonthlyRubricScore, type ManualScoreInput } from "./AssessmentManualScore.js";
 import { AudioEvidencePanel } from "../shared/media/AudioEvidencePanel.js";
 import { normalizeAudioEvidence, type AudioEvidence } from "../shared/media/audio-evidence.js";
 import { normalizeBlankPrompt } from "../learner/text.js";
@@ -329,7 +329,7 @@ const assessmentStatusLabels: Record<string, string> = {
   submitted: "Đã nộp", pending_review: "Chờ duyệt", approved: "Đã duyệt", in_progress: "Đang làm", needs_retry: "Cần làm lại", retry: "Cần làm lại"
 };
 
-export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualScore, savingManualScore = false, onDeleteAudio }: { detail: ContentReviewAssessmentDetailView; onClose(): void; onSaveManualScore?: (input: ManualScoreInput) => void; savingManualScore?: boolean; onDeleteAudio?: (evidence: AudioEvidence) => void | Promise<void> }) {
+export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualScore, savingManualScore = false, onDeleteAudio, onRescore, rescoring = false }: { detail: ContentReviewAssessmentDetailView; onClose(): void; onSaveManualScore?: (input: ManualScoreInput) => void; savingManualScore?: boolean; onDeleteAudio?: (evidence: AudioEvidence) => void | Promise<void>; onRescore?: () => void; rescoring?: boolean }) {
   const compact = useMediaQuery("(max-width: 900px)");
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
@@ -391,6 +391,16 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     const criteria = scoreFor(section)?.criteria ?? {};
     return Array.isArray(criteria.tasks) ? criteria.tasks : [];
   };
+  const monthlyRubric = detail.kind === "final" ? detail.productiveRubric : undefined;
+  const writingCriteria = scoreFor("writing")?.criteria;
+  const comment = typeof writingCriteria?.comment === "string" ? writingCriteria.comment : "";
+  const monthlyScores: Record<string, number> = {};
+  for (const criteria of [writingCriteria?.rubricScores, writingCriteria?.suggestedSpeakingRubricScores, scoreFor("speaking")?.criteria.rubricScores]) {
+    if (!Array.isArray(criteria)) continue;
+    for (const item of criteria) {
+      if (item && typeof item.code === "string" && typeof item.score === "number") monthlyScores[item.code] = item.score;
+    }
+  }
   type ReviewTask = { taskKey: string; title?: string; prompt?: string; maxScore?: number; minWords?: number; maxWords?: number; options?: Array<{ value: string; label: string }>; correctAnswer?: string | null };
   const renderStimulus = (stimulus: { type: string; text?: string; lines?: Array<{ speaker: string; text: string }>; headers?: string[]; rows?: string[][] } | undefined) => {
     if (!stimulus) return null;
@@ -533,6 +543,10 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
         )}</tbody>
       </table>
     </div>}
+    {onRescore && <div className="row">
+      <button className="btn-sm" type="button" disabled={rescoring || savingManualScore} onClick={onRescore}>{rescoring ? "Đang chấm lại…" : "Chấm lại bằng AI"}</button>
+      {detail.aiScoring?.status === "failed" && <span className="small muted">Lần chấm AI gần nhất thất bại. Có thể chấm tay.</span>}
+    </div>}
     <div className="operator-log-group">
       <details className="operator-processing-log"><summary className="small">Nhật ký xử lý ({detail.activity?.length ?? 0})</summary>{detail.activity?.length ? <ul className="small">{detail.activity.map((event, index) => <li key={`${event.at}-${index}`}><b>{event.label}</b> · {operatorDateTime(event.at)}{event.detail ? <span className="muted"> · {event.detail}</span> : null}</li>)}</ul> : <p className="small muted">Chưa có hoạt động xử lý được ghi nhận.</p>}</details>
       <details className="operator-integrity-log"><summary className="small">Nhật ký cảnh báo ({detail.integrityEvents.length})</summary>{detail.integrityEvents.length ? <ul className="small">{detail.integrityEvents.map((event, index) => { const item = integrityEventText(event); return <li key={index}><b>{item.label}</b>{item.count !== undefined ? ` · Lần ghi nhận ${item.count}` : ""}{item.at ? ` · ${item.at}` : ""}</li>; })}</ul> : <p className="small muted">Không có cảnh báo được ghi nhận.</p>}</details>
@@ -541,7 +555,8 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     <section className="operator-assessment-document" aria-label="Bài làm và bằng chứng"><div className="operator-answer-sections">
       {renderAssessmentSection("listening")}
       {renderAssessmentSection("reading")}
-      {onSaveManualScore ? <AssessmentManualScore writingTasks={manualTasks("writing") as ManualScoreInput["writingTasks"]} speakingTasks={manualTasks("speaking") as ManualScoreInput["speakingTasks"]} comment={typeof scoreFor("writing")?.criteria.comment === "string" ? scoreFor("writing")?.criteria.comment as string : ""} onSave={onSaveManualScore} saving={savingManualScore} writingContent={renderSectionContent("writing")} speakingContent={renderSectionContent("speaking")} {...(scoreFor("writing")?.score !== undefined ? { writingScore: scoreFor("writing")!.score } : {})} {...(scoreFor("speaking")?.score !== undefined ? { speakingScore: scoreFor("speaking")!.score } : {})} /> : <>{renderAssessmentSection("writing")}{renderAssessmentSection("speaking")}</>}
+      {onSaveManualScore && monthlyRubric?.length ? <AssessmentMonthlyRubricScore rubric={monthlyRubric} saved={monthlyScores} comment={comment} onSave={onSaveManualScore} saving={savingManualScore} writingContent={renderSectionContent("writing")} speakingContent={renderSectionContent("speaking")} />
+        : onSaveManualScore && detail.kind !== "final" ? <AssessmentManualScore writingTasks={manualTasks("writing") as ManualScoreInput["writingTasks"]} speakingTasks={manualTasks("speaking") as ManualScoreInput["speakingTasks"]} comment={comment} onSave={onSaveManualScore} saving={savingManualScore} writingContent={renderSectionContent("writing")} speakingContent={renderSectionContent("speaking")} {...(detail.kind === "pass_course" && detail.productiveRubric ? { passCourseRubric: detail.productiveRubric } : {})} {...(scoreFor("writing")?.score !== undefined ? { writingScore: scoreFor("writing")!.score } : {})} {...(scoreFor("speaking")?.score !== undefined ? { speakingScore: scoreFor("speaking")!.score } : {})} /> : <>{renderAssessmentSection("writing")}{renderAssessmentSection("speaking")}</>}
     </div></section>
     {detail.decision && <div className="banner info"><div className="body small">Quyết định: {detail.decision.status} · {detail.decision.approvedLevel ?? "—"} · {detail.decision.reason}</div></div>}
     {detail.appeal && <div className="banner warn"><div className="body small">Kháng nghị: {detail.appeal.status} · {detail.appeal.reason}{detail.appeal.resolution ? ` · ${detail.appeal.resolution}` : ""}</div></div>}

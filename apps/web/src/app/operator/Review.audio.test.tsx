@@ -345,6 +345,26 @@ describe("Operator assessment audio playback", () => {
     expect(screen.getByRole("heading", { name: "Nhận xét" }).compareDocumentPosition(speaking!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
+  it("shows the monthly rubric instead of placement task fields", () => {
+    const detail = assessmentDetail();
+    detail.kind = "final";
+    detail.productiveRubric = [
+      { code: "W1", skill: "writing", maxScore: 6, description: "Ý giao tiếp" },
+      { code: "S1", skill: "speaking", maxScore: 8, description: "Đọc thành tiếng" }
+    ];
+    const onSaveManualScore = vi.fn();
+    render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} onSaveManualScore={onSaveManualScore} />);
+    fireEvent.change(screen.getByLabelText("W1 · Ý giao tiếp"), { target: { value: "5" } });
+    fireEvent.change(screen.getByLabelText("S1 · Đọc thành tiếng"), { target: { value: "4.5" } });
+    expect(screen.queryByLabelText("W2 · Task completion")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Lưu điểm chấm tay" }));
+    fireEvent.click(screen.getByRole("button", { name: "Xác nhận" }));
+    expect(onSaveManualScore).toHaveBeenCalledWith({
+      writingTasks: [], speakingTasks: [], comment: "",
+      rubricScores: [{ code: "W1", score: 5 }, { code: "S1", score: 4.5 }]
+    });
+  });
+
   it("keeps the anti-cheat log collapsed and translates technical events for operators", () => {
     const detail = assessmentDetail();
     detail.integrityEvents = [{ reason: "window_blur", occurredAt: "2026-10-15T08:32:05.780Z", violationCount: 1, requestId: "secret-request-id" }];

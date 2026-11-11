@@ -1,0 +1,13 @@
+{
+  "name": "e4s-browser-smoke",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:browserstack": "node run-browserstack.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "browserstack-node-sdk": "1.78.1"
+  }
+}

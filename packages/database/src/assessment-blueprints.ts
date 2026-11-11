@@ -4,6 +4,7 @@ export { passCourseFormADefinition } from "./pass-course-form-a.js";
 import type {
   AssessmentDefinitionView,
   AssessmentOption,
+  AssessmentProductiveRubricItem,
   AssessmentSectionCode,
   AssessmentTaskView,
   CefrLevel,
@@ -25,6 +26,20 @@ export interface StoredAssessmentDefinition extends Omit<AssessmentDefinitionVie
       tasks: StoredAssessmentTask[];
     }>;
   }>;
+}
+
+export function assessmentProductiveRubric(definition: StoredAssessmentDefinition): AssessmentProductiveRubricItem[] {
+  if (definition.kind === "final" && definition.monthlyExam) return definition.monthlyExam.grader.rubric;
+  return (["writing", "speaking"] as const).flatMap(skill => sectionByCode(definition, skill)?.groups.flatMap(group =>
+    group.tasks.filter(task => task.maxScore > 0).map(task => ({
+      code: task.key,
+      skill,
+      maxScore: task.maxScore,
+      description: skill === "writing"
+        ? "Task completion, organisation, vocabulary, grammar and workplace register."
+        : "Task completion and relevance, grammar and vocabulary, coherence and clarity, and professional register. Do not score pronunciation."
+    }))
+  ) ?? []);
 }
 
 const optionLetters = ["A", "B", "C", "D"] as const;

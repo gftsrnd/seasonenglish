@@ -368,7 +368,9 @@ function LearnerContent({ courseCompleted }: { courseCompleted: boolean }) {
       if (submitReason === "manual") {
         try { window.sessionStorage.setItem(assessmentCelebrationKey, "1"); } catch { /* keep navigation safe in restricted storage */ }
         experience.play("celebrate");
-        showLearnerToast("Đã nộp bài thành công. Chúc mừng bạn đã hoàn thành!", "ok");
+      }
+      if (assessment.attempt && assessment.attempt.status !== "in_progress") {
+        showLearnerToast(submitReason === "manual" ? "Đã nộp bài thành công. Chúc mừng bạn đã hoàn thành!" : "Bài thi đã được nộp.", "ok");
       }
       if (route.name === "assessment" && route.params.kind === "placement" || submitReason === "manual") navigate("/home", { replace: true });
     },

@@ -619,7 +619,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
   };
   const rescore = async (attemptId: string) => {
     if (readOnly || typeof client.rescoreAssessment !== "function") return;
-    if (!await modal.confirm({ title: "Chấm lại bằng AI?", message: "AI sẽ chấm lại toàn bộ bài và cập nhật kết quả chấm AI hiện có.", confirmLabel: "Chấm lại", tone: "danger", countdownSeconds: 0 })) return;
+    if (!await modal.confirm({ title: "Chấm lại bằng AI?", message: "AI sẽ chấm lại phần Viết và các tiêu chí phần Nói có đủ bằng chứng.", confirmLabel: "Chấm lại", tone: "danger", countdownSeconds: 0 })) return;
     setRescoreBusy(attemptId);
     const requestId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
@@ -930,7 +930,11 @@ function AssessmentPreviewDialog({
 }
 
 function TestsRoute({ client, readOnly, initialTab }: { client: OperatorApiClient; readOnly: boolean; initialTab: "placement" | "promotion" }) {
-  const [activeTab, setActiveTab] = useState<TestResultsTab>(initialTab);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const requestedTab = new URLSearchParams(location.search).get("tab");
+  const activeTab = requestedTab === "placement" || requestedTab === "monthly" || requestedTab === "promotion" || requestedTab === "exit" ? requestedTab : initialTab;
+  const setActiveTab = (tab: TestResultsTab) => navigate(`?tab=${tab}`, { replace: true, preventScrollReset: true });
   const kinds: Record<TestResultsTab, AssessmentResultKind[]> = {
     placement: ["placement"], monthly: ["final"], promotion: ["level_up"], exit: ["pass_course"]
   };
@@ -1323,10 +1327,10 @@ function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiC
 }
 
 const reviewSections = [
-  { key: "coach", title: "Phản hồi Season", description: "Kiểm tra phản hồi của Season." },
-  { key: "appeals", title: "Kháng nghị", label: "Kháng nghị học viên", description: "Xem và xử lý kháng nghị của học viên." },
-  { key: "sent", title: "Yêu cầu", label: "Yêu cầu đã gửi", description: "Theo dõi phản hồi của Quản lý về yêu cầu mở khóa hoặc xóa tài khoản." },
-  { key: "attempts", title: "Cảnh báo bài tập", description: "Theo dõi các lượt làm cần kiểm tra." }
+  { key: "coach", title: "Phản hồi Season", label: "Phản hồi Season", compactLabel: "Season", description: "Kiểm tra phản hồi của Season." },
+  { key: "appeals", title: "Kháng nghị", label: "Kháng nghị học viên", compactLabel: "Kháng nghị", description: "Xem và xử lý kháng nghị của học viên." },
+  { key: "sent", title: "Yêu cầu", label: "Yêu cầu đã gửi", compactLabel: "Yêu cầu", description: "Theo dõi yêu cầu gửi Quản lý." },
+  { key: "attempts", title: "Cảnh báo bài tập", label: "Cảnh báo bài tập", compactLabel: "Cảnh báo", description: "Theo dõi các lượt làm cần kiểm tra." }
 ] as const;
 
 function OperatorReviewWorkspace({ client }: { client: OperatorApiClient }) {
@@ -1337,7 +1341,7 @@ function OperatorReviewWorkspace({ client }: { client: OperatorApiClient }) {
     <PageTitle><h1>{current.title}</h1><p className="muted section-tab-description">{current.description}</p></PageTitle>
     <div className="operator-review-navigation">
       <nav className="request-tabs" aria-label="Phản hồi & yêu cầu">
-        {reviewSections.map(section => <Link to={`?tab=${section.key}`} aria-current={section.key === current.key ? "page" : undefined} key={section.key}>{"label" in section ? section.label : section.title}</Link>)}
+        {reviewSections.map(section => <Link to={`?tab=${section.key}`} aria-label={section.label} data-compact-label={section.compactLabel} aria-current={section.key === current.key ? "page" : undefined} key={section.key}><span>{section.label}</span></Link>)}
       </nav>
     </div>
     {current.key === "appeals" || current.key === "sent"
@@ -1349,6 +1353,7 @@ function OperatorReviewWorkspace({ client }: { client: OperatorApiClient }) {
 function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly = false, embedded = false, assessmentKinds }: { client: OperatorApiClient; readOnly: boolean; canEditWeeklyPractice: boolean; assessmentOnly?: boolean; embedded?: boolean; assessmentKinds?: readonly AssessmentResultKind[] }) {
   const navigate = useNavigate();
   const modal = useModal();
+  const toast = useToast();
   const paths = useOperatorRoutePaths();
   const location = useLocation();
   const requestedTab = new URLSearchParams(location.search).get("tab") ?? (location.state as { reviewTab?: ReviewTab } | null)?.reviewTab;
@@ -1358,6 +1363,7 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly =
   const [data, setData] = useState<ContentReviewView>();
   const [error, setError] = useState<string>();
   const [dialog, setDialog] = useState<ContentReviewAssessmentDetailView>();
+  const [gradingAction, setGradingAction] = useState<"manual" | "ai">();
   const capabilities = useCapabilities(client);
   const load = async () => {
     try {
@@ -1393,6 +1399,19 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly =
     }
   };
   useEffect(() => { void load(); }, [client]);
+  const attemptFromNotification = assessmentOnly ? new URLSearchParams(location.search).get("attemptId") : null;
+  useEffect(() => {
+    if (!assessmentOnly) return;
+    setDialog(undefined);
+    if (!attemptFromNotification || typeof client.getContentReviewAssessment !== "function") return;
+    let active = true;
+    void client.getContentReviewAssessment(attemptFromNotification).then(detail => {
+      if (active) setDialog(detail);
+    }).catch(() => {
+      if (active) toast.show({ message: "Không mở được bài thi từ thông báo.", tone: "danger" });
+    });
+    return () => { active = false; };
+  }, [assessmentOnly, attemptFromNotification, client, location.key]);
   if (error) return <Status tone="error">Không tải được dữ liệu đọc mẫu: {error}</Status>;
   if (!data) return <Status>Đang tải dữ liệu đọc mẫu…</Status>;
   const refresh = (promise: Promise<unknown>) => void promise.then(load).catch(reason => setError(message(reason)));
@@ -1419,6 +1438,24 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly =
     if (dialog) setDialog(await client.getContentReviewAssessment(dialog.attemptId));
     await load();
   };
+  const updateExamGrade = async (action: "manual" | "ai", attemptId: string, update: () => Promise<unknown>) => {
+    setGradingAction(action);
+    try {
+      await update();
+      const updated = await client.getContentReviewAssessment(attemptId);
+      setDialog(current => current?.attemptId === attemptId ? updated : current);
+      toast.show({ message: action === "manual" ? "Đã lưu điểm chấm tay." : "Đã cập nhật kết quả chấm AI.", tone: "ok" });
+      await load();
+    } catch (reason) {
+      const label = reason instanceof Error ? reason.message : "";
+      toast.show({ message: label === "AI_UNAVAILABLE" ? "AI hiện không khả dụng. Bạn vẫn có thể chấm tay."
+        : action === "manual" ? "Chưa lưu được điểm. Hãy kiểm tra tiêu chí và bằng chứng của bài."
+          : "AI chưa chấm lại được. Bạn có thể thử lại hoặc chấm tay.", tone: "danger" });
+    } finally {
+      setGradingAction(undefined);
+    }
+  };
+  const canGrade = !readOnly && dialog && (dialog.status === "pending_review" || dialog.status === "submitted");
   const guardedManualGrade: OperatorReviewActions["onGradeManual"] = async (id, input) => {
     if (!readOnly && await confirmRegrade(id)) refresh(client.gradeReviewedSubmission(id, input));
   };
@@ -1443,7 +1480,15 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly =
       const next = await client.getContentReview();
       setData(next);
     } } : {})
-  }} />{dialog && <OperatorReviewAssessmentDetail detail={dialog} onClose={() => setDialog(undefined)} {...(typeof client.confirmAssessmentAudioDeletion === "function" && typeof client.deleteAssessmentAudio === "function" && !readOnly ? { onDeleteAudio: deleteReviewedAudio } : {})} />}</>;
+  }} />{dialog && <OperatorReviewAssessmentDetail
+    detail={dialog}
+    onClose={() => setDialog(undefined)}
+    {...(canGrade && client.manualScoreAssessment ? { onSaveManualScore: (input: ManualScoreInput) => void updateExamGrade("manual", dialog.attemptId, () => client.manualScoreAssessment!(dialog.attemptId, input)) } : {})}
+    {...(canGrade && capabilities?.ai && typeof client.rescoreAssessment === "function" ? { onRescore: () => void updateExamGrade("ai", dialog.attemptId, () => client.rescoreAssessment(dialog.attemptId, crypto.randomUUID())) } : {})}
+    savingManualScore={gradingAction === "manual"}
+    rescoring={gradingAction === "ai"}
+    {...(typeof client.confirmAssessmentAudioDeletion === "function" && typeof client.deleteAssessmentAudio === "function" && !readOnly ? { onDeleteAudio: deleteReviewedAudio } : {})}
+  />}</>;
 }
 
 function PromptsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {

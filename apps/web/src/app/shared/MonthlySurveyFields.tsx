@@ -1,4 +1,5 @@
-import { useId } from "react";
+import { useId, useState, type PointerEvent, type ReactNode } from "react";
+import { Star } from "lucide-react";
 import { MONTHLY_SURVEY_LIMITS as limits, type MonthlySurveyAnswer, type MonthlySurveyQuestion } from "@e4s/contracts";
 import "./monthly-surveys.css";
 
@@ -38,18 +39,57 @@ export function MonthlySurveyFields({ questions, answers, onAnswer }: SurveyFiel
           {question.options.filter(Boolean).map((option, optionIndex) => <option key={optionIndex} value={option}>{option}</option>)}
         </select>
       </label>;
-      return <fieldset className="monthly-survey-rating" key={id}>
-        <legend>{label}</legend>
-        <div className="row">
-          {monthlyRatingChoices.map(rating => <label key={rating}>
-            <input type="radio" name={id} value={rating} checked={value === rating} required={question.required} onChange={() => onAnswer(index, rating)} />
-            <span>{rating}</span>
-          </label>)}
-          {!question.required && value !== undefined && value !== "" ? <button type="button" className="btn-sm" onClick={() => onAnswer(index, "")}>Bỏ chọn</button> : null}
-        </div>
-      </fieldset>;
+      return <MonthlyRating key={id} id={id} label={label} required={question.required}
+        value={typeof value === "number" ? value : undefined} onAnswer={rating => onAnswer(index, rating)} />;
     })}
   </div>;
+}
+
+function MonthlyRating({ id, label, required, value, onAnswer }: {
+  id: string;
+  label: ReactNode;
+  required: boolean;
+  value: number | undefined;
+  onAnswer: (value: number | "") => void;
+}) {
+  const [preview, setPreview] = useState<number>();
+  const current = preview ?? value ?? 0;
+
+  function ratingAt(event: PointerEvent<HTMLDivElement>) {
+    const { left, width } = event.currentTarget.getBoundingClientRect();
+    const rating = Math.floor((event.clientX - left) / width * monthlyRatingChoices.length) + 1;
+    return Math.max(1, Math.min(monthlyRatingChoices.length, rating));
+  }
+
+  return <fieldset className="monthly-survey-rating">
+    <legend>{label}</legend>
+    <div className="monthly-survey-stars"
+      onPointerDown={event => {
+        if (event.button !== 0 || !event.isPrimary || !event.currentTarget.setPointerCapture || event.currentTarget.querySelector("input:disabled")) return;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setPreview(ratingAt(event));
+      }}
+      onPointerMove={event => {
+        if (event.currentTarget.hasPointerCapture?.(event.pointerId)) setPreview(ratingAt(event));
+      }}
+      onPointerUp={event => {
+        if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
+        const rating = ratingAt(event);
+        onAnswer(rating);
+        setPreview(undefined);
+        event.currentTarget.querySelector<HTMLInputElement>('input[value="' + rating + '"]')?.focus({ preventScroll: true });
+      }}
+      onLostPointerCapture={() => setPreview(undefined)}>
+      {monthlyRatingChoices.map(rating => <label key={rating} data-filled={rating <= current} title={rating + " sao"}>
+        <input type="radio" name={id} value={rating} aria-label={rating + " sao"} checked={value === rating}
+          required={required} onChange={() => onAnswer(rating)} />
+        <Star size={34} strokeWidth={1.7} aria-hidden="true" />
+      </label>)}
+    </div>
+    {!required && value !== undefined ? <div className="form-actions">
+      <button type="button" className="btn-sm" onClick={() => onAnswer("")}>Bỏ chọn</button>
+    </div> : null}
+  </fieldset>;
 }
 
 export function MonthlySurveyAnswers({ questions, answers }: { questions: MonthlySurveyQuestion[]; answers: MonthlySurveyAnswer[] }) {

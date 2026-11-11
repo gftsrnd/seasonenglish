@@ -1,9 +1,9 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
-import { BookOpen, CalendarDays, ChartColumn, Check, Ellipsis, FileText, Gamepad2, GraduationCap, House, LogOut, MessageSquare, Music2, Pencil, Search, Settings, UserRound, Volume2 } from "lucide-react";
+import { BookOpen, CalendarDays, ChartColumn, Check, CloudSnow, CloudSun, FileText, Flower2, Gamepad2, Gift, GraduationCap, House, Leaf, LogOut, MessageSquare, MoonStar, Music2, Pencil, Search, Settings, Snowflake, Sparkles, Sprout, Star, Sun, TreePine, UserRound, Volume2, Waves, Wind } from "lucide-react";
 import type { AccountRole, CefrLevel, SessionView } from "@e4s/contracts";
 import { SeasonMark } from "./SeasonMark.js";
-import { AvatarMark } from "../learner/ProfileReward.js";
+import { AVATAR_BG, AVATAR_COLOR_HEX, AvatarMark } from "../learner/ProfileReward.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import { cancelAllExclusiveAudio } from "../../features/experience/audio-precedence.js";
 import "./shared.css";
@@ -11,9 +11,10 @@ import { hasAssessmentLogoutGuard, requestAssessmentLogout } from "./assessment-
 import { useDialog } from "./ModalProvider.js";
 import { managerSectionForPath } from "../manager/navigation.js";
 import { NotificationBell } from "./NotificationBell.js";
-import { organisationThemeStorageKey } from "./ThemeProvider.js";
+import { organisationThemeStorageKey, useTheme } from "./ThemeProvider.js";
 import { ScrollJumpButton, useScrollJump } from "./ScrollJump.js";
 import { useMediaQuery } from "./useMediaQuery.js";
+import { AppGuide } from "./AppGuide.js";
 
 export { SeasonMark } from "./SeasonMark.js";
 
@@ -66,6 +67,24 @@ const icons = {
   doc: <FileText {...navIconProps} />
 } as const;
 
+const seasonalMotifs = {
+  spring: [Flower2, Sparkles, Sprout, Leaf, Flower2, Sparkles, Leaf],
+  summer: [Sun, Sparkles, Waves, CloudSun, Sun, Waves, Sparkles],
+  autumn: [Leaf, Sparkles, Wind, Leaf, Leaf, Wind, Sparkles],
+  winter: [Snowflake, Sparkles, Snowflake, CloudSnow, Sparkles, Snowflake, CloudSnow],
+  tet: [Flower2, Sparkles, Flower2, Gift, Flower2, Sparkles, Flower2],
+  midautumn: [MoonStar, Sparkles, Star, MoonStar, Star, Sparkles, MoonStar],
+  christmas: [TreePine, Star, Sparkles, Gift, Star, TreePine, Sparkles]
+} as const;
+
+export function SeasonDecoration({ className }: { className: string }) {
+  const { resolvedTheme } = useTheme();
+  const motifs = seasonalMotifs[resolvedTheme];
+  return <div className={className} aria-hidden="true">
+    {[...motifs, motifs[2], motifs[4]].map((Motif, index) => <Motif key={index} strokeWidth={1.25} />)}
+  </div>;
+}
+
 const nav: Record<ShellRole, readonly NavItem[]> = {
   learner: [
     { to: "/home", icon: icons.home, label: "Trang chủ" },
@@ -109,6 +128,8 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
   const logoutTimer = useRef<number | undefined>(undefined);
   const scroll = useScrollJump();
   const compact = useMediaQuery("(max-width: 960px)");
+  const notificationBell = <NotificationBell key={`${session.user.id}:${role}`} />;
+  const appGuide = <AppGuide key={`${session.user.id}:${role}:${location.pathname}`} role={role} pathname={location.pathname} compact={compact} />;
   const accountPanelId = useId();
   const accountPanel = useRef<HTMLDivElement>(null);
   const bottomNav = useRef<HTMLElement>(null);
@@ -180,6 +201,15 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
   const logoutControl = <button className="btn-sm btn-ghost" type="button" data-action="logout" onClick={logout} disabled={logoutPending} title={logoutPending ? "Đang đăng xuất…" : "Đăng xuất khỏi tài khoản này"} aria-label={logoutPending ? "Đang đăng xuất…" : "Đăng xuất khỏi tài khoản này"}>{logoutPending ? <span className="logout-label">Đang đăng xuất…</span> : <><LogOut size={16} strokeWidth={2} aria-hidden="true" /><span className="logout-label">Đăng xuất</span></>}</button>;
   const logoutFeedback = <><span role="status" aria-label="Trạng thái đăng xuất" aria-live="polite" style={visuallyHiddenStyle}>{logoutPending ? "Đang đăng xuất…" : ""}</span>{logoutError ? <span role="alert" className="shell-logout-error">{logoutError}</span> : null}</>;
 
+  const accountMenu = <>
+    <button className="btn-sm btn-ghost shell-account-trigger" type="button" aria-label="Tài khoản và âm thanh" popoverTarget={accountPanelId}><span aria-hidden="true"><AccountAvatar name={session.user.displayName} avatar={avatar} size={32} /></span></button>
+    <div ref={accountPanel} id={accountPanelId} className="shell-account-panel" popover="auto">
+      <div className="shell-account-info">{avatarControl}{accountIdentity}</div>
+      <AudioControls />
+      {logoutControl}
+    </div>
+  </>;
+
   return <>
     <header className="topbar app-shell-topbar">
       <Link className="brand" style={{ color: "inherit", textDecoration: "none" }} to={role === "learner" ? "/home" : role === "operator" ? "/op" : "/mgr"}>
@@ -187,23 +217,24 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
         <span>Season English <span className="muted" style={{ fontWeight: 400, fontSize: ".85rem" }}>· {organisationName}</span></span>
       </Link>
       <nav aria-label={role === "learner" ? "Điều hướng người học" : role === "operator" ? "Điều hướng người vận hành" : "Điều hướng quản lý"}>{links()}</nav>
+      <SeasonDecoration className="shell-season-decoration" />
       {compact ? <div className="shell-compact-controls" aria-busy={logoutPending || undefined}>
-        <div className="audio-ctl"><NotificationBell key={`${session.user.id}:${role}`} /></div>
-        <button className="btn-ghost shell-account-trigger" type="button" aria-label="Tài khoản và âm thanh" popoverTarget={accountPanelId}><Ellipsis size={22} aria-hidden="true" /></button>
-        <div ref={accountPanel} id={accountPanelId} className="shell-account-panel" popover="auto">
-          <div className="shell-account-info">{avatarControl}{accountIdentity}</div>
-          <AudioControls />
-          {logoutControl}
-        </div>
+        <div className="audio-ctl">{notificationBell}</div>
+        <div className="audio-ctl app-guide-control">{appGuide}</div>
+        {accountMenu}
         {logoutFeedback}
       </div> : <div className="userchip" aria-busy={logoutPending || undefined}>
-        <AudioControls notification={<NotificationBell key={`${session.user.id}:${role}`} />} />
-        {avatarControl}
-        {accountIdentity}
         {logoutControl}
         {logoutFeedback}
       </div>}
     </header>
+    {!compact && <header className="shell-desktop-header no-print">
+      <div className="shell-desktop-controls" role="group" aria-label="Tiện ích ứng dụng">
+        {notificationBell}
+        {appGuide}
+        {accountMenu}
+      </div>
+    </header>}
     <main className="app-content">
       <div ref={scroll.start} className="app-scroll-edge" aria-hidden="true" />
       {children}
@@ -253,21 +284,19 @@ function clearSharedDeviceState() {
   document.body.classList.remove("app-modal-open");
 }
 
-export function AudioControls({ notification }: { notification?: ReactNode } = {}) {
+export function AudioControls() {
   const { effectsOn: sfx, musicOn: bgm, musicAllowed, toggleEffects, toggleMusic } = useExperience();
   const [feedback, setFeedback] = useState("");
-  return <span className="audio-ctl row" style={{ gap: 4, flexWrap: "nowrap" }} role="group" aria-label={notification ? "Âm thanh và thông báo" : "Âm thanh"}>
+  return <span className="audio-ctl row" style={{ gap: 4, flexWrap: "nowrap" }} role="group" aria-label="Âm thanh">
     <button className={`btn-sm btn-ghost ${sfx ? "on" : ""}`} type="button" onClick={() => { toggleEffects(); setFeedback(`Đã ${sfx ? "tắt" : "bật"} hiệu ứng âm thanh.`); }} title={`Hiệu ứng âm thanh: ${sfx ? "bật" : "tắt"}`} aria-label={`Hiệu ứng âm thanh: ${sfx ? "bật" : "tắt"}`} aria-pressed={sfx}><Volume2 {...audioIconProps} /></button>
     <button className={`btn-sm btn-ghost ${bgm ? "on" : ""}`} type="button" onClick={() => { toggleMusic(); setFeedback(`Đã ${bgm ? "tắt" : "bật"} nhạc nền.`); }} disabled={!musicAllowed} title={!musicAllowed ? "Nhạc nền đã bị tắt bởi quản lý" : `Nhạc nền: ${bgm ? "bật" : "tắt"}`} aria-label={`Nhạc nền: ${bgm ? "bật" : "tắt"}`} aria-pressed={bgm}><Music2 {...audioIconProps} /></button>
-    {notification}
     <span role="status" aria-label="Phản hồi âm thanh" aria-live="polite" style={visuallyHiddenStyle}>{feedback}</span>
   </span>;
 }
 
 function AccountAvatar({ name, avatar, size }: { name: string; avatar?: { color?: string; acc?: string; bg?: number } | undefined; size: number }) {
   const initials = name.trim().split(/\s+/).slice(-2).map((word) => word[0]).join("").toUpperCase();
-  const backgrounds = ["#FBB829", "#F6D3CB", "#E3DCFB", "#DCE8C8", "#FFF4D9", "#D6CCBF"];
-  const colors: Record<string, string> = { ink: "#1E1E1E", brown: "#6E3B32", olive: "#4B6120", taupe: "#7A7064", orange: "#F28C28", rose: "#B4374B" };
+  const colors: Record<string, string> = AVATAR_COLOR_HEX;
   const mark = avatar?.acc && avatar.acc !== "none" ? avatar.acc as "leaf" | "sun" | "flower" | "cloud" | "star" | "drop" | "snow" : null;
-  return <span className="avatar" style={{ width: size, height: size, background: backgrounds[avatar?.bg ?? 0] ?? backgrounds[0], color: colors[avatar?.color ?? "ink"] ?? colors.ink, display: "inline-grid", placeItems: "center", fontSize: Math.max(10, Math.round(size * .36)) }}>{mark ? <AvatarMark acc={mark} size={Math.round(size * .65)} /> : initials || "?"}</span>;
+  return <span className="avatar" style={{ width: size, height: size, background: AVATAR_BG[avatar?.bg ?? 0] ?? AVATAR_BG[0], color: colors[avatar?.color ?? "ink"] ?? colors.ink, display: "inline-grid", placeItems: "center", fontSize: Math.max(10, Math.round(size * .36)) }}>{mark ? <AvatarMark acc={mark} size={Math.round(size * .65)} /> : initials || "?"}</span>;
 }

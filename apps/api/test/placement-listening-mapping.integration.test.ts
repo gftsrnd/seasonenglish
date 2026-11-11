@@ -31,8 +31,11 @@ function legacyPlacementDefinition() {
 describe("placement Listening 2 question 9 scoring path", () => {
   const pool = new Pool({ connectionString: databaseUrl });
   let capturedAssessmentInput: unknown;
+  let finishGrading: () => void = () => {};
+  const gradingGate = new Promise<void>(resolve => { finishGrading = resolve; });
   const runTask = vi.fn(async (_taskName: string, input: unknown) => {
     capturedAssessmentInput = input;
+    await gradingGate;
     return ({
     output: {
       writingScore: 10,
@@ -74,6 +77,10 @@ describe("placement Listening 2 question 9 scoring path", () => {
         [learnerId, DEMO_IDS.organization]
       );
       await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [learnerId, await createPinHash("164164")]);
+      await client.query(
+        "insert into learner_profiles (user_id, profile, completed_at) select $1, profile, completed_at from learner_profiles where user_id = $2",
+        [learnerId, DEMO_IDS.learner]
+      );
       await client.query(
         "insert into users (id, organization_id, role, display_name, email) values ($1, $2, 'learner', 'Stale Placement', 'stale-placement@e4s.local')",
         [staleLearnerId, DEMO_IDS.organization]
@@ -137,22 +144,32 @@ describe("placement Listening 2 question 9 scoring path", () => {
       });
       expect(advanced.statusCode, advanced.body).toBe(200);
     }
-    const submitted = await app.inject({
+    const submission = app.inject({
       method: "POST",
       url: `/api/v1/assessment-attempts/${attemptId}/submit`,
       headers: { cookie },
       payload: {}
     });
-    expect(submitted.statusCode, submitted.body).toBe(200);
-    expect(submitted.json()).toMatchObject({
-      attempt: {
-        sectionScores: { listening: 20, reading: 0, writing: 10, speaking: 10 },
-        totalScore: 40,
-        suggestedLevel: "A2"
-      }
-    });
+    try {
+      const deadline = AbortSignal.timeout(3_000);
+      const submitted = await Promise.race([
+        submission,
+        new Promise<never>((_, reject) => deadline.addEventListener("abort", () => reject(new Error("Submission waited for grading")), { once: true }))
+      ]);
+      expect(submitted.statusCode, submitted.body).toBe(200);
+      expect(submitted.json()).toMatchObject({
+        attempt: { status: "pending_review", sectionScores: { listening: 20, reading: 0 } }
+      });
+      expect(submitted.json().attempt.sectionScores.writing).toBeUndefined();
+    } finally {
+      finishGrading();
+    }
 
-    expect(runTask).toHaveBeenCalledOnce();
+    await vi.waitFor(async () => {
+      expect(runTask).toHaveBeenCalledOnce();
+      const job = await pool.query("select state from jobs where kind = 'assessment.ai-score-auto' and payload->>'attemptId' = $1", [attemptId]);
+      expect(job.rows).toEqual([{ state: "succeeded" }]);
+    }, { timeout: 4_000 });
     const aiInput = assessmentGradingInputSchema.parse(capturedAssessmentInput);
     expect(aiInput.objectiveScores.listening).toMatchObject({ score: 20, maxScore: 20, answered: 15, total: 15 });
     expect(aiInput.objectiveScores.listening.groups.find((group) => group.groupKey === "LB")?.taskKeys).toContain("LB_Q9");

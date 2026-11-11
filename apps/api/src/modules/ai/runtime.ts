@@ -27,7 +27,14 @@ export function createOrganizationAiRunnerFactory(pool: Pool, fallback?: AiTaskR
     // When an environment provider is selected it is the only source of
     // truth. Never silently fall through to a stale database provider.
     if (options.preferFallback ?? Boolean(fallback)) return fallback;
-    const runtime = await repositories.manager.providerRuntime(actorId);
+    const runtime = await repositories.manager.providerRuntime(actorId).catch((error: unknown) => {
+      if (error instanceof Error && [
+        "PROVIDER_SETTINGS_ENCRYPTION_KEY_MISSING",
+        "PROVIDER_SETTINGS_ENCRYPTION_KEY_INVALID",
+        "PROVIDER_SETTINGS_DECRYPT_FAILED"
+      ].includes(error.message)) return null;
+      throw error;
+    });
     if (!runtime) return fallback;
     return createAiService({
       registry: AI_TASKS,

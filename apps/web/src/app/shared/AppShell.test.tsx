@@ -9,6 +9,7 @@ import { ExperienceProvider, useExperience } from "../../features/experience/Exp
 import { AudioControls, AppShell } from "./AppShell.js";
 import { registerAssessmentLogoutGuard } from "./assessment-logout-guard.js";
 import { claimExclusiveAudio } from "../../features/experience/audio-precedence.js";
+import { ThemeProvider, useTheme } from "./ThemeProvider.js";
 
 function MusicState() {
   const { musicOn } = useExperience();
@@ -23,6 +24,8 @@ const session = (role: SessionView["role"]): SessionView => ({
   role,
   permissions: role === "learner" ? ["learning:own"] : role === "operator" ? ["content:operate", "assessment:review", "prompt:manage"] : ["content:operate", "assessment:review", "prompt:manage", "report:read", "operations:read", "reminder:manage", "reward:preview", "account:manage", "role:manage", "organisation:manage", "settings:manage"]
 } as SessionView);
+
+const sidebarLogout = () => within(document.querySelector<HTMLElement>(".userchip")!).getByRole("button", { name: "Đăng xuất khỏi tài khoản này" });
 
 it("only shows the scroll shortcut when content extends beyond the viewport", () => {
   const edges: Element[] = [];
@@ -91,6 +94,54 @@ describe("app audio controls", () => {
 });
 
 describe("app shell navigation and logout", () => {
+  it.each([
+    ["learner", "/profile", "profile-identity-actions"],
+    ["operator", "/op/months", "monthly-brief-summary"],
+    ["manager", "/mgr", "manager-progress-card-actions"]
+  ] as const)("puts account details in the desktop avatar menu and keeps sidebar logout for %s", async (role, path, anchor) => {
+    const visibleTarget = vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([new DOMRect(12, 70, 180, 65)] as unknown as DOMRectList);
+    const { container } = render(<ExperienceProvider><MemoryRouter initialEntries={[path]}><AppShell session={session(role)} onLogout={vi.fn()}><div className={anchor}><div className={role === "learner" ? "profile-identity-actions" : undefined}><button type="button" aria-expanded="false">Mở chi tiết</button></div>{role === "learner" ? <button className="btn-primary" type="button">Đổi avatar</button> : null}</div></AppShell></MemoryRouter></ExperienceProvider>);
+    try {
+      const controls = screen.getByRole("group", { name: "Tiện ích ứng dụng" });
+      expect(screen.queryByRole("group", { name: "Âm thanh" })).not.toBeInTheDocument();
+
+      expect(container.querySelector(".shell-desktop-header")).toContainElement(controls);
+      expect(container.querySelector("main")).not.toContainElement(controls);
+      expect(within(controls).getByRole("button", { name: /^Thông báo/ })).toBeInTheDocument();
+      expect(await within(controls).findByRole("button", { name: "Hướng dẫn sử dụng" })).toBeInTheDocument();
+      const account = within(controls).getByRole("button", { name: "Tài khoản và âm thanh" });
+      const menu = container.querySelector<HTMLElement>(".shell-account-panel")!;
+      expect(account).toHaveAttribute("popovertarget", menu.id);
+      expect(account).not.toHaveTextContent(session(role).user.displayName);
+      expect(menu).toHaveTextContent(session(role).user.displayName);
+      expect(menu.querySelector('[role="group"][aria-label="Âm thanh"]')).toBeInTheDocument();
+      expect(menu.querySelector('button[data-action="logout"]')).toBeInTheDocument();
+      expect(sidebarLogout()).toBeInTheDocument();
+      expect(within(controls).getByRole("button", { name: /^Thông báo/ })).not.toHaveTextContent("Thông báo");
+      expect(within(controls).getByRole("button", { name: "Hướng dẫn sử dụng" })).toHaveTextContent(/^$/);
+      expect(screen.getAllByRole("button", { name: /^Thông báo/ })).toHaveLength(1);
+      expect(screen.getAllByRole("button", { name: "Hướng dẫn sử dụng" })).toHaveLength(1);
+    } finally {
+      visibleTarget.mockRestore();
+    }
+  });
+
+  it("updates decorative seasonal motifs when the organisation theme is previewed", async () => {
+    function PreviewWinter() {
+      const { previewTheme } = useTheme();
+      return <button type="button" onClick={() => previewTheme("winter")}>Xem thử mùa đông</button>;
+    }
+    window.localStorage.setItem("e4s:organisation-theme", "summer");
+    const { container } = render(<ThemeProvider><ExperienceProvider><MemoryRouter><AppShell session={session("learner")} onLogout={vi.fn()}><PreviewWinter /></AppShell></MemoryRouter></ExperienceProvider></ThemeProvider>);
+    const decoration = container.querySelector(".shell-season-decoration");
+
+    expect(decoration).toHaveAttribute("aria-hidden", "true");
+    expect(decoration?.querySelectorAll(":scope > svg")).toHaveLength(9);
+    expect(decoration?.querySelector(".lucide-sun")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Xem thử mùa đông" }));
+    expect(decoration?.querySelector(".lucide-snowflake")).toBeInTheDocument();
+  });
+
   it("stops active assessment audio before starting logout", async () => {
     const user = userEvent.setup();
     const stopAudio = vi.fn();
@@ -98,7 +149,7 @@ describe("app shell navigation and logout", () => {
     claimExclusiveAudio("speech", stopAudio);
     render(<ExperienceProvider><MemoryRouter initialEntries={["/home"]}><AppShell session={session("learner")} onLogout={onLogout}><div /></AppShell></MemoryRouter></ExperienceProvider>);
 
-    await user.click(screen.getByRole("button", { name: "Đăng xuất khỏi tài khoản này" }));
+    await user.click(sidebarLogout());
 
     expect(stopAudio).toHaveBeenCalledOnce();
     expect(onLogout).toHaveBeenCalledOnce();
@@ -122,7 +173,7 @@ describe("app shell navigation and logout", () => {
     try {
       render(<ExperienceProvider><MemoryRouter initialEntries={["/test/placement"]}><AppShell session={session("learner")} onLogout={onLogout}><div /></AppShell></MemoryRouter></ExperienceProvider>);
 
-      await user.click(screen.getByRole("button", { name: "Đăng xuất khỏi tài khoản này" }));
+      await user.click(sidebarLogout());
       const dialog = screen.getByRole("dialog", { name: "Bạn đang làm bài test" });
       expect(within(dialog).getByText(/được ghi nhận là một lần cảnh báo/i)).toBeInTheDocument();
       expect(guard).not.toHaveBeenCalled();
@@ -131,7 +182,7 @@ describe("app shell navigation and logout", () => {
       await user.click(within(dialog).getByRole("button", { name: "Ở lại làm bài" }));
       expect(screen.queryByRole("dialog", { name: "Bạn đang làm bài test" })).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "Đăng xuất khỏi tài khoản này" }));
+      await user.click(sidebarLogout());
       await user.click(within(screen.getByRole("dialog", { name: "Bạn đang làm bài test" })).getByRole("button", { name: "Vẫn đăng xuất" }));
       await waitFor(() => expect(guard).toHaveBeenCalledOnce());
       expect(onLogout).toHaveBeenCalledOnce();
@@ -226,7 +277,7 @@ describe("app shell navigation and logout", () => {
     const onLogout = () => new Promise<void>((resolve) => { resolveLogout = resolve; });
     render(<ExperienceProvider><MemoryRouter initialEntries={["/home"]}><AppShell session={session("learner")} onLogout={onLogout}><div /></AppShell></MemoryRouter></ExperienceProvider>);
 
-    const logout = screen.getByRole("button", { name: "Đăng xuất khỏi tài khoản này" });
+    const logout = sidebarLogout();
     await user.click(logout);
 
     expect(logout).toBeDisabled();
@@ -238,10 +289,10 @@ describe("app shell navigation and logout", () => {
     expect(screen.getByRole("status", { name: "Trạng thái đăng xuất" })).toHaveTextContent("");
   });
 
-  it("uses an accessible Lucide logout affordance for the compact shell control", () => {
+  it("uses an accessible Lucide logout affordance for the sidebar control", () => {
     render(<ExperienceProvider><MemoryRouter initialEntries={["/home"]}><AppShell session={session("learner")} onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
 
-    const logout = screen.getByRole("button", { name: "Đăng xuất khỏi tài khoản này" });
+    const logout = sidebarLogout();
     expect(logout).toHaveAttribute("title", "Đăng xuất khỏi tài khoản này");
     expect(logout.querySelector("svg")).toHaveClass("lucide-log-out");
     expect(logout.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
@@ -253,7 +304,7 @@ describe("app shell navigation and logout", () => {
     window.history.replaceState({}, "", "/op");
     render(<ExperienceProvider><BrowserRouter><AppShell session={session("operator")} onLogout={() => undefined}><div /></AppShell></BrowserRouter></ExperienceProvider>);
 
-    await user.click(screen.getByRole("button", { name: "Đăng xuất khỏi tài khoản này" }));
+    await user.click(sidebarLogout());
 
     expect(window.location.pathname).toBe("/");
   });
@@ -267,7 +318,7 @@ describe("app shell navigation and logout", () => {
     document.body.classList.add("app-modal-open");
     render(<ExperienceProvider><MemoryRouter initialEntries={["/home"]}><AppShell session={session("learner")} onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
 
-    await user.click(screen.getByRole("button", { name: "Đăng xuất khỏi tài khoản này" }));
+    await user.click(sidebarLogout());
 
     expect(window.localStorage.getItem("e4s:effects")).toBe("off");
     expect(window.localStorage.getItem("e4s:music")).toBe("on");

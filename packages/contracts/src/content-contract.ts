@@ -1,4 +1,5 @@
 import type { RequestEvidenceView } from "./request-evidence-contract.js";
+import type { AssessmentProductiveRubricItem } from "./assessment-contract.js";
 export const CONTENT_LIFECYCLE_STATUSES = ["draft", "approved", "locked", "reopen_requested", "reopened", "rejected"] as const;
 export type ContentLifecycleStatus = (typeof CONTENT_LIFECYCLE_STATUSES)[number];
 
@@ -327,6 +328,7 @@ export interface ContentReviewAssessmentSectionView {
 }
 
 export interface ContentReviewAssessmentDetailView {
+  productiveRubric?: AssessmentProductiveRubricItem[];
   attemptId: string;
   learnerId: string;
   learnerName: string;

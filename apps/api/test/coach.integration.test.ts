@@ -60,7 +60,7 @@ describe("AI Coach API", () => {
   const runner: AiTaskRunner = {
     runTask: (...args) => args[0] === "coach_roleplay_turn" ? roleplay(...args) : runTask(...args)
   };
-  const aiRunnerFactory = vi.fn(async () => runner);
+  const aiRunnerFactory = vi.fn(async (): Promise<AiTaskRunner | undefined> => runner);
   const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false, aiRunner: runner, aiRunnerFactory });
   let learnerCookie = "";
   let operatorCookie = "";
@@ -486,8 +486,66 @@ describe("AI Coach API", () => {
     expect(roleplay).toHaveBeenCalledOnce();
     expect(runTask).toHaveBeenCalledWith("coach_dialogue", expect.anything(), expect.objectContaining({ maxAttempts: 2 }));
     expect(response.json().messages.at(-1).feedback).toMatchObject({
-      feedbackStatus: "unavailable", nextQuestion: aiOutput.nextQuestion, evaluation: { countsTowardGoal: false }
+      feedbackStatus: "unavailable", nextQuestion: aiOutput.nextQuestion,
+      creditedDuringAiOutage: true, evaluation: { countsTowardGoal: true }
     });
+    const log = await pool.query(
+      "select payload, created_at from audit_events where action = 'coach.practice_turn_credited_during_outage' and payload->>'requestId' = $1",
+      ["10000000-0000-4000-8000-000000000016"]
+    );
+    expect(log.rows).toEqual([{ payload: expect.objectContaining({ code: "AI_OUTPUT_INVALID", practiceDate: expect.any(String) }), created_at: expect.any(Date) }]);
+  });
+
+  it("credits a practice turn once when no AI runner is available", async () => {
+    await pool.query(
+      `update organization_settings set configuration = configuration || '{"simulatedSystemDate":"2026-11-04"}'
+       where organization_id = $1`, [DEMO_IDS.organization]
+    );
+    const getInbox = () => app.inject({ method: "GET", url: "/api/v1/me/notifications", headers: { cookie: learnerCookie } });
+    const priorItems = (await getInbox()).json().items as { id: string }[];
+    aiRunnerFactory.mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
+    const payload = { requestId: "10000000-0000-4000-8000-000000000022", message: "Could you tell me where room 302 is?" };
+    for (const _ of [1, 2]) {
+      const response = await app.inject({
+        method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie }, payload
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({ aiAvailable: false, daily: { used: 1 }, monthly: { turns: 1 } });
+      expect(response.json().messages.at(-1).feedback).toMatchObject({
+        feedbackStatus: "unavailable", creditedDuringAiOutage: true, evaluation: { countsTowardGoal: true }
+      });
+    }
+    expect(roleplay).not.toHaveBeenCalled();
+    expect(runTask).not.toHaveBeenCalled();
+    const log = await pool.query(
+      "select payload from audit_events where action = 'coach.practice_turn_credited_during_outage' and payload->>'requestId' = $1",
+      [payload.requestId]
+    );
+    expect(log.rows).toEqual([{ payload: expect.objectContaining({ code: "AI_UNAVAILABLE" }) }]);
+    aiRunnerFactory.mockResolvedValueOnce(undefined);
+    const nextTurn = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000023", message: "Could you show me the quickest route to room 302?" }
+    });
+    expect(nextTurn.statusCode, nextTurn.body).toBe(200);
+    expect(nextTurn.json()).toMatchObject({ daily: { used: 2 }, monthly: { turns: 2 } });
+    const inbox = await getInbox();
+    expect(inbox.json().items.filter((item: { id: string; kind: string }) =>
+      item.kind === "season_turn_credited" && !priorItems.some(prior => prior.id === item.id))).toEqual([
+      expect.objectContaining({ kind: "season_turn_credited", context: "season" })
+    ]);
+    const staff = await pool.query(
+      `select u.role, n.kind, count(n.id)::integer as count
+       from users u left join inbox_notifications n
+         on n.recipient_id = u.id and n.organization_id = u.organization_id and n.event_key = 'season-feedback:2026-11-04'
+       where u.organization_id = $1 and u.status = 'active' and u.role in ('operator', 'manager')
+       group by u.id, u.role, n.kind order by u.role`, [DEMO_IDS.organization]
+    );
+    expect(staff.rows.map(row => row.role)).toEqual(expect.arrayContaining(["operator", "manager"]));
+    for (const row of staff.rows) {
+      expect(row.count).toBe(1);
+      expect(row.kind).toBe(row.role === "manager" ? "season_service_interrupted" : "season_feedback_interrupted");
+    }
   });
 
   it("uses the accepted model answer instead of the evaluator's duplicated question", async () => {

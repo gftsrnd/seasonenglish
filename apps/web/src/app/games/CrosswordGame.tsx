@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 import type { GameAnswerInput } from "@e4s/contracts";
 import { ArrowDown, ArrowRight } from "lucide-react";
 import { letters, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
@@ -9,6 +9,11 @@ type Entry = { value: string; word: GameWord };
 type Direction = "across" | "down";
 type Placed = Entry & { row: number; column: number; direction: Direction; number?: number };
 type Crossword = { cells: Array<Array<string | null>>; placed: Placed[]; numbers: Record<string, number> };
+
+function distinctDefinition({ definition, vietnamese }: GameWord) {
+  const text = definition?.trim();
+  return text && text.toLowerCase() !== vietnamese.trim().toLowerCase() ? text : undefined;
+}
 
 export function crosswordEntryCount(words: readonly GameWord[]) {
   return buildCrossword(words.map((word) => ({ value: letters(word.english), word })).filter((entry) => entry.value.length >= 3)).placed.length;
@@ -34,12 +39,6 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
     const input = inputRefs.current[key];
     if (!input) return;
     input.focus({ preventScroll: true });
-    const grid = input.closest<HTMLElement>(".crossword-grid");
-    if (!grid) return;
-    const gridBox = grid.getBoundingClientRect();
-    const inputBox = input.getBoundingClientRect();
-    if (inputBox.left < gridBox.left) grid.scrollLeft -= gridBox.left - inputBox.left + 8;
-    if (inputBox.right > gridBox.right) grid.scrollLeft += inputBox.right - gridBox.right + 8;
   };
   const moveFocus = (row: number, column: number, key: string) => {
     const nextRow = row + (key === "ArrowUp" ? -1 : key === "ArrowDown" ? 1 : 0);
@@ -57,7 +56,14 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
     return entry.value.split("").some((_, index) => entry.row + rowStep * index === row && entry.column + columnStep * index === column);
   });
   const activeEntry = activeCell ? entriesAt(activeCell).find((entry) => entry.direction === direction) ?? entriesAt(activeCell)[0] : undefined;
+  const activeDefinition = activeEntry && distinctDefinition(activeEntry.word);
   const activeEntryCells = activeEntry ? activeEntry.value.split("").map((_, index) => cellKey(activeEntry.row + (activeEntry.direction === "down" ? index : 0), activeEntry.column + (activeEntry.direction === "across" ? index : 0))) : [];
+  const selectClue = (entry: Placed) => {
+    const key = cellKey(entry.row, entry.column);
+    setActiveCell(key);
+    setDirection(entry.direction);
+    inputRefs.current[key]?.focus();
+  };
   const toggleDirection = (key: string) => {
     const entries = entriesAt(key);
     if (entries.some((entry) => entry.direction !== direction)) setDirection((value) => value === "across" ? "down" : "across");
@@ -176,10 +182,9 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
   return <div className="game-runner" aria-busy={busy || undefined}>
     <div className="game-hud"><h2>{crossword.placed.length} từ</h2><span>Gợi ý <strong>{hints}</strong></span><span>Kiểm tra <strong>{checks}</strong></span></div>
     <div className="crossword-scene">
-      <p className="crossword-scroll-hint" role="note">Màn nhỏ: vuốt ngang để xem hết lưới.</p>
       <div className="crossword-mode" role="status" aria-live="polite"><span>Đang đi <b>{direction === "across" ? "Ngang" : "Dọc"}</b></span><span>Từ đang chọn <b>{activeEntry?.number ?? "—"}</b></span><button type="button" className="btn-sm" onClick={() => activeCell && toggleDirection(activeCell)} disabled={!activeCell || entriesAt(activeCell).length < 2}>Đổi hướng</button></div>
-      {activeEntry ? <p className="crossword-active-clue"><b>{activeEntry.number}. {activeEntry.direction === "across" ? "Ngang" : "Dọc"}</b> · {activeEntry.word.vietnamese}{activeEntry.word.definition ? ` — ${activeEntry.word.definition}` : ""} <small>({activeEntry.value.length} chữ)</small></p> : <p className="crossword-active-clue is-empty">Chọn một ô để xem gợi ý của từ đó.</p>}
-      <div className="crossword-grid" role="grid" aria-label="Lưới ô chữ" aria-readonly="false" aria-rowcount={crossword.cells.length} aria-colcount={crossword.cells[0]?.length ?? 0} style={{ gridTemplateColumns: `repeat(${crossword.cells[0]?.length ?? 1}, minmax(28px, 38px))` }}>
+      {activeEntry ? <p className="crossword-active-clue"><b>{activeEntry.number}. {activeEntry.direction === "across" ? "Ngang" : "Dọc"}</b> · {activeEntry.word.vietnamese}{activeDefinition ? ` — ${activeDefinition}` : ""} <small>({activeEntry.value.length} chữ)</small></p> : <p className="crossword-active-clue is-empty">Chọn một ô để xem gợi ý của từ đó.</p>}
+      <div className="crossword-grid" role="grid" aria-label="Lưới ô chữ" aria-readonly="false" aria-rowcount={crossword.cells.length} aria-colcount={crossword.cells[0]?.length ?? 0} style={{ "--crossword-columns": crossword.cells[0]?.length ?? 1 } as CSSProperties}>
         {crossword.cells.map((row, rowIndex) => <div role="row" aria-label={`Hàng ${rowIndex + 1}`} aria-rowindex={rowIndex + 1} key={`row-${rowIndex}`}>
           {row.map((wanted, columnIndex) => {
           const key = cellKey(rowIndex, columnIndex);
@@ -237,8 +242,28 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
       </div>
       <div className="crossword-actions"><button className="btn-primary" type="button" onClick={() => void check()} disabled={busy}>Kiểm tra</button><button className="btn-sm" type="button" onClick={hint} disabled={busy || !activeEntry}>Gợi ý 1 chữ</button><span>{activeEntry ? `Gợi ý cho từ ${activeEntry.number} · trừ 1 điểm.` : "Chọn một từ trước khi dùng gợi ý."}</span></div>
       <div className="crossword-clues">
-        <section className={activeEntry?.direction === "across" ? "is-active" : ""} role="region" aria-label="Gợi ý ngang"><h3>Ngang <ArrowRight className="game-control-icon" size={12} strokeWidth={2} aria-hidden="true" /></h3><ol>{clue("across").map((entry) => <li className={activeEntry?.word.id === entry.word.id ? "is-active" : ""} id={`crossword-clue-across-${entry.number}`} key={`${entry.number}-${entry.word.id}`}><b>{entry.number}.</b> {entry.word.vietnamese}{entry.word.definition ? <span className="muted"> · {entry.word.definition}</span> : null} <small>({entry.value.length})</small></li>)}</ol></section>
-        <section className={activeEntry?.direction === "down" ? "is-active" : ""} role="region" aria-label="Gợi ý dọc"><h3>Dọc <ArrowDown className="game-control-icon" size={12} strokeWidth={2} aria-hidden="true" /></h3><ol>{clue("down").map((entry) => <li className={activeEntry?.word.id === entry.word.id ? "is-active" : ""} id={`crossword-clue-down-${entry.number}`} key={`${entry.number}-${entry.word.id}`}><b>{entry.number}.</b> {entry.word.vietnamese}{entry.word.definition ? <span className="muted"> · {entry.word.definition}</span> : null} <small>({entry.value.length})</small></li>)}</ol></section>
+        {([
+          { direction: "across", label: "Ngang", Icon: ArrowRight },
+          { direction: "down", label: "Dọc", Icon: ArrowDown },
+        ] as const).map(({ direction, label, Icon }) => (
+          <section key={direction} className={activeEntry?.direction === direction ? "is-active" : ""} role="region" aria-label={`Gợi ý ${label.toLowerCase()}`}>
+            <h3>{label} <Icon className="game-control-icon" size={12} strokeWidth={2} aria-hidden="true" /></h3>
+            <ol>
+              {clue(direction).map((entry) => {
+                const definition = distinctDefinition(entry.word);
+                return (
+                  <li id={`crossword-clue-${direction}-${entry.number}`} key={entry.word.id}>
+                    <button type="button" aria-current={activeEntry === entry || undefined} onClick={() => selectClue(entry)}>
+                      <b>{entry.number}.</b>
+                      <span>{entry.word.vietnamese}{definition ? <span className="muted"> · {definition}</span> : null}</span>
+                      <small>({entry.value.length})</small>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+        ))}
       </div>
       {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
       <GameFeedback message={notice} tone={noticeTone} />

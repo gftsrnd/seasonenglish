@@ -29,6 +29,8 @@ export type InboxNotificationKind =
   | "complaint_received" | "complaint_approved" | "complaint_rejected"
   | "reopen_received" | "reopen_approved" | "reopen_rejected"
   | "assessment_received" | "assessment_result" | "assessment_retry"
+  | "assessment_manual_review" | "assessment_submission_saved" | "assessment_grading_interrupted"
+  | "season_turn_credited" | "season_feedback_interrupted" | "season_service_interrupted"
   | "appeal_received" | "appeal_approved" | "appeal_rejected"
   | "learning_reminder" | "security_report"
   | "deletion_received" | "deletion_resolved" | "level_changed" | "credential_changed" | "account_reopened"

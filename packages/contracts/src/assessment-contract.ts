@@ -424,6 +424,7 @@ export interface AssessmentReviewLearnerView {
 export interface AssessmentReviewAttemptDetailView extends AssessmentReviewAttemptSummaryView {
   learnerId: string;
   learnerName: string;
+  productiveRubric?: AssessmentProductiveRubricItem[];
   taskPrompts?: Array<{
     section: AssessmentSectionCode;
     taskKey: string;
@@ -477,6 +478,7 @@ export interface AssessmentReviewAttemptDetailView extends AssessmentReviewAttem
 }
 
 export interface ManualAssessmentScoreInput {
+  rubricScores?: AssessmentRubricScore[];
   writingTasks: Array<{
     taskKey: string;
     criteria: {
@@ -498,6 +500,18 @@ export interface ManualAssessmentScoreInput {
     } | null;
   }>;
   comment: string;
+}
+
+export interface AssessmentRubricScore {
+  code: string;
+  score: number;
+}
+
+export interface AssessmentProductiveRubricItem {
+  code: string;
+  skill: "writing" | "speaking";
+  maxScore: number;
+  description: string;
 }
 
 export interface AssessmentReviewChallengeView {

@@ -145,7 +145,7 @@ describe("OperatorRouteController", () => {
       weeklyPractices: [{ versionId: "v1", weekNumber: 1, cefr: "A2", topic: "Directions", status: "draft", version: 1, task: "Write three sentences.", guidance: "Use weekly words.", requiredVocabulary: ["left"] }]
     } as ContentReviewView;
 
-    render(<MemoryRouter initialEntries={["/op/review"]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review) } as any} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter initialEntries={["/op/review"]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review) } as any} /></MemoryRouter></ToastProvider>);
 
     const navigation = screen.getByRole("navigation", { name: "Phản hồi & yêu cầu" });
     expect(within(navigation).getAllByRole("link").map(link => link.textContent)).toEqual(["Phản hồi Season", "Kháng nghị học viên", "Yêu cầu đã gửi", "Cảnh báo bài tập"]);
@@ -219,6 +219,24 @@ describe("OperatorRouteController", () => {
     const exitDialog = await screen.findByRole("dialog", { name: "Xem đề Pass Course – Form A" });
     await user.click(within(exitDialog).getByRole("button", { name: /Nghe.*1 câu/ }));
     expect(exitDialog).toHaveTextContent("pass_course actual listening prompt");
+  });
+
+  it("opens the submitted attempt from a manual-grading notification in the monthly exam tab", async () => {
+    const attemptId = "dd8828fc-27c5-4321-8876-515725d2569a";
+    const getContentReviewAssessment = vi.fn().mockResolvedValue({
+      attemptId, learnerId: "u1", learnerName: "Lan", kind: "final", title: "Bài thi tháng",
+      status: "pending_review", startedAt: "2026-11-09T08:00:00.000Z", submittedAt: "2026-11-09T08:30:00.000Z",
+      totalScore: null, taskPrompts: [], answers: [], scores: [], integrityEvents: [], decision: null, appeal: null
+    });
+    const client = {
+      getContentReview: vi.fn().mockResolvedValue({ tabs: [], submissions: [], coachSamples: [], microLessons: [], appeals: [], lessonAttempts: [], assessments: [], weeklyPractices: [] }),
+      getAssessmentFormPreviews: vi.fn().mockResolvedValue({ kind: "final", forms: [] }),
+      getContentReviewAssessment
+    };
+    render(<ToastProvider><MemoryRouter initialEntries={[`/op/tests?tab=monthly&attemptId=${attemptId}`]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
+    expect(await screen.findByRole("dialog", { name: "Chi tiết bài test của Lan" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Bài thi tháng" })).toHaveAttribute("aria-selected", "true");
+    expect(getContentReviewAssessment).toHaveBeenCalledWith(attemptId);
   });
 
   it("opens the exact monthly draft in the exam tab and refreshes its shared saved preview", async () => {
@@ -1021,7 +1039,7 @@ describe("OperatorRouteController", () => {
       }],
       microLessons: [], appeals: [], lessonAttempts: [], assessments: []
     };
-    render(<MemoryRouter initialEntries={["/op/review?tab=subs"]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review) } as any} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter initialEntries={["/op/review?tab=subs"]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review) } as any} /></MemoryRouter></ToastProvider>);
 
     expect(await screen.findByText("Chưa có lượt luyện nào.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Kháng nghị học viên" })).toBeInTheDocument();

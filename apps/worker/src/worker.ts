@@ -1,7 +1,7 @@
 import type { LeasedJob } from "@e4s/database";
 
 export interface JobPort {
-  leaseNext(workerId: string, leaseSeconds: number): Promise<LeasedJob | null>;
+  leaseNext(workerId: string, leaseSeconds: number, kinds?: string[]): Promise<LeasedJob | null>;
   markSucceeded(id: string, workerId: string): Promise<boolean>;
   markFailed(id: string, workerId: string, error: string): Promise<"queued" | "dead" | null>;
 }
@@ -14,7 +14,7 @@ export async function processNextJob(input: {
   leaseSeconds: number;
   handlers: Record<string, JobHandler>;
 }): Promise<boolean> {
-  const job = await input.jobs.leaseNext(input.workerId, input.leaseSeconds);
+  const job = await input.jobs.leaseNext(input.workerId, input.leaseSeconds, Object.keys(input.handlers));
   if (!job) return false;
 
   try {

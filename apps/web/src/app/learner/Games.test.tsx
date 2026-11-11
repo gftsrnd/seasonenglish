@@ -52,19 +52,21 @@ describe("app games affordances", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Xoá bộ này" }));
     const removal = await screen.findByRole("dialog", { name: "Xoá bộ từ đang dùng?" });
+    expect(within(removal).getByRole("button", { name: "Xoá bộ từ" })).toHaveClass("btn-danger");
     expect(actions.deleteGameSet).not.toHaveBeenCalled();
     fireEvent.click(within(removal).getByRole("button", { name: "Huỷ" }));
     expect(actions.deleteGameSet).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Dùng từ đã học trong tháng" }));
     const replacement = await screen.findByRole("dialog", { name: "Thay bộ từ đang dùng?" });
+    expect(within(replacement).getByRole("button", { name: "Thay bộ từ" })).toHaveClass("btn-primary");
     expect(actions.useWeeklyGameSet).not.toHaveBeenCalled();
     fireEvent.click(within(replacement).getByRole("button", { name: "Huỷ" }));
     expect(actions.useWeeklyGameSet).not.toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: /Bộ từ: Tuần 1/i })).toBeInTheDocument();
   });
   it("separates the three game setup sections into responsive cards", () => {
-    renderGames(<LearnerGames view={view} actions={actions} />);
+    renderGames(<LearnerGames view={{ ...view, aiAvailable: true }} actions={actions} />);
 
     const page = screen.getByRole("heading", { name: "Game từ vựng" }).closest(".games-page");
     expect(page).toHaveClass("games-page");
@@ -87,14 +89,13 @@ describe("app games affordances", () => {
     expect(screen.queryByText("Nhập một chủ đề để tạo bộ từ.")).not.toBeInTheDocument();
   });
 
-  it("disables topic entry when AI generation is unavailable", () => {
-    renderGames(<LearnerGames view={view} actions={actions} />);
+  it("offers a way to get practice words when AI generation and learned words are unavailable", () => {
+    renderGames(<LearnerGames view={{ ...view, wordSet: null }} actions={actions} />);
 
-    const topic = screen.getByRole("textbox", { name: "Chủ đề bộ từ" });
-    expect(topic).toBeDisabled();
-    expect(topic).toHaveAttribute("aria-describedby", "game-topic-help");
-    expect(screen.getByText(/Tạo bộ từ theo chủ đề đang tạm thời không khả dụng/i)).toHaveAttribute("id", "game-topic-help");
-    expect(screen.getByRole("button", { name: "Tạo bộ từ" })).toBeDisabled();
+    expect(screen.queryByRole("textbox", { name: "Chủ đề bộ từ" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Nhập một chủ đề để tạo bộ từ.")).not.toBeInTheDocument();
+    expect(screen.getByText(/Hãy học một bài để có từ luyện tập/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Về Trang chủ" })).toHaveAttribute("href", "/home");
   });
 
   it("shows the loading state while topic generation is pending", async () => {

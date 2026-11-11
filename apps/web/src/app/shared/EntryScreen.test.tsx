@@ -7,6 +7,7 @@ import type { SessionView } from "@e4s/contracts";
 import type { AuthClient } from "../../features/auth/index.js";
 import { EntryScreen } from "./EntryScreen.js";
 import { ApiError } from "../../api/runtime.js";
+import { ThemeProvider, useTheme } from "./ThemeProvider.js";
 
 const learnerSession: SessionView = { user: { id: "learner-1", displayName: "Học viên Demo", email: "learner@e4s.local" }, role: "learner", permissions: ["learning:own"] };
 
@@ -26,6 +27,26 @@ function stubClient(): AuthClient {
 }
 
 describe("EntryScreen interaction", () => {
+  it("uses the current seasonal motifs in the login card", async () => {
+    function ThemePreview() {
+      const { previewTheme } = useTheme();
+      return <><button onClick={() => previewTheme("winter")}>Winter</button><button onClick={() => previewTheme("christmas")}>Christmas</button></>;
+    }
+    const user = userEvent.setup();
+    const { container } = render(<ThemeProvider>
+      <ThemePreview />
+      <EntryScreen client={stubClient()} onAuthenticated={vi.fn()} />
+    </ThemeProvider>);
+    const artwork = container.querySelector(".app-entry .entry-hero-art");
+    expect(artwork).toHaveAttribute("aria-hidden", "true");
+    await user.click(screen.getByRole("button", { name: "Winter" }));
+    expect(artwork?.querySelector(".lucide-snowflake")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Christmas" }));
+    expect(artwork?.querySelector(".lucide-tree-pine")).toBeInTheDocument();
+    expect(artwork?.querySelector(".lucide-snowflake")).toBeNull();
+  });
+
+
   it("opens the learner PIN recovery form directly and follows browser history", async () => {
     window.history.replaceState({}, "", "/forgot-pin");
     const user = userEvent.setup();

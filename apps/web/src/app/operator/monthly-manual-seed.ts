@@ -43,7 +43,7 @@ export function monthlyManualSeed(framework: Framework, lessonNumber: number): {
     return chosen.length ? chosen : sound.examples.slice(0, 3);
   };
   const first = sounds[0];
-  const focusFor = (code: string) => day.skillExercises.find((exercise) => exercise.exerciseCode === code)?.focus;
+  const focusFor = (code: string) => day.skillExercises?.find((exercise) => exercise.exerciseCode === code)?.focus;
   const withFocus = (code: string): Record<string, unknown> => { const focus = focusFor(code); return focus ? { focus } : {}; };
   const words = cores.map((core) => core.word);
   const title = review

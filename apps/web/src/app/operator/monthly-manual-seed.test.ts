@@ -60,6 +60,14 @@ describe("monthlyManualSeed", () => {
     expect(seed.parts.find((part) => part.code === "listening")!.content).toEqual({ focus: "Nghe chi tiết thời gian" });
   });
 
+  it("opens a legacy day without skill exercise allocations", () => {
+    const legacy = structuredClone(framework) as any;
+    delete legacy.resources.roadmap.days[0].skillExercises;
+    const seed = monthlyManualSeed(legacy, 1);
+    expect(seed?.title).toBe("Lesson 1: client");
+    expect(seed?.parts.find(part => part.code === "listening")?.content).toEqual({});
+    expect(seed?.parts.find(part => part.code === "grammar")?.content).toMatchObject({ formula: "S + V(s)" });
+  });
   it("prefills a review day with the whole week and every review sound", () => {
     const seed = monthlyManualSeed(framework, 5)!;
     expect(seed).toMatchObject({ kind: "review", date: "2026-11-06", vocabularyCount: 3, title: "Weekly review: client, report" });

@@ -59,8 +59,10 @@ export function AssessmentAppealForm({ target, appeal, submit }: {
         <label htmlFor={field}>Lý do kháng nghị</label>
         <textarea id={field} rows={3} required minLength={10} maxLength={2000} value={reason} onChange={event => setReason(event.target.value)} autoFocus />
         {error ? <p role="alert">{error}</p> : null}
-        <div className="row"><button type="submit" className="btn-primary" disabled={busy || evidence.blocked || reason.trim().length < 10 || Boolean(target.requiresProposedLevel && !proposedLevel)}>{busy ? "Đang gửi…" : "Gửi cho Vận hành"}</button>
-          <button type="button" className="btn" disabled={busy} onClick={() => { setOpen(false); setEvidence({}); }}>Hủy</button></div>
+        <div className="form-actions learner-support-form-actions">
+          <button type="button" className="btn" disabled={busy} onClick={() => { setOpen(false); setEvidence({}); }}>Hủy</button>
+          <button type="submit" className="btn-primary" disabled={busy || evidence.blocked || reason.trim().length < 10 || Boolean(target.requiresProposedLevel && !proposedLevel)}>{busy ? "Đang gửi…" : "Gửi cho Vận hành"}</button>
+        </div>
       </form>}
   </div>;
 }

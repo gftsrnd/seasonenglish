@@ -62,6 +62,7 @@ const reopenDecisionInput = z.object({ reason: z.string().trim().min(5).max(1000
 /** Monthly routes deliberately live outside routes.ts: monthly contracts are not weeks. */
 export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>): void {
   const repositories = createRepositories(pool);
+  const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
   const resourceProgress = new MonthlyResourceProgressStore();
   const readers = createRoleGuard(pool, ["operator", "manager"]);
   const contentOperator = createRoleGuard(pool, ["operator"]);
@@ -139,7 +140,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
   app.post("/api/v1/content/months/:month/brief/suggest", { preHandler: contentOperator }, async (request, reply) => {
     const month = params.parse(request.params);
     const actorId = request.e4sSession!.user.id;
-    const runner = await aiRunnerFactory?.(actorId) ?? aiRunner;
+    const runner = await runnerFor(actorId);
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const [overview, task] = await Promise.all([
       repositories.monthlyContent.getOverview(actorId, month.month),
@@ -244,11 +245,10 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     if (criteria.grammarTopicCount !== 2 || criteria.pronunciationSoundCount !== 4) {
       return reply.code(422).send({ code: "MONTHLY_RESOURCE_CRITERIA_MISMATCH", requiredGrammarTopicCount: 2, requiredPronunciationSoundCount: 4 });
     }
-    const [task, configuredRunner] = await Promise.all([
+    const [task, baseRunner] = await Promise.all([
       repositories.aiRuns.activeTaskPrompt(actorId, "monthly_resource_generation"),
-      aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner)
+      runnerFor(actorId)
     ]);
-    const baseRunner = configuredRunner ?? aiRunner;
     if (!baseRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     const progressKey = actorId + ":" + month.month + ":" + criteria.cefr;
@@ -937,7 +937,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
   app.post("/api/v1/content/month-frameworks/:id/reviews/:dayNumber/generate", { preHandler: contentOperator }, async (request, reply) => {
     const { id, dayNumber } = dayParams.parse(request.params);
     const actorId = request.e4sSession!.user.id;
-    const runner = await aiRunnerFactory?.(actorId) ?? aiRunner;
+    const runner = await runnerFor(actorId);
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     let contract;
     let task;
@@ -973,7 +973,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
   app.post("/api/v1/content/month-frameworks/:id/days/:dayNumber/generate", { preHandler: contentOperator }, async (request, reply) => {
     const { id, dayNumber } = dayParams.parse(request.params);
     const actorId = request.e4sSession!.user.id;
-    const runner = await aiRunnerFactory?.(actorId) ?? aiRunner;
+    const runner = await runnerFor(actorId);
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     let contract;
     let task;

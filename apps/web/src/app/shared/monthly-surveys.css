@@ -55,31 +55,41 @@
   margin-bottom: 8px;
 }
 
-.monthly-survey-rating label {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 42px;
-  min-height: 42px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0 6px;
+.monthly-survey-stars {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  width: min(100%, 272px);
+  margin-inline: auto;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.monthly-survey-stars label {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 48px;
+  border-radius: 8px;
+  color: var(--muted);
   cursor: pointer;
 }
 
-.monthly-survey-rating .row { flex-wrap: wrap; gap: 8px; }
-
-.monthly-survey-rating label {
-  position: relative;
-  background: var(--surface);
+.monthly-survey-stars label[data-filled="true"] {
+  color: var(--primary);
 }
 
-.monthly-survey-rating label:has(:checked) {
-  background: var(--primary-soft);
-  border-color: var(--primary);
-  color: var(--text);
-  font-weight: 700;
+.monthly-survey-stars label[data-filled="true"] svg {
+  fill: currentColor;
+}
+
+.monthly-survey-stars svg {
+  max-width: 90%;
+  height: auto;
+}
+
+.monthly-survey-form .form-actions > button {
+  min-height: 44px;
 }
 
 .monthly-survey-rating label:has(:focus-visible) {
@@ -207,8 +217,3 @@
 .monthly-survey-history summary svg { flex-shrink: 0; }
 .monthly-survey-history details[open] summary svg { transform: rotate(180deg); }
 .monthly-survey-history .monthly-survey-answers { padding-bottom: 12px; }
-
-@media (max-width: 420px) {
-  .monthly-survey-rating .row { gap: 5px; }
-  .monthly-survey-rating label { min-width: 40px; }
-}

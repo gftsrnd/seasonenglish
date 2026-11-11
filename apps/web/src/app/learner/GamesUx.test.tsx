@@ -359,6 +359,18 @@ describe("learner game visual and interaction regressions", () => {
     expect(screen.getAllByRole("textbox")[0]).toHaveAttribute("aria-describedby");
   });
 
+  it("focuses the matching word when a crossword clue is activated", () => {
+    render(<CrosswordGame words={wordSet.words} onFinish={vi.fn()} />);
+
+    const clue = screen.getByRole("region", { name: "Gợi ý dọc" }).querySelector("button")!;
+    fireEvent.click(clue);
+    const input = document.activeElement as HTMLInputElement;
+    expect(input.tagName).toBe("INPUT");
+    expect(input.getAttribute("aria-describedby")).toContain(clue.parentElement!.id);
+    fireEvent.keyDown(input, { key: "a" });
+    expect(input).toHaveValue("A");
+  });
+
   it("types once and backspaces along the selected vertical crossword entry", () => {
     render(<CrosswordGame words={wordSet.words} onFinish={vi.fn()} />);
     const vertical = screen.getAllByRole("textbox").find((input) => input.getAttribute("aria-describedby")?.includes("crossword-clue-down"));
@@ -485,6 +497,6 @@ describe("learner game visual and interaction regressions", () => {
 
     expect(screen.getByRole("button", { name: "Tạo bộ từ" })).toBeEnabled();
     expect(screen.queryByRole("link", { name: /Chơi / })).not.toBeInTheDocument();
-    expect(screen.getByText("Tạo một bộ từ để bắt đầu chơi.")).toBeInTheDocument();
+    expect(screen.getByText("Chưa có bộ từ.")).toBeInTheDocument();
   });
 });

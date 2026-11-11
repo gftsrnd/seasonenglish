@@ -37,6 +37,7 @@ export interface CoachFeedbackView {
   relevanceNote: string;
   /** False means the roleplay was preserved, but the AI evaluator did not provide scores. */
   feedbackStatus?: "complete" | "unavailable";
+  creditedDuringAiOutage?: boolean;
   evaluation: {
     status: "valid" | "insufficient" | "off_topic";
     result: "correct" | "partially_correct" | "missing_information" | "off_topic";

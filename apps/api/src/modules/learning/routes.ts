@@ -605,10 +605,10 @@ export function registerLearningRoutes(
     if (!body.success) return reply.code(400).send({ code: "INVALID_MICRO_LESSON_REQUEST" });
     const learnerId = request.e4sSession!.user.id;
     const runner = await runnerFor(learnerId);
-    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const regenerate = body.data.regenerate === true;
     const existing = regenerate ? null : await repositories.learning.todayMicroLesson(learnerId);
-    if (existing) return microLessonView(existing, Boolean(aiRunner));
+    if (existing) return microLessonView(existing, Boolean(runner));
+    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const [profile, context, task] = await Promise.all([
       repositories.learning.getProfile(learnerId),
       repositories.learning.getActiveContext(learnerId),
@@ -694,7 +694,7 @@ export function registerLearningRoutes(
         learnerId, microLessonId: params.data.microLessonId, answer: body.data.answer,
         correct, score: correct === null ? null : correct ? 10 : 0,
         feedback: correct === null
-          ? "Đã lưu câu trả lời. AI hiện chưa sẵn sàng; người vận hành có thể đọc và phản hồi bài này."
+          ? "Đã lưu câu trả lời. Lượt này chưa có nhận xét từ AI."
           : correct ? "Đúng rồi. Bạn đã áp dụng đúng mẫu câu của bài."
             : "Chưa đúng. Hãy xem lại mẫu câu và các từ gợi ý rồi thử lại."
       }).then((saved) => saved ? microLessonView(saved, Boolean(runner)) : saved);
@@ -711,7 +711,7 @@ export function registerLearningRoutes(
 
 
       const output = microGradingOutputSchema.safeParse(result.output);
-      if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
+      if (!output.success) return await deterministic();
       if (!validateGeneratedFeedback({
         answer: body.data.answer,
         feedback: output.data.feedback,

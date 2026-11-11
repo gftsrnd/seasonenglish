@@ -1520,6 +1520,7 @@ export function registerContentRoutes(
       totalTimeSeconds: detail.totalTimeSeconds ?? null,
       totalTimeLimitMinutes: detail.totalTimeLimitMinutes ?? 70,
       ...(detail.taskPrompts ? { taskPrompts: detail.taskPrompts } : {}),
+      ...(detail.productiveRubric ? { productiveRubric: detail.productiveRubric } : {}),
       answers: detail.responses.map((answer) => {
         const artifact = answer.artifactKey ? byArtifact.get(answer.artifactKey) : undefined;
         const signed = answer.artifactKey ? signedArtifacts.get(answer.artifactKey) : undefined;

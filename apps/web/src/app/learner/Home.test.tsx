@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearnerHome, LearnerMonthly } from "./Home.js";
 import type { LearnerCallbacks, LearnerHomeView } from "./contracts.js";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 const actions = { navigate: vi.fn() } as unknown as LearnerCallbacks;
 const month = { month: "2026-11", themeTitle: "Customer handover", themeBrief: "Prepare a handover.", communicationGoal: "Explain risks.", examDate: "2026-11-30", systemDate: "2026-11-03" };
 const lessons = [
@@ -64,6 +67,7 @@ describe("monthly learner home", () => {
     expect(within(calendar).getByRole("gridcell", { name: "2026-11-30" })).toHaveClass("exam");
     expect(within(calendar).getByRole("gridcell", { name: "2026-11-30" })).toHaveTextContent("Bài thi tháng");
     expect(screen.getByRole("region", { name: "Tiến độ tháng" })).toHaveTextContent("1/3");
+    expect(within(screen.getByRole("region", { name: "Tiến độ tháng" })).getByText("Điểm huy hiệu")).toBeInTheDocument();
     for (const retired of ["Chặng 1", "Chặng 2", "Bài tuần", "Khảo sát cuối pilot", "E4S Pilot"]) expect(screen.queryByText(retired)).not.toBeInTheDocument();
   });
 
@@ -73,6 +77,28 @@ describe("monthly learner home", () => {
     const primary = document.querySelector<HTMLElement>('[data-home-block="primary"]')!;
     expect(within(primary).getByRole("heading", { name: /Bài này mở vào/ })).toBeInTheDocument();
     expect(within(primary).queryByRole("link", { name: /Học bài/ })).not.toBeInTheDocument();
+  });
+
+  it("opens the current week on a phone and keeps the whole month reachable", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    render(<LearnerHome view={view()} actions={actions} />);
+    const calendar = screen.getByRole("region", { name: "Lịch học tháng 11/2026" });
+    expect(within(calendar).queryByRole("grid")).not.toBeInTheDocument();
+    expect(within(calendar).getAllByRole("listitem")).toHaveLength(7);
+    const today = within(calendar).getByRole("listitem", { name: "2026-11-03" });
+    expect(today).toHaveAttribute("aria-current", "date");
+    expect(within(today).getByRole("link", { name: "Bài 2" })).toHaveAttribute("href", "/lesson/lesson-2");
+    const locked = within(calendar).getByRole("listitem", { name: "2026-11-06" });
+    expect(locked).toHaveTextContent("Chưa mở");
+    expect(within(locked).queryByRole("link")).not.toBeInTheDocument();
+    fireEvent.click(within(calendar).getByRole("button", { name: "Tuần trước" }));
+    expect(within(calendar).getByRole("listitem", { name: "2026-10-26" })).toHaveClass("outside-month");
+    expect(within(calendar).getByRole("button", { name: "Tuần trước" })).toBeDisabled();
+    const next = within(calendar).getByRole("button", { name: "Tuần sau" });
+    for (let week = 0; week < 5; week++) fireEvent.click(next);
+    expect(next).toBeDisabled();
+    expect(within(calendar).getByRole("listitem", { name: "2026-12-06" })).toHaveClass("outside-month");
+    expect(within(calendar).getByRole("link", { name: "Bài thi tháng" })).toHaveAttribute("href", "/monthly");
   });
 
   it("shows preparation only when the real monthly framework is absent", () => {
@@ -89,9 +115,11 @@ describe("monthly learner home", () => {
     render(<LearnerMonthly view={view()} actions={actions} />);
     expect(screen.getByRole("heading", { name: "Bài thi tháng" })).toBeInTheDocument();
     const landing = screen.getByRole("region", { name: "Bài thi tháng" });
-    expect(landing).toHaveTextContent("Ngày hệ thống");
+    expect(landing).not.toHaveTextContent("Ngày hệ thống");
     expect(landing).toHaveTextContent("Điểm danh");
-    expect(landing).toHaveTextContent("Form đề đang được chuẩn bị");
+    expect(landing).toHaveTextContent("Hoàn thành 2 bài còn lại");
+    expect(landing).not.toHaveTextContent("ngày đến lịch thi");
+    expect(within(landing).getAllByRole("article")).toHaveLength(3);
     expect(screen.queryByRole("grid", { name: "Lịch học tháng 11/2026" })).not.toBeInTheDocument();
   });
 
@@ -106,7 +134,7 @@ describe("monthly learner home", () => {
     render(<LearnerMonthly view={view({ month: null, monthlyPreparation: true, lessons: [], nextLesson: null, monthlyExam: null })} actions={actions} />);
     const pending = screen.getByRole("region", { name: "Bài thi tháng" });
     expect(pending).toHaveTextContent("Đề chưa phát hành");
-    expect(pending).toHaveTextContent("Form đề đang được chuẩn bị");
+    expect(pending).toHaveTextContent("Đề đang được chuẩn bị cho trình độ của bạn");
     expect(screen.queryByText("Chặng 1")).not.toBeInTheDocument();
     const eligibility = screen.getByLabelText("Điều kiện vào bài thi tháng");
     expect(eligibility).toHaveTextContent("1/6");

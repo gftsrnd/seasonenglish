@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
-import { Award, BriefcaseBusiness, Clock3, Eye, EyeOff, Leaf, MessageSquare } from "lucide-react";
+import { Award, BriefcaseBusiness, Clock3, Eye, EyeOff, MessageSquare } from "lucide-react";
 import type { SessionView } from "@e4s/contracts";
 import type { AuthClient } from "../../features/auth/index.js";
-import { AudioControls, SeasonMark } from "./AppShell.js";
+import { AudioControls, SeasonDecoration, SeasonMark } from "./AppShell.js";
 
 type Mode = "login" | "register" | "forgotEmail" | "forgotOtp" | "forgotPin" | "forgotStaff";
 type FieldErrors = Partial<Record<"displayName" | "email" | "credential" | "confirmation" | "code", string>>;
@@ -167,10 +167,12 @@ export function EntryScreen({ client, onAuthenticated, staffEntryPath, separateS
       </header>
       <div className="app-entry-content">
         <div className="app-entry-intro">
-          <div className="entry-hero-art" aria-hidden="true"><Leaf className="entry-hero-leaf entry-hero-leaf-main" size={58} strokeWidth={1.35} /><Leaf className="entry-hero-leaf entry-hero-leaf-small" size={30} /><Leaf className="entry-hero-leaf entry-hero-leaf-wide" size={42} /><Leaf className="entry-hero-leaf entry-hero-leaf-light" size={25} /><Leaf className="entry-hero-leaf entry-hero-leaf-tiny" size={22} /></div>
-          <div className="eyebrow">E4S · English for Every Season</div><h2>Mỗi ngày một chút nắng</h2>
-          <p>Tựa cây non âm thầm lớn lên qua bốn mùa, hãy cho mình mỗi ngày một chút nắng: thực hành tình huống thực tế và nhận góp ý để ngày càng tự tin hơn.</p>
-          <section className="entry-learning-card" aria-label="Điểm nổi bật của E4S"><div className="entry-benefit-row"><span className="entry-benefit-pill"><Clock3 size={17} /><span>10 phút mỗi ngày, T2–T6</span></span><span className="entry-benefit-pill"><MessageSquare size={17} /><span>Luyện chat với Season</span></span><span className="entry-benefit-pill"><Award size={17} /><span>Điểm thưởng và huy hiệu</span></span><span className="entry-benefit-pill"><BriefcaseBusiness size={17} /><span>Bài học sát công việc</span></span></div></section>
+          <SeasonDecoration className="entry-hero-art" />
+          <div className="entry-intro-copy">
+            <div className="eyebrow">E4S · English for Every Season</div><h2>Mỗi ngày một chút nắng</h2>
+            <p>Tựa cây non âm thầm lớn lên qua bốn mùa, hãy cho mình mỗi ngày một chút nắng: thực hành tình huống thực tế và nhận góp ý để ngày càng tự tin hơn.</p>
+            <section className="entry-learning-card" aria-label="Điểm nổi bật của E4S"><div className="entry-benefit-row"><span className="entry-benefit-pill"><Clock3 size={17} /><span>10 phút mỗi ngày, T2–T6</span></span><span className="entry-benefit-pill"><MessageSquare size={17} /><span>Luyện chat với Season</span></span><span className="entry-benefit-pill"><Award size={17} /><span>Điểm thưởng và huy hiệu</span></span><span className="entry-benefit-pill"><BriefcaseBusiness size={17} /><span>Bài học sát công việc</span></span></div></section>
+          </div>
         </div>
         <div className="card app-entry-card" aria-busy={busy || undefined}>
           {mode === "login" ? <>

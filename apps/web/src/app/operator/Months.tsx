@@ -602,8 +602,8 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
   return <OperatorPage title={`${kindLabel} ${dateLabel}`} hideRouteBack><PageTitle actions={<div className="row operator-page-title-actions">
     {onApprove && <Button primary className="operator-lesson-approve-button" disabled={busy} onClick={() => void onApprove()}><Check className="operator-button-icon" size={16} strokeWidth={2.5} aria-hidden="true" />Duyệt bài</Button>}
     {onRegenerate && <Button danger disabled={busy} onClick={() => void onRegenerate()}><Sparkles className="operator-button-icon" size={16} aria-hidden="true" />{busy ? "Đang sinh…" : "Sinh lại bằng AI"}</Button>}
-    {onEdit && <Button disabled={busy} onClick={onEdit}><Pencil className="operator-button-icon" size={16} aria-hidden="true" />Sửa tay</Button>}
-    {onRequestReopen && <Button disabled={busy} onClick={() => setRequestingReopen(true)}>Yêu cầu mở lại</Button>}
+    {onEdit && <Button className="operator-lesson-edit-button" disabled={busy} onClick={onEdit}><Pencil className="operator-button-icon" size={16} aria-hidden="true" />Sửa tay</Button>}
+    {onRequestReopen && <Button className="operator-lesson-reopen-button" disabled={busy} onClick={() => setRequestingReopen(true)}>Yêu cầu mở lại</Button>}
   </div>}>
     <a className="link-button small" href="/op/months" onClick={(event) => { event.preventDefault(); onClose(); }}>← Về lịch tháng</a>
     <h1 className="operator-lesson-set-title">{dateLabel} · {teachingLabel} · Mức {cefr} <Badge tone={isDraft ? "warn" : "ok"}>{isDraft ? "Bản nháp" : "Đã duyệt"}</Badge></h1>
@@ -644,7 +644,7 @@ function MonthlyReopenRequest({ label, onCancel, onSubmit }: { label: string; on
   const dialogRef = useRef<HTMLElement>(null);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   useDialog(true, dialogRef, onCancel, reasonRef);
-  return <div className="monthly-lesson-preview-backdrop" role="presentation"><section ref={dialogRef} tabIndex={-1} className="monthly-generation-confirmation card" role="dialog" aria-modal="true" aria-label={`Yêu cầu mở lại ${label}`}><span className="eyebrow">Nội dung đã khóa</span><h2>Yêu cầu mở lại {label}</h2><p className="small muted">Manager sẽ duyệt hoặc từ chối yêu cầu. Học viên đã hoàn thành vẫn giữ kết quả cũ.</p><label className="monthly-reopen-reason">Lý do yêu cầu mở lại<textarea ref={reasonRef} aria-label="Lý do yêu cầu mở lại" value={reason} onChange={(event) => setReason(event.target.value)} /></label><footer><button type="button" className="btn" onClick={onCancel}>Quay lại</button><button type="button" className="btn btn-primary" onClick={() => onSubmit(reason)}>Gửi yêu cầu Manager</button></footer></section></div>;
+  return <div className="monthly-lesson-preview-backdrop" role="presentation"><section ref={dialogRef} tabIndex={-1} className="monthly-generation-confirmation monthly-reopen-dialog card" role="dialog" aria-modal="true" aria-label={`Yêu cầu mở lại ${label}`}><span className="eyebrow">Nội dung đã khóa</span><h2>Yêu cầu mở lại {label}</h2><p className="small muted">Manager sẽ duyệt hoặc từ chối yêu cầu. Học viên đã hoàn thành vẫn giữ kết quả cũ.</p><label className="monthly-reopen-reason">Lý do yêu cầu mở lại<textarea ref={reasonRef} aria-label="Lý do yêu cầu mở lại" value={reason} onChange={(event) => setReason(event.target.value)} /></label><footer><button type="button" className="btn" onClick={onCancel}>Quay lại</button><button type="button" className="btn btn-primary" onClick={() => onSubmit(reason)}>Gửi yêu cầu Manager</button></footer></section></div>;
 }
 
 function GrammarResourcePanel({ topics, roadmap }: {

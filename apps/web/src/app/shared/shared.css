@@ -26,7 +26,7 @@
   gap: 8px;
 }
 
-.topbar .account-identity {
+:is(.topbar, .shell-desktop-controls) .account-identity {
   display: inline-flex;
   min-width: 0;
   align-items: center;
@@ -34,20 +34,20 @@
   white-space: nowrap;
 }
 
-.topbar .account-name {
+:is(.topbar, .shell-desktop-controls) .account-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.topbar .account-role {
+:is(.topbar, .shell-desktop-controls) .account-role {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   gap: 3px;
 }
 
-.topbar .account-level-badge {
+:is(.topbar, .shell-desktop-controls) .account-level-badge {
   flex: 0 0 auto;
   padding: 2px 7px;
   font-weight: 700;
@@ -199,20 +199,27 @@
     scroll-padding-bottom: 16px;
   }
 
+  body:has(nav.bottomnav) > #root > main:has(.app-learner-page.home-page) {
+    padding-bottom: 64px !important;
+    scroll-padding-bottom: 64px;
+  }
+
   body:has(nav.bottomnav):has(.settings-page) > #root > .app-scroll-jump {
     position: absolute;
   }
 
-  /* Keep the jump button below the checklist and calendar actions. */
+  /* Keep the jump button below the checklist, calendar, and survey actions. */
   body:has(nav.bottomnav):has(.assessment-prep-compact) > #root > .app-scroll-jump,
-  body:has(nav.bottomnav[data-role="operator"]):has(.operator-months-page) > #root > .app-scroll-jump {
+  body:has(nav.bottomnav[data-role="operator"]):has(.operator-months-page) > #root > .app-scroll-jump,
+  body:has(nav.bottomnav):has(.monthly-survey-form) > #root > .app-scroll-jump {
     position: static;
     flex: none;
     margin: 2px max(12px, env(safe-area-inset-right, 0px)) 4px auto;
   }
 
   body:has(nav.bottomnav):has(.assessment-prep-compact):has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump,
-  body:has(nav.bottomnav[data-role="operator"]):has(.operator-months-page):has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump {
+  body:has(nav.bottomnav[data-role="operator"]):has(.operator-months-page):has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump,
+  body:has(nav.bottomnav):has(.monthly-survey-form):has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump {
     display: grid;
     visibility: hidden;
   }
@@ -377,14 +384,96 @@ main.app-entry-main {
 .app-entry-intro h2 { margin: 4px 0 8px; font-size: 1.45rem; }
 .app-entry-intro p { margin: 0; }
 
-.entry-hero-art { position: relative; height: 78px; margin-bottom: 0; }
-.entry-hero-leaf { position: absolute; color: var(--primary); }
-.entry-hero-leaf-main { top: -12px; left: 18px; opacity: .8; transform: rotate(-22deg); }
-.entry-hero-leaf-small { top: 17px; left: 105px; color: var(--olive); opacity: .65; transform: rotate(28deg); }
-.entry-hero-leaf-wide { top: -10px; left: 190px; opacity: .5; transform: rotate(42deg); }
-.entry-hero-leaf-light { top: 22px; left: 285px; color: var(--olive); opacity: .42; transform: rotate(-18deg); }
-.entry-hero-leaf-tiny { top: -4px; left: 142px; opacity: .38; transform: rotate(-42deg); }
-.entry-hero-leaf-faint { top: 12px; left: 370px; color: var(--olive); opacity: .34; transform: rotate(35deg); }
+.entry-hero-art {
+  position: relative;
+  inline-size: min(100%, 390px);
+  block-size: 78px;
+  color: var(--primary-dark);
+  pointer-events: none;
+}
+
+@media (min-width: 961px) {
+  .app-entry-intro {
+    align-self: stretch;
+    display: grid;
+    grid-template-rows: minmax(120px, 1fr) auto;
+    padding-block-end: clamp(12px, 7vh, 64px);
+  }
+
+  .entry-hero-art { align-self: stretch; inline-size: 100%; block-size: auto; }
+
+  .entry-hero-art svg:nth-child(1) {
+    --motif-x: 12%;
+    --motif-y: 54%;
+    --motif-size: 49px;
+    --motif-tilt: -17deg;
+    --motif-opacity: .68;
+  }
+
+  .entry-hero-art svg:nth-child(2) {
+    --motif-x: 27%;
+    --motif-y: 16%;
+    --motif-size: 22px;
+    --motif-tilt: 13deg;
+    --motif-opacity: .44;
+  }
+
+  .entry-hero-art svg:nth-child(3) {
+    --motif-x: 29%;
+    --motif-y: 79%;
+    --motif-size: 13px;
+    --motif-tilt: -26deg;
+    --motif-opacity: .32;
+  }
+
+  .entry-hero-art svg:nth-child(4) {
+    --motif-x: 47%;
+    --motif-y: 30%;
+    --motif-size: 34px;
+    --motif-tilt: 17deg;
+    --motif-opacity: .51;
+  }
+
+  .entry-hero-art svg:nth-child(5) {
+    --motif-x: 58%;
+    --motif-y: 67%;
+    --motif-size: 20px;
+    --motif-tilt: -17deg;
+    --motif-opacity: .39;
+  }
+
+  .entry-hero-art svg:nth-child(6) {
+    --motif-x: 71%;
+    --motif-y: 13%;
+    --motif-size: 15px;
+    --motif-tilt: 11deg;
+    --motif-opacity: .34;
+  }
+
+  .entry-hero-art svg:nth-child(7) {
+    --motif-x: 71%;
+    --motif-y: 89%;
+    --motif-size: 21px;
+    --motif-tilt: -23deg;
+    --motif-opacity: .37;
+  }
+
+  .entry-hero-art svg:nth-child(8) {
+    --motif-x: 84%;
+    --motif-y: 69%;
+    --motif-size: 37px;
+    --motif-tilt: 13deg;
+    --motif-opacity: .53;
+  }
+
+  .entry-hero-art svg:nth-child(9) {
+    --motif-x: 94%;
+    --motif-y: 38%;
+    --motif-size: 16px;
+    --motif-tilt: 29deg;
+    --motif-opacity: .31;
+  }
+}
 
 .entry-learning-card {
   margin-top: 24px;
@@ -692,17 +781,154 @@ body :is(.ds-toast-viewport, .assessment-toast-viewport) {
   margin-top: 20px;
 }
 
+.shell-season-decoration {
+  position: relative;
+  inline-size: min(100%, 158px);
+  min-block-size: 0;
+  flex: 0 1 clamp(172px, calc(100dvh - 480px), 270px);
+  align-self: center;
+  overflow: clip;
+  color: var(--primary-dark);
+  pointer-events: none;
+}
+
+:is(.shell-season-decoration, .entry-hero-art) svg {
+  position: absolute;
+  inset-inline-start: var(--motif-x);
+  inset-block-start: var(--motif-y);
+  inline-size: var(--motif-size);
+  block-size: auto;
+  opacity: var(--motif-opacity);
+  transform: translate(-50%, -50%) rotate(var(--motif-tilt));
+}
+
+.shell-season-decoration svg:nth-child(1) {
+  --motif-x: 36%;
+  --motif-y: 29%;
+  --motif-size: 49px;
+  --motif-tilt: -16deg;
+  --motif-opacity: .22;
+}
+
+.shell-season-decoration svg:nth-child(2) {
+  --motif-x: 69%;
+  --motif-y: 8%;
+  --motif-size: 19px;
+  --motif-tilt: 26deg;
+  --motif-opacity: .16;
+}
+
+.shell-season-decoration svg:nth-child(3) {
+  --motif-x: 21%;
+  --motif-y: 12%;
+  --motif-size: 15px;
+  --motif-tilt: -21deg;
+  --motif-opacity: .15;
+}
+
+.shell-season-decoration svg:nth-child(4) {
+  --motif-x: 73%;
+  --motif-y: 52%;
+  --motif-size: 36px;
+  --motif-tilt: 18deg;
+  --motif-opacity: .2;
+}
+
+.shell-season-decoration svg:nth-child(5) {
+  --motif-x: 21%;
+  --motif-y: 58%;
+  --motif-size: 23px;
+  --motif-tilt: -22deg;
+  --motif-opacity: .17;
+}
+
+@media (min-width: 961px) and (max-height: 640px) {
+  .shell-season-decoration { display: none; }
+}
+
 @media screen and (min-width: 961px) {
-  .app-content {
+  #root:has(> .shell-desktop-header) {
     --sidebar-width: 232px;
     --content-max-width: 1120px;
+    --shell-header-height: 62px;
+    --shell-account-end: 16px;
+  }
+
+  .app-shell-topbar:has(+ .shell-desktop-header) { padding-block-start: 0; row-gap: 8px; }
+
+  .app-shell-topbar:has(+ .shell-desktop-header) > .brand {
+    flex: 0 0 var(--shell-header-height);
+  }
+
+  .app-shell-topbar:has(+ .shell-desktop-header)::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    box-sizing: border-box;
+    block-size: var(--shell-header-height);
+    border-bottom: 1px solid var(--primary-line);
+    background: var(--primary-soft);
+    z-index: -1;
+  }
+
+  .app-content {
     max-width: var(--content-max-width);
     margin-inline-start: max(var(--sidebar-width), calc((100% + var(--sidebar-width) - var(--content-max-width)) / 2));
     margin-inline-end: auto;
   }
+
+  .shell-desktop-header {
+    display: grid;
+    min-block-size: var(--shell-header-height);
+    margin-inline-start: var(--sidebar-width);
+    border-bottom: 1px solid var(--primary-line);
+    background: var(--primary-soft);
+  }
+
+  .shell-desktop-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    padding-inline: var(--shell-account-end);
+  }
 }
 
 @media (min-width: 961px) {
+  .shell-season-decoration { inline-size: min(100%, 176px); flex-basis: clamp(172px, calc(100dvh - 480px), 300px); }
+
+  .shell-season-decoration svg:nth-child(6) {
+    --motif-x: 65%;
+    --motif-y: 85%;
+    --motif-size: 15px;
+    --motif-tilt: 18deg;
+    --motif-opacity: .15;
+  }
+
+  .shell-season-decoration svg:nth-child(7) {
+    --motif-x: 35%;
+    --motif-y: 84%;
+    --motif-size: 33px;
+    --motif-tilt: -17deg;
+    --motif-opacity: .19;
+  }
+
+  .shell-season-decoration svg:nth-child(8) {
+    --motif-x: 76%;
+    --motif-y: 29%;
+    --motif-size: 17px;
+    --motif-tilt: -23deg;
+    --motif-opacity: .16;
+  }
+
+  .shell-season-decoration svg:nth-child(9) {
+    --motif-x: 88%;
+    --motif-y: 76%;
+    --motif-size: 12px;
+    --motif-tilt: 11deg;
+    --motif-opacity: .14;
+  }
+
   /* Keep the full canonical brand inside the 232px desktop sidebar. The
      shared avatar is wider than the app leaf mark, so trim only the
      surrounding gap/padding instead of ellipsizing the organisation name. */
@@ -848,11 +1074,71 @@ body:has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump {
 .app-scroll-jump svg { transition: transform 180ms ease; }
 .app-scroll-jump[data-direction="up"] svg { transform: rotate(180deg); }
 
+:is(.shell-desktop-controls, .app-shell-topbar .shell-compact-controls) button:is(.inbox-trigger, .app-guide-trigger, .shell-account-trigger) {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  inline-size: 44px;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  box-shadow: none;
+  transition-property: color, transform;
+}
+
+:is(.shell-desktop-controls, .app-shell-topbar .shell-compact-controls) button:is(.inbox-trigger, .app-guide-trigger, .shell-account-trigger):hover:not(:disabled) {
+  background: transparent;
+  color: var(--primary-dark);
+  box-shadow: none;
+}
+
+:is(.shell-desktop-controls, .shell-compact-controls) button:is(.inbox-trigger, .app-guide-trigger) > svg {
+  inline-size: 22px;
+  block-size: 22px;
+}
+
+:is(.shell-desktop-controls, .shell-compact-controls) button.shell-account-trigger { border-radius: 50%; }
+
+.shell-account-trigger > span { display: grid; place-items: center; }
+
+.shell-account-panel {
+  position: fixed;
+  inset: calc(var(--shell-header-height, 54px) + 6px + env(safe-area-inset-top, 0px)) var(--shell-account-end, max(12px, env(safe-area-inset-right, 0px))) auto auto;
+  width: min(260px, calc(100vw - max(12px, env(safe-area-inset-right, 0px)) - max(12px, env(safe-area-inset-left, 0px))));
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 8px 22px rgb(0 0 0 / .15);
+}
+
+.shell-account-panel:popover-open { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.shell-account-info { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.shell-account-info > button { flex: 0 0 44px; }
+.shell-account-info .account-identity { flex: 1; min-width: 0; }
+.shell-account-info .account-role { display: none; }
+.shell-account-panel button { min-height: 44px; }
+.shell-account-panel [data-action="logout"] { display: flex; align-items: center; gap: 8px; }
+.shell-account-panel .logout-label { display: inline; }
+
+:is(.shell-desktop-controls, .shell-compact-controls) .inbox-count {
+  inset-block-start: -3px;
+  inset-inline-end: -3px;
+}
+
 @media (max-width: 960px) {
   body:has(nav.bottomnav) > #root > .app-shell-topbar {
     gap: 8px;
     height: calc(54px + env(safe-area-inset-top, 0px));
-    padding: env(safe-area-inset-top, 0px) 12px 0;
+    padding: env(safe-area-inset-top, 0px) max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px));
+    border-bottom-color: var(--primary-line);
+    background: var(--primary-soft);
     overflow: visible;
   }
 
@@ -866,39 +1152,90 @@ body:has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump {
 
   .app-shell-topbar > .brand > span:last-child { overflow: visible; }
   .app-shell-topbar > .brand > span:last-child > .muted { display: none; }
+
+  .shell-season-decoration {
+    position: absolute;
+    z-index: -1;
+    inset-block: env(safe-area-inset-top, 0px) 0;
+    inset-inline: 0;
+    align-self: stretch;
+    inline-size: auto;
+  }
+
+  :is(.shell-season-decoration, .entry-hero-art) svg:nth-child(n+8) { display: none; }
+
+  :is(.shell-season-decoration, .entry-hero-art) svg:nth-child(1) {
+    --motif-x: 5%;
+    --motif-y: 35%;
+    --motif-size: 18px;
+    --motif-tilt: -18deg;
+    --motif-opacity: .09;
+  }
+
+  :is(.shell-season-decoration, .entry-hero-art) svg:nth-child(2) {
+    --motif-x: 17%;
+    --motif-y: 76%;
+    --motif-size: 15px;
+    --motif-tilt: 22deg;
+    --motif-opacity: .085;
+  }
+
+  :is(.shell-season-decoration, .entry-hero-art) svg:nth-child(3) {
+    --motif-x: 31%;
+    --motif-y: 24%;
+    --motif-size: 22px;
+    --motif-tilt: -31deg;
+    --motif-opacity: .12;
+  }
+
+  :is(.shell-season-decoration, .entry-hero-art) svg:nth-child(4) {
+    --motif-x: 46%;
+    --motif-y: 58%;
+    --motif-size: 26px;
+    --motif-tilt: 14deg;
+    --motif-opacity: .16;
+  }
+
+  :is(.shell-season-decoration, .entry-hero-art) svg:nth-child(5) {
+    --motif-x: 64%;
+    --motif-y: 26%;
+    --motif-size: 13px;
+    --motif-tilt: -25deg;
+    --motif-opacity: .12;
+  }
+
+  :is(.shell-season-decoration, .entry-hero-art) svg:nth-child(6) {
+    --motif-x: 79%;
+    --motif-y: 71%;
+    --motif-size: 24px;
+    --motif-tilt: -19deg;
+    --motif-opacity: .09;
+  }
+
+  :is(.shell-season-decoration, .entry-hero-art) svg:nth-child(7) {
+    --motif-x: 96%;
+    --motif-y: 66%;
+    --motif-size: 16px;
+    --motif-tilt: 23deg;
+    --motif-opacity: .08;
+  }
   .shell-compact-controls { display: flex; align-items: center; gap: 4px; margin-inline-start: auto; }
-  .shell-compact-controls > .audio-ctl > .inbox-trigger,
-  .shell-compact-controls > .shell-account-trigger {
-    display: grid;
-    place-items: center;
-    width: 44px;
-    min-width: 44px;
-    min-height: 44px;
-    padding: 0;
-  }
-
-  .shell-account-panel {
-    position: fixed;
-    inset: calc(60px + env(safe-area-inset-top, 0px)) 12px auto auto;
-    width: min(260px, calc(100vw - 24px));
-    margin: 0;
-    padding: 12px;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: var(--surface);
-    color: var(--text);
-    box-shadow: 0 8px 22px rgb(0 0 0 / .15);
-  }
-
-  .shell-account-panel:popover-open { display: grid; gap: 10px; }
-  .shell-account-info { display: flex; align-items: center; gap: 8px; }
-  .shell-account-info .account-identity { flex-wrap: wrap; }
-  .shell-account-info .account-name { white-space: normal; overflow-wrap: anywhere; }
-  .shell-account-info .account-role { display: inline-flex; }
-  .shell-account-panel button { min-height: 44px; }
-  .shell-account-panel [data-action="logout"] { display: flex; align-items: center; gap: 8px; }
-  .shell-account-panel .logout-label { display: inline; }
   #root > .bottomnav > a { flex: 1 1 0; min-width: 0; line-height: 1.2; }
+}
+
+@media (max-width: 360px) {
+  body:has(nav.bottomnav) > #root > .app-shell-topbar > .brand {
+    font-size: .9rem;
+    gap: 6px;
+  }
+}
+
+@media (max-width: 639px) {
+  .shell-season-decoration {
+    opacity: .78;
+  }
+
+  :is(.shell-season-decoration, .entry-hero-art) svg { max-inline-size: 21px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -918,13 +1255,8 @@ body:has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump {
     overflow: clip;
     pointer-events: none;
     z-index: -1;
-    opacity: .24;
+    inline-size: auto;
   }
-  .entry-hero-leaf-main { top: -18px; left: 3%; }
-  .entry-hero-leaf-small { top: 34px; left: 23%; }
-  .entry-hero-leaf-wide { top: 7px; left: 48%; }
-  .entry-hero-leaf-light { top: 36px; left: 67%; }
-  .entry-hero-leaf-tiny { top: 3px; left: 87%; }
   .app-entry-header { padding: 10px 14px; }
   .app-entry-content { grid-template-columns: minmax(0, 1fr); padding: 12px 14px 16px; }
   .app-entry .app-entry-card { padding: 0; border: 0; box-shadow: none; background: transparent; }

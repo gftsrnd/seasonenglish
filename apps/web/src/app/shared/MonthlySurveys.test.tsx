@@ -35,7 +35,7 @@ it("keeps manager preview separate from publication and requires explicit confir
   expect(await screen.findByText("Tháng này chưa có khảo sát được công bố.")).toBeVisible();
   expect(screen.getByRole("button", { name: "Công bố khảo sát" })).toBeEnabled();
   await user.click(screen.getByRole("button", { name: "Xem trước biểu mẫu" }));
-  await user.click(screen.getByRole("radio", { name: "4" }));
+  await user.click(screen.getByRole("radio", { name: "4 sao" }));
   await user.click(screen.getByRole("button", { name: "Công bố khảo sát" }));
   const confirm = within(await screen.findByRole("dialog"));
   expect(publish).not.toHaveBeenCalled();
@@ -56,14 +56,21 @@ it("shows the submitted rating with its original question and date in learner hi
   render(<MemoryRouter initialEntries={["/support?type=feedback"]}><LearnerRequestHistory /></MemoryRouter>);
 
   expect(screen.queryByRole("link", { name: "Quay lại Hỗ trợ" })).not.toBeInTheDocument();
-  await user.click(await screen.findByRole("radio", { name: "4" }));
+  await user.click(await screen.findByRole("radio", { name: "4 sao" }));
   await user.click(screen.getByRole("button", { name: "Gửi phản hồi" }));
 
   expect(await screen.findByText("Đã gửi phản hồi. Cảm ơn bạn!")).toBeVisible();
   const history = within(screen.getByRole("table", { name: "Lịch sử hỗ trợ" }));
+  const summary = history.getByRole("row", { name: /Đã gửi/ });
+  const details = within(summary).getByRole("button", { name: "Chi tiết" });
+  expect(history.queryByText("4/5")).not.toBeInTheDocument();
+  await user.click(details);
+  expect(within(summary).queryByText("4/5")).not.toBeInTheDocument();
   expect(history.getByText("1. Bài học hữu ích thế nào?")).toBeVisible();
   expect(history.getByText("4/5")).toBeVisible();
   expect(history.getByText(/Tháng 03\/2030/)).toBeVisible();
   expect(history.getByRole("time")).toHaveAttribute("datetime", date);
+  await user.click(within(summary).getByRole("button", { name: "Thu gọn" }));
+  expect(history.queryByText("4/5")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Gửi phản hồi" })).toBeNull();
 });

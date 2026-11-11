@@ -262,7 +262,7 @@ async function ensurePrototypePromptsForUser(
   if (!organizationId) return;
   await ensurePrototypePrompts(pool, organizationId, keys);
 }
-import { normalizeLevelFormQuestionPrompts, type StoredAssessmentDefinition } from "./assessment-blueprints.js";
+import { assessmentProductiveRubric, normalizeLevelFormQuestionPrompts, type StoredAssessmentDefinition } from "./assessment-blueprints.js";
 function roundAssessmentScore(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
@@ -6045,6 +6045,7 @@ class AssessmentRepository {
     attemptId: string;
     requestId?: string;
     submitReason?: AssessmentSubmitReason;
+    queueAiScoring?: boolean;
   }): Promise<AssessmentAttemptRecord | null> {
     const client = await this.pool.connect();
     try {
@@ -6096,6 +6097,18 @@ class AssessmentRepository {
          where id = $1 and learner_id = $2`,
         [input.attemptId, input.learnerId, reason, JSON.stringify(timingState)]
       );
+      if (input.queueAiScoring) {
+        await client.query(
+          `insert into jobs (id, kind, payload, idempotency_key)
+           select $3, 'assessment.ai-score-auto', jsonb_build_object(
+             'attemptId', $1::text, 'learnerId', u.id::text,
+             'organizationId', u.organization_id::text, 'requestId', $1::text
+           ), $4
+           from users u where u.id = $2
+           on conflict (idempotency_key) do nothing`,
+          [input.attemptId, input.learnerId, randomUUID(), `assessment-ai-score:${input.attemptId}:${input.attemptId}`]
+        );
+      }
       if (input.requestId) {
         await client.query(
           `insert into idempotency_keys (scope, key, response) values ($1, $2, $3::jsonb)`,
@@ -6273,7 +6286,7 @@ class AssessmentRepository {
          and reviewer.organization_id = learner.organization_id
        join assessment_versions av on av.id = aa.assessment_version_id
        join assessment_definitions ad on ad.id = av.definition_id
-       where aa.id = $2 and aa.status = 'pending_review' and ad.kind in ('placement', 'level_up')`,
+       where aa.id = $2 and aa.status = 'pending_review' and ad.kind in ('placement', 'level_up', 'final', 'pass_course')`,
       [reviewerId, attemptId]
     );
     const row = scope.rows[0];
@@ -6284,6 +6297,7 @@ class AssessmentRepository {
 
   async saveAssessmentRescore(input: {
     actorId: string;
+    automatic?: boolean;
     attemptId: string;
     requestId: string;
     aiRequestKey: string;
@@ -6291,10 +6305,12 @@ class AssessmentRepository {
     promptVersionId: string;
     output: {
       writingScore: number;
-      speakingScore: number;
-      suggestedLevel: CefrLevel;
+      speakingScore: number | null;
+      suggestedLevel?: CefrLevel;
       rationale: string;
-      monthlyGoal: string;
+      monthlyGoal?: string;
+      writingCriteria?: Record<string, unknown>;
+      speakingCriteria?: Record<string, unknown>;
     };
     metadata: AiRunMetadataInput;
   }): Promise<"saved" | "duplicate" | null> {
@@ -6307,9 +6323,11 @@ class AssessmentRepository {
          join assessment_attempts aa on aa.id = $2 and aa.status = 'pending_review'
          join users learner on learner.id = aa.learner_id
            and learner.organization_id = reviewer.organization_id and learner.status = 'active'
-         where reviewer.id = $1 and reviewer.role in ('operator', 'manager')
+         where reviewer.id = $1 and (
+           ($3 and reviewer.id = aa.learner_id) or (not $3 and reviewer.role in ('operator', 'manager'))
+         )
          for update of aa`,
-        [input.actorId, input.attemptId]
+        [input.actorId, input.attemptId, Boolean(input.automatic)]
       );
       const person = scope.rows[0];
       if (!person) {
@@ -6334,23 +6352,27 @@ class AssessmentRepository {
         `insert into assessment_scores (id, attempt_id, section, score, criteria, source)
          values ($1, $2, 'writing', $3, $4::jsonb, 'ai')
          on conflict (attempt_id, section)
-         do update set score = excluded.score, criteria = excluded.criteria, source = 'ai', created_at = now()`,
+         do update set score = excluded.score, criteria = excluded.criteria, source = 'ai', created_at = now()
+         where not $5 or assessment_scores.source <> 'human'`,
         [randomUUID(), input.attemptId, input.output.writingScore, JSON.stringify({
           rationale: input.output.rationale,
-          monthlyGoal: input.output.monthlyGoal
-        })]
+          monthlyGoal: input.output.monthlyGoal,
+          ...input.output.writingCriteria
+        }), Boolean(input.automatic || input.output.writingCriteria)]
       );
-      await client.query(
+      if (input.output.speakingScore !== null) await client.query(
         `insert into assessment_scores (id, attempt_id, section, score, criteria, source)
          values ($1, $2, 'speaking', $3, $4::jsonb, 'ai')
          on conflict (attempt_id, section)
-         do update set score = excluded.score, criteria = excluded.criteria, source = 'ai', created_at = now()`,
+         do update set score = excluded.score, criteria = excluded.criteria, source = 'ai', created_at = now()
+         where not $5 or assessment_scores.source <> 'human'`,
         [randomUUID(), input.attemptId, input.output.speakingScore, JSON.stringify({
           rationale: input.output.rationale,
-          evidencePolicy: "Pronunciation is scored only when audio evidence exists."
-        })]
+          evidencePolicy: "Pronunciation is scored only when audio evidence exists.",
+          ...input.output.speakingCriteria
+        }), Boolean(input.automatic || input.output.speakingCriteria)]
       );
-      await client.query(
+      if (input.output.suggestedLevel) await client.query(
         `insert into assessment_decisions
            (id, attempt_id, suggested_level, approved_level, status, reason, decided_by, decided_at)
          values ($1, $2, $3, null, 'suggested', $4, null, null)
@@ -6362,7 +6384,7 @@ class AssessmentRepository {
       await client.query(
         `insert into audit_events
            (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
-         values ($1, $2, $3, 'assessment.rescored', 'assessment_attempt', $4, $5::jsonb, $6)`,
+         values ($1, $2, $3, $7, 'assessment_attempt', $4, $5::jsonb, $6)`,
         [
           randomUUID(),
           person.organization_id,
@@ -6377,7 +6399,8 @@ class AssessmentRepository {
             monthlyGoal: input.output.monthlyGoal,
             aiRunId
           }),
-          randomUUID()
+          randomUUID(),
+          input.automatic ? "assessment.ai_scored" : "assessment.rescored"
         ]
       );
       await client.query("commit");
@@ -6397,10 +6420,11 @@ class AssessmentRepository {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
-      const scope = await client.query<{ organization_id: string; learner_id: string }>(
-        `select reviewer.organization_id, aa.learner_id
+      const scope = await client.query<{ organization_id: string; blueprint: StoredAssessmentDefinition }>(
+        `select reviewer.organization_id, av.blueprint
          from users reviewer
          join assessment_attempts aa on aa.id = $2 and aa.status in ('pending_review', 'submitted')
+         join assessment_versions av on av.id = aa.assessment_version_id
          join users learner on learner.id = aa.learner_id
            and learner.organization_id = reviewer.organization_id and learner.status = 'active'
          where reviewer.id = $1 and reviewer.role in ('operator', 'manager')
@@ -6412,26 +6436,61 @@ class AssessmentRepository {
         await client.query("rollback");
         return null;
       }
-      const writingScore = roundAssessmentScore(input.writingTasks.reduce((total, task) => {
+      const monthly = person.blueprint.kind === "final";
+      const rubric = monthly || person.blueprint.kind === "pass-course" ? assessmentProductiveRubric(person.blueprint) : [];
+      const rubricScores = input.rubricScores ?? [];
+      const rubricByCode = new Map(rubric.map(criterion => [criterion.code, criterion]));
+      const submittedScores = new Map(rubricScores.map(criterion => [criterion.code, criterion.score]));
+      if ((monthly && (!rubric.length || rubricScores.length !== rubric.length || submittedScores.size !== rubric.length
+        || rubricScores.some(({ code, score }) => score > (rubricByCode.get(code)?.maxScore ?? -1))))
+        || (!monthly && rubricScores.length)) {
+        await client.query("rollback");
+        return null;
+      }
+      const passCourse = person.blueprint.kind === "pass-course";
+      const speakingEvidence = new Map<string, ManualAssessmentScoreInput["speakingTasks"][number]["evidenceType"]>();
+      if (passCourse || (monthly && person.blueprint.monthlyExam)) {
+        const evidence = await client.query<{ task_key: string; evidence_type: string | null; artifact_key: string | null }>(
+          `select task_key, response->>'evidenceType' as evidence_type, response->>'artifactKey' as artifact_key
+           from assessment_responses where attempt_id = $1 and section = 'speaking'`, [input.attemptId]
+        );
+        for (const { task_key, evidence_type, artifact_key } of evidence.rows) {
+          if (evidence_type === "audio" && artifact_key) speakingEvidence.set(task_key, "audio");
+          if (evidence_type === "transcript" || evidence_type === "typed_proxy" || evidence_type === "technical_failure") {
+            speakingEvidence.set(task_key, evidence_type);
+          }
+        }
+      }
+      if (monthly && person.blueprint.monthlyExam
+        && (((submittedScores.get("S1") ?? 0) > 0 && speakingEvidence.get("SA") !== "audio")
+          || ((submittedScores.get("S5") ?? 0) > 0 && speakingEvidence.get("SB") !== "audio"))) {
+        await client.query("rollback");
+        return null;
+      }
+      const sectionRubric = (skill: "writing" | "speaking") => rubricScores.filter(item => rubricByCode.get(item.code)?.skill === skill);
+      const monthlyWriting = sectionRubric("writing");
+      const monthlySpeaking = sectionRubric("speaking");
+      const writingScore = roundAssessmentScore(monthly ? monthlyWriting.reduce((total, item) => total + item.score, 0) : input.writingTasks.reduce((total, task) => {
         const raw = task.criteria.taskCompletion + task.criteria.organization + task.criteria.vocabulary + task.criteria.grammar + task.criteria.workplaceRegister;
-        return total + raw / 20 * (task.taskKey === "W1" ? 7 : 13);
+        return total + raw / 20 * (rubricByCode.get(task.taskKey)?.maxScore ?? (task.taskKey === "W1" ? 7 : 13));
       }, 0));
       const speakingScores = input.speakingTasks.map((task) => task.criteria === null ? null : (
         task.criteria.taskCompletionRelevance + task.criteria.grammarVocabulary + task.criteria.coherenceClarity + task.criteria.interactionProfessionalRegister
-      ) / 4);
+      ) / 20 * (rubricByCode.get(task.taskKey)?.maxScore ?? 5));
       if (speakingScores.some((score) => score === null)) {
         await client.query("rollback");
         return null;
       }
-      const speakingScore = roundAssessmentScore(speakingScores.reduce<number>((total, score) => total + Number(score), 0));
+      const speakingScore = roundAssessmentScore(monthly ? monthlySpeaking.reduce((total, item) => total + item.score, 0) : speakingScores.reduce<number>((total, score) => total + Number(score), 0));
       const scoredSpeakingTasks = input.speakingTasks.map((task, index) => ({
         ...task,
+        evidenceType: passCourse ? speakingEvidence.get(task.taskKey) ?? "skipped" : task.evidenceType,
         taskScore: Number(speakingScores[index]),
         completionStatus: task.criteria === null ? "pending_evidence" : "scored"
       }));
       for (const [section, score, sectionCriteria] of [
-        ["writing", writingScore, { tasks: input.writingTasks, comment: input.comment }],
-        ["speaking", speakingScore, { tasks: scoredSpeakingTasks, totalScore: speakingScore, completionStatus: "scored", notes: input.comment, comment: input.comment }]
+        ["writing", writingScore, { ...(monthly ? { rubricScores: monthlyWriting } : { tasks: input.writingTasks }), comment: input.comment }],
+        ["speaking", speakingScore, { ...(monthly ? { rubricScores: monthlySpeaking } : { tasks: scoredSpeakingTasks }), totalScore: speakingScore, completionStatus: "scored", notes: input.comment, comment: input.comment }]
       ] as const) {
         await client.query(
           `insert into assessment_scores (id, attempt_id, section, score, criteria, source)
@@ -6447,7 +6506,7 @@ class AssessmentRepository {
         [input.attemptId]
       );
       const totalScore = roundAssessmentScore(Number(totals.rows[0]?.total_score ?? 0));
-      const suggestedLevel = Number(totals.rows[0]?.section_count ?? 0) === 4
+      const suggestedLevel = !monthly && person.blueprint.kind !== "pass-course" && Number(totals.rows[0]?.section_count ?? 0) === 4
         ? reviewCefrFromScore(totalScore, 100)
         : null;
       if (suggestedLevel) {
@@ -6514,7 +6573,7 @@ class AssessmentRepository {
       `select j.state, j.payload->>'requestId' as request_id, j.last_error, j.updated_at
        from jobs j
        join users reviewer on reviewer.id = $1
-       where j.kind = 'assessment.ai-score'
+       where j.kind in ('assessment.ai-score', 'assessment.ai-score-auto')
          and j.payload->>'attemptId' = $2
          and (j.payload->>'organizationId')::uuid = reviewer.organization_id
        order by j.updated_at desc limit 1`,
@@ -6618,6 +6677,7 @@ class AssessmentRepository {
       approvedLevel: row.approved_level,
       learnerId: row.learner_id,
       learnerName: row.learner_name,
+      ...(row.kind === "final" || row.kind === "pass_course" ? { productiveRubric: assessmentProductiveRubric(row.blueprint) } : {}),
       taskPrompts,
       responses: attempt.responses.map((response) => ({
         section: response.section,
@@ -8468,7 +8528,15 @@ class CoachRepository {
     } finally { client.release(); }
   }
 
-  async saveInsufficientTurn(input: {
+  async hasPracticeTurn(sessionId: string, requestId: string): Promise<boolean> {
+    const result = await this.pool.query(
+      "select 1 from coach_turns where session_id = $1 and content->>'requestId' = $2 limit 1",
+      [sessionId, requestId]
+    );
+    return Boolean(result.rowCount);
+  }
+
+  async saveLocalPracticeTurn(input: {
     learnerId: string;
     sessionId: string;
     requestId: string;
@@ -8480,6 +8548,7 @@ class CoachRepository {
     nextQuestion: string;
     nextQuestionTranslation: string;
     reasonVi?: string;
+    aiFailureCode?: string;
   }): Promise<boolean> {
     const client = await this.pool.connect();
     try {
@@ -8508,16 +8577,17 @@ class CoachRepository {
         [turnId, input.sessionId, Number(next.rows[0]?.number ?? 1),
           JSON.stringify({ text: input.message, requestId: input.requestId, ...(input.audio ? { audioArtifact: storedAudioArtifact(input.audio) } : {}) }),
           JSON.stringify({
-            coachText: input.seasonReply,
-            evaluation: { status: "insufficient", result: "missing_information", countsTowardGoal: false, noteVi: input.reasonVi ?? input.seasonReplyTranslation },
+            coachText: input.aiFailureCode ? coachSpokenText(input.seasonReply, input.nextQuestion) : input.seasonReply,
+            ...(input.aiFailureCode ? { feedbackStatus: "unavailable", aiFailureCode: input.aiFailureCode } : {}),
+            evaluation: { status: "insufficient", result: "missing_information", countsTowardGoal: Boolean(input.aiFailureCode), noteVi: input.reasonVi ?? input.seasonReplyTranslation },
             seasonReply: input.seasonReply, seasonReplyTranslation: input.seasonReplyTranslation,
             nextQuestion: input.nextQuestion,
             nextQuestionTranslation: input.nextQuestionTranslation,
-            rubric: {
+            ...(input.aiFailureCode ? {} : { rubric: {
               meaning: { score: 0, evidence: `“${input.message}” chưa đủ thông tin để trả lời câu hỏi.`, improvement: "Viết một câu có chủ ngữ và ý chính." },
               vocabulary: { score: 0, evidence: "Chưa đủ nội dung để đánh giá từ vựng.", improvement: "Dùng ít nhất một từ liên quan đến câu hỏi." },
               grammar: { score: 0, evidence: "Chưa đủ câu để đánh giá ngữ pháp.", improvement: "Viết một câu tiếng Anh hoàn chỉnh." }
-            },
+            } }),
             corrections: [], correctedText: "", suggestedAnswer: { text: "", translation: "" },
             usedWords: [], checked: false
           })]
@@ -8525,6 +8595,15 @@ class CoachRepository {
       if (input.audio) await linkAudioOnClient(client, {
         ownerUserId: input.learnerId, audio: input.audio, sourceFlow: "season", sourceEntityId: turnId
       });
+      if (input.aiFailureCode) {
+        await client.query(
+          `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+           select $1, organization_id, id, 'coach.practice_turn_credited_during_outage', 'coach_turn', $3,
+             jsonb_build_object('code', $4::text, 'requestId', $5::text, 'practiceDate', organization_system_date(organization_id)), $6
+           from users where id = $2`,
+          [randomUUID(), input.learnerId, turnId, input.aiFailureCode, input.requestId, randomUUID()]
+        );
+      }
       await client.query("commit");
       return true;
     } catch (error) {
@@ -8798,8 +8877,10 @@ function storedCoachSpokenText(value: Record<string, unknown>): string {
 }
 
 function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView | null {
-  if (!value || !value.rubric || typeof value.rubric !== "object" || Array.isArray(value.rubric)) return null;
-  const rubric = value.rubric as Record<string, unknown>;
+  if (!value) return null;
+  const rubric = value.rubric && typeof value.rubric === "object" && !Array.isArray(value.rubric)
+    ? value.rubric as Record<string, unknown> : null;
+  if (!rubric && typeof value.aiFailureCode !== "string") return null;
   const classification = coachTurnClassification(value);
   const correctionSource = Array.isArray(value.corrections) ? value.corrections : Array.isArray(value.suggestions) ? value.suggestions : [];
   const corrections = correctionSource.flatMap((item) => {
@@ -8817,18 +8898,18 @@ function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView
   const evaluationSource = value.evaluation && typeof value.evaluation === "object" && !Array.isArray(value.evaluation)
     ? value.evaluation as Record<string, unknown> : null;
   const legacyGenericFallback = evaluationSource?.noteVi === "Bạn đã phản hồi đúng tình huống."
-    && coachRubricCriterion(rubric.meaning).evidence === "Câu trả lời bám sát tình huống."
-    && coachRubricCriterion(rubric.vocabulary).evidence === "Từ vựng phù hợp ngữ cảnh."
-    && coachRubricCriterion(rubric.grammar).evidence === "Cấu trúc câu rõ ràng."
-    && coachRubricCriterion(rubric.meaning).score === 4
-    && coachRubricCriterion(rubric.vocabulary).score === 4
-    && coachRubricCriterion(rubric.grammar).score === 4
+    && coachRubricCriterion(rubric?.meaning).evidence === "Câu trả lời bám sát tình huống."
+    && coachRubricCriterion(rubric?.vocabulary).evidence === "Từ vựng phù hợp ngữ cảnh."
+    && coachRubricCriterion(rubric?.grammar).evidence === "Cấu trúc câu rõ ràng."
+    && coachRubricCriterion(rubric?.meaning).score === 4
+    && coachRubricCriterion(rubric?.vocabulary).score === 4
+    && coachRubricCriterion(rubric?.grammar).score === 4
     && !corrections.length;
   const feedbackUnavailable = value.feedbackStatus === "unavailable" || legacyGenericFallback;
   const legacyRelevant = value.relevant !== false;
   const status = feedbackUnavailable ? "insufficient" : evaluationSource?.status === "insufficient" || evaluationSource?.status === "off_topic"
     ? evaluationSource.status : legacyRelevant ? "valid" : "off_topic";
-  const countsTowardGoal = feedbackUnavailable ? false : typeof evaluationSource?.countsTowardGoal === "boolean"
+  const countsTowardGoal = feedbackUnavailable && typeof value.aiFailureCode !== "string" ? false : typeof evaluationSource?.countsTowardGoal === "boolean"
     ? evaluationSource.countsTowardGoal : status === "valid";
   const result = feedbackUnavailable ? "missing_information" : evaluationSource?.result === "correct" || evaluationSource?.result === "partially_correct"
     || evaluationSource?.result === "missing_information" || evaluationSource?.result === "off_topic"
@@ -8841,6 +8922,7 @@ function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView
     relevant: status !== "off_topic",
     relevanceNote: typeof value.relevanceNote === "string" ? value.relevanceNote : "",
     feedbackStatus: feedbackUnavailable ? "unavailable" : "complete",
+    ...(typeof value.aiFailureCode === "string" ? { creditedDuringAiOutage: true } : {}),
     evaluation: {
       status,
       result,
@@ -8857,9 +8939,9 @@ function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView
     nextQuestion: typeof value.nextQuestion === "string" ? value.nextQuestion : "",
     nextQuestionTranslation: typeof value.nextQuestionTranslation === "string" ? value.nextQuestionTranslation : "",
     rubric: {
-      meaning: coachRubricCriterion(rubric.meaning),
-      vocabulary: coachRubricCriterion(rubric.vocabulary),
-      grammar: coachRubricCriterion(rubric.grammar)
+      meaning: coachRubricCriterion(rubric?.meaning),
+      vocabulary: coachRubricCriterion(rubric?.vocabulary),
+      grammar: coachRubricCriterion(rubric?.grammar)
     },
     corrections,
     correctedText: typeof value.correctedText === "string" ? value.correctedText : "",
@@ -10691,7 +10773,7 @@ class JobRepository {
     );
   }
 
-  async leaseNext(workerId: string, leaseSeconds: number): Promise<LeasedJob | null> {
+  async leaseNext(workerId: string, leaseSeconds: number, kinds?: string[]): Promise<LeasedJob | null> {
     const result = await this.pool.query<{
       id: string;
       kind: string;
@@ -10708,6 +10790,7 @@ class JobRepository {
            or (state = 'running' and lock_expires_at <= now())
          )
          and attempts < max_attempts
+         and ($3::text[] is null or kind = any($3::text[]))
          order by run_at, created_at
          for update skip locked
          limit 1
@@ -10718,7 +10801,7 @@ class JobRepository {
        from next_job
        where j.id = next_job.id
        returning j.id, j.kind, j.payload, j.state, j.attempts, j.max_attempts, j.locked_by`,
-      [workerId, leaseSeconds]
+      [workerId, leaseSeconds, kinds ?? null]
     );
     const row = result.rows[0];
     return row
@@ -10745,10 +10828,10 @@ class JobRepository {
     return Boolean(result.rowCount);
   }
 
-  async markFailed(id: string, workerId: string, error: string): Promise<"queued" | "dead" | null> {
-    const result = await this.pool.query<{ state: "queued" | "dead" }>(
+  async markFailed(id: string, workerId: string, error: string, retry = true): Promise<"queued" | "dead" | null> {
+    const result = await this.pool.query<{ state: "queued" | "dead" | "failed" }>(
       `update jobs
-       set state = case when attempts >= max_attempts then 'dead' else 'queued' end,
+       set state = case when not $4 then 'failed' when attempts >= max_attempts then 'dead' else 'queued' end,
            run_at = case
              when attempts >= max_attempts then run_at
              else now() + (least(attempts, 6) * interval '10 seconds')
@@ -10759,9 +10842,10 @@ class JobRepository {
            updated_at = now()
        where id = $1 and state = 'running' and locked_by = $2 and lock_expires_at > now()
        returning state`,
-      [id, workerId, error]
+      [id, workerId, error, retry]
     );
-    return result.rows[0]?.state ?? null;
+    const state = result.rows[0]?.state;
+    return state === "queued" || state === "dead" ? state : null;
   }
 }
 

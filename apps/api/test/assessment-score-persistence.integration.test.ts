@@ -29,6 +29,13 @@ describe("assessment score persistence", () => {
         [violationLearnerId, timeoutLearnerId, DEMO_IDS.organization]
       );
       await client.query(
+        `insert into learner_profiles (user_id, profile, completed_at)
+         select learner.id, demo.profile, demo.completed_at
+         from learner_profiles demo cross join unnest($1::uuid[]) as learner(id)
+         where demo.user_id = $2`,
+        [[violationLearnerId, timeoutLearnerId], DEMO_IDS.learner]
+      );
+      await client.query(
         `insert into user_credentials (user_id, credential_hash) values ($1, $3), ($2, $4)
          on conflict (user_id) do update set credential_hash = excluded.credential_hash`,
         [violationLearnerId, timeoutLearnerId, await createPinHash("141141"), await createPinHash("142142")]

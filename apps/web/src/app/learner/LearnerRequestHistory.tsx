@@ -6,7 +6,8 @@ import { AssessmentAppealForm } from "./AssessmentAppealForm.js";
 import { PageTitle } from "./ui.js";
 import { RequestEvidenceDetails, RequestEvidenceFields, requestEvidenceArgs, type RequestEvidenceDraft } from "../shared/RequestEvidence.js";
 import { RequestTable } from "../shared/RequestTable.js";
-import { LearnerMonthlySurveys, LearnerSurveyHistoryEntry, useLearnerMonthlySurveys } from "./MonthlySurveys.js";
+import { LearnerMonthlySurveys, useLearnerMonthlySurveys } from "./MonthlySurveys.js";
+import { MonthlySurveyAnswers, surveyMonthLabel } from "../shared/MonthlySurveyFields.js";
 
 const complaintLabels: Record<LearnerComplaintKind, string> = {
   exam_eligibility: "Điều kiện dự thi", lesson_unlock: "Mở khóa bài học", account_unlock: "Mở khóa tài khoản",
@@ -21,7 +22,7 @@ const supportFilters = [
   { value: "all", label: "Tất cả" },
   { value: "complaints", label: "Khiếu nại" },
   { value: "appeals", label: "Kháng nghị" },
-  { value: "feedback", label: "Khảo sát tháng" }
+  { value: "feedback", label: "Khảo sát", suffix: " tháng" }
 ] as const;
 
 type SupportData = {
@@ -31,16 +32,29 @@ type SupportData = {
 };
 
 export function LearnerRequestHistory() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const requested = params.get("type") ?? params.get("tab");
   const filter = supportFilters.find(item => item.value === requested)?.value ?? "all";
   const focusedId = params.get("id");
+  const [expandedRequest, setExpandedRequest] = useState<{ filter: typeof filter; focusedId: string | null; id: string | null }>();
+  const openRequestId = expandedRequest?.filter === filter && expandedRequest.focusedId === focusedId ? expandedRequest.id : focusedId;
+  const lessonUnlock = params.get("kind") === "lesson_unlock";
+  const composing = filter === "complaints" && (lessonUnlock || params.get("compose") === "complaint");
   const fromProfile = params.get("from") === "profile";
   const [data, setData] = useState<SupportData>();
   const [revision, setRevision] = useState(0);
   const [notice, setNotice] = useState("");
   const surveys = useLearnerMonthlySurveys();
   const refresh = () => setRevision(value => value + 1);
+  const setComplaintFormOpen = (open: boolean) => {
+    const next = new URLSearchParams(params);
+    if (open) next.set("compose", "complaint");
+    else {
+      next.delete("compose");
+      if (lessonUnlock) next.delete("kind");
+    }
+    setParams(next, { replace: true });
+  };
 
   useEffect(() => {
     let active = true;
@@ -71,20 +85,40 @@ export function LearnerRequestHistory() {
     ...(showAppeals ? data?.appeals ?? [] : []).map(item => ({ ...item, date: item.createdAt, kindLabel: "Kháng nghị",
       title: `${appealLabels[item.kind]} · ${item.title}`, evidenceKind: evidenceKinds[item.kind],
       scope: item.scope ?? (item.partCode ? lessonPartNames[item.partCode] ?? null : null) }))
-  ].map(item => ({
-    id: `support-request-${item.id}`,
-    kind: item.kindLabel,
-    date: item.date,
-    content: <><b>{item.title}</b><p>{item.reason}</p><RequestEvidenceDetails kind={item.evidenceKind} item={item} />{item.resolution ? <p className="small muted">Phản hồi: {item.resolution}</p> : null}</>,
-    status: <span className={`badge ${item.status === "pending" ? "warn" : item.status === "rejected" ? "danger" : "ok"}`}>{item.status === "pending" ? "Chờ xử lý" : item.status === "rejected" ? "Đã từ chối" : "Đã duyệt"}</span>
-  }));
-  const feedbackRows = (showFeedback ? surveys.submitted : []).map(({ form, submission }) => ({
-    id: `support-feedback-${form.month}`,
-    kind: "Góp ý",
-    date: submission.submittedAt,
-    content: <LearnerSurveyHistoryEntry form={form} submission={submission} expanded={surveys.submittedMonth === form.month || params.get("month") === form.month} />,
-    status: <span className="badge ok">Đã gửi</span>
-  }));
+  ].map(item => {
+    const expanded = openRequestId === item.id;
+    const detailsId = `support-details-${item.id}`;
+    return {
+      id: `support-request-${item.id}`,
+      kind: item.kindLabel,
+      date: item.date,
+      content: <b>{item.title}</b>,
+      status: <span className={`badge ${item.status === "pending" ? "warn" : item.status === "rejected" ? "danger" : "ok"}`}>{item.status === "pending" ? "Chờ xử lý" : item.status === "rejected" ? "Đã từ chối" : "Đã duyệt"}</span>,
+      action: <button type="button" className="btn btn-sm" aria-expanded={expanded} aria-controls={expanded ? detailsId : undefined}
+        onClick={() => setExpandedRequest({ filter, focusedId, id: expanded ? null : item.id })}>{expanded ? "Thu gọn" : "Chi tiết"}</button>,
+      detail: expanded ? <div id={detailsId} className="learner-support-request-detail">
+        <div><h3>Nội dung đã gửi</h3><p>{item.reason}</p><RequestEvidenceDetails kind={item.evidenceKind} item={item} /></div>
+        {item.resolution ? <div><h3>Phản hồi</h3><p>{item.resolution}</p></div> : null}
+      </div> : null
+    };
+  });
+  const feedbackRows = (showFeedback ? surveys.submitted : []).map(({ form, submission }) => {
+    const id = `support-feedback-${form.month}`;
+    const expanded = openRequestId === id;
+    const detailsId = `${id}-answers`;
+    return {
+      id,
+      kind: "Góp ý",
+      date: submission.submittedAt,
+      content: <><b>{form.title}</b><div className="muted">{surveyMonthLabel(form.month)}</div></>,
+      status: <span className="badge ok">Đã gửi</span>,
+      action: <button type="button" className="btn btn-sm" aria-expanded={expanded} aria-controls={expanded ? detailsId : undefined}
+        onClick={() => setExpandedRequest({ filter, focusedId, id: expanded ? null : id })}>{expanded ? "Thu gọn" : "Chi tiết"}</button>,
+      detail: expanded ? <div id={detailsId} className="learner-support-request-detail">
+        <MonthlySurveyAnswers questions={form.questions} answers={submission.answers} />
+      </div> : null
+    };
+  });
   const rows = [...history, ...feedbackRows].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
   const requestError = data && ((showComplaints && !data.complaints) || (showAppeals && !data.appeals) || (filter === "appeals" && !data.results));
   const surveyError = showFeedback && surveys.loadError;
@@ -99,20 +133,16 @@ export function LearnerRequestHistory() {
         const search = new URLSearchParams();
         if (fromProfile) search.set("from", "profile");
         if (item.value !== "all") search.set("type", item.value);
-        return <Link key={item.value} to={{ search: search.toString() }} aria-current={item.value === filter ? "page" : undefined}>{item.label}</Link>;
+        return <Link key={item.value} to={{ search: search.toString() }} aria-current={item.value === filter ? "page" : undefined}>
+          <span>{item.label}{"suffix" in item && <span className="learner-support-tab-suffix">{item.suffix}</span>}</span>
+        </Link>;
       })}
     </nav>
     {filter === "feedback" ? <LearnerMonthlySurveys surveys={surveys} month={params.get("month")} key={params.get("month") ?? ""} /> : null}
     {notice ? <p role="status">{notice}</p> : null}
-    <section className="card request-card">
-      <div className="request-filters">
-        <h2>{filter === "complaints" ? "Khiếu nại đã gửi" : filter === "appeals" ? "Kháng nghị đã gửi" : filter === "feedback" ? "Lịch sử góp ý" : listLabel}</h2>
-        {filter === "complaints" && data?.complaints ? <ComplaintForm key={params.get("kind")} lessonUnlock={params.get("kind") === "lesson_unlock"} complaints={data.complaints} submitted={() => { setNotice("Đã gửi khiếu nại cho Quản lý."); refresh(); }} /> : null}
-      </div>
-      {requestError || (surveyError && filter !== "feedback") ? <p role="alert">Chưa tải được đầy đủ lịch sử. <button type="button" className="btn" onClick={() => { refresh(); surveys.retry(); }}>Thử lại</button></p> : null}
-      <RequestTable label={listLabel} rows={rows} empty={loading ? <span role="status">Đang tải…</span> : "Chưa có mục nào."} />
-    </section>
-    {filter === "appeals" && data?.results?.length ? <section className="card">
+    {composing && data?.complaints ? <ComplaintForm lessonUnlock={lessonUnlock} complaints={data.complaints}
+      cancel={() => setComplaintFormOpen(false)} submitted={() => { setComplaintFormOpen(false); setNotice("Đã gửi khiếu nại cho Quản lý."); refresh(); }} /> : null}
+    {filter === "appeals" && data?.results?.length ? <section className="card learner-support-action">
       <h2>Bài thi có thể kháng nghị</h2>
       <ul className="request-history-items">{data.results.map(result => <li key={result.attemptId}>
         <h3>{result.title}</h3>
@@ -123,14 +153,21 @@ export function LearnerRequestHistory() {
         }} />
       </li>)}</ul>
     </section> : null}
+    <section className="card request-card">
+      <div className="request-filters learner-support-history-header">
+        <h2>{filter === "complaints" ? "Khiếu nại đã gửi" : filter === "appeals" ? "Kháng nghị đã gửi" : filter === "feedback" ? "Lịch sử góp ý" : listLabel}</h2>
+        {filter === "complaints" && data?.complaints && !composing ? <button type="button" className="btn-primary" onClick={() => setComplaintFormOpen(true)}>Gửi khiếu nại</button> : null}
+      </div>
+      {requestError || (surveyError && filter !== "feedback") ? <p role="alert">Chưa tải được đầy đủ lịch sử. <button type="button" className="btn" onClick={() => { refresh(); surveys.retry(); }}>Thử lại</button></p> : null}
+      <RequestTable label={listLabel} rows={rows} empty={loading ? <span role="status">Đang tải…</span> : "Chưa có mục nào."} />
+    </section>
   </div>;
 }
 
-function ComplaintForm({ complaints, submitted, lessonUnlock }: { complaints: LearnerComplaintView[]; submitted: () => void; lessonUnlock: boolean }) {
+function ComplaintForm({ complaints, submitted, cancel, lessonUnlock }: { complaints: LearnerComplaintView[]; submitted: () => void; cancel: () => void; lessonUnlock: boolean }) {
   const [kind, setKind] = useState<LearnerComplaintKind>(lessonUnlock ? "lesson_unlock" : "attendance");
   const [reason, setReason] = useState("");
   const [evidence, setEvidence] = useState<RequestEvidenceDraft>({});
-  const [open, setOpen] = useState(lessonUnlock);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const pending = complaints.some(item => item.kind === kind && item.status === "pending");
@@ -143,19 +180,22 @@ function ComplaintForm({ complaints, submitted, lessonUnlock }: { complaints: Le
       await learnerApiClient.submitLearnerComplaint(kind, reason.trim(), ...requestEvidenceArgs(evidence));
       setReason("");
       setEvidence({});
-      setOpen(false);
       submitted();
     } catch { setError(true); }
     finally { setBusy(false); }
   };
-  return !open ? <button type="button" className="btn-primary" onClick={() => setOpen(true)}>Gửi khiếu nại</button>
-    : <form className="learner-support-form" onSubmit={submit} aria-busy={busy}>
-      {lessonUnlock ? <b>Mở khóa bài học tháng</b> : <label>Loại khiếu nại<select value={kind} onChange={event => setKind(event.target.value as LearnerComplaintKind)}>{complaintKinds.map(value => <option value={value} key={value}>{complaintLabels[value]}</option>)}</select></label>}
-      <RequestEvidenceFields value={evidence} onChange={setEvidence} label="Màn hình hoặc ngày xảy ra" placeholder="Ví dụ: Điểm danh ngày 06/11" disabled={busy} />
-      <label>Lý do khiếu nại<textarea rows={3} value={reason} minLength={5} maxLength={2000} required onChange={event => setReason(event.target.value)} /></label>
-      {pending ? <p role="status">Bạn đã có khiếu nại loại này đang chờ.</p> : null}
-      {error ? <p role="alert">Chưa gửi được khiếu nại. Hãy thử lại.</p> : null}
-      <div className="row"><button type="submit" className="btn-primary" disabled={busy || pending || evidence.blocked || reason.trim().length < 5}>{busy ? "Đang gửi…" : "Gửi cho Quản lý"}</button>
-        <button type="button" className="btn" disabled={busy} onClick={() => { setOpen(false); setEvidence({}); }}>Hủy</button></div>
-    </form>;
+  return <section className="card learner-support-action" aria-labelledby="learner-complaint-title">
+      <h2 id="learner-complaint-title">Khiếu nại mới</h2>
+      <form className="learner-support-form" onSubmit={submit} aria-busy={busy}>
+        {lessonUnlock ? <b>Mở khóa bài học tháng</b> : <label>Loại khiếu nại<select value={kind} onChange={event => setKind(event.target.value as LearnerComplaintKind)}>{complaintKinds.map(value => <option value={value} key={value}>{complaintLabels[value]}</option>)}</select></label>}
+        <RequestEvidenceFields value={evidence} onChange={setEvidence} label="Màn hình hoặc ngày xảy ra" placeholder="Ví dụ: Điểm danh ngày 06/11" disabled={busy} />
+        <label>Lý do khiếu nại<textarea rows={3} value={reason} minLength={5} maxLength={2000} required onChange={event => setReason(event.target.value)} /></label>
+        {pending ? <p role="status">Bạn đã có khiếu nại loại này đang chờ.</p> : null}
+        {error ? <p role="alert">Chưa gửi được khiếu nại. Hãy thử lại.</p> : null}
+        <div className="form-actions learner-support-form-actions">
+          <button type="button" className="btn" disabled={busy} onClick={cancel}>Hủy</button>
+          <button type="submit" className="btn-primary" disabled={busy || pending || evidence.blocked || reason.trim().length < 5}>{busy ? "Đang gửi…" : "Gửi cho Quản lý"}</button>
+        </div>
+      </form>
+    </section>;
 }

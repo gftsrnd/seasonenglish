@@ -35,9 +35,9 @@ function reopenTitle(item: ReopenRequestView) {
 
 function monthlyResourcesApprovalWarning(resources: NonNullable<ReopenRequestView["monthlyResources"]>): string {
   if (resources.lessonsWithContent > 0) {
-    return `Cảnh báo: ${resources.lessonsWithContent}/${resources.lessonCount} bài đã có nội dung (đã soạn hoặc đã duyệt). Duyệt mở lại sẽ xoá toàn bộ ${resources.lessonCount} bài khỏi lịch, kể cả các bài này. Tài nguyên được giữ nguyên và trở về bản nháp.`;
+    return `Cảnh báo: ${resources.lessonsWithContent}/${resources.lessonCount} bài đã có nội dung. Duyệt sẽ xóa cả ${resources.lessonCount} bài khỏi lịch. Tài nguyên được giữ và chuyển về bản nháp.`;
   }
-  return `Duyệt mở lại sẽ đưa tài nguyên về bản nháp và xoá ${resources.lessonCount} bài chưa có nội dung khỏi lịch.`;
+  return `Duyệt sẽ xoá ${resources.lessonCount} bài chưa có nội dung khỏi lịch. Tài nguyên được giữ và chuyển về bản nháp.`;
 }
 
 function submittedAt(row: RequestRow) {

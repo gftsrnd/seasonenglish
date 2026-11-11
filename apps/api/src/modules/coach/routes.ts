@@ -63,10 +63,9 @@ export function registerCoachRoutes(
     const audio = parsed.data.audio as AudioArtifactInput | undefined;
     const learnerId = request.e4sSession!.user.id;
     const runner = await runnerFor(learnerId);
-    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
-    const existing = await repositories.coach.currentForLearner(learnerId, true);
+    const existing = await repositories.coach.currentForLearner(learnerId, Boolean(runner));
     if (!existing) return reply.code(404).send({ code: "COACH_CONTEXT_NOT_FOUND" });
-    if (await repositories.aiRuns.requestExists(learnerId, parsed.data.requestId, "coach_dialogue")) return withCoachAudio(existing, learnerId, repositories, storage);
+    if (await repositories.coach.hasPracticeTurn(existing.sessionId, parsed.data.requestId)) return withCoachAudio(existing, learnerId, repositories, storage);
     if (existing.daily.used >= existing.daily.limit) return reply.code(429).send({ code: "COACH_DAILY_LIMIT" });
     if (existing.chatAvailability?.available === false) return reply.code(409).send({ code: "COACH_CLOSED_TODAY", reason: existing.chatAvailability.reason });
     const currentQuestion = coachQuestionForPersona(
@@ -84,15 +83,13 @@ export function registerCoachRoutes(
       const followUp = coachInsufficientFollowUp(
         parsed.data.message, currentQuestion, existing.topic, existing.persona, existing.questionHistory ?? []
       );
-      await repositories.coach.saveInsufficientTurn({
+      await repositories.coach.saveLocalPracticeTurn({
         learnerId, sessionId: existing.sessionId, requestId: parsed.data.requestId,
         message: parsed.data.message, currentQuestion, reasonVi: turnGateReason,
         ...followUp, ...(audio ? { audio } : {})
       });
       return withCoachAudio(await repositories.coach.currentForLearner(learnerId, true), learnerId, repositories, storage);
     }
-    const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "coach_dialogue");
-    if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     let dailyReservation = false;
     try {
       const reservation = await repositories.coach.reserveDailyTurn({
@@ -113,9 +110,33 @@ export function registerCoachRoutes(
         // learner answers lets model feedback leak from one turn into the next.
         priorTurns: []
       };
-      const { result, output } = await runCoachWithPersonaRepair(
-        runner, aiInput, `${coachPersonaPrompt(task.prompt, existing.persona, existing.cefr, audio)}\n\n${coachPracticeTurnPolicy(existing.cefr, existing.topic, (existing.questionHistory ?? []).slice(-20))}`, existing.persona, validationContext
-      );
+      const saveOutageTurn = async (code: string, acceptedReply?: CoachTaskOutput) => {
+        const reasonVi = "Đã tính lượt luyện tập. Nhận xét AI tạm thời chưa có.";
+        const stored = await repositories.coach.saveLocalPracticeTurn({
+          learnerId, sessionId: existing.sessionId, requestId: parsed.data.requestId,
+          message: parsed.data.message, currentQuestion, aiFailureCode: code, reasonVi,
+          seasonReply: acceptedReply?.seasonReply ?? "Your answer was saved. Feedback is temporarily unavailable.",
+          seasonReplyTranslation: acceptedReply?.seasonReplyTranslation || reasonVi,
+          nextQuestion: acceptedReply?.nextQuestion || currentQuestion,
+          nextQuestionTranslation: acceptedReply?.nextQuestionTranslation ?? "",
+          ...(audio ? { audio } : {})
+        });
+        if (stored) request.log.warn({ code, requestId: parsed.data.requestId }, "Season practice credited during AI outage");
+        return withCoachAudio(await repositories.coach.currentForLearner(learnerId, Boolean(runner)), learnerId, repositories, storage);
+      };
+      if (!runner) return await saveOutageTurn("AI_UNAVAILABLE");
+      const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "coach_dialogue");
+      if (!task) return await saveOutageTurn("AI_PROMPT_NOT_READY");
+      let scored: Awaited<ReturnType<typeof runCoachWithPersonaRepair>>;
+      try {
+        scored = await runCoachWithPersonaRepair(
+          runner, aiInput, `${coachPersonaPrompt(task.prompt, existing.persona, existing.cefr, audio)}\n\n${coachPracticeTurnPolicy(existing.cefr, existing.topic, (existing.questionHistory ?? []).slice(-20))}`, existing.persona, validationContext
+        );
+      } catch (error) {
+        return await saveOutageTurn(safeAiErrorCode(error));
+      }
+      const { result, output, feedbackErrorCode } = scored;
+      if (feedbackErrorCode) return await saveOutageTurn(feedbackErrorCode, output);
       const normalizedOutput = normalizeCoachVocabularyUnlocks(
         repeatCurrentQuestionForOffTopic(output, currentQuestion), parsed.data.message, existing.vocabulary
       );
@@ -638,7 +659,7 @@ export async function runCoachWithPersonaRepair(
   systemPrompt: string,
   persona: "informal" | "formal",
   validationContext?: CoachValidationContext
-): Promise<{ result: AiRunResult; output: CoachTaskOutputWithFeedbackStatus }> {
+): Promise<{ result: AiRunResult; output: CoachTaskOutputWithFeedbackStatus; feedbackErrorCode?: string }> {
   const roleplayPrompt = `${systemPrompt}\n\nROLEPLAY TURN ONLY. Return ONLY this compact JSON object: {"seasonReply":"...","learnerQuestion":"...","suggestedLearnerReply":"..."}. All three fields are English-only. Speak as the colleague/customer, not as a teacher. seasonReply has 2-4 direct in-character sentences and ends with learnerQuestion verbatim. learnerQuestion must be a natural question/request to the learner, never 'What would you say?' or other teaching language. suggestedLearnerReply directly answers learnerQuestion. Do not return evaluation, translations, rubric, corrections, headings, Vietnamese, or commentary.`;
   const roleplayResult = await runner.runTask("coach_roleplay_turn", input, {
     systemPrompt: roleplayPrompt, temperature: 0, maxAttempts: 2, maxOutputTokens: 700
@@ -650,17 +671,19 @@ export async function runCoachWithPersonaRepair(
   // intentionally not allowed to overwrite the accepted spoken turn.
   let feedback: CoachTaskOutputWithFeedbackStatus | undefined;
   let feedbackResult: AiRunResult | undefined;
+  let feedbackErrorCode: string | undefined;
   try {
     const generated = await runCoachFeedbackWithPersonaRepair(runner, input, `${systemPrompt}\n\nFEEDBACK ONLY: evaluate the learner response. The roleplay turn below is already accepted and must not be changed. Return the standard JSON object, but its seasonReply/nextQuestion/suggestedAnswer fields will be ignored.\nACCEPTED TURN: ${JSON.stringify(roleplay.turn)}`, validationContext);
     feedback = generated.output;
     feedbackResult = generated.result;
-  } catch {
+  } catch (error) {
+    feedbackErrorCode = safeAiErrorCode(error);
     // Preserve the learning flow; an unavailable evaluator cannot erase a
     // valid roleplay turn. This is deliberately modest rather than fabricated.
     feedback = localCoachFeedback(roleplay.turn, validationContext?.learnerMessage ?? "");
   }
   const output = mergeAcceptedRoleplay(feedback!, roleplay.turn);
-  return { result: feedbackResult ?? roleplayResult, output };
+  return { result: feedbackResult ?? roleplayResult, output, ...(feedbackErrorCode ? { feedbackErrorCode } : {}) };
 }
 
 function inspectRoleplayTurn(raw: unknown, persona: "informal" | "formal", context?: CoachValidationContext): { turn?: CoachRoleplayTurnOutput; violations: string[] } {

@@ -155,19 +155,37 @@ describe("app profile avatar dialog affordances", () => {
   });
 
   it("keeps personal information collapsed until the learner asks to view it", async () => {
-    render(<LearnerProfile view={view} actions={actions} />);
+    const profile = { ...view.learner.profile, email: "demo@e4s.local", department: "QA", position: "Tester" };
+    render(<LearnerProfile view={{ ...view, learner: { ...view.learner, profile } }} actions={actions} />);
     expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Xem hồ sơ" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Học viên Demo", { selector: ".profile-detail-value" })).not.toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Xem hồ sơ" }));
     expect(screen.getByRole("button", { name: "Đóng thông tin" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Học viên Demo", { selector: ".profile-detail-value" })).toBeInTheDocument();
+    expect(Array.from(document.querySelectorAll("#profile-identity-details > dl dt"), (term) => term.textContent)).toEqual(["Họ và tên", "Email", "Phòng ban / team", "Vị trí công việc"]);
     const preferences = screen.getByText("Thông tin học tập");
     expect(screen.getByText("Informal · Thân thiện")).not.toBeVisible();
     expect(screen.getByRole("link", { name: "Cập nhật hồ sơ" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Cập nhật hồ sơ" })).toHaveAttribute("href", "/onboard");
     await userEvent.click(preferences);
     expect(screen.getByText("Informal · Thân thiện")).toBeVisible();
+    const details = preferences.closest("details")!;
+    expect(details.querySelectorAll("dl")).toHaveLength(1);
+    expect(within(details).getByText("Phong cách Season")).toBeVisible();
+    expect(Array.from(details.querySelectorAll("dt"), (term) => term.textContent).slice(0, 5)).toEqual(["Giải thích bằng", "Phong cách Season", "Thời lượng mỗi buổi", "Thiết bị hay dùng", "Lịch học"]);
+  });
+
+  it("previews the original fixed avatar colors by their saved choices", async () => {
+    const user = userEvent.setup();
+    render(<LearnerProfile view={view} actions={actions} />);
+    await user.click(screen.getAllByRole("button", { name: "Đổi avatar" })[0]!);
+    const dialog = within(screen.getByRole("dialog", { name: "Avatar của bạn" }));
+    const preview = dialog.getByLabelText("Avatar của Học viên Demo");
+    expect(preview).toHaveStyle({ background: "#E3DCFB", color: "#4B6120" });
+    await user.click(dialog.getByRole("button", { name: "Cam" }));
+    await user.click(dialog.getByRole("button", { name: "Màu nền Xanh nhạt" }));
+    expect(preview).toHaveStyle({ background: "#DCE8C8", color: "#F28C28" });
   });
 
   it("uses library icons for the selected avatar accessory", () => {

@@ -264,10 +264,10 @@ function SurveyDraftEditor({ definition, busy, onChange, onSave, onClose }: {
           <button type="button" className="btn-sm" aria-label={`Xoá câu hỏi ${index + 1}`} onClick={() => setQuestions(questions.filter((_question, i) => i !== index))}>Xoá câu hỏi</button>
         </div>
       </fieldset>)}
-      <div className="row monthly-survey-actions">
+      <div className="form-actions">
         <button type="button" className="btn" disabled={questions.length >= limits.questions} onClick={() => setQuestions([...questions, newQuestion])}>Thêm câu hỏi</button>
-        <button type="submit" className="btn btn-primary">{busy ? "Đang lưu…" : "Lưu bản nháp"}</button>
         <button type="button" className="btn" onClick={onClose}>Đóng soạn thảo</button>
+        <button type="submit" className="btn btn-primary">{busy ? "Đang lưu…" : "Lưu bản nháp"}</button>
       </div>
     </fieldset>
   </form>;

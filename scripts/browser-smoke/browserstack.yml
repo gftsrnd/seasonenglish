@@ -1,0 +1,35 @@
+# BrowserStack reads credentials from BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY.
+projectName: E4S
+buildName: Public login
+framework: playwright
+browserstackLocal: false
+parallelsPerPlatform: 1
+selfHeal: false
+testObservability: false
+video: false
+debug: false
+networkLogs: false
+consoleLogs: disable
+platforms:
+  - os: Windows
+    osVersion: 11
+    browserName: chrome
+    browserVersion: latest
+  - os: Windows
+    osVersion: 11
+    browserName: edge
+    browserVersion: latest
+  - os: Windows
+    osVersion: 11
+    browserName: playwright-firefox
+    browserVersion: latest
+  - os: OS X
+    osVersion: Sequoia
+    browserName: Safari
+    browserVersion: latest
+  - deviceName: iPhone 15 Pro Max
+    osVersion: 17
+    browserName: safari
+  - deviceName: iPad Pro 12.9 2022
+    osVersion: 16
+    browserName: safari

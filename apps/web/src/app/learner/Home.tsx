@@ -1,10 +1,11 @@
 import { RequestEvidenceFields, requestEvidenceArgs, type RequestEvidenceDraft } from "../shared/RequestEvidence.js";
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { BookOpen, Clock3, LockKeyhole, MessageCircle, Play, Sprout } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MessageCircle, Play, Sprout } from "lucide-react";
 import type { LearnerHomeView, LearnerCallbacks } from "./contracts.js";
 import { Notice, PageTitle, Progress, AppLink, LearnerSupportCard, learnerLessonLabel } from "./ui.js";
 import { buildMonthlyTeachingCalendar } from "@e4s/domain/monthly";
 import { LevelReadinessCard } from "./LevelReadiness.js";
+import { useMediaQuery } from "../shared/useMediaQuery.js";
 import type { LearnerComplaintView } from "@e4s/contracts";
 
 export function LearnerHome({ view, actions, courseCompleted = false }: { view: LearnerHomeView; actions: LearnerCallbacks; courseCompleted?: boolean }) {
@@ -29,11 +30,11 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
   const next = view.nextLesson;
   const monthly = view.month ?? null;
   const monthlyPreparation = view.monthlyPreparation === true;
-  return <div className="app-learner-page home-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
+  return <div className="app-learner-page home-page" data-monthly-preparation={monthlyPreparation || !monthly || (!next && !view.lessons.length)} style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
     <PageTitle eyebrow={monthly ? `Tháng ${formatMonth(monthly.month)} · ${monthly.themeTitle}` : "Lộ trình tháng đang được chuẩn bị"} title={`Chào ${view.learner.displayName}!`} aside={<span className={`badge lvl lvl-${view.learner.cefr}`}>Trình độ {view.learner.cefr}</span>} />
     <div className="bao-row" style={{ marginBottom: 16 }} aria-label="Lời chào của Season AI Coach"><div className="bubble home-today-heading" style={{ flex: 1 }}>Hôm nay học gì nào?</div></div>
     {view.inactivityReminder ? <Notice tone="warn"><b>Bạn đã vắng {view.inactivityReminder.inactiveDays} ngày học liên tiếp.</b> Vắng thêm {Math.max(1, 5 - view.inactivityReminder.inactiveDays)} ngày học liên tiếp sẽ bị khóa tài khoản.</Notice> : null}
-    {!view.aiAvailable && view.aiAvailable !== undefined ? <Notice tone="warn">AI chưa kết nối (chưa có API key). Bạn vẫn làm test và học bài đã duyệt; báo người vận hành để bật AI coach.</Notice> : null}
+    {!view.aiAvailable && view.aiAvailable !== undefined ? <Notice tone="warn">Bạn vẫn có thể học, làm bài thi và luyện với Season. Nhận xét AI đang tạm thời gián đoạn.</Notice> : null}
     {view.notifications?.length ? <section className="card soft" aria-label="Thông báo mới" style={{ marginTop: 12 }}><div className="eyebrow">Thông báo</div><h3 style={{ margin: "2px 0 8px" }}>Nội dung học tập</h3><ul style={{ margin: 0, paddingLeft: 20 }}>{view.notifications.slice(0, 5).map((notification) => <li key={notification.id} className="small" style={{ marginBottom: 6 }}>{notification.message}</li>)}</ul></section> : null}
     <PrimaryLesson view={view} next={next} actions={actions} />
     {view.learner.cefr === "C1" && !courseCompleted ? <section className="card learner-summary-card pass-course-home-card" aria-label="Bài thi đầu ra">
@@ -47,12 +48,12 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
       </div>
     </section> : null}
     {!monthlyPreparation ? <section data-home-block="metrics" aria-label="Tiến độ tháng" style={{ marginTop: 16, padding: "16px 18px", borderRadius: 18, background: "var(--mint)", border: "1px solid var(--border)" }}>
-      <div className="row between" style={{ gap: 12, alignItems: "baseline", flexWrap: "wrap" }}><div><div className="eyebrow">Theo tháng</div><h2 style={{ margin: "2px 0 0" }}>Tiến độ học tập</h2></div><span className="small muted">Bài thi tháng nằm trong thẻ riêng bên dưới</span></div>
+      <div><div className="eyebrow">Theo tháng</div><h2 style={{ margin: "2px 0 0" }}>Tiến độ học tập</h2></div>
       <div className="stats monthly-home-metrics" style={{ marginTop: 12 }}>
         <Metric label="Bài theo lịch" value={`${view.metrics.completedLessons}/${view.metrics.totalLessons}`} percent={ratio(view.metrics.completedLessons, view.metrics.totalLessons)} />
         <Metric label="Bài ôn" value={`${view.metrics.completedReviews ?? 0}/${view.metrics.totalReviews ?? 0}`} percent={ratio(view.metrics.completedReviews ?? 0, view.metrics.totalReviews ?? 0)} color="var(--primary)" />
-        <Metric label="Điểm danh" secondary={view.monthlyEligibility ? `Vắng ${view.monthlyEligibility.absenceDays}/${view.monthlyEligibility.maxAbsences} tối đa` : undefined} value={view.monthlyEligibility ? `${view.monthlyEligibility.attendedDays}/${view.monthlyEligibility.effectiveDays}` : "–"} percent={view.monthlyEligibility ? ratio(view.monthlyEligibility.attendedDays, view.monthlyEligibility.effectiveDays) : 0} color="var(--peach)" />
-        <MonthlyExamMetric status={view.metrics.monthlyExamStatus ?? view.monthlyExam?.status ?? "unpublished"} />
+        <Metric label="Điểm danh" secondary={view.monthlyEligibility ? `Vắng ${view.monthlyEligibility.absenceDays}/${view.monthlyEligibility.maxAbsences}` : undefined} value={view.monthlyEligibility ? `${view.monthlyEligibility.attendedDays}/${view.monthlyEligibility.effectiveDays}` : "–"} percent={view.monthlyEligibility ? ratio(view.monthlyEligibility.attendedDays, view.monthlyEligibility.effectiveDays) : 0} color="var(--peach)" />
+        <Metric label="Điểm huy hiệu" value={String(view.metrics.points)} color="var(--primary)" />
       </div>
     </section> : null}
     {monthly ? <MonthlyCalendar month={monthly} lessons={view.lessons} actions={actions} /> : null}
@@ -64,7 +65,7 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
     {view.monthlyExam ? <MonthlyExamOverview exam={view.monthlyExam} month={!view.monthlyEligibility || view.monthlyEligibility.month === monthly?.month ? monthly : null} navigate={actions.navigate} /> : null}
     <section className="card learner-summary-card learner-summary-card--profile" style={{ marginTop: 12 }} aria-label="Hồ sơ và đánh giá đầu vào">
       <div className="row between" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div><div className="eyebrow">Thông tin của bạn</div><h3 style={{ margin: "2px 0 4px" }}>Hồ sơ và đánh giá đầu vào</h3><p className="small muted" style={{ margin: 0 }}>Trình độ đã duyệt: <b>{view.learner.cefr}</b>. Kết quả đầu vào và hồ sơ vẫn xem được khi lộ trình tháng đang chuẩn bị.</p></div>
+        <div><div className="eyebrow">Thông tin của bạn</div><h3 style={{ margin: "2px 0 4px" }}>Hồ sơ và đánh giá đầu vào</h3><p className="small muted" style={{ margin: 0 }}>Trình độ đã duyệt: <b>{view.learner.cefr}</b>. {monthlyPreparation ? "Kết quả đầu vào và hồ sơ vẫn xem được khi lộ trình tháng đang chuẩn bị." : "Xem kết quả đầu vào và thông tin hồ sơ của bạn."}</p></div>
         <div className="row learner-summary-actions" style={{ flexWrap: "wrap" }}>
           <AppLink className="btn" href="/profile" navigate={actions.navigate}>Hồ sơ học tập & đầu vào</AppLink>
           {!monthly && !monthlyPreparation ? <AppLink className="btn" href="/survey" navigate={actions.navigate}>Khảo sát cuối pilot</AppLink> : null}
@@ -224,12 +225,6 @@ function OnboardingHome({ view, actions }: { view: LearnerHomeView; actions: Lea
   })}</section><LearnerSupportCard from="home" navigate={actions.navigate} /></div>;
 }
 
-function MonthlyExamMetric({ status }: { status: NonNullable<LearnerHomeView["monthlyExam"]>["status"] }) {
-  const label = monthlyExamLabel(status);
-  const opened = status === "completed" || status === "ready";
-  return <article className="stat" aria-label="Bài thi tháng"><div className="ring" style={{ "--p": opened ? 100 : 0, "--c": opened ? "var(--olive)" : "var(--butter)" } as CSSProperties}><b>{status === "completed" ? "✓" : status === "ready" ? "Mở" : "Chờ"}</b></div><span className="lbl">Bài thi tháng</span><small className="metric-secondary">{label}</small></article>;
-}
-
 function MonthlyExamOverview({ exam, month, navigate }: { exam: NonNullable<LearnerHomeView["monthlyExam"]>; month: LearnerHomeView["month"] | null; navigate: LearnerCallbacks["navigate"] }) {
   return <section className="card learner-summary-card learner-summary-card--monthly" data-home-block="monthly-exam" aria-label="Bài thi tháng" style={{ marginTop: 0, marginBottom: 20 }}>
     <div className="row between learner-summary-row" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}><div><div className="eyebrow">Bài tháng</div><h3 style={{ margin: "2px 0 4px" }}>Bài thi tháng</h3><p className="small muted" style={{ margin: 0 }}>{exam.requirement}{month ? ` · Ngày thi ${formatLessonDate(month.examDate)}` : ""}</p></div><div className="row learner-summary-actions"><AppLink className="btn" href="/monthly" navigate={navigate}>Xem điều kiện và bài thi tháng</AppLink></div></div>
@@ -245,24 +240,40 @@ const monthlyCalendarKinds = {
 } as const;
 
 function MonthlyCalendar({ month, lessons, actions }: { month: NonNullable<LearnerHomeView["month"]>; lessons: LearnerHomeView["lessons"]; actions: LearnerCallbacks }) {
+  const compact = useMediaQuery("(max-width: 700px)");
+  const [selectedWeek, setSelectedWeek] = useState<{ month: string; index: number }>();
   const days = buildMonthlyTeachingCalendar(month.month, month.holidays);
   const first = new Date(`${month.month}-01T00:00:00Z`);
   const offset = (first.getUTCDay() + 6) % 7;
   const trailing = (7 - (offset + days.length) % 7) % 7;
-  const gridDays = [...Array<null>(offset).fill(null), ...days, ...Array<null>(trailing).fill(null)];
+  const weekdays = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+  const gridDays = [...Array<null>(offset).fill(null), ...days, ...Array<null>(trailing).fill(null)].map((day, index) => ({
+    day,
+    date: day?.date ?? new Date(first.getTime() + (index - offset) * 86_400_000).toISOString().slice(0, 10),
+    weekday: weekdays[index % 7]
+  }));
+  const lastWeek = gridDays.length / 7 - 1;
+  const todayIndex = gridDays.findIndex(({ date }) => date === month.systemDate && date.startsWith(month.month));
+  const week = selectedWeek?.month === month.month ? selectedWeek.index : Math.floor((todayIndex < 0 ? offset : todayIndex) / 7);
+  const visibleDays = compact ? gridDays.slice(week * 7, week * 7 + 7) : gridDays;
+  const shortDate = (date: string) => `${date.slice(-2)}/${date.slice(5, 7)}`;
+  const dayRole = compact ? "listitem" : "gridcell";
   const byDate = new Map(lessons.filter(lesson => lesson.lessonDate).map(lesson => [lesson.lessonDate!, lesson]));
   return <section className="card learner-month-calendar-card" data-home-block="month-path" aria-labelledby="month-path-title">
-    <div className="row between"><h3 id="month-path-title">Lịch học tháng {formatMonth(month.month)}</h3><span className="small muted">{month.themeTitle}</span></div>
-    <ul className="monthly-learner-calendar-legend" aria-label="Chú thích lịch">
+    <div className="monthly-learner-calendar-header"><h3 id="month-path-title">Lịch học tháng {formatMonth(month.month)}</h3><span className="small muted">{month.themeTitle}</span></div>
+    {compact ? <div className="monthly-learner-calendar-week">
+      <button type="button" className="btn" aria-label="Tuần trước" disabled={week === 0} onClick={() => setSelectedWeek({ month: month.month, index: week - 1 })}><ChevronLeft size={18} aria-hidden="true" /></button>
+      <strong aria-live="polite">{shortDate(visibleDays[0]!.date)} – {shortDate(visibleDays[6]!.date)}</strong>
+      <button type="button" className="btn" aria-label="Tuần sau" disabled={week === lastWeek} onClick={() => setSelectedWeek({ month: month.month, index: week + 1 })}><ChevronRight size={18} aria-hidden="true" /></button>
+    </div> : <ul className="monthly-learner-calendar-legend" aria-label="Chú thích lịch">
       {Object.entries(monthlyCalendarKinds).map(([kind, label]) => <li className={kind} key={kind}>{label}</li>)}
-    </ul>
-    <div className="monthly-learner-calendar-scroll">
-      <div className="monthly-learner-calendar" role="grid" aria-label={`Lịch học tháng ${formatMonth(month.month)}`}>
-        {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map(label => <b className="monthly-learner-calendar-heading" role="columnheader" key={label}>{label}</b>)}
-        {gridDays.map((day, index) => {
+    </ul>}
+    <div className={`monthly-learner-calendar${compact ? " monthly-learner-calendar--agenda" : ""}`} role={compact ? "list" : "grid"} aria-label={compact ? "Lịch học trong tuần" : `Lịch học tháng ${formatMonth(month.month)}`}>
+        {!compact && weekdays.map(label => <b className="monthly-learner-calendar-heading" role="columnheader" key={label}>{label}</b>)}
+        {visibleDays.map(({ day, date, weekday }) => {
+          const dayLabel = <time dateTime={date}>{compact ? <span>{weekday}</span> : null}{date.slice(-2)}</time>;
           if (!day) {
-            const date = new Date(first.getTime() + (index - offset) * 86_400_000).toISOString().slice(0, 10);
-            return <div className="monthly-learner-calendar-day outside-month" role="gridcell" aria-label={date} key={date}><time dateTime={date}>{date.slice(-2)}</time></div>;
+            return <div className="monthly-learner-calendar-day outside-month" role={dayRole} aria-label={date} key={date}>{dayLabel}{compact && <span className="monthly-learner-calendar-label">Ngoài tháng</span>}</div>;
           }
           const lesson = byDate.get(day.date);
           const exam = day.date === month.examDate;
@@ -272,27 +283,22 @@ function MonthlyCalendar({ month, lessons, actions }: { month: NonNullable<Learn
           const kind = exam ? "exam" : holiday ? "holiday" : rest ? "rest" : review ? "review" : "lesson";
           const activity = lesson ? learnerLessonLabel(lesson) : review ? "Ôn tập" : "Bài học";
           const status = lesson?.status === "completed" ? "Đã học" : lesson?.lock ? "Chưa mở" : lesson?.status === "in_progress" ? "Đang học" : lesson ? "Có thể học" : "Chưa có bài";
-          return <div className={`monthly-learner-calendar-day ${kind}`} role="gridcell" aria-label={day.date} aria-current={day.date === month.systemDate ? "date" : undefined} key={day.date}>
-            <time dateTime={day.date}>{day.date.slice(-2)}</time>
+          return <div className={`monthly-learner-calendar-day ${kind}`} role={dayRole} aria-label={date} aria-current={date === month.systemDate ? "date" : undefined} key={date}>
+            {dayLabel}
             {exam ? <AppLink href="/monthly" navigate={actions.navigate} className="monthly-learner-calendar-link">Bài thi tháng</AppLink>
               : !lesson && (rest || holiday) ? <span className="monthly-learner-calendar-label" title={holiday}>{holiday ? "Nghỉ lễ" : "Nghỉ"}</span>
                 : <>
                   {lesson && !lesson.lock ? <AppLink href={`/lesson/${lesson.id}`} navigate={actions.navigate} className="monthly-learner-calendar-link" title={lesson.title}>{activity}</AppLink>
                     : <span className="monthly-learner-calendar-label" title={lesson?.lock?.message}>{activity}</span>}
                   <small>{status}</small>
-                  {holiday ? <small title={holiday}>Ngày nghỉ</small> : null}
+                  {holiday ? <small className="monthly-learner-calendar-holiday" title={holiday}>Ngày nghỉ</small> : null}
                 </>}
           </div>;
         })}
-      </div>
     </div>
   </section>;
 }
 
-
-function monthlyExamLabel(status: NonNullable<LearnerHomeView["monthlyExam"]>["status"]) {
-  return status === "completed" ? "Đã hoàn thành" : status === "ready" ? "Đã mở" : status === "unpublished" ? "Chờ phát hành" : "Chưa mở";
-}
 
 export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actions: LearnerCallbacks }) {
   const month = view.month;
@@ -300,25 +306,28 @@ export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actio
   const exam = view.monthlyExam;
   const monthLabel = eligibility?.month ?? month?.month;
   const examDate = eligibility?.examDate ?? month?.examDate;
-  const systemDate = month?.systemDate ?? eligibility?.systemDate;
+  const canStart = exam?.status === "ready";
   const publishState = exam?.inProgress ? "Đang làm bài" : exam?.status === "completed" ? "Đã hoàn thành" : eligibility?.entryClosed ? "Đã hết giờ vào thi" : exam?.status === "ready" || eligibility?.formPublished ? "Đề đã phát hành" : "Đề chưa phát hành";
+  const formNote = exam?.inProgress ? "Mở lại bài thi từ vị trí đã lưu."
+    : canStart ? "Chuẩn bị tai nghe và micro trước khi bắt đầu."
+      : exam?.status === "completed" ? "Kết quả được lưu trong hồ sơ của bạn."
+        : exam?.requirement || (eligibility?.entryClosed ? null : eligibility?.formPublished ? "Chờ đến giờ mở đề." : "Đề đang được chuẩn bị cho trình độ của bạn.");
 
   return <div className="app-learner-page monthly-assessment-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
-    <PageTitle eyebrow={monthLabel ? `Tháng ${formatMonth(monthLabel)}` : "Bài tháng"} title="Bài thi tháng" detail={month ? month.themeTitle : "Theo dõi điều kiện và thời điểm vào đề của tháng hiện tại."} />
+    <PageTitle {...(monthLabel ? { eyebrow: `Tháng ${formatMonth(monthLabel)}` } : {})} title="Bài thi tháng" detail={month?.themeTitle} />
     <section className="monthly-assessment-landing" aria-label="Bài thi tháng">
       <header className="monthly-assessment-header">
         <div>
           <div className="eyebrow">Lịch thi</div>
           <h2>{examDate ? formatLessonDate(examDate) : "Đang chờ lịch thi"}</h2>
-          <p>{systemDate ? `Ngày hệ thống: ${formatLessonDate(systemDate)}` : "Ngày hệ thống đang được cập nhật."}</p>
         </div>
         <span className={`badge ${exam?.status === "ready" || exam?.status === "completed" ? "ok" : "warn"}`}>{publishState}</span>
       </header>
+      {formNote || canStart ? <div className="monthly-assessment-form-state" aria-label="Trạng thái đề thi">
+        {formNote ? <p>{formNote}</p> : null}
+        {canStart ? <AppLink className="btn btn-primary" href="/test/monthly" navigate={actions.navigate}>{exam.inProgress ? "Tiếp tục bài thi" : "Vào bài thi"}</AppLink> : null}
+      </div> : null}
       {eligibility ? <MonthlyEligibilitySummary eligibility={eligibility} actions={actions} /> : <p className="monthly-assessment-inline-note">Điều kiện điểm danh đang được tải từ hệ thống.</p>}
-      <div className="monthly-assessment-form-state" aria-label="Trạng thái form đề">
-        <div><b>{exam?.inProgress ? "Tiếp tục bài thi đang làm" : exam?.status === "ready" ? "Bạn có thể vào đề" : exam?.status === "completed" ? "Bạn đã hoàn thành bài thi tháng" : !eligibility?.formPublished && !eligibility?.entryClosed ? "Form đề đang được chuẩn bị" : publishState}</b><span>{exam?.inProgress ? "Mở lại bài thi từ vị trí đã lưu." : exam?.status === "ready" ? "Kiểm tra lại tai nghe và micro trước khi bắt đầu." : exam?.status === "completed" ? "Kết quả được lưu trong hồ sơ của bạn." : exam?.requirement ?? "Theo dõi lịch thi và điều kiện điểm danh ở trên."}</span></div>
-        {exam?.status === "ready" ? <AppLink className="btn btn-primary" href="/test/monthly" navigate={actions.navigate}>{exam.inProgress ? "Tiếp tục bài thi" : "Vào bài thi"}</AppLink> : null}
-      </div>
     </section>
   </div>;
 }
@@ -331,37 +340,29 @@ function MonthlyEligibilitySummary({ eligibility, actions }: { eligibility: NonN
   const [complaintError, setComplaintError] = useState("");
   const [submittingComplaint, setSubmittingComplaint] = useState(false);
   useEffect(() => { void actions.getComplaints?.().then((result) => setComplaints(result.complaints)).catch(() => undefined); }, [actions.getComplaints]);
-  const remaining = Math.max(0, daysUntil(eligibility.systemDate, eligibility.examDate));
   const appealRequired = eligibility.accessState === "appeal_required";
   const openToday = eligibility.accessEligible ?? eligibility.accessState === "eligible";
-  const missingLearningGate = eligibility.formPublished === false;
   const state = appealRequired
     ? { label: "Cần kháng nghị", tone: "warn", copy: "Số ngày vắng đã vượt giới hạn." }
     : openToday
       ? { label: "Đủ điều kiện", tone: "ok", copy: "Đã đến ngày thi." }
-      : missingLearningGate
-        ? { label: "Chưa có đề", tone: "warn", copy: "Đề cố định sẽ mở sau khi được phát hành cho trình độ của bạn." }
-        : { label: "Đang theo dõi", tone: "ok", copy: remaining ? `Còn ${remaining} ngày đến giờ mở đề.` : "Chờ giờ mở đề." };
-  return <div className="monthly-eligibility-summary" aria-label="Điều kiện vào bài thi tháng">
-    <div className="monthly-eligibility-state"><span className={`badge ${state.tone}`}>{state.label}</span><span className="small muted">{state.copy}</span></div>
+      : null;
+  return <section className="monthly-eligibility-summary" aria-label="Điều kiện vào bài thi tháng">
+    <h3>Điều kiện dự thi</h3>
+    {state ? <div className="monthly-eligibility-state"><span className={`badge ${state.tone}`}>{state.label}</span><span className="small muted">{state.copy}</span></div> : null}
     <div className="monthly-eligibility-metrics">
-      <Metric label="Điểm danh" secondary={`Vắng ${eligibility.absenceDays}/${eligibility.maxAbsences} tối đa`} value={`${eligibility.attendedDays}/${eligibility.effectiveDays}`} percent={ratio(eligibility.attendedDays, eligibility.effectiveDays)} color={appealRequired ? "var(--danger)" : "var(--olive)"} />
+      <Metric label="Điểm danh" secondary={`Vắng ${eligibility.absenceDays}/${eligibility.maxAbsences}`} value={`${eligibility.attendedDays}/${eligibility.effectiveDays}`} percent={ratio(eligibility.attendedDays, eligibility.effectiveDays)} color={appealRequired ? "var(--danger)" : "var(--olive)"} />
       {(eligibility.frameworkApproved === true && (eligibility.scheduledLessons ?? 0) > 0)
         ? <Metric label="Hoàn thành lịch học" value={`${eligibility.completedLessons ?? 0}/${eligibility.scheduledLessons ?? 0}`} percent={ratio(eligibility.completedLessons ?? 0, eligibility.scheduledLessons ?? 0)} color="var(--primary)" />
         : <Metric label="Hoàn thành lịch học" pending="Chờ chốt lịch học" percent={0} color="var(--primary)" />}
       <Metric label="Season hợp lệ" value={`${eligibility.seasonTurns ?? 0}/${eligibility.seasonTurnsRequired ?? 100}`} percent={ratio(eligibility.seasonTurns ?? 0, eligibility.seasonTurnsRequired ?? 100)} color="var(--lav)" />
-      <Metric label="Đếm ngược" value={remaining ? `${remaining} ngày` : "Hôm nay"} percent={ratio(Math.max(0, eligibility.effectiveDays - remaining), eligibility.effectiveDays)} color="var(--primary)" />
     </div>
     <details className="monthly-eligibility-rules"><summary>Quy tắc điểm danh và giờ vào đề</summary><ul><li>Bài thi tháng cố định dành cho mọi học viên cùng trình độ, kể cả khi chưa hoàn thành hết bài học.</li><li>Hoàn thành ít nhất một bài trong ngày để được tính một lần điểm danh; học bù nhiều bài cùng ngày vẫn chỉ tính một lần.</li><li>Ngày học hiệu lực là Thứ Hai–Thứ Sáu, không tính ngày thi; được vắng tối đa {eligibility.maxAbsences} ngày.</li><li>Đề mở trong cửa sổ hệ thống sau khi form được phát hành; chỉ số bài học và Season dùng để theo dõi tiến độ.</li>{appealRequired ? <li>Gửi khiếu nại tới Quản lý để được xem xét điều kiện dự thi.</li> : null}</ul></details>
     {appealRequired ? <section className="card monthly-complaint-form"><h3>Khiếu nại điều kiện dự thi</h3><p className="small muted">Quản lý sẽ phản hồi trong 24 giờ. Nếu chưa xử lý đúng hạn, đơn sẽ được tự duyệt.</p>{complaints.filter((item) => item.kind === "exam_eligibility").map((item) => <p className="small" key={item.id}>Đơn gần nhất: {item.status === "pending" ? "Đang chờ xử lý" : item.status === "auto_approved" || item.status === "approved" ? `Đã duyệt${item.resolution ? ` · ${item.resolution}` : ""}` : `Bị từ chối${item.resolution ? ` · ${item.resolution}` : ""}`}</p>)}{complaintError ? <p role="alert" className="small danger-text">{complaintError}</p> : null}<RequestEvidenceFields key={complaintRevision} value={complaintEvidence} onChange={setComplaintEvidence} label="Ngày hoặc mục cần kiểm tra" placeholder="Ví dụ: Điểm danh ngày 06/11" disabled={submittingComplaint} /><label>Lý do<textarea value={complaintReason} maxLength={2000} onChange={(event) => setComplaintReason(event.target.value)} /></label><button className="btn-sm btn-primary" type="button" disabled={submittingComplaint || complaintEvidence.blocked || complaintReason.trim().length < 5 || complaints.some((item) => item.kind === "exam_eligibility" && item.status === "pending")} onClick={() => { const submit = actions.submitComplaint; if (!submit) return; setSubmittingComplaint(true); setComplaintError(""); void submit("exam_eligibility", complaintReason.trim(), ...requestEvidenceArgs(complaintEvidence)).then(() => { setComplaintReason(""); setComplaintEvidence({}); setComplaintRevision(value => value + 1); return actions.getComplaints?.(); }).then((result) => { if (result) setComplaints(result.complaints); }).catch(() => setComplaintError("Không gửi được khiếu nại. Hãy thử lại sau.")).finally(() => setSubmittingComplaint(false)); }}>Gửi khiếu nại</button></section> : null}
-  </div>;
+  </section>;
 }
-function daysUntil(systemDate: string, examDate: string) {
-  const start = new Date(`${systemDate.slice(0, 10)}T00:00:00Z`).getTime(); const end = new Date(`${examDate.slice(0, 10)}T00:00:00Z`).getTime();
-  return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, Math.ceil((end - start) / 86_400_000)) : 0;
-}
-function Metric({ label, secondary, value, pending, percent, color = "var(--olive)" }: { label: string; secondary?: string | undefined; value?: string; pending?: string; percent: number; color?: string }) {
-  return <article className={`stat${pending ? " is-pending" : ""}`}>{pending ? <div className="metric-pending" role="status">{pending}</div> : <div className="ring" style={{ "--p": percent, "--c": color } as CSSProperties}><b>{value}</b></div>}<span className="lbl">{label}</span>{secondary ? <small className="metric-secondary" style={{ display: "block" }}>{secondary}</small> : null}</article>;
+function Metric({ label, secondary, value, pending, percent, color = "var(--olive)" }: { label: string; secondary?: string | undefined; value?: string; pending?: string; percent?: number; color?: string }) {
+  return <article className={`stat${pending ? " is-pending" : ""}`}>{pending ? <div className="metric-pending" role="status">{pending}</div> : <div className="ring" style={{ "--p": percent ?? 0, "--c": color } as CSSProperties}><b>{value}</b></div>}<span className="lbl">{label}</span>{secondary ? <small className="metric-secondary" style={{ display: "block" }}>{secondary}</small> : null}</article>;
 }
 
 function ratio(value: number, total: number) { return total > 0 ? Math.max(0, Math.min(100, Math.round(value / total * 100))) : 0; }

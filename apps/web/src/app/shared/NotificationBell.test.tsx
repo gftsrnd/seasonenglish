@@ -52,7 +52,21 @@ describe("NotificationBell", () => {
     render(<MemoryRouter><NotificationBell /><Routes><Route path="/" element={<span />} /><Route path="/op/review" element={<Target />} /></Routes></MemoryRouter>);
     await user.click(await screen.findByRole("button", { name: /1 chưa đọc/ }));
     await user.click(await screen.findByRole("button", { name: "Mở kháng nghị" }));
-    expect(screen.getByRole("heading", { name: `?tab=appeals&id=${relatedId}` })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: `?tab=appeals&id=${relatedId}` })).toBeInTheDocument();
+  });
+
+  it("links a grading interruption to the exact exam attempt and manual review tab", async () => {
+    const relatedId = "dd8828fc-27c5-4321-8876-515725d2569a";
+    const items = [{ ...notification, kind: "assessment_manual_review", context: "final", relatedId }];
+    api.getNotificationInbox.mockImplementation(async limit => ({ items: limit ? items : [], unreadCount: 1, nextCursor: null }));
+    api.markInboxRead.mockResolvedValue({ unreadCount: 0 });
+    function Target() { return <h1>{useLocation().search}</h1>; }
+    const user = userEvent.setup();
+    render(<MemoryRouter><NotificationBell /><Routes><Route path="/" element={<span />} /><Route path="/op/tests" element={<Target />} /></Routes></MemoryRouter>);
+    await user.click(await screen.findByRole("button", { name: /1 chưa đọc/ }));
+    expect(await screen.findByText("Có bài thi tháng cần chấm tay")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Mở bài cần chấm" }));
+    expect(await screen.findByRole("heading", { name: `?tab=monthly&attemptId=${relatedId}` })).toBeInTheDocument();
   });
 
   it("keeps the badge when marking read fails and retries the mutation", async () => {

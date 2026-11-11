@@ -1,4 +1,5 @@
 /* Shared E4S presentation tokens. Seasonal overrides live in app-layout.css. */
+.form-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 /* ---- structural tokens: the same for every theme ---- */
 :root{
   color-scheme:light;

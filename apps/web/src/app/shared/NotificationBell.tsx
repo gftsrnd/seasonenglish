@@ -14,6 +14,9 @@ const assessmentNames: Record<string, string> = {
   level_up: "bài thi lên mức",
   pass_course: "bài thi đầu ra"
 };
+const assessmentTabs: Record<string, string> = {
+  placement: "placement", final: "monthly", level_up: "promotion", pass_course: "exit"
+};
 const notificationTime = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" });
 const complaintNames: Record<string, string> = {
   exam_eligibility: "điều kiện dự thi", lesson_unlock: "mở khóa bài học", account_unlock: "mở khóa tài khoản",
@@ -31,6 +34,8 @@ function notificationCategory(kind: InboxNotificationView["kind"]): keyof typeof
 
 function notificationContent(item: InboxNotificationView): { title: string; description: string; path: string; action: string } {
   const exam = assessmentNames[item.context] ?? "bài thi";
+  const examTab = assessmentTabs[item.context] ?? "placement";
+  const examAttempt = item.relatedId ? `&attemptId=${encodeURIComponent(item.relatedId)}` : "";
   const reopen = item.context === "resources" ? "tài nguyên tháng" : "bài học";
   const complaint = complaintNames[item.context];
   const focus = item.relatedId ? `&id=${encodeURIComponent(item.relatedId)}` : "";
@@ -47,7 +52,19 @@ function notificationContent(item: InboxNotificationView): { title: string; desc
     case "reopen_rejected":
       return { title: `Yêu cầu mở lại ${reopen} ${item.kind === "reopen_approved" ? "đã được duyệt" : "đã được từ chối"}`, description: "Xem quyết định và phản hồi của Quản lý trong yêu cầu đã gửi.", path: `/op/review?tab=sent${focus}`, action: "Xem yêu cầu" };
     case "assessment_received":
-      return { title: `Có ${exam} chờ duyệt`, description: "Một lượt đã nộp và đang chờ kiểm tra.", path: item.context === "placement" ? "/op" : "/op/tests", action: "Mở hàng duyệt" };
+      return { title: `Có ${exam} chờ duyệt`, description: "Một lượt đã nộp và đang chờ kiểm tra.", path: item.context === "placement" ? "/op" : `/op/tests?tab=${examTab}`, action: "Mở hàng duyệt" };
+    case "assessment_manual_review":
+      return { title: `Có ${exam} cần chấm tay`, description: "Chấm tự động chưa hoàn tất. Mở bài đã nộp để kiểm tra và chấm phần Viết, Nói.", path: `/op/tests?tab=${examTab}${examAttempt}`, action: "Mở bài cần chấm" };
+    case "assessment_submission_saved":
+      return { title: `Đã nộp ${exam}`, description: "Bài làm đã được lưu. Vận hành sẽ kiểm tra và cập nhật kết quả.", path: item.context === "final" ? "/monthly" : item.context === "pass_course" ? "/test/pass-course" : "/profile", action: "Xem trạng thái" };
+    case "assessment_grading_interrupted":
+      return { title: `Chấm tự động ${exam} bị gián đoạn`, description: "Bài nộp đã được lưu. Vận hành có thể chấm tay phần Viết và Nói.", path: `/mgr/ops/tests?tab=${examTab}`, action: "Xem kết quả bài thi" };
+    case "season_turn_credited":
+      return { title: "Season đã ghi nhận lượt luyện", description: "Lượt luyện hợp lệ vẫn được tính khi nhận xét tự động gián đoạn.", path: "/coach", action: "Mở Season" };
+    case "season_feedback_interrupted":
+      return { title: "Nhận xét Season bị gián đoạn", description: "Các lượt luyện hợp lệ vẫn được ghi nhận. Xem phản hồi Season để theo dõi.", path: "/op/review?tab=coach", action: "Xem phản hồi Season" };
+    case "season_service_interrupted":
+      return { title: "Nhận xét Season bị gián đoạn", description: "Tiến độ lượt luyện hợp lệ vẫn được ghi nhận. Bạn có thể kiểm tra kết nối AI trong Cài đặt.", path: "/settings", action: "Mở Cài đặt" };
     case "assessment_result":
     case "assessment_retry":
       return { title: item.kind === "assessment_retry" ? `Có hướng dẫn thi lại ${exam}` : `Có kết quả ${exam}`, description: "Mở trang học để xem kết quả và bước tiếp theo.", path: item.context === "pass_course" ? item.kind === "assessment_result" ? "/reward/course" : "/support?tab=appeals" : item.context === "final" ? "/monthly" : "/profile", action: "Xem kết quả" };
