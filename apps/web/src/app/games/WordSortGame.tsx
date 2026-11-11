@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameAnswerInput } from "@e4s/contracts";
 import { Volume2 } from "lucide-react";
-import { prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
+import { gameCombo, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import { GameFeedback } from "./GameFeedback.js";
 
@@ -46,7 +46,7 @@ export function WordSortGame({ words: source, onFinish, attemptSeed = 0 }: { wor
     if (selected || busy) return;
     const correct = group === right;
     const nextStreak = correct ? streak + 1 : 0;
-    const nextAnswers = [...answers, { wordId: word.id, answer: group, attempts: 1, usedHint: false, combo: Math.max(1, nextStreak) }];
+    const nextAnswers = [...answers, { wordId: word.id, answer: group, attempts: 1, usedHint: false, combo: gameCombo(nextStreak) }];
     setSelected(group);
     setNotice(correct ? `Đúng · ${word.english} = ${right}` : `Chưa đúng · ${word.english} là ${right}.`);
     play(correct ? "success" : "error");

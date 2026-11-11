@@ -18,6 +18,7 @@ import {
 import type { CefrLevel, MonthlyResourceEditInput, MonthlyResourceEditIssue, SharedMonthBriefView } from "@e4s/contracts";
 import { z } from "zod";
 import { isPronunciationTargetAllowedForLevel, isValidMonthlyPronunciationIpaTarget } from "./monthly-resource-plan-spec.js";
+import { doesMonthlyPronunciationExampleMatch, isVietnameseMonthlyText, monthlyDailyObjectivesMustBeEnglish } from "./monthly-resource-generation.js";
 
 /**
  * Manual editing of a DRAFT monthly resource pool (VH-R30/VH-R35).
@@ -54,8 +55,18 @@ export const monthlyResourceEditInputSchema = z.object({
 }) satisfies z.ZodType<MonthlyResourceEditInput>;
 
 export type MonthlyResourceEditResult =
-  | { ok: true; pool: MonthlyResourcePoolContract }
-  | { ok: false; issues: MonthlyResourceEditIssue[] };
+  | { ok: true; pool: MonthlyResourcePoolContract; warnings: MonthlyResourceEditIssue[] }
+  | { ok: false; issues: MonthlyResourceEditIssue[]; warnings: MonthlyResourceEditIssue[] };
+
+/** Core words of the other CEFR levels of the same month (WP9 cross-level overlap check). */
+export interface MonthlyResourceEditOptions {
+  otherLevelCoreTerms?: ReadonlyArray<{ cefr: CefrLevel; words: readonly string[] }>;
+}
+
+/** B1 and C1 must not share core words; any other cross-level overlap is only a warning. */
+function isBlockingLevelOverlap(left: CefrLevel, right: CefrLevel): boolean {
+  return (left === "C1" && right === "B1") || (left === "B1" && right === "C1");
+}
 
 const MIN_GRAMMAR_EXAMPLES = 3;
 const MIN_PRONUNCIATION_EXAMPLES = 9;
@@ -82,8 +93,9 @@ export function blankMonthlyResourcePool(brief: SharedMonthBriefView, level: Cef
 }
 
 /** Applies an Operator edit to a stored draft pool and validates the result. */
-export function applyMonthlyResourceEdit(existing: MonthlyResourcePoolContract, input: MonthlyResourceEditInput): MonthlyResourceEditResult {
+export function applyMonthlyResourceEdit(existing: MonthlyResourcePoolContract, input: MonthlyResourceEditInput, options: MonthlyResourceEditOptions = {}): MonthlyResourceEditResult {
   const issues: MonthlyResourceEditIssue[] = [];
+  const warnings: MonthlyResourceEditIssue[] = [];
   const add = (issue: MonthlyResourceEditIssue) => { issues.push(issue); };
 
   // Structure: the counts and IDs the lesson roadmap depends on are fixed.
@@ -134,6 +146,14 @@ export function applyMonthlyResourceEdit(existing: MonthlyResourcePoolContract, 
       const owner = coreWordOwner.get(key);
       if (owner) add({ section: "coreTerms", rowId: core.id, field: "word", message: `Trùng từ cốt lõi "${word}".` });
       else coreWordOwner.set(key, core.id);
+    }
+    // Cross-level overlap in the same month: a C1 core that is already a B1 core
+    // (or the reverse) is not a C1 word; other level pairs are flagged only.
+    if (key) for (const other of options.otherLevelCoreTerms ?? []) {
+      if (other.cefr === existing.cefr || !other.words.some((value) => normalizeWord(value) === key)) continue;
+      const issue: MonthlyResourceEditIssue = { section: "coreTerms", rowId: core.id, field: "word", message: `"${word}" đã là từ cốt lõi ${other.cefr} của cùng tháng.` };
+      if (isBlockingLevelOverlap(existing.cefr, other.cefr)) add(issue);
+      else warnings.push(issue);
     }
   }
 
@@ -201,6 +221,9 @@ export function applyMonthlyResourceEdit(existing: MonthlyResourcePoolContract, 
       const focus = step.focus.trim().toLocaleLowerCase("en-US");
       if (focus && foci.has(focus)) add({ section: "grammarTopics", rowId: step.id, field: "focus", message: "Các bước trong một chủ điểm phải có trọng tâm khác nhau." });
       foci.add(focus);
+      if (monthlyDailyObjectivesMustBeEnglish(existing.cefr) && (step.dailyObjectives ?? []).some(isVietnameseMonthlyText)) {
+        add({ section: "grammarTopics", rowId: step.id, field: "dailyObjectives", message: `Mục tiêu từng ngày ở ${existing.cefr} phải bằng tiếng Anh đơn giản, không dùng tiếng Việt.` });
+      }
     }
   }
 
@@ -221,13 +244,16 @@ export function applyMonthlyResourceEdit(existing: MonthlyResourcePoolContract, 
       if (!word) add({ section: "sounds", rowId: example.id, field: "word", message: "Từ ví dụ không được để trống." });
       else if (syllableCount(word) > MAX_PRONUNCIATION_SYLLABLES) add({ section: "sounds", rowId: example.id, field: "word", message: "Từ ví dụ phát âm tối đa 3 âm tiết." });
       if (!example.ipa.trim()) add({ section: "sounds", rowId: example.id, field: "ipa", message: "IPA của từ ví dụ không được để trống." });
+      else if (isValidMonthlyPronunciationIpaTarget(ipa) && !doesMonthlyPronunciationExampleMatch(ipa, example.ipa, word)) {
+        add({ section: "sounds", rowId: example.id, field: "ipa", message: `IPA ${example.ipa.trim()} của "${word}" không chứa âm mục tiêu ${ipa}.` });
+      }
       const key = normalizeWord(word);
       if (key && exampleWords.has(key)) add({ section: "sounds", rowId: example.id, field: "word", message: `"${word}" đã dùng làm ví dụ phát âm khác.` });
       if (key) exampleWords.set(key, example.id);
     }
   }
 
-  if (issues.length) return { ok: false, issues };
+  if (issues.length) return { ok: false, issues, warnings };
 
   const supportById = new Map(existing.supportTerms.map((term) => [term.id, term]));
   const pool: MonthlyResourcePoolContract = {
@@ -265,12 +291,12 @@ export function applyMonthlyResourceEdit(existing: MonthlyResourcePoolContract, 
   // not catch is reported as a pool issue, anchored to a row when the message names one.
   try {
     const planErrors = validateMonthlyCurriculum(planMonthlyResourcePool(pool));
-    if (planErrors.length) return { ok: false, issues: planErrors.map(poolIssue) };
+    if (planErrors.length) return { ok: false, issues: planErrors.map(poolIssue), warnings };
   } catch (error) {
-    if (error instanceof RangeError) return { ok: false, issues: splitDomainMessages(error.message).map(poolIssue) };
+    if (error instanceof RangeError) return { ok: false, issues: splitDomainMessages(error.message).map(poolIssue), warnings };
     throw error;
   }
-  return { ok: true, pool };
+  return { ok: true, pool, warnings };
 }
 
 function poolIssue(message: string): MonthlyResourceEditIssue {

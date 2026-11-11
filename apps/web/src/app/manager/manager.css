@@ -17,6 +17,14 @@
 .manager-holiday-form input { min-width: 0; }
 .manager-holiday-form > button { flex: none; }
 
+/* A 320 px card cannot fit the date (incl. year) and the button on one row. */
+@media (max-width: 420px) {
+  .manager-holiday-form { flex-wrap: wrap; }
+  .manager-holiday-form > label { flex: 1 1 100%; }
+  .manager-holiday-form input[type="date"] { width: 100%; }
+  .manager-holiday-form > button { flex: 1 1 100%; }
+}
+
 .manager-holiday-header {
   display: flex;
   align-items: center;
@@ -54,6 +62,14 @@
 }
 
 .manager-holiday-list button { flex: none; }
+/* "Nguồn chính thức" sits in a 12 px caption line: give it the page's 44 px touch height. */
+.manager-holiday-description a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: 2px;
+}
+.manager-holiday-description small { display: flex; flex-wrap: wrap; align-items: center; column-gap: 4px; }
 .manager-holiday-list time { white-space: nowrap; }
 
 .manager-holiday-description {
@@ -534,6 +550,14 @@
 
 .manager-progress-table :is(.manager-progress-level .badge, .week-dots) { white-space: nowrap; }
 
+/* Desktop table: keep headers, dates and the Hồ sơ button whole instead of
+   breaking inside a word ("BÀI THÁN G", "09/11/202 6"). */
+@container manager-progress (min-width: 1000px) {
+  .manager-progress-table th,
+  .manager-progress-table td { overflow-wrap: normal; word-break: normal; }
+  .manager-progress-table .manager-progress-profile button { white-space: nowrap; }
+}
+
 .manager-readiness-card > .manager-section-heading,
 .manager-operators-section > .manager-section-heading {
   margin-top: 0;
@@ -960,7 +984,16 @@
 }
 
 @container manager-accounts (max-width: 559px) {
-  .manager-accounts-table__table .manager-account-actions > .btn-sm { flex: 1 1 0; }
+  /* Compact, consistent row of secondary actions; destructive ones stay an
+     outline (as on desktop) instead of a filled block. */
+  .manager-accounts-table__table .manager-account-actions { justify-content: flex-start; gap: 8px; }
+  .settings-page .manager-accounts-table__table .manager-account-actions > .btn-sm {
+    flex: 0 0 auto;
+    min-width: 72px;
+    min-height: var(--hci-touch-target, 44px);
+    padding: 6px 14px;
+    font-size: .875rem;
+  }
 }
 
 @container manager-accounts (560px <= width <= 975px) {
@@ -1447,7 +1480,7 @@
 
   .manager-progress-page .manager-kpi-grid .val { font-size: clamp(1.1rem, 5vw, 1.45rem); }
   .manager-progress-page .manager-kpi-grid .kpi b { font-size: .75rem; }
-  .manager-progress-page .manager-kpi-grid .kpi .xs { font-size: .66rem; }
+  .manager-progress-page .manager-kpi-grid .kpi .xs { font-size: .72rem; }
 }
 
 /* Month filters and results inside the printable report. */
@@ -1758,3 +1791,51 @@
   .manager-operator-detail { padding: 8px; }
   .manager-operator-detail .grid.manager-operator-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 }
+
+/* Readable minimum for small print on tablet and desktop. */
+@media (min-width: 768px) {
+  .manager-page .xs { font-size: .8125rem; }
+  .manager-page .badge { font-size: .8rem; }
+}
+
+/* Phones and tablets: the progress list is part of the page scroll. */
+@media (max-width: 1023px) {
+  .manager-progress-page .manager-progress-table,
+  .manager-progress-page .manager-progress-list { max-height: none; overflow-y: visible; }
+  .manager-progress-table thead th { position: static; }
+}
+
+@media (min-width: 1024px) {
+  .manager-progress-page .manager-progress-table,
+  .manager-progress-page .manager-progress-list { max-height: min(70vh, 720px); }
+}
+
+/* Account row actions: one light look on every size. Khoá and Đặt lại are
+   neutral ghost buttons; only Xoá keeps a subtle danger text colour. */
+.settings-page .manager-accounts-table__table .manager-account-actions > .btn-sm,
+.settings-page .manager-accounts-table__table .manager-account-actions > .btn-sm.btn-danger {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--text);
+}
+
+.settings-page .manager-accounts-table__table .manager-account-actions > .btn-sm:last-child {
+  color: var(--danger);
+}
+
+.settings-page .manager-accounts-table__table .manager-account-actions > .btn-sm:is(:hover, :active):not(:disabled) {
+  background: var(--surface-3);
+}
+
+.settings-page .manager-accounts-table__table .manager-account-actions > .btn-sm:last-child:is(:hover, :active):not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+/* Weekly authoring table at 320px: uppercase headers broke inside a word ("ĐÃ DUYỆ|T"). Keep words whole and
+   tighten the header letter spacing so the four columns still fit. */
+.manager-operator-week-table th{overflow-wrap:normal;word-break:normal;hyphens:none;letter-spacing:.02em}
+@media(max-width:360px){.manager-operator-week-table th,.manager-operator-week-table td{padding-inline:4px}.manager-operator-week-table th{font-size:.68rem}.manager-operator-week-table :is(th,td):first-child{width:28%}}
+/* Reminder history table (desktop): a long recipient email squeezed the short columns, so "Base.vn" and
+   "4 ngày" broke mid-word. Keep the short columns on one line and let the email wrap instead. */
+table[aria-label="Lịch sử nhắc học"] :is(th,td):is(:nth-child(1),:nth-child(4),:nth-child(5)){white-space:nowrap}
+table[aria-label="Lịch sử nhắc học"] td:nth-child(3){overflow-wrap:anywhere}

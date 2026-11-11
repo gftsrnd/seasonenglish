@@ -1,5 +1,15 @@
 const sectionLabels: Record<string, string> = { listening: "Nghe", reading: "Đọc", writing: "Viết", grammar: "Ngữ pháp", pronunciation: "Phát âm", vocabulary: "Từ vựng", speaking: "Nói", word_class: "Từ loại", word_use: "Dùng từ" };
 
+/**
+ * nginx closes a long monthly resource request after proxy_read_timeout (504)
+ * while the API keeps generating and checkpointing. That is not a failure: the
+ * Operator should keep watching the existing progress endpoint.
+ */
+export function isGatewayTimeout(reason: unknown): boolean {
+  const error = reason && typeof reason === "object" ? reason as { code?: unknown; status?: unknown } : {};
+  return error.status === 504 || error.code === "HTTP_504";
+}
+
 /** Describe the failed stage without displaying model output, validator text or technical codes. */
 export function monthlyGenerationMessage(reason: unknown): string {
   const error = reason && typeof reason === "object" ? reason as { code?: string; details?: { report?: { severe?: Array<{ component?: string }> }; issues?: Array<{ component?: string }>; components?: string[] } } : {};

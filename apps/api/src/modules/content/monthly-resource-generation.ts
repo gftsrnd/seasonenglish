@@ -1,7 +1,8 @@
-import { allowedMonthlySupportLevels, describeRequiredSupportRelations, isMonthlyCoreLevelAllowed, isMonthlySupportLevelAllowed, maxMonthlyWordFamilyLevel, buildMonthlyCalendar, monthlyCorePartOfSpeech, monthlyDayKind, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, optionalStructuralSupportRelationsFor, requiredSupportRelationsFor, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
+import { allowedMonthlySupportLevels, describeRequiredSupportRelations, isMonthlyCoreLevelAllowed, isMonthlySupportLevelAllowed, maxMonthlyWordFamilyLevel, buildMonthlyCalendar, monthlyCorePartOfSpeech, monthlyDayKind, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, monthlyIpaExampleMatchesTarget, optionalStructuralSupportRelationsFor, requiredSupportRelationsFor, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
 import type { CefrLevel } from "@e4s/contracts";
 import { monthlyResourcePlanOutputSchema, type MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.js";
+import { buildMonthlyCoreCefrGuidance, buildMonthlyOtherLevelCoreExclusionText, getMonthlyCoreLevelIssue, getMonthlyPronunciationExampleQualityIssue } from "./monthly-resource-quality-gates.js";
 
 /**
  * VH-R33: umbrella/synonym/antonym (and every other support) may come from the
@@ -17,7 +18,10 @@ export function buildMonthlySupportLevelGuidance(cefr: string): string {
 
 /** Core level rule shared by the core candidate prompts. */
 function buildMonthlyCoreLevelGuidance(cefr: string): string {
-  return `Every core word itself must be at CEFR ${cefr} or below, never above it; set each coreTerms item's cefr field to that core word's own CEFR level. The application rejects any core candidate labelled above ${cefr}.`;
+  // Root cause of B2/C1 cores at A1–B1 (11/11): "at CEFR X or below" let the
+  // model fill B2/C1 with basic words. B1+ now states the target band, a level
+  // descriptor and too-easy examples, mirrored by getMonthlyCoreLevelIssue.
+  return buildMonthlyCoreCefrGuidance(cefr);
 }
 
 /**
@@ -120,6 +124,8 @@ export function selectMonthlyCoreCandidates(input: {
   needed: number;
   /** Month level: a candidate whose own cefr label is above it is rejected (an absent label is allowed). */
   cefr?: CefrLevel;
+  /** Core words of the month's other levels that this level must not reuse (word -> level); see buildMonthlyCrossLevelCoreExclusions. */
+  otherLevelCoreWords?: ReadonlyMap<string, CefrLevel>;
 }): { selected: MonthlyResourcePlanTaskOutput["coreTerms"]; rejected: string[] } {
   const selected: MonthlyResourcePlanTaskOutput["coreTerms"] = [];
   const rejected: string[] = [];
@@ -130,6 +136,7 @@ export function selectMonthlyCoreCandidates(input: {
     if (!isSingleHeadword(candidate.word)) reason = "must be one standalone lexical headword";
     else if (!hasSingleCoreSense(candidate.type, candidate.meaning)) reason = "must have one part of speech and one unambiguous Vietnamese meaning";
     else if (input.cefr && !isMonthlyCoreLevelAllowed(input.cefr, candidate.cefr)) reason = `CEFR ${candidate.cefr} is above the month level ${input.cefr}`;
+    else if (input.cefr && (reason = getMonthlyCoreLevelIssue(candidate, input.cefr, input.otherLevelCoreWords) ?? "")) { /* reason set: non-word, below the level band, too easy, or another level's core */ }
     // Only a part of speech that requires a word family (verb, adjective, adverb) is screened here; a noun core may have none.
     else if (CORE_WORDS_WITHOUT_CLEAR_DERIVATIONAL_FAMILIES.has(word) && requiredSupportRelationsFor(candidate.type).includes("word_family")) reason = "does not have a clear, common derivational word family for this resource plan";
     else if (input.existingCoreWords.has(word)) reason = "duplicates an existing core term";
@@ -171,6 +178,8 @@ export function buildMonthlyCoreCandidatesPrompt(input: {
   relationOptionsPerRequired?: number;
   /** Month-wide generation: the sub-area of the theme this parallel call covers. */
   subArea?: string;
+  /** Other levels' core words of the same month, given to the model as an exclusion list. */
+  otherLevelCoreWords?: ReadonlyMap<string, CefrLevel>;
 }): string {
   const neededCount = input.neededCount ?? 3;
   const relationOptions = input.relationOptionsPerRequired ? Math.max(2, Math.min(3, Math.round(input.relationOptionsPerRequired))) : 0;
@@ -194,7 +203,7 @@ export function buildMonthlyCoreCandidatesPrompt(input: {
   const retry = input.rejectedWords?.length || input.previousIssue
     ? ` RETRY FOR CORE BATCH ${input.batchNumber}: ${input.rejectedWords?.length ? `these headwords have already failed and are forbidden, including normalized variants, synonyms, and inflections: ${input.rejectedWords.join(", ")}. ` : ""}${input.previousIssue ? `The previous candidates failed because ${input.previousIssue}. ` : ""}Return ${candidateCount} entirely different authentic standalone headwords. Preserve every base requirement, especially the relations each part of speech requires (a genuine umbrella for a noun; a clear, common derivational word-family item for a verb, adjective or adverb).`
     : "";
-  return `PHASE 1 — ORDERED MONTH VOCABULARY CANDIDATES. ${categoryScope} Every candidate must be one standalone English lexical headword, never a multi-word compound phrase, slash alternative, interjection, greeting, discourse formula, or inflected variant of another selected candidate. Assign exactly one part of speech (noun, verb, adjective, or adverb) and one clear, common workplace sense; do not combine POS labels or give alternate meanings in the Vietnamese meaning field. Every candidate must have one short Vietnamese gloss for that chosen sense. Select only authentic level-appropriate English; a family form must be a distinct lexical item, not just a plural or tense form. Do not invent words or use semantic neighbors as family members. ${candidatePoolRules}${input.candidatePoolOnly ? "" : `Verb, adjective and adverb candidates intended for use as core words must have a common, useful derivational family (for example: manage → manager/management; help → helpful; decide → decision; pay → payment; careful → carefully). Noun candidates must have a genuine umbrella (hypernym) and take a word-family item only when a common one exists (plan → planner/planning). ${input.preflightRelations ? "Every core candidate must support the relations its part of speech requires: a noun a genuine umbrella category and a natural same-sense synonym; a verb, adjective or adverb a natural same-sense synonym and a common derivational word-family item; verify them for the exact meaning." : "Every core candidate must support the relations its part of speech requires: a noun a genuine umbrella category and a natural same-sense synonym; a verb, adjective or adverb a natural same-sense synonym and a common derivational word-family item; silently identify them for the exact meaning before returning that candidate."} ${input.preflightRelations ? "" : `${monthlyUmbrellaRuleFor("")} `}Omit any verb, adjective or adverb candidate whose only derivation is rare, an inflection, a compound, or changes to an unrelated sense. ${buildMonthlyCoreLevelGuidance(input.cefr)}`} A1 uses very common concrete words; A2 uses useful routine office terms; B1+ can be more nuanced. All ${candidateCount} candidates must be appropriate to CEFR ${input.cefr}, and directly useful for the approved month theme (${input.theme}) and practical communication goal (${input.communicationGoal}); never return a word that is off-theme or only loosely tied to it. The application will select the first ${neededCount} unique valid headword${neededCount === 1 ? "" : "s"}. Use these already generated core and support terms as forbidden words: ${input.existingCoreWords.join("; ") || "none"}. If a candidate conflicts with a forbidden word or another candidate, replace it with a different standalone term; do not repeat the collision or a normalized variant. This is an unordered month pool; do not assign calendar days.${relationPreflight}${subArea}${retry}`;
+  return `PHASE 1 — ORDERED MONTH VOCABULARY CANDIDATES. ${categoryScope} Every candidate must be one standalone English lexical headword, never a multi-word compound phrase, slash alternative, interjection, greeting, discourse formula, or inflected variant of another selected candidate. Assign exactly one part of speech (noun, verb, adjective, or adverb) and one clear, common workplace sense; do not combine POS labels or give alternate meanings in the Vietnamese meaning field. Every candidate must have one short Vietnamese gloss for that chosen sense. Select only authentic level-appropriate English; a family form must be a distinct lexical item, not just a plural or tense form. Do not invent words or use semantic neighbors as family members. ${candidatePoolRules}${input.candidatePoolOnly ? "" : `Verb, adjective and adverb candidates intended for use as core words must have a common, useful derivational family (for example: manage → manager/management; help → helpful; decide → decision; pay → payment; careful → carefully). Noun candidates must have a genuine umbrella (hypernym) and take a word-family item only when a common one exists (plan → planner/planning). ${input.preflightRelations ? "Every core candidate must support the relations its part of speech requires: a noun a genuine umbrella category and a natural same-sense synonym; a verb, adjective or adverb a natural same-sense synonym and a common derivational word-family item; verify them for the exact meaning." : "Every core candidate must support the relations its part of speech requires: a noun a genuine umbrella category and a natural same-sense synonym; a verb, adjective or adverb a natural same-sense synonym and a common derivational word-family item; silently identify them for the exact meaning before returning that candidate."} ${input.preflightRelations ? "" : `${monthlyUmbrellaRuleFor("")} `}Omit any verb, adjective or adverb candidate whose only derivation is rare, an inflection, a compound, or changes to an unrelated sense. ${buildMonthlyCoreLevelGuidance(input.cefr)}`} A1 uses very common concrete words; A2 uses useful routine office terms; B1, B2 and C1 must follow the TARGET LEVEL rule above, each clearly harder than the level below it. All ${candidateCount} candidates must be appropriate to CEFR ${input.cefr}, and directly useful for the approved month theme (${input.theme}) and practical communication goal (${input.communicationGoal}); never return a word that is off-theme or only loosely tied to it. The application will select the first ${neededCount} unique valid headword${neededCount === 1 ? "" : "s"}. Use these already generated core and support terms as forbidden words: ${input.existingCoreWords.join("; ") || "none"}. If a candidate conflicts with a forbidden word or another candidate, replace it with a different standalone term; do not repeat the collision or a normalized variant. This is an unordered month pool; do not assign calendar days.${buildMonthlyOtherLevelCoreExclusionText(input.otherLevelCoreWords)}${relationPreflight}${subArea}${retry}`;
 }
 
 export function buildMonthlyCandidateRelationGraphPrompt(input: {
@@ -432,6 +441,10 @@ export function selectMonthlyPronunciationCandidates(input: {
   forbiddenWords: ReadonlySet<string>;
   needed: number;
   targetIpa?: string;
+  /** Target label; a stress target's label ("first syllable", "two-syllable") is checked against each example. */
+  targetLabel?: string;
+  /** The month's core words with their IPA, so a homograph with a different stress (present) is rejected. */
+  coreTerms?: ReadonlyArray<{ word: string; ipa: string }>;
 }): { selected: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"]; rejected: string[] } {
   const selected: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"] = [];
   const rejected: string[] = [];
@@ -443,9 +456,11 @@ export function selectMonthlyPronunciationCandidates(input: {
       ? `has ${syllables} syllables`
       : input.forbiddenWords.has(word) || chosen.has(word)
         ? "duplicates a pronunciation example already used"
-        : input.targetIpa && !doesMonthlyPronunciationExampleMatch(input.targetIpa, candidate.ipa)
+        : input.targetIpa && !doesMonthlyPronunciationExampleMatch(input.targetIpa, candidate.ipa, candidate.word)
           ? `IPA ${candidate.ipa} does not illustrate target ${input.targetIpa}`
-          : "";
+          : input.targetIpa
+            ? getMonthlyPronunciationExampleQualityIssue({ targetIpa: input.targetIpa, targetLabel: input.targetLabel, word: candidate.word, ipa: candidate.ipa, coreTerms: input.coreTerms }) ?? ""
+            : "";
     if (reason) {
       rejected.push(`${candidate.word} -> ${word} (${reason})`);
       continue;
@@ -457,15 +472,10 @@ export function selectMonthlyPronunciationCandidates(input: {
   return { selected, rejected };
 }
 
-export function doesMonthlyPronunciationExampleMatch(targetIpa: string, exampleIpa: string): boolean {
-  const stripDelimiters = (value: string) => value.trim().replace(/^[/\[]/u, "").replace(/[/\]]$/u, "").replace(/͡/gu, "");
-  const target = stripDelimiters(targetIpa);
-  const example = stripDelimiters(exampleIpa);
-  if (target.includes("X")) {
-    const stressMarks = target.match(/[ˈˌ]/gu) ?? [];
-    return stressMarks.every((mark) => example.includes(mark));
-  }
-  return Boolean(target && example.includes(target));
+export function doesMonthlyPronunciationExampleMatch(targetIpa: string, exampleIpa: string, word?: string): boolean {
+  // Whole-phoneme comparison (shared with manual edit and approval): no legacy
+  // "X" placeholder, no diphthong/affricate/onset-cluster false positives (WP9).
+  return monthlyIpaExampleMatchesTarget(targetIpa, exampleIpa, word);
 }
 
 export function buildMonthlyPronunciationDistinctnessConstraint(
@@ -518,7 +528,21 @@ export function buildMonthlyPronunciationSchemaRepairIssue(issues: readonly Reco
   return `Structured output repair required. Previous response schema issues: ${details.join("; ") || "the response did not match the required shape"}. Return a complete corrected result. pronunciationTargets must be an array containing exactly one target object for this phase, not a string. Include at least 18 ordered example candidates; keep coreTerms, expandedTerms and grammarTopics empty. The target ipa must be one valid slash-delimited IPA form with no prose or multiple transcriptions.`;
 }
 
-export function getMonthlyGrammarPhaseIssues(result: MonthlyResourcePlanTaskOutput): string[] {
+// Letters only Vietnamese uses (tone marks on top of ă/â/ê/ô/ơ/ư, đ, and the
+// dot-below/hook-above tones); á/à/é/í/ó/ú alone also occur in English loanwords.
+const VIETNAMESE_ONLY_LETTER = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉĩịọỏốồổỗộớờởỡợụủũứừửữựỳỵỷỹ]/iu;
+
+/** True when a learner-facing objective written for B1–C1 contains Vietnamese (WP9). */
+export function isVietnameseMonthlyText(value: string): boolean {
+  return VIETNAMESE_ONLY_LETTER.test(value);
+}
+
+/** dailyObjectives are Vietnamese for A1/A2 and simple English from B1. */
+export function monthlyDailyObjectivesMustBeEnglish(cefr: string | undefined): boolean {
+  return cefr === "B1" || cefr === "B2" || cefr === "C1";
+}
+
+export function getMonthlyGrammarPhaseIssues(result: MonthlyResourcePlanTaskOutput, cefr?: string): string[] {
   const issues: string[] = [];
   if (result.coreTerms.length) issues.push(`coreTerms must be empty (received ${result.coreTerms.length})`);
   if (result.expandedTerms.length) issues.push(`expandedTerms must be empty (received ${result.expandedTerms.length})`);
@@ -533,24 +557,28 @@ export function getMonthlyGrammarPhaseIssues(result: MonthlyResourcePlanTaskOutp
     const objectives = topic.steps.flatMap(step => step.dailyObjectives ?? []);
     if (objectives.length !== 6 || objectives.some(value => value.trim().length < 10)) issues.push(`grammarTopics[${topicIndex}] needs two explicit dailyObjectives per step (six in total)`);
     if (new Set(objectives.map(value => value.toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim())).size !== objectives.length) issues.push(`grammarTopics[${topicIndex}] repeats a daily teaching objective`);
+    const vietnamese = monthlyDailyObjectivesMustBeEnglish(cefr) ? objectives.filter(isVietnameseMonthlyText) : [];
+    if (vietnamese.length) issues.push(`grammarTopics[${topicIndex}] dailyObjectives must be in simple English for ${cefr}, not Vietnamese (e.g. "${vietnamese[0]!.trim().slice(0, 80)}")`);
   }
   return issues;
 }
 
-export function buildMonthlyGrammarPhasePrompt(rejectedIssues: readonly string[] = []): string {
+export function buildMonthlyGrammarPhasePrompt(rejectedIssues: readonly string[] = [], cefr?: string): string {
   const repair = rejectedIssues.length
     ? ` Previous response rejected: ${rejectedIssues.join("; ")}. Correct each listed issue in this response.`
     : "";
-  return `PHASE 3 — GRAMMAR ONLY. Return exactly two grammarTopics; coreTerms, expandedTerms and pronunciationTargets must be empty arrays. Each grammar topic must have exactly three ordered progressive steps that build in complexity; use a distinct focus and teaching point at each step, with precise formula, usage in Vietnamese for A1/A2 or simple English for B1/C1, and three to six authentic workplace reference examples. Each step also has dailyObjectives: exactly two distinct objectives, first recognition/explanation and then contextual application, at the supplied CEFR. Together they define A1–A6 or B1–B6; never copy one objective twice. Topic A steps are the progression for N1–N2, N3–N4, N5–N6. Topic B steps are the progression for N7–N8, N9–N10, N11–N12. N13–N15 combine the third step of both topics through contrast, read-aloud and voice note. N16–N18 are optional personalization, shadowing and speaking mock, without new grammar topics. Return JSON matching the schema only; do not include explanations or any other resource category.${repair}`;
+  const objectiveLanguage = cefr ? ` For this ${cefr} plan, write dailyObjectives in ${monthlyDailyObjectivesMustBeEnglish(cefr) ? "simple English with no Vietnamese words" : "Vietnamese"}.` : "";
+  return `PHASE 3 — GRAMMAR ONLY. Return exactly two grammarTopics; coreTerms, expandedTerms and pronunciationTargets must be empty arrays. Each grammar topic must have exactly three ordered progressive steps that build in complexity; use a distinct focus and teaching point at each step, with precise formula, usage in Vietnamese for A1/A2 or simple English for B1, B2 and C1, and three to six authentic workplace reference examples. Each step also has dailyObjectives: exactly two distinct objectives, first recognition/explanation and then contextual application, at the supplied CEFR, written in Vietnamese for A1/A2 and in simple English for B1, B2 and C1 (never Vietnamese from B1 upwards).${objectiveLanguage} Together they define A1–A6 or B1–B6; never copy one objective twice. Topic A steps are the progression for N1–N2, N3–N4, N5–N6. Topic B steps are the progression for N7–N8, N9–N10, N11–N12. N13–N15 combine the third step of both topics through contrast, read-aloud and voice note. N16–N18 are optional personalization, shadowing and speaking mock, without new grammar topics. Return JSON matching the schema only; do not include explanations or any other resource category.${repair}`;
 }
 
 export async function runMonthlyGrammarPhaseWithRetry(
-  generate: (prompt: string) => Promise<MonthlyResourcePlanTaskOutput>
+  generate: (prompt: string) => Promise<MonthlyResourcePlanTaskOutput>,
+  cefr?: string
 ): Promise<MonthlyResourcePlanTaskOutput> {
   let issues: string[] = [];
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const result = await generate(buildMonthlyGrammarPhasePrompt(issues));
-    issues = getMonthlyGrammarPhaseIssues(result);
+    const result = await generate(buildMonthlyGrammarPhasePrompt(issues, cefr));
+    issues = getMonthlyGrammarPhaseIssues(result, cefr);
     if (!issues.length) return result;
   }
   throw new MonthlyResourcePlanError([`Grammar phase failed after 3 attempts: ${issues.join("; ")}.`]);

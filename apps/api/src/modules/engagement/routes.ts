@@ -10,22 +10,11 @@ import { z } from "zod";
 import { requestEvidenceFields } from "../manager/request-evidence.js";
 import { createRoleGuard } from "../identity/policy.js";
 import { assessmentInProgress } from "../assessment/active-attempt.js";
+import { gameResultInput as resultInput, gameResultValidationError } from "./result-input.js";
 import type { ContentMediaService } from "../media/index.js";
 import type { ObjectStorage } from "@e4s/storage";
 
 const gameKey = z.enum(["scramble", "crossword", "eggs", "mario", "sort", "typing"]);
-const answer = z.object({
-  wordId: z.string().min(1), answer: z.string().max(200), attempts: z.number().int().min(1).max(20).optional(),
-  usedHint: z.boolean().optional(), combo: z.number().int().min(1).max(5).optional()
-});
-const gameEvent = z.object({
-  type: z.enum(["wrong_catch", "timeout"]), wordId: z.string().min(1), answer: z.string().max(200)
-});
-const resultInput = z.object({
-  requestId: z.uuid(), hintsUsed: z.number().int().min(0).max(100).optional(),
-  attemptSeed: z.number().int().min(0).max(10_000).optional(),
-  answers: z.array(answer).min(1).max(30), events: z.array(gameEvent).max(60).optional()
-});
 const practiceAppealParams = z.object({ submissionId: z.uuid() });
 const practiceAppealInput = z.object({ reason: z.string().trim().min(5).max(2_000), ...requestEvidenceFields });
 const audioArtifactInput = z.object({
@@ -254,7 +243,8 @@ export function registerEngagementRoutes(
   app.post("/api/v1/engagement/games/:game/results", { preHandler: learnerOnly }, async (request, reply) => {
     const params = z.object({ game: gameKey }).safeParse(request.params);
     const body = resultInput.safeParse(request.body);
-    if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_GAME_RESULT" });
+    if (!params.success) return reply.code(400).send({ code: "INVALID_GAME_RESULT", message: "Unknown game." });
+    if (!body.success) return reply.code(400).send(gameResultValidationError(body.error));
     const learnerId = request.e4sSession!.user.id;
     if (await assessmentInProgress(pool, learnerId)) return reply.code(409).send({ code: "MINIGAME_LOCKED_DURING_ASSESSMENT" });
     const duplicate = await repositories.engagement.findGameResult(learnerId, body.data.requestId);

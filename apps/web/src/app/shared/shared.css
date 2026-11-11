@@ -169,8 +169,11 @@
      hide the middle of a long card while the page is still at scrollTop 0;
      making main the scroll container gives the nav its own real row without
      changing routes or the order of the screen content. */
+  /* `clip` (not just `hidden`): scrollIntoView (App Guide, focus) can still scroll an
+     overflow:hidden box, which slid the whole shell up under the header on 320 px. */
   body:has(nav.bottomnav) {
     overflow: hidden !important;
+    overflow: clip !important;
   }
 
   body:has(nav.bottomnav) > #root {
@@ -179,6 +182,7 @@
     height: 100dvh !important;
     min-height: 100dvh !important;
     overflow: hidden !important;
+    overflow: clip !important;
   }
 
   body:has(nav.bottomnav):has(.settings-page) > #root {
@@ -208,21 +212,15 @@
     position: absolute;
   }
 
-  /* Keep the jump button below the checklist, calendar, and survey actions. */
-  body:has(nav.bottomnav):has(.assessment-prep-compact) > #root > .app-scroll-jump,
-  body:has(nav.bottomnav[data-role="operator"]):has(.operator-months-page) > #root > .app-scroll-jump,
-  body:has(nav.bottomnav):has(.monthly-survey-form) > #root > .app-scroll-jump {
-    position: static;
-    flex: none;
-    margin: 2px max(12px, env(safe-area-inset-right, 0px)) 4px auto;
+  /* The 44 px jump button floats 16 px above the nav: reserve that strip at the
+     end of the page so the last row (links, action buttons) can scroll clear of it. */
+  body:has(nav.bottomnav):has(#root > .app-scroll-jump) > #root > main {
+    padding-bottom: 72px !important;
+    scroll-padding-bottom: 72px;
   }
 
-  body:has(nav.bottomnav):has(.assessment-prep-compact):has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump,
-  body:has(nav.bottomnav[data-role="operator"]):has(.operator-months-page):has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump,
-  body:has(nav.bottomnav):has(.monthly-survey-form):has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump {
-    display: grid;
-    visibility: hidden;
-  }
+  /* The jump button always floats over the content (AppShell sets its bottom
+     offset above the nav); it must never reserve its own row and clip the page. */
 
   body:has(nav.bottomnav) > #root > .bottomnav {
     display: flex;
@@ -499,17 +497,20 @@ main.app-entry-main {
 }
 
 .app-entry .password-toggle {
+  /* Centred with auto margins, not transform: the shared button:active
+     press effect replaces transform and would drop the icon below the field. */
   position: absolute;
-  top: 50%;
+  inset-block: 0;
   right: 8px;
   width: 36px;
   min-width: 36px;
+  height: 36px;
   min-height: 36px;
+  margin-block: auto;
   padding: 0;
   border: 0;
   background: transparent;
   box-shadow: none;
-  transform: translateY(-50%);
 }
 
 .app-entry .password-toggle:hover:not(:disabled) {
@@ -747,6 +748,30 @@ body :is(.ds-toast-viewport, .assessment-toast-viewport) {
 
 #modal .app-modal-prompt-field + .app-modal-actions {
   margin-top: 16px;
+}
+
+/* Prompt/confirm rhythm: title, message, then a real field label with its
+   own space, so the sentence and "Lý do" do not run together. */
+#modal .dialog > h3:first-of-type {
+  margin: 0 0 10px;
+  font-size: 1.125rem;
+  line-height: 1.35;
+}
+
+#modal .dialog > h3:first-of-type + .small {
+  font-size: .9375rem;
+  line-height: 1.5;
+}
+
+#modal .dialog label.app-modal-prompt-field {
+  margin-top: 18px;
+}
+
+#modal label.app-modal-prompt-field > span {
+  margin-bottom: 6px;
+  color: var(--text);
+  font-size: .875rem;
+  font-weight: 600;
 }
 
 .app-modal-close {
@@ -1056,7 +1081,8 @@ body :is(.ds-toast-viewport, .assessment-toast-viewport) {
 .exam-scroll-jump-dock {
   position: sticky;
   inset-block-end: 12px;
-  block-size: 56px;
+  /* Zero height: the button floats over the exam instead of taking a row. */
+  block-size: 0;
   z-index: 6;
 }
 
@@ -1104,6 +1130,8 @@ body:has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump {
 :is(.shell-desktop-controls, .shell-compact-controls) button.shell-account-trigger { border-radius: 50%; }
 
 .shell-account-trigger > span { display: grid; place-items: center; }
+/* The filled 32px avatar reads higher than the 22px line icons beside it: nudge it down optically. */
+.shell-account-trigger > span { transform: translateY(1.5px); }
 
 .shell-account-panel {
   position: fixed;
@@ -1293,3 +1321,45 @@ body:has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump {
 
   .app-entry form[role="tabpanel"] > :not(.field) { grid-column: 1 / -1; }
 }
+
+/* While someone types into a field, the floating scroll button sits over the form's last row (Season's Send button,
+   a complaint or appeal's submit button) on phones. Typing is the task at hand, so the button steps aside until
+   focus leaves the field. */
+body:has(#root > main :is(textarea, select, input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"])):focus) > #root > .app-scroll-jump { display: none; }
+
+/* Long lists in every role scroll inside their own bounded box with a visible scrollbar (phone, tablet and
+   desktop); the section heading, filters and tabs stay outside the box. Short lists simply end before the cap.
+   #root raises specificity over older per-page rules that switched the boxes off below 1024px. */
+#root :is(
+  .operator-approved-list, .operator-pending-list, .operator-bounded-list, .operator-action-table-wrap,
+  .operator-review-card-list, .operator-coach-list, .operator-assessment-form-list,
+  .manager-progress-table, .manager-progress-list, .manager-holiday-list, .manager-reminder-history-list,
+  .manager-accounts-table, .request-table
+) {
+  max-height: min(60vh, 560px) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #9b958b #eeeae3;
+  scrollbar-gutter: stable;
+}
+#root :is(.operator-action-table-wrap, .manager-progress-table, .manager-accounts-table, .request-table) thead th {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+  background: var(--surface);
+}
+#root :is(
+  .operator-approved-list, .operator-pending-list, .operator-bounded-list, .operator-action-table-wrap,
+  .operator-review-card-list, .operator-coach-list, .operator-assessment-form-list,
+  .manager-progress-table, .manager-progress-list, .manager-holiday-list, .manager-reminder-history-list,
+  .manager-accounts-table, .request-table
+)::-webkit-scrollbar { width: 10px; height: 10px; }
+#root :is(
+  .operator-approved-list, .operator-pending-list, .operator-bounded-list, .operator-action-table-wrap,
+  .operator-review-card-list, .operator-coach-list, .operator-assessment-form-list,
+  .manager-progress-table, .manager-progress-list, .manager-holiday-list, .manager-reminder-history-list,
+  .manager-accounts-table, .request-table
+)::-webkit-scrollbar-thumb { border: 2px solid #eeeae3; border-radius: 999px; background: #9b958b; }
+/* An opened request row shows its decision buttons; let that box grow so they are never hidden in the scroll. */
+#root .request-table:has(.request-expanded-row) { max-height: none !important; overflow-y: visible !important; }

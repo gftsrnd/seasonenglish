@@ -1,12 +1,67 @@
-import { Component, lazy, Suspense, type ErrorInfo, type ReactNode } from "react";
+import { Component, createContext, Suspense, useContext, useEffect, useState, type ComponentType, type ErrorInfo, type ReactNode } from "react";
 import { Link, Navigate, useLocation } from "react-router";
 import { CircleHelp, LockKeyhole } from "lucide-react";
 import type { SessionView } from "@e4s/contracts";
 import { ManagerSectionLayout } from "./manager/shared.js";
 
-const LearnerRouteController = lazy(() => import("./learner/LearnerRouteController.js").then(({ LearnerRouteController }) => ({ default: LearnerRouteController })));
-const ManagerRouteController = lazy(() => import("./manager/ManagerRouteController.js").then(({ ManagerRouteController }) => ({ default: ManagerRouteController })));
-const OperatorRouteController = lazy(() => import("./operator/OperatorRouteController.js").then(({ OperatorRouteController }) => ({ default: OperatorRouteController })));
+const RouteLoadingLabelContext = createContext("Đang tải trang");
+
+function RouteLoadingFallback() {
+  const label = useContext(RouteLoadingLabelContext);
+  return <section className="empty" aria-busy="true"><p role="status">{label}…</p></section>;
+}
+
+/**
+ * A code-split role controller that can be fetched before it is rendered.
+ * Unlike React.lazy, an already loaded module renders synchronously, and a
+ * pending one shows the route fallback without a Suspense boundary, so the
+ * page is not held behind React's 300 ms fallback reveal throttle.
+ * Load failures are rethrown during render for RoleRouteErrorBoundary.
+ */
+function preloadableRoute<P extends object>(load: () => Promise<ComponentType<P>>) {
+  let loaded: ComponentType<P> | undefined;
+  let pending: Promise<ComponentType<P>> | undefined;
+  const preload = () => pending ??= load().then((component) => { loaded = component; return component; }, (error: unknown) => { pending = undefined; throw error; });
+  function PreloadableRoute(props: P) {
+    const [component, setComponent] = useState<ComponentType<P> | undefined>(() => loaded);
+    const [failure, setFailure] = useState<{ error: unknown }>();
+    useEffect(() => {
+      if (component) return;
+      let live = true;
+      preload().then((next) => { if (live) setComponent(() => next); }, (error: unknown) => { if (live) setFailure({ error }); });
+      return () => { live = false; };
+    }, [component]);
+    if (failure) throw failure.error;
+    if (!component) return <RouteLoadingFallback />;
+    const Loaded = component;
+    return <Loaded {...props} />;
+  }
+  return { Component: PreloadableRoute, preload };
+}
+
+const learnerRouteModule = preloadableRoute<{ courseCompleted?: boolean }>(() => import("./learner/LearnerRouteController.js").then(({ LearnerRouteController }) => LearnerRouteController));
+const managerRouteModule = preloadableRoute(() => import("./manager/ManagerRouteController.js").then(({ ManagerRouteController }) => ManagerRouteController));
+const operatorRouteModule = preloadableRoute(() => import("./operator/OperatorRouteController.js").then(({ OperatorRouteController }) => OperatorRouteController));
+const LearnerRouteController = learnerRouteModule.Component;
+const ManagerRouteController = managerRouteModule.Component;
+const OperatorRouteController = operatorRouteModule.Component;
+
+/**
+ * Starts downloading the role controller a route will need, so it can load in
+ * parallel with the session/theme bootstrap instead of after it. Best effort:
+ * failures are surfaced again (and recovered) when the route renders.
+ */
+export function preloadRoleRoute(role: SessionView["role"] | null, pathname: string) {
+  const path = normalizePathname(pathname);
+  const staffSettings = path === "/settings";
+  const target = role === "learner" ? learnerRouteModule
+    : role === "operator" ? (staffSettings ? managerRouteModule : operatorRouteModule)
+      : role === "manager" ? (path.startsWith("/mgr/ops/") ? operatorRouteModule : managerRouteModule)
+        : isRouteOrChild(path, "/op") ? operatorRouteModule
+          : isRouteOrChild(path, "/mgr") || staffSettings ? managerRouteModule
+            : undefined;
+  void target?.preload().catch(() => undefined);
+}
 
 const managerRoutes = ["/mgr", "/mgr/ops", "/mgr/requests", "/mgr/reopen-requests", "/mgr/complaints", "/mgr/holidays", "/mgr/recovery", "/mgr/reminders", "/mgr/report", "/mgr/surveys", "/mgr/rewards"] as const;
 const operatorRoutes = ["/op", "/op/levelforms", "/op/months", "/op/review", "/op/requests", "/op/tests"] as const;
@@ -50,7 +105,7 @@ export function RoleRoutes({ session, onSessionRevoked }: { session: SessionView
 }
 
 function RoleRouteLoadingBoundary({ children, label }: { children: ReactNode; label: string }) {
-  return <RoleRouteErrorBoundary><Suspense fallback={<section className="empty" aria-busy="true"><p role="status">{label}…</p></section>}>{children}</Suspense></RoleRouteErrorBoundary>;
+  return <RoleRouteErrorBoundary><RouteLoadingLabelContext.Provider value={label}><Suspense fallback={<RouteLoadingFallback />}>{children}</Suspense></RouteLoadingLabelContext.Provider></RoleRouteErrorBoundary>;
 }
 
 const roleBundleReloadKey = "e4s:role-bundle-reload-at";

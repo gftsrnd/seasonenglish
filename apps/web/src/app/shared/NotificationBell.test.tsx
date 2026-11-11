@@ -43,6 +43,21 @@ describe("NotificationBell", () => {
     expect(api.markInboxRead).toHaveBeenCalledWith({ ids: [notification.id] });
   });
 
+  it("renders a neutral row for an unknown notification kind instead of crashing the inbox", async () => {
+    const items = [{ ...notification, id: "unknown-kind", kind: "reminder", context: "learning" }, notification];
+    api.getNotificationInbox.mockImplementation(async (limit) => ({ items: limit ? items : [], unreadCount: 2, nextCursor: null }));
+    api.markInboxRead.mockResolvedValue({ unreadCount: 1 });
+    const user = userEvent.setup();
+    render(<MemoryRouter><NotificationBell /></MemoryRouter>);
+    await user.click(await screen.findByRole("button", { name: /2 chưa đọc/ }));
+    const dialog = screen.getByRole("dialog", { name: "Thông báo" });
+    expect(await within(dialog).findByText("Có thông báo mới")).toBeInTheDocument();
+    expect(within(dialog).getByText("Học tập")).toBeInTheDocument();
+    expect(within(dialog).getByText("Khiếu nại về điều kiện dự thi")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Về trang chính" }));
+    expect(api.markInboxRead).toHaveBeenCalledWith({ ids: ["unknown-kind"] });
+  });
+
   it("opens the matching appeal in the operator request hub", async () => {
     const relatedId = "dd8828fc-27c5-4321-8876-515725d2569a";
     api.getNotificationInbox.mockImplementation(async (limit) => ({ items: limit ? [{ ...notification, kind: "appeal_received", context: "assessment", relatedId }] : [], unreadCount: 1, nextCursor: null }));

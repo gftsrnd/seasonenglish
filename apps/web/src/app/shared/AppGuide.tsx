@@ -1,9 +1,11 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, CircleHelp, X } from "lucide-react";
 import "./app-guide.css";
 
 import { guideDefinitions, guidePopupDefinitions, type GuideRole, type GuideStep } from "./app-guide-steps.js";
+
+const SCROLL_KEYS = new Set([" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home", "End"]);
 
 type ActiveStep = { selector: string; target: HTMLElement; title: string; text: string; prioritize?: true };
 type Spotlight = { top: number; left: number; width: number; height: number };
@@ -22,6 +24,10 @@ function findSteps(definitions: readonly GuideStep[], scope: ParentNode): Active
   return definitions.flatMap(([selector, title, text, prioritize]) => {
     const target = Array.from(scope.querySelectorAll<HTMLElement>(selector)).find(isVisible);
     return target ? [{ selector, target, title, text, ...(prioritize ? { prioritize } : {}) }] : [];
+  }).sort((left, right) => {
+    // Steps follow the reading order of the current layout; a region comes before the controls inside it.
+    if (left.target === right.target) return 0;
+    return left.target.compareDocumentPosition(right.target) & Node.DOCUMENT_POSITION_PRECEDING ? 1 : -1;
   });
 }
 
@@ -47,6 +53,11 @@ function updateContext(current: GuideState, next: GuideContext): GuideState {
   return { ...next, isOpen: current.isOpen && next.steps.length > 0, index: Math.max(0, index) };
 }
 
+/** Step copy may mark button names and key conditions with **bold**; everything else stays plain text. */
+function guideText(text: string) {
+  return text.split(/\*\*(.+?)\*\*/g).map((part, index) => index % 2 ? <b key={index}>{part}</b> : part);
+}
+
 function getSpotlight(target: HTMLElement): Spotlight | null {
   if (!target.isConnected || !target.getClientRects().length) return null;
   const rect = target.getBoundingClientRect();
@@ -62,7 +73,10 @@ export function AppGuide({ role, pathname, compact }: { role: GuideRole; pathnam
   const dialogId = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
-  const pointerPosition = useRef<{ x: number; y: number }>(null);
+  const engineScrollUntil = useRef(0);
+  // Collapsed sections the engine opened for the current step; closed again when the step changes or the guide closes.
+  const engineOpened = useRef<Array<{ restore: () => void }>>([]);
+  const engineClicking = useRef(false);
   const [state, setState] = useState<GuideState>({ isOpen: false, index: 0, steps: [], popup: null });
   const [spotlight, setSpotlight] = useState<Spotlight | null>(null);
   const { isOpen, index, steps, popup, inboxOpen } = state;
@@ -99,30 +113,63 @@ export function AppGuide({ role, pathname, compact }: { role: GuideRole; pathnam
   }, [definitions, compact, path, role]);
 
   const close = () => {
-    setState(current => ({ ...current, isOpen: false }));
+    setState(current => ({ ...current, isOpen: false, index: 0 }));
     trigger.current?.focus({ preventScroll: true });
   };
-  const open = (event: MouseEvent<HTMLButtonElement>) => {
+  const open = () => {
     if (isOpen) {
       close();
       return;
     }
-    pointerPosition.current = event.detail ? { x: event.clientX, y: event.clientY } : null;
-    const first = Math.max(0, steps.findIndex(step => step.prioritize));
-    setState(current => ({ ...current, isOpen: true, index: first }));
+    // Opening (or re-opening) the guide always starts from step 1; a prioritized step only jumps ahead
+    // when its card appears while the guide is already open (see updateContext).
+    setState(current => ({ ...current, isOpen: true, index: 0 }));
   };
-  const move = (direction: -1 | 1, event: MouseEvent<HTMLButtonElement>) => {
-    if (event.detail) pointerPosition.current = { x: event.clientX, y: event.clientY };
+  const move = (direction: -1 | 1) => {
     setState(current => ({ ...current, index: Math.max(0, Math.min(current.index + direction, current.steps.length - 1)) }));
   };
 
   const activeTarget = active?.target;
   useLayoutEffect(() => {
+    const restoreAll = () => {
+      for (const opened of engineOpened.current.splice(0)) opened.restore();
+    };
+    if (!isOpen || !activeTarget) { restoreAll(); return; }
+    restoreAll();
+    // A step that points at a collapsed section (settings panel toggle, <details>) opens it while the step is shown.
+    const engineClick = (button: HTMLElement) => {
+      engineClicking.current = true;
+      try { button.click(); } finally { engineClicking.current = false; }
+    };
+    const toggle = activeTarget.querySelector<HTMLElement>(':scope > button[aria-expanded="false"][aria-controls]');
+    if (toggle) {
+      engineClick(toggle);
+      engineOpened.current.push({ restore: () => { if (toggle.isConnected && toggle.getAttribute("aria-expanded") === "true") engineClick(toggle); } });
+    }
+    const details = activeTarget instanceof HTMLDetailsElement ? activeTarget : activeTarget.querySelector<HTMLDetailsElement>(":scope > details");
+    if (details && !details.open) {
+      details.open = true;
+      engineOpened.current.push({ restore: () => { if (details.isConnected) details.open = false; } });
+    }
+    if (!engineOpened.current.length) return;
+    // The opened section grows: once it has rendered, align its top below the header.
+    const frame = window.requestAnimationFrame(() => {
+      engineScrollUntil.current = Date.now() + 1500;
+      activeTarget.scrollIntoView?.({ block: "start", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTarget, isOpen]);
+  useEffect(() => () => { for (const opened of engineOpened.current.splice(0)) opened.restore(); }, []);
+  useLayoutEffect(() => {
     if (!activeTarget) return;
     const rect = activeTarget.getBoundingClientRect();
     const panel = closeButton.current?.closest(".app-guide-panel")?.getBoundingClientRect();
-    if (panel && (rect.top < (compact ? 64 : 12) || rect.bottom > panel.top - 10)) {
-      activeTarget.scrollIntoView?.({ block: "center", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+    const top = compact ? 64 : 12;
+    if (panel && (rect.top < top || rect.bottom > panel.top - 10)) {
+      // A region taller than the space above the guide panel is aligned by its top so its heading stays readable.
+      const tall = rect.height > panel.top - 10 - top;
+      engineScrollUntil.current = Date.now() + 1500;
+      activeTarget.scrollIntoView?.({ block: tall ? "start" : "center", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
     }
   }, [activeTarget, compact]);
 
@@ -133,29 +180,46 @@ export function AppGuide({ role, pathname, compact }: { role: GuideRole; pathnam
   useEffect(() => {
     if (!isOpen) return;
     const preventPageAction = (event: Event) => {
+      if (engineClicking.current) return;
       if (!(event.target instanceof Element) ||
         event.target.closest(".app-guide-panel") || trigger.current?.contains(event.target)) return;
       event.preventDefault();
       event.stopPropagation();
     };
-    const onTarget = (event: Event) => {
-      if (event.type === "pointermove") {
-        const { clientX, clientY, pointerType } = event as PointerEvent;
-        if (pointerType === "touch") return;
-        const previous = pointerPosition.current;
-        if (previous?.x === clientX && previous?.y === clientY) return;
-        pointerPosition.current = { x: clientX, y: clientY };
+    // The page is locked while the guide is open: only the engine scrolls (to bring the next card into view).
+    const inPanel = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest(".app-guide-panel"));
+    const preventScroll = (event: Event) => {
+      if (!inPanel(event.target)) event.preventDefault();
+    };
+    const root = document.scrollingElement ?? document.documentElement;
+    // Phones and tablets scroll `#root > main`, desktop scrolls the document: lock both (and any other
+    // container that scrolls) so programmatic scrolling cannot move the page while the guide is open.
+    const locked = new Map<Element, { top: number; left: number }>();
+    const remember = (element: Element | null | undefined) => {
+      if (element && !locked.has(element)) locked.set(element, { top: element.scrollTop, left: element.scrollLeft });
+    };
+    remember(root);
+    remember(document.querySelector("#root > main"));
+    const keepScroll = (event: Event) => {
+      const element = event.target === document ? root : event.target instanceof Element ? event.target : null;
+      if (!element || element.closest(".app-guide-panel")) return;
+      if (Date.now() < engineScrollUntil.current) {
+        locked.set(element, { top: element.scrollTop, left: element.scrollLeft });
+        return;
       }
-      if (!(event.target instanceof Node)) return;
-      const node = event.target;
-      setState(current => {
-        const match = current.steps.reduce((best, step, index) =>
-          step.target.contains(node) && (best < 0 || current.steps[best]!.target.contains(step.target)) ? index : best, -1);
-        return match < 0 || current.index === match ? current : { ...current, index: match };
-      });
+      const position = locked.get(element);
+      if (!position) return;
+      if (element.scrollTop !== position.top) element.scrollTop = position.top;
+      if (element.scrollLeft !== position.left) element.scrollLeft = position.left;
     };
     const onGuideKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
+      const activatesButton = (event.key === " " || event.key === "Enter") && inPanel(event.target);
+      if (SCROLL_KEYS.has(event.key) && !activatesButton) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       if (event.key === "Tab") {
         const panel = closeButton.current?.closest(".app-guide-panel");
         const buttons = Array.from(panel?.querySelectorAll<HTMLButtonElement>("button:enabled") ?? []);
@@ -171,18 +235,21 @@ export function AppGuide({ role, pathname, compact }: { role: GuideRole; pathnam
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
-      setState(current => ({ ...current, isOpen: false }));
+      setState(current => ({ ...current, isOpen: false, index: 0 }));
       trigger.current?.focus({ preventScroll: true });
     };
-    document.addEventListener("pointermove", onTarget);
-    document.addEventListener("focusin", onTarget);
+    const blocking = { capture: true, passive: false } as const;
+    document.addEventListener("wheel", preventScroll, blocking);
+    document.addEventListener("touchmove", preventScroll, blocking);
+    window.addEventListener("scroll", keepScroll, true);
     document.addEventListener("click", preventPageAction, true);
     document.addEventListener("auxclick", preventPageAction, true);
     document.addEventListener("submit", preventPageAction, true);
     document.addEventListener("keydown", onGuideKey, true);
     return () => {
-      document.removeEventListener("pointermove", onTarget);
-      document.removeEventListener("focusin", onTarget);
+      document.removeEventListener("wheel", preventScroll, blocking);
+      document.removeEventListener("touchmove", preventScroll, blocking);
+      window.removeEventListener("scroll", keepScroll, true);
       document.removeEventListener("click", preventPageAction, true);
       document.removeEventListener("auxclick", preventPageAction, true);
       document.removeEventListener("submit", preventPageAction, true);
@@ -225,6 +292,7 @@ export function AppGuide({ role, pathname, compact }: { role: GuideRole; pathnam
   return <>
     {popup ? createPortal(helpButton, popup.querySelector(":scope > header") ?? popup) : helpButton}
     {isOpen && createPortal(<>
+      <div className="app-guide-blocker" data-popup={Boolean(popup) || undefined} aria-hidden="true" />
       {active && spotlight && <div className="app-guide-spotlight" style={spotlight} aria-hidden="true" />}
       <section id={dialogId} role="dialog" aria-labelledby={`${dialogId}-label`} className="app-guide-panel"
         data-compact={compact || undefined} data-popup={Boolean(popup) || undefined}>
@@ -236,13 +304,13 @@ export function AppGuide({ role, pathname, compact }: { role: GuideRole; pathnam
           </button>
         </header>
         <div className="app-guide-copy" aria-live="polite" aria-atomic="true">
-          {active && <><h2>{active.title}</h2><p>{active.text}</p></>}
+          {active && <><h2>{active.title}</h2><p>{guideText(active.text)}</p></>}
         </div>
         <footer className="app-guide-actions">
-          {steps.length > 1 && <button type="button" className="btn-sm" disabled={index === 0} onClick={event => move(-1, event)}>
+          {steps.length > 1 && <button type="button" className="btn-sm" disabled={index === 0} onClick={() => move(-1)}>
             <ChevronLeft size={16} aria-hidden="true" /> Trước
           </button>}
-          <button type="button" className="btn-sm btn-primary" onClick={event => index + 1 < steps.length ? move(1, event) : close()}>
+          <button type="button" className="btn-sm btn-primary" onClick={() => index + 1 < steps.length ? move(1) : close()}>
             {index + 1 < steps.length ? <>Tiếp theo <ChevronRight size={16} aria-hidden="true" /></> : "Đã hiểu"}
           </button>
         </footer>

@@ -563,3 +563,28 @@ describe("monthly curriculum contract", () => {
     });
   });
 });
+
+describe("skill exercise focus text (AI quality round 2, 11/11)", () => {
+  const foci = (cefr: MonthlyCurriculumInput["cefr"]) => buildMonthlyCurriculum({ ...inputFor(), cefr }).daySpecs.flatMap((day) => day.skillExercises.map((exercise) => ({ code: exercise.exerciseCode, focus: exercise.focus })));
+
+  it("writes A1-A2 focus in Vietnamese and describes word form, not word class (HV-R49)", () => {
+    for (const cefr of ["A1", "A2"] as const) {
+      const all = foci(cefr);
+      expect(all.every((item) => /[ăâđêôơưàáảãạầấậềếệọộờớợùúụừứự]/iu.test(item.focus))).toBe(true);
+      const wordForm = all.filter((item) => item.code === "word_class");
+      // The measured A1 plan said "Nhận diện từ loại của các từ cốt lõi ngày học."
+      expect(wordForm.some((item) => /từ loại|loại từ/iu.test(item.focus))).toBe(false);
+      expect(wordForm.every((item) => /dạng đúng/iu.test(item.focus))).toBe(true);
+    }
+  });
+
+  it("writes B1-C1 focus in simple English without Vietnamese or word-class wording", () => {
+    for (const cefr of ["B1", "B2", "C1"] as const) {
+      const all = foci(cefr);
+      expect(all.some((item) => /[ăâđêôơưàáảãạầấậềếệọộờớợùúụừứự]/iu.test(item.focus))).toBe(false);
+      const wordForm = all.filter((item) => item.code === "word_class");
+      expect(wordForm.some((item) => /word class|part of speech/iu.test(item.focus))).toBe(false);
+      expect(wordForm.every((item) => /correct form/iu.test(item.focus))).toBe(true);
+    }
+  });
+});

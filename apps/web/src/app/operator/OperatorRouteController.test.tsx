@@ -9,6 +9,7 @@ import { ApiError } from "../../api/runtime.js";
 import { ToastProvider } from "../shared/design-system.js";
 import { monthlyFinalView } from "../../../test/support/monthly-final-view.js";
 import { OperatorRouteController } from "./OperatorRouteController.js";
+import { buildMonthlyCalendar, monthlyDayKind, monthlyNewLessonOrdinal } from "@e4s/domain/monthly";
 
 afterEach(cleanup);
 
@@ -44,6 +45,33 @@ describe("OperatorRouteController", () => {
     await waitFor(() => expect(client.getContentMonthResourceCheckpoint).toHaveBeenLastCalledWith(expect.any(String), "A2"));
     await waitFor(() => expect(scrollY).toBe(420));
     expect(window.scrollTo).toHaveBeenCalledWith(0, 420);
+  });
+
+  it("opens the manual monthly editor with the calendar's lesson label as the default title", async () => {
+    const user = userEvent.setup();
+    const calendar = buildMonthlyCalendar("2026-11");
+    const firstReview = calendar.effectiveDays.findIndex((_date, index) => monthlyDayKind(index + 1, calendar) === "review") + 1;
+    const afterReview = firstReview + 1;
+    const ordinal = monthlyNewLessonOrdinal(afterReview, calendar)!;
+    const overview = {
+      systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true },
+      brief: { month: "2026-11", title: "Updates", brief: "Project updates", context: "Office", communicationGoal: "Report", version: 1, status: "approved" },
+      calendar: calendar.effectiveDays.map((date, index) => ({ date, kind: monthlyDayKind(index + 1, calendar), lessonNumber: index + 1, ...(monthlyDayKind(index + 1, calendar) === "new" ? { newLessonNumber: monthlyNewLessonOrdinal(index + 1, calendar)! } : { reviewWeekNumber: 1 }) })),
+      frameworks: (["A1", "A2", "B1", "B2", "C1"] as const).map((cefr) => ({ id: `framework-${cefr}`, cefr, version: 1, status: "approved", scopeHash: "scope", lessons: [], quality: { severe: [], light: [] }, resources: { coreTerms: [], supportTerms: [], grammarTopics: [], sounds: [] }, publication: { ready: false, publishedOn: null } }))
+    };
+    const client = { getContentMonth: vi.fn().mockResolvedValue(overview), getContentMonthResourceCheckpoint: vi.fn().mockResolvedValue(undefined), saveContentMonthDay: vi.fn(), uploadContentMedia: vi.fn() };
+    const { container } = render(<ToastProvider><MemoryRouter initialEntries={["/op/months"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
+    await screen.findByRole("heading", { name: "Tài nguyên tháng" });
+
+    const newCell = await waitFor(() => container.querySelector<HTMLElement>(`#monthly-day-${calendar.effectiveDays[afterReview - 1]}`)!);
+    await user.click(within(newCell).getByRole("button", { name: `Soạn tay bài ${ordinal}` }));
+    expect(await screen.findByLabelText("Tiêu đề bài")).toHaveValue(`Bài ${ordinal}`);
+    expect(screen.getByLabelText("Tiêu đề bài")).not.toHaveValue(`Bài T${afterReview}`);
+    await user.click(screen.getByRole("button", { name: /Hủy|Đóng/ }));
+
+    const reviewCell = container.querySelector<HTMLElement>(`#monthly-day-${calendar.effectiveDays[firstReview - 1]}`)!;
+    await user.click(within(reviewCell).getByRole("button", { name: "Soạn tay bài ôn" }));
+    expect(await screen.findByLabelText("Tiêu đề bài")).toHaveValue("Bài ôn tuần 1");
   });
 
   it("uses the sidebar without repeating an operational navigation bar on Operator screens", async () => {
@@ -106,6 +134,8 @@ describe("OperatorRouteController", () => {
     expect(within(header).getAllByRole("button").map(button => button.textContent)).toEqual(["Lưu bản nháp", "Đóng"]);
     const status = within(editor).getByRole("region", { name: "Trạng thái đề lên mức" });
     const publish = within(status).getByRole("button", { name: "Duyệt & phát hành" });
+    expect(publish).toBeDisabled();
+    await user.click(within(status).getByRole("checkbox", { name: "Tôi đã đọc lại đáp án từng câu" }));
     expect(publish).toBeEnabled();
     const prompt = await screen.findByRole("textbox", { name: "Nội dung L1" });
     await user.clear(prompt);
@@ -120,12 +150,13 @@ describe("OperatorRouteController", () => {
 
     await waitFor(() => expect(updateAssessmentLevelForm).toHaveBeenCalledWith("version-1", expect.objectContaining({ sections: expect.any(Array) })));
     expect(updateAssessmentLevelForm.mock.calls[0]?.[1].sections[0].groups[0].tasks[0].prompt).toBe("Updated prompt");
+    await user.click(within(status).getByRole("checkbox", { name: "Tôi đã đọc lại đáp án từng câu" }));
     await waitFor(() => expect(publish).toBeEnabled());
     await user.click(publish);
     const confirmation = await screen.findByRole("dialog", { name: "Duyệt và phát hành đề lên mức?" });
     expect(publishAssessmentLevelForm).not.toHaveBeenCalled();
     await user.click(within(confirmation).getByRole("button", { name: "Duyệt & phát hành" }));
-    await waitFor(() => expect(publishAssessmentLevelForm).toHaveBeenCalledWith("version-1"));
+    await waitFor(() => expect(publishAssessmentLevelForm).toHaveBeenCalledWith("version-1", { answersReviewed: true }));
     expect(await screen.findByRole("button", { name: "Chỉnh sửa" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Chi tiết Đề B1" })).not.toBeInTheDocument();
   });
@@ -673,6 +704,28 @@ describe("OperatorRouteController", () => {
     expect(screen.getAllByText("Chờ chấm")).toHaveLength(3);
   });
 
+  it("closes the placement approval prompt on cancel or Escape without an error toast", async () => {
+    const user = userEvent.setup();
+    const overview = {
+      pendingAssessments: [{ attemptId: "a1", learnerId: "u1", learnerName: "Lan", kind: "placement", title: "Đầu vào", submittedAt: "2026-10-14", sectionScores: { listening: 70 }, suggestedLevel: "B1" }],
+      pendingLevelUp: [], approvedLearners: [], unassessedLearners: [],
+      levelSignals: { windowDays: 14, ready: [], weak: [] }, topicReports: []
+    };
+    const decideAssessment = vi.fn().mockResolvedValue({});
+    render(<MemoryRouter initialEntries={["/op"]}><OperatorRouteController session={operator} client={{ getAssessmentReviewOverview: vi.fn().mockResolvedValue(overview), decideAssessment } as any} /></MemoryRouter>);
+
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Mức duyệt cho Lan" }), "B1");
+    await user.click(screen.getByRole("button", { name: "Duyệt mức" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Duyệt mức đầu vào" })).getByRole("button", { name: /Huỷ|Hủy/ }));
+    await user.click(screen.getByRole("button", { name: "Duyệt mức" }));
+    screen.getByRole("dialog", { name: "Duyệt mức đầu vào" });
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Duyệt mức đầu vào" })).not.toBeInTheDocument());
+    expect(screen.queryByText(/Lý do duyệt mức là bắt buộc/)).not.toBeInTheDocument();
+    expect(decideAssessment).not.toHaveBeenCalled();
+  });
+
   it("uses the app prompt modal when rejecting a level request", async () => {
     const user = userEvent.setup();
     const overview = {
@@ -1019,6 +1072,25 @@ describe("OperatorRouteController", () => {
     ] });
     render(<MemoryRouter initialEntries={["/op/review?tab=coach"]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review), listAssessmentAudio } as any} /></MemoryRouter>);
     expect(await screen.findByLabelText("Phát Bản ghi âm Season của Lan")).toHaveAttribute("src", "/audio/season-current.webm");
+  });
+
+  it("does not request the assessment audio list when object storage is not configured", async () => {
+    const review = {
+      tabs: [{ key: "coach", label: "Phản hồi coach", count: 1 }],
+      submissions: [],
+      coachSamples: [{
+        id: "turn-1", learnerName: "Lan", cefr: "A2", weekNumber: 2,
+        createdAt: "2026-10-14T09:00:00.000Z", checked: false, learnerText: "Season transcript", coachText: "Good.",
+        scores: { meaning: null, vocabulary: null, grammar: null }, suggestions: []
+      }],
+      microLessons: [], appeals: [], lessonAttempts: [], assessments: []
+    } as unknown as ContentReviewView;
+    const listAssessmentAudio = vi.fn().mockRejectedValue(new ApiError("NOT_FOUND", "http", 404));
+    const getSystemCapabilities = vi.fn().mockResolvedValue({ api: true, database: true, ai: false, objectStorage: false, maintenance: false, imageProviders: { pexels: false, pixabay: false } });
+    render(<ToastProvider><MemoryRouter initialEntries={["/op/review?tab=coach"]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review), listAssessmentAudio, getSystemCapabilities } as any} /></MemoryRouter></ToastProvider>);
+
+    expect(await screen.findByText("Season transcript")).toBeInTheDocument();
+    expect(listAssessmentAudio).not.toHaveBeenCalled();
   });
 
   it("keeps the current review navigation available when a retired tab is requested by URL", async () => {

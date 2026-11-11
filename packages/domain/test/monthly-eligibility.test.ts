@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consecutiveLearningAbsences, evaluateMonthlyExamEligibility, evaluateMonthlyLevelUpReadiness, monthlyExamEntryState, monthlyLearnerWindow, monthlySeasonTurnTarget } from "../src/progression/monthly-eligibility.js";
+import { consecutiveLearningAbsences, evaluateMonthlyExamEligibility, evaluateMonthlyLevelUpReadiness, monthlyExamEntryState, learnerMonthlySeasonTarget, monthlyLearnerWindow, monthlySeasonTurnTarget } from "../src/progression/monthly-eligibility.js";
 
 it("allows starts through the 23:24 ICT minute and closes at 23:25", () => {
   expect(monthlyExamEntryState("2026-11-29", "2026-11-30", "23:59:59")).toBe("upcoming");
@@ -135,4 +135,15 @@ describe("monthly Season quota", () => {
     expect(monthlySeasonTurnTarget("2026-11-09", "2026-11", "2026-11-30")).toBe(75);
     expect(monthlySeasonTurnTarget("2026-11-01", "2026-11", "2026-11-30")).toBe(100);
   });
+});
+
+it("uses one Season target rule for Coach and monthly-exam eligibility", () => {
+  // Approved after a third of November: the prorated window target (65) is not a
+  // cohort target because the learner joins next month; both screens show 100.
+  const late = monthlyLearnerWindow("2026-11", "2026-11-30", "2026-11-11");
+  expect(late.canStudy).toBe(false);
+  expect(learnerMonthlySeasonTarget({ ...late, state: "waiting_next_month" })).toBe(100);
+  const prorated = monthlyLearnerWindow("2026-11", "2026-11-30", "2026-11-09");
+  expect(learnerMonthlySeasonTarget({ ...prorated, state: "active" })).toBe(prorated.seasonTarget);
+  expect(learnerMonthlySeasonTarget(null)).toBe(100);
 });

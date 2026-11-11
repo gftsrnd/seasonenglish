@@ -28,6 +28,8 @@ export interface CoreTerm {
   dayNumber: number;
   /** AI or uploaded square illustration, frozen into the contract when resources are approved. */
   imageUrl?: string;
+  /** The core word's own CEFR level as labelled by the generator (kept for level audits); absent on older pools. */
+  cefr?: CefrLevel;
 }
 
 export interface SupportTerm {
@@ -230,6 +232,8 @@ export interface PronunciationSound {
   ipa: string;
   label: string;
   examples: PronunciationExample[];
+  /** Roadmap catalog item this target teaches (see pronunciation-catalog.ts); absent on older pools. */
+  catalogId?: string;
 }
 
 export interface MonthlyCurriculumInput {
@@ -428,7 +432,7 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
       for (const exampleId of teaching.pronunciationPlan.exampleIds) if (!pendingReviewPronunciationExampleIds.includes(exampleId)) pendingReviewPronunciationExampleIds.push(exampleId);
     }
     if (exampleIds.length !== 3) throw new RangeError(`Sound ${sound.id} needs three unused examples for lesson ${lessonNumber}`);
-    const skillExercises = buildMonthlySkillExercises(kind, kind === "new" ? coreTermIds : reviewTermIds, kind === "new" ? expandedTermIds : reviewExpandedTermIds);
+    const skillExercises = buildMonthlySkillExercises(kind, kind === "new" ? coreTermIds : reviewTermIds, kind === "new" ? expandedTermIds : reviewExpandedTermIds, input.cefr);
     const reviewWeekNumber = [...new Set(calendar.effectiveDays.slice(0, index + 1).map(mondayOfWeek))].length;
     return { lessonNumber, date, kind, ...(kind === "new" ? { newLessonNumber: newLessonOrdinal, ...teaching } : { reviewWeekNumber }), coreTermIds, expandedTermIds, reviewTermIds, reviewExpandedTermIds, reviewFromPreviousMonth, reviewGatesNextWeek, reviewWeekKey, reviewPrerequisiteLessonNumbers, reviewGrammarStepIds, reviewSoundIds, reviewPronunciationExampleIds, skillExercises, grammarStepId: step.id, grammarStepIds: grammarSteps.map((grammarStep) => grammarStep.id), soundId: sound.id, pronunciationSlot, pronunciationExampleIds: exampleIds };
   });
@@ -503,7 +507,7 @@ export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): Mont
     month: pool.month,
     cefr: pool.cefr,
     theme: pool.theme,
-    coreTerms: pool.coreTerms.map(({ id, word, meaning, type, ipa, imageUrl }) => ({ id, word, meaning, type, ipa, ...(imageUrl ? { imageUrl } : {}) })),
+    coreTerms: pool.coreTerms.map(({ id, word, meaning, type, ipa, imageUrl, cefr }) => ({ id, word, meaning, type, ipa, ...(imageUrl ? { imageUrl } : {}), ...(cefr ? { cefr } : {}) })),
     supportTerms: plannedSupportTerms,
     grammarTopics: pool.grammarTopics,
     sounds: pool.sounds
@@ -820,20 +824,36 @@ function expandedRepeatCount(values: readonly string[]): number {
   return values.length - new Set(values).size;
 }
 
-const MONTHLY_EXERCISE_FOCI: Record<MonthlyExerciseCode, { lesson: string; review: string }> = {
-  listening: { lesson: "Nghe và nhận diện thông tin gắn với tài nguyên ngày học.", review: "Nghe lại và nhận diện tài nguyên đã học trong tuần." },
-  reading: { lesson: "Đọc và tìm thông tin dùng các tài nguyên ngày học.", review: "Đọc lại và tìm thông tin trong nội dung tuần đã học." },
-  writing: { lesson: "Dùng tài nguyên ngày học trong một phản hồi viết ngắn.", review: "Ôn cách dùng tài nguyên tuần qua một phản hồi viết ngắn." },
-  word_class: { lesson: "Nhận diện từ loại của các từ cốt lõi ngày học.", review: "Ôn từ loại của các từ cốt lõi trong tuần." },
-  word_use: { lesson: "Chọn cách dùng phù hợp cho từ và nhóm từ đã học.", review: "Ôn cách dùng các từ và nhóm từ đã học trong tuần." },
-  speaking: { lesson: "Dùng tài nguyên ngày học trong phản hồi nói ngắn.", review: "Ôn tài nguyên tuần qua phản hồi nói ngắn." }
+/**
+ * Plan text for each skill slot, in the level's instruction language
+ * (Vietnamese for A1–A2, simple English for B1–C1). Word form (HV-R49)
+ * describes choosing a word's form in a sentence, never its word class.
+ */
+const MONTHLY_EXERCISE_FOCI: Record<"vi" | "en", Record<MonthlyExerciseCode, { lesson: string; review: string }>> = {
+  vi: {
+    listening: { lesson: "Nghe và nhận diện thông tin gắn với tài nguyên ngày học.", review: "Nghe lại và nhận diện tài nguyên đã học trong tuần." },
+    reading: { lesson: "Đọc và tìm thông tin dùng các tài nguyên ngày học.", review: "Đọc lại và tìm thông tin trong nội dung tuần đã học." },
+    writing: { lesson: "Dùng tài nguyên ngày học trong một phản hồi viết ngắn.", review: "Ôn cách dùng tài nguyên tuần qua một phản hồi viết ngắn." },
+    word_class: { lesson: "Chọn dạng đúng của từ ngày học để điền vào chỗ trống trong câu công việc.", review: "Ôn dạng đúng của các từ trong tuần khi điền vào câu công việc." },
+    word_use: { lesson: "Chọn cách dùng phù hợp cho từ và nhóm từ đã học.", review: "Ôn cách dùng các từ và nhóm từ đã học trong tuần." },
+    speaking: { lesson: "Dùng tài nguyên ngày học trong phản hồi nói ngắn.", review: "Ôn tài nguyên tuần qua phản hồi nói ngắn." }
+  },
+  en: {
+    listening: { lesson: "Listen and pick out information that uses today's words.", review: "Listen again and recognise the words learnt this week." },
+    reading: { lesson: "Read and find information that uses today's words.", review: "Read again and find information in this week's content." },
+    writing: { lesson: "Use today's words in a short written reply.", review: "Review this week's words in a short written reply." },
+    word_class: { lesson: "Choose the correct form of today's words to complete a workplace sentence.", review: "Review the correct form of this week's words in workplace sentences." },
+    word_use: { lesson: "Choose the right way to use the words and phrases learnt today.", review: "Review how to use the words and phrases learnt this week." },
+    speaking: { lesson: "Use today's words in a short spoken reply.", review: "Review this week's words in a short spoken reply." }
+  }
 };
 
-function buildMonthlySkillExercises(kind: "new" | "review", coreIds: string[], expandedIds: string[]): MonthlySkillExercisePlan[] {
+function buildMonthlySkillExercises(kind: "new" | "review", coreIds: string[], expandedIds: string[], cefr: CefrLevel): MonthlySkillExercisePlan[] {
   const resourceIds = [...coreIds, ...expandedIds];
+  const foci = MONTHLY_EXERCISE_FOCI[cefr === "A1" || cefr === "A2" ? "vi" : "en"];
   return MONTHLY_EXERCISE_CODES.map((exerciseCode) => ({
     exerciseCode,
-    focus: MONTHLY_EXERCISE_FOCI[exerciseCode][kind === "new" ? "lesson" : "review"],
+    focus: foci[exerciseCode][kind === "new" ? "lesson" : "review"],
     resourceIds: [...resourceIds]
   }));
 }

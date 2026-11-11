@@ -10,7 +10,7 @@ import {
   MonthlyFinalInputError, allocateMonthlyFinalTerms, assembleMonthlyFinalFromAi, buildManualMonthlyFinalDraft,
   buildMonthlyFinalGenerationInput, monthlyFinalInputErrors, rebalanceAnswerPositions, withEvaluation
 } from "../src/modules/assessment/monthly-final-builder.js";
-import { MONTHLY_FINAL_MANUAL_RULES, evaluateMonthlyFinal } from "../src/modules/assessment/monthly-final-checks.js";
+import { MONTHLY_FINAL_MANUAL_RULES, evaluateMonthlyFinal, monthlyFinalReadingItemProblems } from "../src/modules/assessment/monthly-final-checks.js";
 import { applyMonthlyFinalUpdate, monthlyFinalWindowOpen, type MonthlyFinalUpdateBody } from "../src/modules/assessment/monthly-final-routes.js";
 import { monthlyFinalAllocation } from "../src/modules/assessment/monthly-final-spec.js";
 import { fakeMonthlyFinalAiOutput, frameworkRef, monthlyFinalContract } from "./support/monthly-final-fixture.js";
@@ -190,6 +190,53 @@ describe("monthly final v2.0 assembly and GEN checks", () => {
     const b2 = generated("B2").blueprint;
     expect(b2.sections[0]!.title).toBe("Listening");
     expect(b2.sections[2]!.groups[0]!.tasks[0]).toMatchObject({ minWords: 100, maxWords: 120 });
+  });
+
+  it("checks the Writing and Speaking B prompts against the instruction language (GEN22, WP6)", () => {
+    const failed = (blueprint: StoredAssessmentDefinition, contract: ReturnType<typeof monthlyFinalContract>) => evaluateMonthlyFinal(blueprint, contract).checks.find((item) => item.code === "GEN22")!;
+    const b1 = generated("B1");
+    expect(failed(b1.blueprint, b1.contract).status).toBe("pass");
+    const viTask = mutate(b1.blueprint, (draft) => { draft.sections[2]!.groups[0]!.tasks[0]!.prompt = draft.sections[2]!.groups[0]!.tasks[0]!.prompt.replace("Write a short message to your manager, Anna.", "Viết tin nhắn ngắn cho quản lý của bạn, Anna."); });
+    expect(failed(viTask, b1.contract)).toMatchObject({ status: "fail", detail: expect.stringContaining("Writing: B1–C1") });
+    const viFacts = mutate(b1.blueprint, (draft) => { draft.sections[3]!.groups[1]!.tasks[0]!.prompt = draft.sections[3]!.groups[1]!.tasks[0]!.prompt.replace("The client cannot join at 3 p.m.", "Khách hàng không họp được lúc 3 giờ."); });
+    expect(failed(viFacts, b1.contract)).toMatchObject({ status: "fail", detail: expect.stringContaining("Speaking B: B1–C1") });
+    // A capitalised Vietnamese name or one loanword is not Vietnamese instruction text.
+    const name = mutate(b1.blueprint, (draft) => { draft.sections[2]!.groups[0]!.tasks[0]!.prompt = draft.sections[2]!.groups[0]!.tasks[0]!.prompt.replace("Anna.", "Nguyễn Hùng at the café."); });
+    expect(failed(name, b1.contract).status).toBe("pass");
+    const c1 = generated("C1");
+    expect(failed(c1.blueprint, c1.contract).status).toBe("pass");
+    for (const cefr of ["A1", "A2"] as const) {
+      const vi = generated(cefr);
+      expect(failed(vi.blueprint, vi.contract).status, cefr).toBe("pass");
+      const english = mutate(vi.blueprint, (draft) => { draft.sections[3]!.groups[1]!.tasks[0]!.prompt = "Leave a voice note for your manager.\n\nDữ kiện: The slides are ready. The client cannot join at 3 p.m.\n\nTin nhắn thoại cần:\n- Say the slides are ready.\n\nDùng đủ 3 từ sau: a, b, c."; });
+      const detail = failed(english, vi.contract);
+      expect(detail.status, cefr).toBe("fail");
+      expect(detail.detail).toContain("Speaking B: A1–A2: lời đề phải có tiếng Việt");
+      expect(detail.detail).toContain("Speaking B: A1–A2: yêu cầu phải có tiếng Việt");
+      expect(detail.detail).toContain("Speaking B: A1–A2: dữ kiện phải có tiếng Việt");
+    }
+    // The read-aloud text and the English sample answers are not inspected.
+    const a2 = generated("A2");
+    expect(a2.blueprint.monthlyExam!.grader.writingSample).not.toMatch(/[ạảấầ]/u);
+    expect(failed(a2.blueprint, a2.contract).status).toBe("pass");
+  });
+
+  it("requires a question and the target word in the Reading context sentence (GEN07 pre-check, WP10)", () => {
+    expect(monthlyFinalReadingItemProblems("Please check the report before noon. What should you do?", "Check the report", "report")).toEqual([]);
+    expect(monthlyFinalReadingItemProblems("Please send the ____ before noon.", "report", "report")).toEqual([]);
+    expect(monthlyFinalReadingItemProblems("Our slides are ready for the client meeting.", "Prepared", "ready")).toEqual(["chưa có câu hỏi hoặc chỗ trống"]);
+    expect(monthlyFinalReadingItemProblems("Our team found a new way to fix the login error. Which word is closest in meaning to 'solution'?", "answer", "solution"))
+      .toEqual([`"solution" không có trong câu ngữ cảnh (chỉ có ở câu hỏi/đáp án)`]);
+    const { blueprint, contract } = generated("B1");
+    const gen07 = (draft: StoredAssessmentDefinition) => evaluateMonthlyFinal(draft, contract).checks.find((item) => item.code === "GEN07")!;
+    expect(gen07(blueprint).status).toBe("needs_review");
+    const noQuestion = mutate(blueprint, (draft) => { const task = draft.sections[1]!.groups[0]!.tasks[0]!; task.prompt = task.prompt.replace(" What should you do?", ""); });
+    expect(gen07(noQuestion)).toMatchObject({ status: "fail", detail: expect.stringContaining("R01: chưa có câu hỏi") });
+    const wordInQuestionOnly = mutate(blueprint, (draft) => { const task = draft.sections[1]!.groups[0]!.tasks[0]!; const word = draft.monthlyExam!.mapping.find((row) => row.taskKey === task.key)!.word; task.prompt = `Please check the file before noon. What does '${word}' mean?`; });
+    expect(gen07(wordInQuestionOnly)).toMatchObject({ status: "fail", detail: expect.stringContaining("không có trong câu ngữ cảnh") });
+    // Confirming GEN07 by hand cannot override a failing pre-check.
+    const confirmed = mutate(noQuestion, (draft) => { draft.monthlyExam!.manualConfirmations = ["GEN07"]; });
+    expect(gen07(confirmed).status).toBe("fail");
   });
 
   it("balances answer letters without runs or an A-B-C cycle (GEN17)", () => {

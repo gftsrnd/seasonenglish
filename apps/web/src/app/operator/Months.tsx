@@ -12,7 +12,7 @@ import type { MonthlyResourceCheckpointView } from "../../api/operator.js";
 import { groupVocabularyForDisplay, isStandaloneWord } from "./resource-display.js";
 import { MonthlyFinalReview } from "./MonthlyFinalReview.js";
 import { MonthlyResourceProgress } from "./MonthlyResourceProgress.js";
-import { monthlyGenerationMessage, monthlyFinalGenerationMessage } from "./monthly-generation-message.js";
+import { isGatewayTimeout, monthlyGenerationMessage, monthlyFinalGenerationMessage } from "./monthly-generation-message.js";
 import { MonthlyResourceEditor } from "./MonthlyResourceEditor.js";
 import { MonthlyReviewPractice } from "./MonthlyReviewPractice.js";
 import { MonthlyIllustrationPanel } from "./MonthlyIllustrationPanel.js";
@@ -56,7 +56,8 @@ export interface OperatorMonthsActions {
   onPublishMonthlyFinal?(versionId: string): Promise<unknown> | void;
   onSynthesizeMonthlyFinalAudio?(input: { text: string; voice: string }): Promise<{ filename: string; mimeType: string; base64: string }>;
   onUploadMonthlyFinalAudio?(file: Blob, filename: string): Promise<{ url: string }>;
-  onComposeDay?(id: string, dayNumber: number): void;
+  /** `slot` is what the calendar cell shows, so old plans without a day allocation still open the right editor. */
+  onComposeDay?(id: string, dayNumber: number, slot?: { kind: "new" | "review"; date?: string | undefined; title?: string | undefined }): void;
   onViewDay?(id: string, dayNumber: number): void;
   onSaveDay(id: string, dayNumber: number, lesson: MonthlyDayInput): Promise<MonthlyQualityReport>;
   onGenerateDay(id: string, dayNumber: number): Promise<{ lesson: MonthlyDayInput; report: MonthlyQualityReport }>;
@@ -73,6 +74,8 @@ export interface OperatorMonthsProps { month: string; todayMonth: string; overvi
 
 const LEVELS: CefrLevel[] = ["A1", "A2", "B1", "B2", "C1"];
 const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+/** DOM id of a calendar day cell; unique per date (lesson numbers can repeat while a plan is rebuilt). */
+export function monthlyDayCellId(date: string): string { return `monthly-day-${date}`; }
 const emptyBrief = (): MonthlyBriefInput => ({ title: "", brief: "", context: "", communicationGoal: "" });
 function shiftMonth(month: string, offset: number) {
   const [year, index] = month.split("-").map(Number) as [number, number];
@@ -154,6 +157,10 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
   const plannedDays = framework?.resources?.roadmap?.days ?? [];
   const pendingDayNumbers = (plannedDays.length ? plannedDays.map(day => day.lessonNumber) : calendar.effectiveDays.map((_, index) => index + 1))
     .filter(number => !framework?.lessons.some(day => day.lessonNumber === number && day.status === "approved"));
+  // Calendar cells are identified by date: a lesson number can repeat across weeks while a plan is being rebuilt.
+  const pendingLesson = framework?.lessons.find((item) => item.lessonNumber === pendingDayNumbers[0]);
+  const pendingCellIndex = pendingDayNumbers.length ? calendarCells.findIndex((cell) => !cell.outside && (pendingLesson ? cell.date === pendingLesson.lessonDate : cell.lessonNumber === pendingDayNumbers[0])) : -1;
+  const pendingTargetId = pendingCellIndex >= 0 ? monthlyDayCellId(calendarCells[pendingCellIndex]!.key) : undefined;
   const lockedDayTitle = "Chốt tài nguyên tháng trước khi sinh bài";
   const proposedResourceCounts = toResourceCounts(recommendedMonthlyResourceCriteria(month, cefr));
   const resourceCounts = framework?.resources ? {
@@ -261,6 +268,11 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       await actions.onGenerateFramework(month, { cefr, vocabularyCount: resourceCounts.core, expandedVocabularyCount: resourceCounts.expanded, grammarTopicCount: resourceCounts.grammar, pronunciationSoundCount: resourceCounts.sounds });
       toast.show({ message: "Đã sinh tài nguyên tháng.", tone: "ok" });
     } catch (error) {
+      if (isGatewayTimeout(error)) {
+        // The server is still generating; the progress panel keeps polling and reloads the month when it completes.
+        toast.show({ message: "Máy chủ vẫn đang sinh tài nguyên tháng. Theo dõi tiến độ bên dưới; không cần bấm Sinh lại.", tone: "info" });
+        return;
+      }
       setResourceGenerationFailed(true);
       const noAi = error instanceof Error && ["AI_UNAVAILABLE", "AI_PROMPT_NOT_READY"].includes(error.message);
       showUnavailable(noAi ? "Chưa kết nối AI, bạn có thể soạn tay." : "AI không tạo được đủ tài nguyên. Hãy thử lại hoặc soạn tay.");
@@ -289,11 +301,11 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       setGenerating(undefined);
     }
   };
-  const openManualEditor = (dayNumber: number) => {
+  const openManualEditor = (dayNumber: number, slot?: { kind: "new" | "review"; date?: string | undefined; title?: string | undefined }) => {
     if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
     if (!framework || framework.status !== "approved") return showUnavailable("Hãy chốt tài nguyên tháng trước khi soạn bài học.");
     if (!actions.onComposeDay) return showUnavailable("Màn biên soạn bài tháng chưa sẵn sàng.");
-    actions.onComposeDay(framework.id, dayNumber);
+    actions.onComposeDay(framework.id, dayNumber, slot);
   };
   const suggestBrief = async () => {
     if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
@@ -440,15 +452,11 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
               ? <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void publishMonth()}>Công bố tháng</button>
               : <p className="small muted">Sẵn sàng công bố</p>)
             : briefLocked && resourcesApproved && pendingDayNumbers.length ? (
-              <a className="small monthly-publication-link" href={"#monthly-day-" + pendingDayNumbers[0]} onClick={(event) => {
-                if (!agenda) return;
-                const lesson = framework?.lessons.find((item) => item.lessonNumber === pendingDayNumbers[0]);
-                const cellIndex = calendarCells.findIndex((cell) => !cell.outside && (lesson ? cell.date === lesson.lessonDate : cell.lessonNumber === pendingDayNumbers[0]));
-                if (cellIndex < 0) return;
+              <a className="small monthly-publication-link" {...(pendingTargetId ? { href: "#" + pendingTargetId } : {})} onClick={(event) => {
+                if (!agenda || pendingCellIndex < 0 || !pendingTargetId) return;
                 event.preventDefault();
-                const targetId = "monthly-day-" + pendingDayNumbers[0];
-                setAgendaSelection({ month, week: Math.floor(cellIndex / 7) });
-                window.requestAnimationFrame(() => document.getElementById(targetId)?.scrollIntoView({ block: "center" }));
+                setAgendaSelection({ month, week: Math.floor(pendingCellIndex / 7) });
+                window.requestAnimationFrame(() => document.getElementById(pendingTargetId)?.scrollIntoView({ block: "center" }));
               }}><span>Còn {pendingDayNumbers.length} bài cần duyệt</span><ChevronRight size={16} aria-hidden="true" /></a>
             ) : <p className="small muted">{!briefLocked ? "Chưa chốt chủ đề" : !resourcesApproved ? "Chưa duyệt tài nguyên" : "Chưa đủ điều kiện công bố"}</p>}
         </section>
@@ -485,8 +493,8 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
             const draft = lesson?.status === "draft";
             const isReview = scheduledKind === "review";
             const newLessonOrdinal = isReview ? null : monthlyNewLessonOrdinal(scheduledLessonNumber, calendar);
-            const planDay = framework?.resources?.roadmap?.days.find(day => day.lessonNumber === scheduledLessonNumber); const dayLabel = isReview ? "bài ôn" : newLessonOrdinal ? `bài ${newLessonOrdinal}` : "bài học"; const dayText = formatMonthlyDayLabel({ kind: isReview ? "review" : "new", newLessonNumber: newLessonOrdinal ?? undefined, reviewWeekNumber: planDay?.reviewWeekNumber ?? overview.calendar?.find(day => day.date === cell.date)?.reviewWeekNumber, ...(planDay?.grammarPlan ? { grammarPlan: planDay.grammarPlan } : {}), ...(planDay?.pronunciationPlan ? { pronunciationPlan: planDay.pronunciationPlan } : {}) });
-            return <article id={`monthly-day-${scheduledLessonNumber}`} key={cell.date} role={agenda ? "listitem" : "gridcell"} aria-label={`${cell.dateLabel}, ${dayText}${holidayDescription}`} title={calendarDay?.holiday?.name} className={`monthly-day-cell ${kind} ${calendarDay?.holiday ? "holiday" : ""} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{agenda ? <span>{WEEKDAYS[index % 7]}</span> : null}{cell.dateLabel}</b><strong>{dayText}</strong><div className="monthly-day-actions" role="group" aria-label={`Thao tác ${dayLabel}`}>{lesson && (lesson.status === "approved" || draft) ? <><button type="button" aria-label={`Xem ${dayLabel}`} title={draft ? "Xem bản nháp để duyệt" : "Xem bài đã duyệt"} className="monthly-day-action monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}><Eye aria-hidden="true" /><span>Xem</span></button>{draft ? <button type="button" aria-label={`Soạn tay ${dayLabel}`} title="Sửa tay bản nháp" className="monthly-day-action monthly-manual-action" disabled={busy || !canEdit || !resourcesApproved} onClick={() => openManualEditor(scheduledLessonNumber)}><Pencil aria-hidden="true" /></button> : null}</> : <><button type="button" aria-label={isReview ? "Sinh" : `Sinh ${dayLabel}`} {...(resourcesApproved ? {} : { title: lockedDayTitle })} className="monthly-day-action monthly-generate-action" disabled={busy || !canEdit || !resourcesApproved} onClick={() => setGenerationConfirmation({ dayNumber: scheduledLessonNumber, kind: isReview ? "review" : "new" })}>{generating === scheduledLessonNumber ? <span className="spinner" role="status" aria-label="Đang sinh bài" /> : <><Sparkles aria-hidden="true" /><span>AI</span></>}</button><button type="button" aria-label={`Soạn tay ${dayLabel}`} title={resourcesApproved ? "Soạn tay" : lockedDayTitle} className="monthly-day-action monthly-manual-action" disabled={busy || !canEdit || !resourcesApproved} onClick={() => openManualEditor(scheduledLessonNumber)}><Pencil aria-hidden="true" /></button></>}</div></article>;
+            const planDay = framework?.resources?.roadmap?.days.find(day => day.lessonNumber === scheduledLessonNumber); const dayLabel = isReview ? "bài ôn" : newLessonOrdinal ? `bài ${newLessonOrdinal}` : "bài học"; const reviewWeekNumber = planDay?.reviewWeekNumber ?? overview.calendar?.find(day => day.date === cell.date)?.reviewWeekNumber; const composeTitle = isReview ? (reviewWeekNumber ? `Bài ôn tuần ${reviewWeekNumber}` : "Bài ôn tập") : newLessonOrdinal ? `Bài ${newLessonOrdinal}` : undefined; const dayText = formatMonthlyDayLabel({ kind: isReview ? "review" : "new", newLessonNumber: newLessonOrdinal ?? undefined, reviewWeekNumber, ...(planDay?.grammarPlan ? { grammarPlan: planDay.grammarPlan } : {}), ...(planDay?.pronunciationPlan ? { pronunciationPlan: planDay.pronunciationPlan } : {}) });
+            return <article id={monthlyDayCellId(cell.key)} key={cell.date} role={agenda ? "listitem" : "gridcell"} aria-label={`${cell.dateLabel}, ${dayText}${holidayDescription}`} title={calendarDay?.holiday?.name} className={`monthly-day-cell ${kind} ${calendarDay?.holiday ? "holiday" : ""} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{agenda ? <span>{WEEKDAYS[index % 7]}</span> : null}{cell.dateLabel}</b><strong>{dayText}</strong><div className="monthly-day-actions" role="group" aria-label={`Thao tác ${dayLabel}`}>{lesson && (lesson.status === "approved" || draft) ? <><button type="button" aria-label={`Xem ${dayLabel}`} title={draft ? "Xem bản nháp để duyệt" : "Xem bài đã duyệt"} className="monthly-day-action monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}><Eye aria-hidden="true" /><span>Xem</span></button>{draft ? <button type="button" aria-label={`Soạn tay ${dayLabel}`} title="Sửa tay bản nháp" className="monthly-day-action monthly-manual-action" disabled={busy || !canEdit || !resourcesApproved} onClick={() => openManualEditor(scheduledLessonNumber, { kind: isReview ? "review" : "new", date: cell.date, ...(composeTitle ? { title: composeTitle } : {}) })}><Pencil aria-hidden="true" /></button> : null}</> : <><button type="button" aria-label={isReview ? "Sinh" : `Sinh ${dayLabel}`} {...(resourcesApproved ? {} : { title: lockedDayTitle })} className="monthly-day-action monthly-generate-action" disabled={busy || !canEdit || !resourcesApproved} onClick={() => setGenerationConfirmation({ dayNumber: scheduledLessonNumber, kind: isReview ? "review" : "new" })}>{generating === scheduledLessonNumber ? <span className="spinner" role="status" aria-label="Đang sinh bài" /> : <><Sparkles aria-hidden="true" /><span>AI</span></>}</button><button type="button" aria-label={`Soạn tay ${dayLabel}`} title={resourcesApproved ? "Soạn tay" : lockedDayTitle} className="monthly-day-action monthly-manual-action" disabled={busy || !canEdit || !resourcesApproved} onClick={() => openManualEditor(scheduledLessonNumber, { kind: isReview ? "review" : "new", date: cell.date, ...(composeTitle ? { title: composeTitle } : {}) })}><Pencil aria-hidden="true" /></button></>}</div></article>;
           })}
         </div>
       </section>;

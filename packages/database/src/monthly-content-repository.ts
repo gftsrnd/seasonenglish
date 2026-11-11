@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { monthlyResourceApprovalIssues } from "./monthly-resource-approval-checks.js";
 import {
   carryoverReviewContract,
   buildMonthlyCalendar,
@@ -431,6 +432,34 @@ export class MonthlyContentRepository {
     return { id: frameworkId, cefr: saved.cefr, version: saved.version, status: "draft", scopeHash: saved.scopeHash };
   }
 
+  /**
+   * Pronunciation targets of the same level in the months before `beforeMonth`
+   * (at most `windowMonths`), from the latest non-retired framework of each
+   * month, draft or approved: the memory used to pick the next roadmap items.
+   */
+  async listPronunciationHistory(actorId: string, cefr: MonthFrameworkView["cefr"], beforeMonth: string, windowMonths = 12): Promise<Array<{ month: string; sounds: Array<{ ipa: string; label: string; catalogId?: string }> }>> {
+    const actor = await this.requireContentOperator(actorId);
+    const [year, monthNumber] = beforeMonth.split("-").map(Number) as [number, number];
+    const startIndex = year * 12 + (monthNumber - 1) - windowMonths;
+    const fromMonth = `${Math.floor(startIndex / 12)}-${String((startIndex % 12) + 1).padStart(2, "0")}`;
+    const result = await this.database.query<{ month: string; sounds: unknown }>(
+      `select distinct on (pm.month) pm.month, mf.curriculum_contract->'sounds' as sounds
+       from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+       where pm.organization_id = $1 and mf.cefr = $2 and pm.month >= $3 and pm.month < $4 and mf.status <> 'retired'
+       order by pm.month, mf.version desc`,
+      [actor.organization_id, cefr, fromMonth, beforeMonth]
+    );
+    return result.rows.map((row) => ({
+      month: row.month,
+      sounds: (Array.isArray(row.sounds) ? row.sounds : []).flatMap((sound: unknown) => {
+        if (!sound || typeof sound !== "object") return [];
+        const value = sound as { ipa?: unknown; label?: unknown; catalogId?: unknown };
+        if (typeof value.ipa !== "string") return [];
+        return [{ ipa: value.ipa, label: typeof value.label === "string" ? value.label : "", ...(typeof value.catalogId === "string" ? { catalogId: value.catalogId } : {}) }];
+      })
+    }));
+  }
+
   async getResourceGenerationCheckpoint(actorId: string, month: string, cefr: MonthFrameworkView["cefr"]): Promise<MonthlyResourceGenerationCheckpoint | null> {
     const actor = await this.requireContentOperator(actorId);
     await this.requireWritableMonth(actor.organization_id, month);
@@ -537,7 +566,18 @@ export class MonthlyContentRepository {
             [randomUUID(), frameworkId, day.lessonNumber, day.date, scopeHash]);
         }
       }
-      const planErrors = [...validateMonthlyCurriculum(contract), ...(contract.planSchemaVersion === 2 ? validateMonthlyGrammarObjectives(contract.grammarTopics) : [])];
+      // WP9: re-run the resource gates (example IPA, objective language, B1/C1
+      // core overlap) so data that skipped them cannot be approved.
+      const otherLevels = await client.query<{ cefr: CefrLevel; core_words: string[] | null }>(
+        `select other.cefr, array(select jsonb_array_elements(other.curriculum_contract->'coreTerms')->>'word') as core_words
+         from month_frameworks other join month_frameworks mf on mf.program_month_id = other.program_month_id
+         where mf.id = $1 and other.id <> $1 and other.status <> 'retired'`, [frameworkId]
+      );
+      const planErrors = [
+        ...validateMonthlyCurriculum(contract),
+        ...(contract.planSchemaVersion === 2 ? validateMonthlyGrammarObjectives(contract.grammarTopics) : []),
+        ...monthlyResourceApprovalIssues(contract, otherLevels.rows.map((level) => ({ cefr: level.cefr, coreWords: level.core_words ?? [] })))
+      ];
       if (planErrors.length) throw Object.assign(new Error("MONTHLY_RESOURCE_PLAN_INVALID"), { code: "MONTHLY_RESOURCE_PLAN_INVALID", issues: planErrors });
       const result = await client.query<{ id: string }>(
       `update month_frameworks mf

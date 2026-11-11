@@ -217,3 +217,43 @@
 .monthly-survey-history summary svg { flex-shrink: 0; }
 .monthly-survey-history details[open] summary svg { transform: rotate(180deg); }
 .monthly-survey-history .monthly-survey-answers { padding-bottom: 12px; }
+
+/* Month filter: field and buttons share one bottom line; a disabled
+   "Xem tháng" still reads as a button. */
+.monthly-survey-month-filter > .btn {
+  min-height: 44px;
+}
+
+.monthly-survey-month-filter > .btn:disabled {
+  opacity: .7;
+}
+
+/* Editor card rhythm: status line and action buttons use one gap. */
+.monthly-surveys-page .monthly-survey-stack > .row,
+.monthly-surveys-page .monthly-survey-stack > .monthly-survey-actions {
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .monthly-survey-month-filter {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+  }
+
+  .monthly-survey-month-filter .monthly-survey-field {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+
+  .monthly-survey-month-filter > .btn {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 8px;
+  }
+
+  .monthly-surveys-page .monthly-survey-stack > .row > .btn,
+  .monthly-surveys-page .monthly-survey-stack > .monthly-survey-actions > .btn {
+    flex: 1 1 100%;
+  }
+}

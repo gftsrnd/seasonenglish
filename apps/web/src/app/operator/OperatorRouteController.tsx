@@ -25,7 +25,7 @@ import type {
   SystemCapabilitiesView
 } from "@e4s/contracts";
 import { operatorApiClient as apiClient } from "../../api/operator.js";
-import { OperatorDashboard } from "./Dashboard.js";
+import { OperatorDashboard, OperatorProfileRows } from "./Dashboard.js";
 import { OperatorLevelFormDetail, OperatorLevelForms } from "./LevelForms.js";
 import { OperatorLessonSet, OperatorLessons } from "./Lessons.js";
 import { emptyLesson, LessonFormEditor } from "./LessonFormEditor.js";
@@ -217,7 +217,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
   const [resourceGenerationActive,setResourceGenerationActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> }; kind?: "new" | "review"; date?: string; vocabularyCount?: number }>();
+  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> }; kind?: "new" | "review"; date?: string; vocabularyCount?: number; defaultTitle?: string }>();
   const systemMonthInitialized = useRef(false);
   useEffect(() => { if (linkedMonth) setMonth(linkedMonth); }, [linkedMonth]);
   const pendingScrollRestore = useRef<number | null>(null);
@@ -289,15 +289,26 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     catch (reason) { if (propagateError) throw reason; const detail = message(reason); setError(detail); toast.show({ message: detail, tone: "danger" }); return undefined; }
     finally { setBusy(false); }
   };
-  const openDayEditor = (frameworkId: string, dayNumber: number) => {
+  const openDayEditor = (frameworkId: string, dayNumber: number, cellSlot?: { kind: "new" | "review"; date?: string | undefined; title?: string | undefined }) => {
     const framework = overview?.frameworks.find((item) => item.id === frameworkId);
-    const saved = framework?.lessons.find((item) => item.lessonNumber === dayNumber)?.content;
+    const savedLesson = framework?.lessons.find((item) => item.lessonNumber === dayNumber);
+    const saved = savedLesson?.content;
     // Approved plan: prefill the day's allocated resources so manual authoring starts from the plan.
     const seed = framework ? monthlyManualSeed(framework, dayNumber) : null;
-    const meta = seed ? { kind: seed.kind, date: seed.date, vocabularyCount: seed.vocabularyCount } : {};
-    setEditor(saved?.parts?.length ? { frameworkId, dayNumber, initial: saved, ...meta } : seed ? { frameworkId, dayNumber, initial: { title: seed.title, parts: seed.parts }, ...meta } : { frameworkId, dayNumber });
+    // A day without a plan allocation (old plans) takes its kind from the calendar cell the operator clicked,
+    // then the saved lesson row, then the overview calendar.
+    const slot = overview?.calendar?.find((item) => item.lessonNumber === dayNumber && (item.kind === "new" || item.kind === "review"));
+    const kind = seed?.kind ?? cellSlot?.kind ?? savedLesson?.kind ?? (slot?.kind === "review" ? "review" : slot?.kind === "new" ? "new" : undefined);
+    const date = seed?.date ?? savedLesson?.lessonDate ?? cellSlot?.date ?? slot?.date;
+    // Default title follows the calendar label ("Bài 7", "Bài ôn tuần 2"), not the slot number (lessonNumber 8 is "Bài 7" after a review day).
+    const calendarDay = overview?.calendar?.find((item) => (date ? item.date === date : item.lessonNumber === dayNumber) && (item.kind === "new" || item.kind === "review"));
+    const defaultTitle = cellSlot?.title ?? (kind === "review"
+      ? (calendarDay?.reviewWeekNumber ? `Bài ôn tuần ${calendarDay.reviewWeekNumber}` : "Bài ôn tập")
+      : calendarDay?.newLessonNumber ? `Bài ${calendarDay.newLessonNumber}` : undefined);
+    const meta = { ...(kind ? { kind } : {}), ...(date ? { date } : {}), ...(seed ? { vocabularyCount: seed.vocabularyCount } : {}), ...(defaultTitle ? { defaultTitle } : {}) };
+    setEditor(saved?.parts?.length ? { frameworkId, dayNumber, initial: saved, ...meta } : seed ? { frameworkId, dayNumber, initial: { title: seed.title, parts: seed.parts }, ...meta } : { frameworkId, dayNumber, ...meta });
   };
-  const dayEditor = !readOnly && editor ? <LessonFormEditor weekNumber={0} cefr={cefr} initial={editor.initial?.parts?.length ? { dayNumber: editor.dayNumber - 1, title: editor.initial.title || `Bài ${editor.dayNumber}`, durationMinutes: 10, parts: editor.initial.parts.map((part) => ({ code: (part.code || "instruction") as import("@e4s/contracts").LessonPartCode, title: part.title || part.code || "Nội dung", content: part.content || {} })) } : emptyLesson(editor.dayNumber - 1)} vocabularyCount={editor.vocabularyCount ?? 3} kind={editor.kind === "review" ? "review" : "lesson"} onSave={async (lesson) => {
+  const dayEditor = !readOnly && editor ? <LessonFormEditor weekNumber={0} cefr={cefr} initial={editor.initial?.parts?.length ? { dayNumber: editor.dayNumber - 1, title: editor.initial.title || editor.defaultTitle || `Bài ${editor.dayNumber}`, durationMinutes: 10, parts: editor.initial.parts.map((part) => ({ code: (part.code || "instruction") as import("@e4s/contracts").LessonPartCode, title: part.title || part.code || "Nội dung", content: part.content || {} })) } : { ...emptyLesson(editor.dayNumber - 1), ...(editor.defaultTitle ? { title: editor.defaultTitle } : {}) }} vocabularyCount={editor.vocabularyCount ?? 3} kind={editor.kind === "review" ? "review" : "lesson"} onSave={async (lesson) => {
     const result = await run(() => client.saveContentMonthDay(editor.frameworkId, editor.dayNumber, { title: lesson.title, parts: lesson.parts }), `Đã lưu bản nháp bài ${editor.dayNumber}.`);
     if (result) setEditor(undefined);
   }} headingOverride={`${editor.kind === "review" ? "Soạn bài ôn" : "Soạn bài"} ngày ${editor.date ? `${editor.date.slice(8, 10)}/${editor.date.slice(5, 7)}` : `#${editor.dayNumber}`} · ${cefr}`} onCancel={() => setEditor(undefined)} uploadMedia={client.uploadContentMedia} busy={busy} /> : null;
@@ -647,7 +658,9 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
       if (!cefr) return;
       void modal.prompt({ title: "Duyệt mức đầu vào", message: `Mức được duyệt: ${cefr}. Hãy ghi rõ lý do để lưu quyết định.`, label: "Lý do", confirmLabel: "Duyệt mức" })
         .then(reason => {
-          const trimmed = reason?.trim();
+          // null = Huỷ / Esc / backdrop: just close, no error toast.
+          if (reason === null) return;
+          const trimmed = reason.trim();
           if (!trimmed) {
             notify("Lý do duyệt mức là bắt buộc; quyết định chưa được lưu.", "danger");
             return;
@@ -744,7 +757,7 @@ function OperatorProfileEvidence({ detail }: { detail: AssessmentReviewLearnerVi
     ["Lo ngại / mong muốn", profile.concerns ?? ""]
   ].filter((row): row is [string, string] => Boolean(row[1]));
   return <>
-    <div className="card soft operator-profile-card">{profileRows.length ? <><div className="row between"><b>Hồ sơ cá nhân</b></div><div className="operator-profile-rows">{profileRows.map(([label, value]) => <div className="operator-profile-row" key={label}><span className="xs muted operator-profile-label">{label}</span><span className="small operator-profile-value">{value}</span></div>)}</div></> : <p className="small muted" style={{ margin: 0 }}>Chưa điền hồ sơ cá nhân.</p>}</div>
+    <div className="card soft operator-profile-card">{profileRows.length ? <><div className="row between"><b>Hồ sơ cá nhân</b></div><OperatorProfileRows rows={profileRows} labelClassName="xs muted" /></> : <p className="small muted" style={{ margin: 0 }}>Chưa điền hồ sơ cá nhân.</p>}</div>
     <div className="grid cols-2"><div className="card soft"><h4>Tài khoản</h4><p className="small"><b>Trạng thái:</b> {detail.learner.status}</p><p className="small"><b>Email:</b> {detail.learner.email ?? "—"}</p><p className="small"><b>Mức hiện tại:</b> {detail.learner.currentLevel ?? "—"}</p></div><div className="card soft"><h4>Mục tiêu tháng</h4><p className="small">{detail.monthlyGoal ?? "—"}</p></div></div>
     <h4>Lịch sử đổi mức</h4>
     {detail.levelHistory.length ? <div className="list">{detail.levelHistory.map((item, index) => <div className="item small" key={`${item.changedAt}-${index}`}><b>{item.from ?? "—"} → {item.to}</b> · {item.mode} · {item.reason}<div className="xs muted">{item.changedAt} · bằng chứng: {item.evidence || "—"}</div></div>)}</div> : <p className="small muted">Chưa có lịch sử đổi mức.</p>}
@@ -1024,10 +1037,10 @@ function LevelFormsRoute({ client, readOnly, embedded = false }: { client: Opera
         setDialog({ detail: updated, editing: true });
         await load();
       }}
-      onPublish={async () => {
+      onPublish={async (confirmation) => {
         const confirmed = await modal.confirm({ title: "Duyệt và phát hành đề lên mức?", message: "Phiên bản này sẽ dùng cho các lượt thi lên mức mới.", confirmLabel: "Duyệt & phát hành", cancelLabel: "Quay lại" });
         if (!confirmed) return;
-        await client.publishAssessmentLevelForm(dialog.detail.versionId);
+        await client.publishAssessmentLevelForm(dialog.detail.versionId, confirmation);
         setDialog(undefined);
         await load();
       }}
@@ -1369,6 +1382,14 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly =
     try {
       const next = await client.getContentReview();
       if (typeof client.listAssessmentAudio !== "function") {
+        setData(next);
+        return;
+      }
+      // The file routes are only registered when object storage is configured;
+      // without it the list endpoint 404s. Skip it so the review keeps its
+      // neutral "no audio" rendering instead of firing a failing request.
+      const systemCapabilities = typeof client.getSystemCapabilities === "function" ? await client.getSystemCapabilities().catch(() => null) : null;
+      if (systemCapabilities?.objectStorage === false) {
         setData(next);
         return;
       }

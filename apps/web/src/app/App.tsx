@@ -13,7 +13,7 @@ import { ModalProvider } from "./shared/ModalProvider.js";
 import { ToastProvider } from "./shared/design-system.js";
 import { useToast } from "./shared/design-system.js";
 import { ThemeProvider, useTheme } from "./shared/ThemeProvider.js";
-import { RoleRoutes } from "./RoleRoutes.js";
+import { preloadRoleRoute, RoleRoutes } from "./RoleRoutes.js";
 import { AvatarDialog } from "./learner/ProfileReward.js";
 import { LockedLearnerSupport } from "./shared/LockedLearnerSupport.js";
 import "./app-layout.css";
@@ -44,6 +44,14 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
     if (staffEntryPath) window.sessionStorage.setItem(staffEntryStorageKey, staffEntryPath);
   }, [staffEntryPath]);
   const [routeReady, setRouteReady] = useState(false);
+  // Only the real role router needs the code-split controllers; injected
+  // children (tests, previews) render their own content.
+  const preloadRoutes = useRef(!children);
+  useEffect(() => {
+    // Fetch the controller for the requested route alongside the session and
+    // theme bootstrap instead of after it.
+    if (preloadRoutes.current) preloadRoleRoute(null, window.location.pathname);
+  }, []);
   const [themeReadyFor, setThemeReadyFor] = useState<string | null>();
   const [bootstrapError, setBootstrapError] = useState(false);
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
@@ -77,6 +85,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
       // fallback (or an empty page) instead of its own home screen. The
       // resolver preserves routes that already belong to the active role.
       if (nextSession) applySessionEntryRoute(nextSession, staffEntryPath);
+      if (nextSession && preloadRoutes.current) preloadRoleRoute(nextSession.role, window.location.pathname);
       setSession(nextSession);
       setRouteReady(true);
     }).catch((caught: unknown) => {
@@ -126,7 +135,6 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
       if (document.visibilityState !== "hidden") void syncOrganisationExperience();
     };
     void syncOrganisationExperience();
-    const stream = !session || session.accountStatus === "disabled" || typeof EventSource === "undefined" ? undefined : new EventSource(apiUrl("/api/v1/organisation-experience/events"), { withCredentials: true });
     const applyPushedExperience = (event: Event) => {
       try {
         const experience = JSON.parse((event as MessageEvent<string>).data) as { theme: Parameters<typeof setTheme>[0]; backgroundMusic: OrganisationBackgroundMusicView };
@@ -138,18 +146,38 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
         // Ignore malformed events; focus and interval sync remain available.
       }
     };
-    stream?.addEventListener("experience", applyPushedExperience);
+    // The push stream is only held while the tab is visible. Each open stream
+    // pins one of the browser's ~6 HTTP/1.1 connections per origin, so
+    // background tabs would otherwise starve a newly opened tab's scripts and
+    // API calls. A tab that becomes visible again reconnects and re-syncs.
+    const streamAvailable = Boolean(session) && session?.accountStatus !== "disabled" && typeof EventSource !== "undefined";
+    let stream: EventSource | undefined;
+    const openStream = () => {
+      if (!streamAvailable || stream || document.visibilityState === "hidden") return;
+      stream = new EventSource(apiUrl("/api/v1/organisation-experience/events"), { withCredentials: true });
+      stream.addEventListener("experience", applyPushedExperience);
+    };
+    const closeStream = () => {
+      stream?.close();
+      stream = undefined;
+    };
+    const syncVisibility = () => {
+      if (document.visibilityState === "hidden") closeStream();
+      else openStream();
+      syncWhenActive();
+    };
+    openStream();
     const interval = window.setInterval(syncWhenActive, 30_000);
     window.addEventListener("focus", syncWhenActive);
     window.addEventListener("online", syncWhenActive);
-    document.addEventListener("visibilitychange", syncWhenActive);
+    document.addEventListener("visibilitychange", syncVisibility);
     return () => {
       live = false;
-      stream?.close();
+      closeStream();
       window.clearInterval(interval);
       window.removeEventListener("focus", syncWhenActive);
       window.removeEventListener("online", syncWhenActive);
-      document.removeEventListener("visibilitychange", syncWhenActive);
+      document.removeEventListener("visibilitychange", syncVisibility);
     };
   }, [session, setTheme]);
   useEffect(() => {
@@ -161,7 +189,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
   }, [session]);
   if (bootstrapError) return <AppStatus tone="error" onRetry={() => { setBootstrapError(false); setSession(undefined); setRouteReady(false); setBootstrapAttempt((attempt) => attempt + 1); }}>E4S hiện chưa thể kết nối. Kiểm tra mạng hoặc máy chủ rồi thử lại.</AppStatus>;
   if (session === undefined || !routeReady || themeReadyFor !== (session?.user.id ?? null)) return <AppStatus>Đang mở E4S…</AppStatus>;
-  if (!session) return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><EntryScreen client={sharedApiClient} staffEntryPath={staffEntryPath} separateStaffEntry={separateStaffEntry} onAuthenticated={(nextSession) => { applySessionEntryRoute(nextSession, staffEntryPath); announceAuthChange(); setRouteReady(true); setSession(nextSession); }} /></ExperienceProvider>;
+  if (!session) return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><EntryScreen client={sharedApiClient} staffEntryPath={staffEntryPath} separateStaffEntry={separateStaffEntry} onAuthenticated={(nextSession) => { applySessionEntryRoute(nextSession, staffEntryPath); if (preloadRoutes.current) preloadRoleRoute(nextSession.role, window.location.pathname); announceAuthChange(); setRouteReady(true); setSession(nextSession); }} /></ExperienceProvider>;
   if (!isSupportedSessionRole(session.role)) return <AppStatus>Không thể mở tài khoản này. Vui lòng đăng nhập lại.</AppStatus>;
   const clearSession = () => {
     announceAuthChange();
@@ -183,7 +211,6 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
   if (session.role === "learner" && session.accountStatus === "disabled") {
     return <main className="app-status-page"><section className="app-status-card" aria-labelledby="locked-account-title">
       <h1 id="locked-account-title">Tài khoản đang bị khóa</h1>
-      <p>Tài khoản của bạn đang tạm dừng. Bạn có thể gửi yêu cầu để Quản lý xem xét mở khóa.</p>
       <LockedLearnerSupport key={session.user.id} onLogout={() => void logout()} />
     </section></main>;
   }
@@ -202,7 +229,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
   const avatar = session.role === "learner" ? profileRecord?.profile.avatar : session.user.avatar;
   const avatarReady = session.role !== "learner" || Boolean(profileRecord);
   const learnerProfileComplete = session.role !== "learner" || profileRecord?.completed === true;
-  return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><BrowserRouter><RouteAudioStopper /><ModalProvider><AppShell session={session} avatar={avatar} onboardingComplete={learnerProfileComplete} learnerHomeOnly={session.role === "learner" && learnerCefr === undefined} {...(learnerCefr ? { learnerCefr } : {})} onAvatarClick={avatarReady ? () => setAvatarOpen(true) : undefined} onLogout={logout}>{sandboxMode ? <div role="status" data-sandbox-mode="true" className="banner info">Chế độ thử (sandbox): dữ liệu hồ sơ chỉ lưu trong trình duyệt này.</div> : null}{children ? children(session) : <RoleRoutes session={session} onSessionRevoked={clearSession} />}</AppShell>{avatarOpen && avatarReady ? <AvatarDialog initial={avatar} onClose={() => setAvatarOpen(false)} onSave={(nextAvatar) => void saveAvatar(nextAvatar)} /> : null}</ModalProvider></BrowserRouter></ExperienceProvider>;
+  return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><BrowserRouter><RouteAudioStopper /><ModalProvider><AppShell session={session} avatar={avatar} onboardingComplete={learnerProfileComplete} learnerHomeOnly={session.role === "learner" && learnerCefr === undefined} {...(learnerCefr ? { learnerCefr } : {})} onAvatarClick={avatarReady ? () => setAvatarOpen(true) : undefined} onLogout={logout}>{sandboxMode ? <div role="status" data-sandbox-mode="true" className="banner info">Chế độ thử (sandbox): dữ liệu hồ sơ chỉ lưu trong trình duyệt này.</div> : null}{children ? children(session) : <RoleRoutes session={session} onSessionRevoked={clearSession} />}</AppShell>{avatarOpen && avatarReady ? <AvatarDialog initial={avatar} name={session.user.displayName} onClose={() => setAvatarOpen(false)} onSave={(nextAvatar) => void saveAvatar(nextAvatar)} /> : null}</ModalProvider></BrowserRouter></ExperienceProvider>;
 }
 
 export function RouteAudioStopper() {

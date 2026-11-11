@@ -6,6 +6,14 @@ import { AudioControls, SeasonDecoration, SeasonMark } from "./AppShell.js";
 
 type Mode = "login" | "register" | "forgotEmail" | "forgotOtp" | "forgotPin" | "forgotStaff";
 type FieldErrors = Partial<Record<"displayName" | "email" | "credential" | "confirmation" | "code", string>>;
+/** Same minimum interval as the API (`PIN_RESET_RESEND_INTERVAL_SECONDS`). */
+const PIN_RESET_RESEND_SECONDS = 60;
+const PIN_RESET_SENT_NOTICE = "Nếu email thuộc tài khoản người học, mã xác minh đã được gửi.";
+
+function retryAfterSeconds(details: unknown): number {
+  const value = details && typeof details === "object" && "retryAfterSeconds" in details ? Number(details.retryAfterSeconds) : NaN;
+  return Number.isFinite(value) && value > 0 ? Math.min(PIN_RESET_RESEND_SECONDS, Math.ceil(value)) : PIN_RESET_RESEND_SECONDS;
+}
 
 function entryMode(staffEntryPath?: string | null): Mode {
   const path = window.location.pathname.replace(/\/+$/, "");
@@ -32,13 +40,27 @@ export function EntryScreen({ client, onAuthenticated, staffEntryPath, separateS
   const [errors, setErrors] = useState<FieldErrors>({});
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resendUntil, setResendUntil] = useState(0);
+  const [clock, setClock] = useState(() => Date.now());
   const emailInput = useRef<HTMLInputElement>(null);
   const entryRevision = useRef(0);
   const resetForm = useCallback((next: Mode) => {
     entryRevision.current++;
     setMode(next); setDisplayName(""); setEmail(""); setCredential(""); setConfirmation(""); setCode("");
-    setChallengeId(""); setResetToken(""); setErrors({}); setNotice(""); setShowPassword(false); setCapsLockOn(false); setBusy(false);
+    setChallengeId(""); setResetToken(""); setErrors({}); setNotice(""); setShowPassword(false); setCapsLockOn(false); setBusy(false); setResendUntil(0);
   }, []);
+  // `clock` only triggers the once-a-second re-render; the countdown reads the current time.
+  const resendSeconds = mode === "forgotOtp" && resendUntil > clock ? Math.max(0, Math.ceil((resendUntil - Date.now()) / 1_000)) : 0;
+  const cooling = resendSeconds > 0;
+  useEffect(() => {
+    if (!cooling) return;
+    const timer = window.setInterval(() => setClock(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [cooling, resendUntil]);
+  const startResendCooldown = (seconds = PIN_RESET_RESEND_SECONDS) => {
+    const now = Date.now();
+    setClock(now); setResendUntil(now + seconds * 1_000);
+  };
   useEffect(() => {
     const onPopState = () => {
       setAudience(initialAudience);
@@ -129,8 +151,8 @@ export function EntryScreen({ client, onAuthenticated, staffEntryPath, separateS
       } else if (mode === "forgotEmail") {
         const challenge = await client.startLearnerPinReset({ email });
         if (revision !== entryRevision.current) return;
-        setChallengeId(challenge.challengeId); setMode("forgotOtp"); setCode("");
-        setNotice("Nếu email thuộc tài khoản người học, mã xác minh đã được gửi.");
+        setChallengeId(challenge.challengeId); setMode("forgotOtp"); setCode(""); startResendCooldown();
+        setNotice(PIN_RESET_SENT_NOTICE);
       } else if (mode === "forgotOtp") {
         const verified = await client.verifyLearnerPinReset({ challengeId, code });
         if (revision !== entryRevision.current) return;
@@ -150,7 +172,32 @@ export function EntryScreen({ client, onAuthenticated, staffEntryPath, separateS
       const codeValue = caught && typeof caught === "object" && "code" in caught && typeof caught.code === "string"
         ? caught.code : caught instanceof Error ? caught.message : "";
       const details = caught && typeof caught === "object" && "details" in caught ? caught.details : undefined;
+      if (codeValue === "PIN_RESET_RESEND_TOO_SOON") startResendCooldown(retryAfterSeconds(details));
       setErrors(errorFor(mode, audience, codeValue, details, showRoleTabs));
+    } finally {
+      if (revision === entryRevision.current) setBusy(false);
+    }
+  };
+
+  // "Gửi lại mã": requests a new code for the same email; the server enforces the same 60 s interval per email.
+  const resendCode = async () => {
+    if (busy || resendSeconds > 0 || mode !== "forgotOtp") return;
+    const revision = entryRevision.current;
+    setErrors({}); setNotice(""); setBusy(true);
+    try {
+      const challenge = await client.startLearnerPinReset({ email });
+      if (revision !== entryRevision.current) return;
+      setChallengeId(challenge.challengeId); setCode(""); startResendCooldown();
+      setNotice(PIN_RESET_SENT_NOTICE);
+    } catch (caught) {
+      if (revision !== entryRevision.current) return;
+      const codeValue = caught && typeof caught === "object" && "code" in caught && typeof caught.code === "string"
+        ? caught.code : caught instanceof Error ? caught.message : "";
+      const details = caught && typeof caught === "object" && "details" in caught ? caught.details : undefined;
+      if (codeValue === "PIN_RESET_RESEND_TOO_SOON") startResendCooldown(retryAfterSeconds(details));
+      // The email field is hidden on this screen, so the message is shown under the code field.
+      const failure = errorFor("forgotEmail", audience, codeValue, details, showRoleTabs);
+      setErrors({ code: failure.email ?? failure.credential ?? failure.code ?? "Không thể xử lý yêu cầu. Vui lòng thử lại." });
     } finally {
       if (revision === entryRevision.current) setBusy(false);
     }
@@ -196,6 +243,7 @@ export function EntryScreen({ client, onAuthenticated, staffEntryPath, separateS
             <div className="app-entry-secondary-actions">
               {mode === "login" && audience === "learner" ? <><button className="app-entry-link" type="button" onClick={() => goTo("register")}>Tạo tài khoản người học</button><span>·</span><button className="app-entry-link" type="button" onClick={() => goTo("forgotEmail")}>Quên mã PIN?</button></> : null}
               {mode === "login" && audience === "staff" ? <button className="app-entry-link" type="button" onClick={() => goTo("forgotStaff")}>Quên mật khẩu?</button> : null}
+              {mode === "forgotOtp" ? <><button className="app-entry-link" type="button" disabled={busy || resendSeconds > 0} onClick={() => void resendCode()}>{resendSeconds > 0 ? `Gửi lại mã (${resendSeconds}s)` : "Gửi lại mã"}</button><span>·</span></> : null}
               {mode !== "login" ? <button className="app-entry-link" type="button" onClick={() => goTo("login")}>Quay lại đăng nhập</button> : null}
             </div>
             {mode === "login" ? <details className="app-shared-device-note"><summary>Đăng nhập trên thiết bị dùng chung?</summary><p className="small muted" role="note">Không lưu đăng nhập. Hãy đăng xuất sau khi học.</p></details> : null}
@@ -252,6 +300,7 @@ function errorFor(mode: Mode, audience: "learner" | "staff", code: string, detai
   }
   if (code === "LEARNER_REGISTRATION_EMAIL_EXISTS" || code === "LEARNER_REGISTRATION_EMAIL_DELETED") return { email: "Email này không khả dụng. Hãy dùng email khác." };
   if (code === "EMAIL_DELIVERY_FAILED" || code === "EMAIL_DELIVERY_UNAVAILABLE") return { email: "Chưa thể gửi mã xác minh. Vui lòng thử lại." };
+  if (code === "PIN_RESET_RESEND_TOO_SOON") return { email: `Mã vừa được gửi. Vui lòng đợi ${retryAfterSeconds(details)} giây rồi gửi lại mã.` };
   if (code === "INVALID_OR_EXPIRED_CODE") return { code: "Mã không đúng hoặc đã hết hạn." };
   if (code === "WRONG_LOGIN_PATH" && showRoleTabs) return audience === "learner"
     ? { email: "Không thể đăng nhập. Vui lòng kiểm tra email, mã PIN và vai trò. Tài khoản nhân sự cần đăng nhập ở tab Nhân sự." }

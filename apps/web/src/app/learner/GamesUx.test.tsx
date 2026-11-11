@@ -192,6 +192,29 @@ describe("learner game visual and interaction regressions", () => {
     await waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 0));
   });
 
+  it("derives the Typing race tutorial word count and max score from the actual word set", () => {
+    const typing = descriptor("typing", []);
+    typing.name = "Typing race";
+    typing.goal = "Gõ đúng 10 từ thật nhanh, giữ chuỗi combo càng dài càng nhiều điểm.";
+    typing.scoring = "10 điểm × combo cho mỗi từ đúng; tối đa 10 từ.";
+    const eightWords: GameWordSetView = { ...wordSet, words: Array.from({ length: 8 }, (_, index) => ({ id: `w-${index}`, english: `word${"abcdefgh"[index]}`, vietnamese: `từ ${index}`, definition: "a word", partOfSpeech: "noun" })) };
+    render(<LearnerGame descriptor={typing} wordSet={eightWords} result={null} actions={actions} />);
+
+    expect(screen.getByText("Gõ đúng 8 từ thật nhanh, giữ chuỗi combo càng dài càng nhiều điểm.")).toBeInTheDocument();
+    expect(screen.getByText("10 điểm × combo cho mỗi từ đúng; 8 từ, tối đa 300 điểm.")).toBeInTheDocument();
+    expect(screen.queryByText(/10 từ/)).not.toBeInTheDocument();
+  });
+
+  it("derives Scramble and Season catch round counts from the word set", () => {
+    const scramble = descriptor("scramble", []);
+    const { unmount } = render(<LearnerGame descriptor={scramble} wordSet={wordSet} result={null} actions={actions} />);
+    expect(screen.getByText("Xếp đúng càng nhiều từ càng tốt (3 từ).")).toBeInTheDocument();
+    unmount();
+    render(<LearnerGame descriptor={descriptor("eggs", [])} wordSet={wordSet} result={null} actions={actions} />);
+    expect(screen.getByText("Hứng đúng vật phẩm khớp với gợi ý, 3 lượt.")).toBeInTheDocument();
+    expect(screen.getByText("+1 điểm mỗi vật phẩm hứng đúng, tối đa 3.")).toBeInTheDocument();
+  });
+
   it("resets the learner main scroll container when a game starts", async () => {
     const crossword = descriptor("crossword", []);
     render(<main><LearnerGame descriptor={crossword} wordSet={wordSet} result={null} actions={actions} /></main>);

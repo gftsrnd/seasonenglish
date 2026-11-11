@@ -61,7 +61,7 @@ export interface OperatorApiClient {
   createManualAssessmentLevelForm(targetLevel: Exclude<CefrLevel, "A1">): Promise<AssessmentLevelFormView>;
   updateAssessmentLevelForm(versionId: string, input: AssessmentLevelFormUpdateInput): Promise<AssessmentLevelFormDetailView>;
   copyAssessmentLevelFormToDraft(versionId: string): Promise<AssessmentLevelFormDetailView>;
-  publishAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormView>;
+  publishAssessmentLevelForm(versionId: string, confirmation?: { answersReviewed: true }): Promise<AssessmentLevelFormView>;
   deleteAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormDeleteView>;
   getContentWeeks(): Promise<ContentWeekFrameView>;
   saveContentWeeks(weeks: ContentWeekInput[]): Promise<ContentWeekFrameView>;
@@ -182,7 +182,7 @@ export const operatorApiClient: OperatorApiClient = {
   createManualAssessmentLevelForm: (targetLevel) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(targetLevel)}/manual-draft`, { method: "POST", body: "{}" }),
   updateAssessmentLevelForm: (versionId, input) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}`, { method: "PUT", body: JSON.stringify(input) }),
   copyAssessmentLevelFormToDraft: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}/draft`, { method: "POST", body: "{}" }),
-  publishAssessmentLevelForm: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}/publication`, { method: "POST", body: "{}" }),
+  publishAssessmentLevelForm: (versionId, confirmation) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}/publication`, { method: "POST", body: JSON.stringify(confirmation ?? {}) }),
   deleteAssessmentLevelForm: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}`, { method: "DELETE" }),
   getContentWeeks: () => request("/api/v1/content/weeks"),
   saveContentWeeks: (weeks) => request("/api/v1/content/weeks", { method: "PUT", body: JSON.stringify({ weeks }) }),

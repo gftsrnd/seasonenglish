@@ -10,11 +10,14 @@ import {
 } from "@e4s/ai";
 
 const A1_WRITING_HINT = 'Bắt đầu bằng câu gợi ý: "Here is a short update."';
+/** Smallest natural read-aloud sentence that still holds two taught words per pool. */
+const MIN_READ_ALOUD_SENTENCE_WORDS = 6;
 const GRAMMAR_REVIEW_PROMPT = [
   "For each item, compare the actual English quote with its supplied grammar formula and focus.",
   "Give one short reason naming the construction in the quote or the error. Set matches to true if the quote is grammatical and demonstrates the supplied form. If sample is present, its other sentences must also be grammatical.",
   "When facts are supplied, check the entire sample against the key facts and required actions. Reject contradictions or an omitted stated deadline, schedule change or major required action. Allow paraphrasing, short natural context and combining ideas.",
-  "Judge the actual construction. The key only identifies the item, and the usage examples illustrate the form. Do not infer another requirement from the key or demand the exact example words."
+  "Judge the actual construction. The key only identifies the item, and the usage examples illustrate the form. Do not infer another requirement from the key or demand the exact example words.",
+  "Set matches to false only for a concrete grammatical error, a wrong form or a missed key fact that you name in the reason. Style, clarity, word choice or a possible better phrasing is not an error. The reason and matches must agree: if your reason says the quote is grammatical and demonstrates the form and the sample has no named error or missed fact, matches is true."
 ].join("\n");
 
 function applyWritingRepair(writing: MonthlyFinalProductiveOutput["writing"], output: unknown) {
@@ -22,8 +25,32 @@ function applyWritingRepair(writing: MonthlyFinalProductiveOutput["writing"], ou
   return exercise.success ? exercise.data : {...writing, ...monthlyFinalWritingSampleRepairSchema.parse(output)};
 }
 
+/**
+ * The productive slice re-reviews evidence after each repair, including quotes
+ * that did not change (the untouched section, unchanged secondary quotes, block
+ * candidates later chosen as evidence). A quote already accepted for the same
+ * grammar, sample and facts is not sent to the reviewer again within one
+ * generation; rejected or new items are always reviewed.
+ */
+export function withAcceptedGrammarReviewMemo(runner:AiTaskRunner):AiTaskRunner{
+  const accepted=new Map<string,AiRunResult>();
+  return {
+    async runTask(taskId,input,options){
+      if(taskId!=="monthly_final_grammar_evidence_review")return runner.runTask(taskId,input,options);
+      const key=JSON.stringify([input,options?.systemPrompt??""]);
+      const known=accepted.get(key);
+      if(known)return known;
+      const result=await runner.runTask(taskId,input,options);
+      const parsed=monthlyFinalGrammarReviewOutputSchema.safeParse(result.output);
+      if(parsed.success&&parsed.data.items.length&&parsed.data.items.every(item=>item.matches))accepted.set(key,result);
+      return result;
+    }
+  };
+}
+
 /** Repair failed sections without rewriting accepted instructions, facts, grammar or other sections. */
-export async function generateMonthlyFinalProductive(runner:AiTaskRunner,input:MonthlyFinalGenerationInput,prompt:string):Promise<AiRunResult>{
+export async function generateMonthlyFinalProductive(baseRunner:AiTaskRunner,input:MonthlyFinalGenerationInput,prompt:string):Promise<AiRunResult>{
+  const runner=withAcceptedGrammarReviewMemo(baseRunner);
   const result=await generateProductiveCandidate(runner,input,prompt);
   const candidate=monthlyFinalProductiveOutputSchema.parse(result.output);
   const review=await reviewGrammarEvidence(runner,input,candidate);
@@ -139,21 +166,27 @@ async function repairReadAloud(runner:AiTaskRunner,input:MonthlyFinalGenerationI
     // The spec limits the whole passage, not equal halves. Allow small local
     // imbalance and rebalance only if the actual composed text exceeds its cap.
     const maxWords=limit??(input.cefr==="A1"?profile.maxWords:goal+2);
+    // goal+2 is the requested size. A first sentence is only rejected when it
+    // cannot fit the whole passage next to minimal sentences for the other
+    // groups; composeSentences rebalances or shortens it against the real cap.
+    const acceptedWords=limit??(input.cefr==="A1"?profile.maxWords:Math.max(maxWords,profile.maxWords-MIN_READ_ALOUD_SENTENCE_WORDS*(groups.length-1)));
     const selectedPools=groups[index]!.map(poolIndex=>repairInput.pools[poolIndex]!).map(pool=>({...pool,examples:pool.examples.filter((example,index,all)=>all.findIndex(other=>other.word.toLocaleLowerCase("en-US")===example.word.toLocaleLowerCase("en-US"))===index)}));
     const targets=selectedPools.map(pool=>`${pool.code}: ${pool.examples.map(example=>example.word).join(", ")}`).join("\n");
-    const sentenceInput={...repairInput,maxWords,words:[],pools:selectedPools,previousText};
+    const sentenceInput={...repairInput,maxWords:acceptedWords,words:[],pools:selectedPools,previousText};
     const shortening = previousText
       ? `Write a new sentence of at most ${maxWords} words. Use one subject and one verb, with a short object or time phrase. Drop extra subjects, joined clauses and repeated context. Choose new pool words if needed; do not preserve the old wording.`
       : "";
     const style=input.cefr==="A1"
       ? "Use one simple workplace clause about an ordinary team action. Use exactly spelled words without plural or verb endings. An imperative or modal lets you use a base verb. Use the chosen words as the subject, verb, object or modifier."
       : "";
-    const systemPrompt=`Write THREE different complete, natural English sentences for a ${input.cefr} workplace read-aloud, as three alternatives in candidates. EVERY alternative must use TWO DIFFERENT exact taught words from EACH of these ${selectedPools.length} pools:\n${targets}\n${style}\nChoose the words that combine most naturally and compactly. Each alternative must independently cover every supplied pool. Aim for ${limit??goal} words per sentence, at most ${maxWords}. Use the exact forms. Do not split a sentence into tokens/fragments, write a word list, or continue one candidate in another.\n${shortening}`;
+    const systemPrompt=`Write THREE different complete, natural English sentences for a ${input.cefr} workplace read-aloud, as three alternatives in candidates. EVERY alternative must use TWO DIFFERENT exact taught words from EACH of these ${selectedPools.length} pools:\n${targets}\n${style}\nChoose the words that combine most naturally and compactly. Each alternative must independently cover every supplied pool. Aim for ${limit??goal} words per sentence, at most ${maxWords}; count the words before returning. Use the exact forms, letter for letter: no added plural, -s, -ed or -ing endings, so a pool word must appear exactly as listed. Do not split a sentence into tokens/fragments, write a word list, or continue one candidate in another.\n${shortening}`;
     let result: AiRunResult;
     try {
       result=await runner.runTask("monthly_final_read_aloud_repair",sentenceInput,{systemPrompt,maxOutputTokens:1200,temperature:0.2,maxAttempts:2});
     } catch (error) {
-      if (input.cefr !== "A1" || !error || typeof error !== "object" || !("code" in error) || error.code !== "AI_OUTPUT_INVALID") throw error;
+      // Every level reuses the targeted rewrite of the best prior sentence
+      // (keep its matched pool words, add the missing ones) before failing.
+      if (!error || typeof error !== "object" || !("code" in error) || error.code !== "AI_OUTPUT_INVALID") throw error;
       const raw = (error as {details?: {invalidOutput?: string}}).details?.invalidOutput;
       const prior = monthlyFinalReadAloudOutputSchema.safeParse(raw);
       if (!prior.success) throw error;
@@ -368,8 +401,11 @@ async function repairSample(runner:AiTaskRunner,input:MonthlyFinalGenerationInpu
     if(!chosen)throw Object.assign(new Error("No valid whole-answer writing combination"),{code:"AI_OUTPUT_INVALID",issues:[{path:"writing.sample",message:`No combination of the complete candidate sentences fits ${repairInput.profile.minWords}–${repairInput.profile.maxWords} words with the required opening and all vocabulary.`}],details:{invalidOutput:JSON.stringify({opening:planned.opening,banks:banks.map(bank=>({key:bank.key,candidates:bank.candidates}))})}});
     const output = composeWritingBlocks(chosen,planned);
     if (input.cefr === "A1") {
-      const {writing,review} = await reviewWriting(output);
-      if (!review.length) return {output:writing,metadata:banks[0]!.metadata};
+      // Keep the learner notes written for THIS sample even when the review
+      // still has findings: merging the new sample with the old notes lets the
+      // final facts review reject the sample for facts it was never written for.
+      const {writing} = await reviewWriting(output);
+      return {output:writing,metadata:banks[0]!.metadata};
     }
     return {output,metadata:banks[0]!.metadata};
   }

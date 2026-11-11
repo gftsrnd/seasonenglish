@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameAnswerInput, GameEvidenceEventInput, GameWordSetView } from "@e4s/contracts";
 import { Heart, ShoppingBasket } from "lucide-react";
-import { choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
+import { CATCH_ROUND_SIZE, choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
 import { currentSeasonVisual, DinoGameOverArt, SeasonCatchItem, SeasonHero } from "./season-art.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import { GameFeedback } from "./GameFeedback.js";
@@ -12,7 +12,7 @@ const speedByLevel: Record<GameWordSetView["cefr"], number> = { A1: 1, A2: 1.5, 
 
 export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0 }: { words: GameWord[]; cefr: GameWordSetView["cefr"]; onFinish: FinishGame; attemptSeed?: number }) {
   const season = currentSeasonVisual();
-  const words = useMemo(() => prepareGameAttempt(source, attemptSeed).slice(0, 10), [attemptSeed, source]);
+  const words = useMemo(() => prepareGameAttempt(source, attemptSeed).slice(0, CATCH_ROUND_SIZE), [attemptSeed, source]);
   const [round, setRound] = useState(0);
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);

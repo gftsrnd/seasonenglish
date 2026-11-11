@@ -318,7 +318,7 @@ details.monthly-resource-editor-section[open]>summary{margin-bottom:8px}
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: none;
   grid-auto-rows: auto;
-  gap: 6px;
+  gap: 12px;
   border: 0;
 }
 .operator-months-page .monthly-agenda .monthly-day-cell {
@@ -447,3 +447,26 @@ details.monthly-resource-editor-section[open]>summary{margin-bottom:8px}
     font-size: .75rem;
   }
 }
+
+/* Resource editor header: the title block keeps its width; on phones the
+   actions (and the guide button) drop to their own row instead of squeezing
+   the title into a one-letter column. */
+.monthly-resource-editor-header>div:first-child{flex:1 1 auto;min-width:0}
+.monthly-resource-editor-header>.app-guide-popup-trigger{flex:none}
+@media(max-width:560px){.monthly-resource-editor-header{flex-wrap:wrap;align-items:center;gap:10px}.monthly-resource-editor-header>div:first-child{flex:1 1 100%}.monthly-resource-editor-actions{flex:1 1 0;min-width:0}.monthly-resource-editor-header>.app-guide-popup-trigger{margin-left:auto}}
+/* Phones: every field row of the resource editor is one column; nothing wider than the dialog. */
+.monthly-resource-editor-row>*,.monthly-resource-editor-group>*,.monthly-resource-editor-step>*,.monthly-resource-editor-core>*{min-width:0}
+@media(max-width:480px){.monthly-resource-editor{padding:0 12px 16px}.monthly-resource-editor-header{margin:0 -12px 12px;padding:12px}.monthly-resource-editor-row.core,.monthly-resource-editor-row.support,.monthly-resource-editor-row.grammar,.monthly-resource-editor-row.sound{grid-template-columns:minmax(0,1fr)}.monthly-resource-editor-row.example{grid-template-columns:minmax(0,1fr) 32px}.monthly-resource-editor-row.example>:nth-child(2){grid-column:1}.monthly-resource-editor-row.support>.monthly-resource-editor-icon{justify-self:end}.monthly-resource-editor-examples{grid-template-columns:minmax(0,1fr)}.monthly-resource-editor-group{padding:10px}}
+/* Phones/tablets: the sound row kept a fixed 160px IPA column, so the "Tên mục tiêu" field ran past the editor
+   (cut at 320, 6px over at 390). Let every editor row shrink its fields, and stack the sound row on narrow phones. */
+.monthly-resource-editor-section{grid-template-columns:minmax(0,1fr);min-width:0}
+details.monthly-resource-editor-section>summary{flex-wrap:wrap;min-width:0}
+.monthly-resource-editor-row>*,.monthly-resource-editor-group,.monthly-resource-editor-group>*,.monthly-resource-editor-examples>*{min-width:0}
+.monthly-resource-editor-row :is(input,select,textarea){min-width:0;max-width:100%}
+/* <details> ignores its own grid gap for the content after <summary> in Chrome, so the groups (IPA targets, grammar
+   points, word rows) touched each other. Space the blocks explicitly. */
+details.monthly-resource-editor-section>:not(summary)+:not(summary){margin-top:10px}
+.monthly-resource-editor-actions{flex-wrap:wrap;min-width:0}
+.monthly-resource-editor-actions>:is(button,a){flex:0 0 auto;white-space:nowrap}
+@media(max-width:760px){.monthly-resource-editor-row.sound{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+@media(max-width:420px){.monthly-resource-editor-row.sound{grid-template-columns:minmax(0,1fr)}}

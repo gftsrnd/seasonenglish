@@ -1,5 +1,5 @@
-import type { MonthlyCurriculumContract } from "@e4s/domain";
-import { validateLessonPublication } from "@e4s/domain";
+import type { MonthlyCurriculumContract, MonthlyDaySpec } from "@e4s/domain";
+import { answerIsUniqueLongestOption, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
 import type { LessonPart } from "@e4s/contracts";
 import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
 
@@ -48,13 +48,17 @@ export function evaluateMonthlyLessonQuality(
     if (!parts.has(code)) severe.push(finding("MONTHLY_COMPONENT_MISSING", `Missing required ${code} component`, dayNumber, code));
   }
 
+  const expected = monthlyLockedPlanExpectations(contract, day);
+  const lockedPlanValues = monthlyLockedPlanValues(expected);
   const contentValidation = validateLessonPublication([{
     dayNumber,
     title: lesson.title,
     durationMinutes: 15,
     parts: lesson.parts as unknown as LessonPart[]
-  }], undefined, contract.cefr);
+  }], undefined, contract.cefr, { ...(lockedPlanValues ? { lockedPlanValues } : {}), requireVietnameseInstructions: true });
   for (const issue of contentValidation.issues) {
+    // WP7: A1–A2 learner prompts must be Vietnamese, in daily lessons and every review section.
+    if (issue.rule === "vietnamese_instructions") { severe.push(finding("MONTHLY_A1A2_INSTRUCTION_LANGUAGE", issue.message, dayNumber, issue.code)); continue; }
     // Review exercises use `items` per section (checked below), not the single daily question shape.
     // The daily part order also expects a writing part, which a review folds into speaking.
     if (review && ((MONTHLY_REVIEW_SECTIONS as readonly string[]).includes(issue.code) || issue.code === "writing" || issue.code === "order")) continue;
@@ -103,39 +107,29 @@ export function evaluateMonthlyLessonQuality(
   // Review days may split the formula into grammar.steps (one block per step); accept either place.
   const grammarContent = parts.get("grammar")?.content;
   const stepFormulas = Array.isArray(grammarContent?.steps) ? grammarContent.steps.map((step) => step && typeof step === "object" ? asString((step as Record<string, unknown>).formula) : "") : [];
-  const formula = [asString(grammarContent?.formula), ...stepFormulas].join("\n");
-  if (!grammarIds.length || grammarSteps.length !== grammarIds.length || grammarSteps.some((step) => !formula.includes(step.formula))) severe.push(finding("MONTHLY_GRAMMAR_SCOPE_MISMATCH", "Grammar formula does not match every locked grammar step", dayNumber, "grammar"));
+  const formula = normalizeFormula([asString(grammarContent?.formula), ...stepFormulas].join("\n"));
+  if (!grammarIds.length || grammarSteps.length !== grammarIds.length || grammarSteps.some((step) => !formula.includes(normalizeFormula(step.formula)))) {
+    severe.push(finding("MONTHLY_GRAMMAR_SCOPE_MISMATCH", `Grammar formula does not match every locked grammar step. grammar.formula${grammarSteps.length > 1 ? " (or grammar.steps[].formula, one per step in order)" : ""} must contain verbatim: ${grammarSteps.map((step) => `"${step.formula}"`).join("; ")}`, dayNumber, "grammar"));
+  }
 
-  const soundIds = day.kind === "review" ? day.reviewSoundIds ?? [] : day.pronunciationPlan?.targetIds ?? [day.soundId];
-  const exampleIds = day.kind === "review" ? day.reviewPronunciationExampleIds ?? [] : day.pronunciationPlan?.exampleIds ?? day.pronunciationExampleIds;
-  const sounds = soundIds.map((soundId) => contract.sounds.find((candidate) => candidate.id === soundId)).filter((sound): sound is NonNullable<typeof sound> => Boolean(sound));
-  const soundByExampleId = new Map(sounds.flatMap((sound) => sound.examples.map((example) => [example.id, { sound, example }] as const)));
-  const expectedExamples = exampleIds.map((id) => soundByExampleId.get(id)?.example);
-  const primarySound = sounds[0];
-  const primaryIds = day.kind === "review" ? exampleIds.filter(id => primarySound?.examples.some(example => example.id === id)).slice(0, 3) : day.pronunciationExampleIds;
-  const primaryExamples = primarySound ? primaryIds.map(id => primarySound.examples.find(example => example.id === id)).filter((example): example is NonNullable<typeof example> => Boolean(example)) : [];
   const pronunciation = parts.get("pronunciation")?.content;
   const focus = asString(pronunciation?.focus);
   const words = items(pronunciation).map((item) => ({ word: asString(item.word), ipa: asString(item.ipa) }));
   const reviewTargets = Array.isArray(pronunciation?.reviewTargets) ? pronunciation.reviewTargets.filter(isRecord) : [];
-  const expectedReviewTargets = sounds.map((sound) => ({
-    soundId: sound.id,
-    focus: sound.ipa,
-    words: exampleIds.map((id) => soundByExampleId.get(id)).filter((entry): entry is NonNullable<typeof entry> => entry !== undefined && entry.sound.id === sound.id).map((entry) => entry.example)
-  }));
-  const needsFullTargets = day.kind === "review" || (day.pronunciationPlan?.targetIds.length ?? 0) > 1;
-  const reviewTargetsMatch = !needsFullTargets || (reviewTargets.length === expectedReviewTargets.length && reviewTargets.every((target, index) => {
-    const expected = expectedReviewTargets[index];
-    if (!expected) return false;
+  const expectedReviewTargets = expected.reviewTargets;
+  const reviewTargetsMatch = !expectedReviewTargets || (reviewTargets.length === expectedReviewTargets.length && reviewTargets.every((target, index) => {
+    const expectedTarget = expectedReviewTargets[index];
+    if (!expectedTarget) return false;
     const actualWords = items(target).map((item) => ({ word: asString(item.word), ipa: asString(item.ipa) }));
-    return target.soundId === expected.soundId && target.focus === expected.focus && actualWords.length === expected.words.length && samePronunciationExamples(actualWords, expected.words);
+    return target.soundId === expectedTarget.soundId && target.focus === expectedTarget.focus && actualWords.length === expectedTarget.words.length && samePronunciationExamples(actualWords, expectedTarget.words);
   }));
-  if (!sounds.length || sounds.length !== soundIds.length || !exampleIds.length || expectedExamples.some((example) => !example) || !primarySound || focus !== primarySound.ipa || words.length !== primaryExamples.length || !samePronunciationExamples(words, primaryExamples) || !reviewTargetsMatch) {
-    severe.push(finding("MONTHLY_SOUND_SCOPE_MISMATCH", "Pronunciation focus or examples do not match the locked day specification", dayNumber, "pronunciation"));
+  if (!expected.soundScopeResolved || focus !== expected.focus || words.length !== expected.words.length || !samePronunciationExamples(words, expected.words) || !reviewTargetsMatch) {
+    const targetsText = expectedReviewTargets ? `; pronunciation.reviewTargets must be exactly, in this order: ${expectedReviewTargets.map((target) => `{soundId "${target.soundId}", focus "${target.focus}", words [${formatExamples(target.words)}]}`).join(", ")}` : "";
+    severe.push(finding("MONTHLY_SOUND_SCOPE_MISMATCH", `Pronunciation focus or examples do not match the locked day specification. Set pronunciation.focus to "${expected.focus ?? ""}" and pronunciation.words to exactly [${formatExamples(expected.words)}]${targetsText}`, dayNumber, "pronunciation"));
   }
   if (contract.planSchemaVersion === 2 && day.kind === "new") {
     const grammar = grammarContent ?? {};
-    if (grammar.dailyCode !== day.grammarPlan?.code || grammar.objective !== day.grammarPlan?.objective) severe.push(finding("MONTHLY_DAILY_GRAMMAR_OBJECTIVE", "Grammar must identify and teach the locked daily objective/code", dayNumber, "grammar"));
+    if (grammar.dailyCode !== day.grammarPlan?.code || grammar.objective !== day.grammarPlan?.objective) severe.push(finding("MONTHLY_DAILY_GRAMMAR_OBJECTIVE", `Grammar must identify and teach the locked daily objective/code. Set grammar.dailyCode to "${day.grammarPlan?.code ?? ""}" and grammar.objective to exactly "${day.grammarPlan?.objective ?? ""}" (copy verbatim, do not translate)`, dayNumber, "grammar"));
     const examples = Array.isArray(grammar.examples) ? grammar.examples.filter((value): value is string => typeof value === "string" && Boolean(value.trim())) : [];
     const references = new Set(grammarSteps.flatMap(step => step.examples).map(normalize));
     if (examples.length < 3 || examples.every(example => references.has(normalize(example)))) severe.push(finding("MONTHLY_DAILY_GRAMMAR_EXAMPLES", "Write at least 3 new examples for today's objective instead of copying the monthly references", dayNumber, "grammar"));
@@ -151,16 +145,21 @@ export function evaluateMonthlyLessonQuality(
       if (!asString(question.prompt) || options.length !== 4 || new Set(options.map(normalize)).size !== 4 || !options.some(option => normalize(option) === normalize(asString(question.answer))) || !asString(question.explanation)) severe.push(finding("MONTHLY_DAILY_GRAMMAR_QUESTION", "Every grammar question needs a prompt, 4 distinct options, an answer copied from them, and an explanation", dayNumber, "grammar"));
     }
     if (day.grammarPlan?.recallMilestoneIds.length && !questions.some(question => day.grammarPlan!.recallMilestoneIds.includes(asString(question.milestoneId)))) severe.push(finding("MONTHLY_DAILY_GRAMMAR_RECALL", "Include the locked topic A recall question from N8", dayNumber, "grammar"));
-    if (pronunciation?.stage !== day.pronunciationPlan?.stage || pronunciation?.objective !== day.pronunciationPlan?.objective) severe.push(finding("MONTHLY_DAILY_PRONUNCIATION_STAGE", "Pronunciation must teach the locked daily stage and objective", dayNumber, "pronunciation"));
+    if (pronunciation?.stage !== day.pronunciationPlan?.stage || pronunciation?.objective !== day.pronunciationPlan?.objective) severe.push(finding("MONTHLY_DAILY_PRONUNCIATION_STAGE", `Pronunciation must teach the locked daily stage and objective. Set pronunciation.stage to "${day.pronunciationPlan?.stage ?? ""}" and pronunciation.objective to exactly "${day.pronunciationPlan?.objective ?? ""}" (copy verbatim)`, dayNumber, "pronunciation"));
     const required = day.pronunciationPlan?.requiredPositions;
     if (required) {
       const positions = Array.isArray(pronunciation?.targetPositions) ? pronunciation.targetPositions.filter(isRecord) : [];
       const actual = positions.map(position => `${position.soundId}:${position.exampleId}`).sort();
       const planned = required.map(position => `${position.soundId}:${position.exampleId}`).sort();
       const passage = asString(pronunciation?.passage).toLocaleLowerCase("en-US");
-      if (JSON.stringify(actual) !== JSON.stringify(planned) || !hasExactTargetOccurrences(passage, required.map(position => sounds.find(sound => sound.id === position.soundId)?.examples.find(example => example.id === position.exampleId)?.word ?? ""))) severe.push(finding("MONTHLY_COMBINED_PRONUNCIATION_POSITIONS", "Read-aloud needs exactly 8 taught target positions, two per monthly target, present in the passage", dayNumber, "pronunciation"));
+      const requiredWords = expected.targetPositionWords;
+      if (JSON.stringify(actual) !== JSON.stringify(planned) || !hasExactTargetOccurrences(passage, requiredWords)) {
+        const counts = [...requiredWords.reduce((map, word) => map.set(word, (map.get(word) ?? 0) + 1), new Map<string, number>())].map(([word, count]) => `"${word}" ×${count}`).join(", ");
+        severe.push(finding("MONTHLY_COMBINED_PRONUNCIATION_POSITIONS", `Read-aloud needs exactly 8 taught target positions, two per monthly target, present in the passage. pronunciation.targetPositions must be exactly [${required.map(position => `{soundId "${position.soundId}", exampleId "${position.exampleId}"}`).join(", ")}] and pronunciation.passage must contain each of these words exactly this many times (whole words): ${counts}`, dayNumber, "pronunciation"));
+      }
     }
   }
+  evaluateChoiceAndWording(contract, dayNumber, lesson.parts, lockedPlanValues, severe, light);
   if (review) {
     const sections = evaluateMonthlyReviewSections(contract, day, dayNumber, parts);
     severe.push(...sections.severe);
@@ -171,6 +170,173 @@ export function evaluateMonthlyLessonQuality(
 
 function finding(code: string, message: string, dayNumber: number, component: string): MonthlyQualityFinding {
   return { severity: "severe", code, message, dayNumber, component };
+}
+
+type PlanSound = MonthlyCurriculumContract["sounds"][number];
+type PlanExample = PlanSound["examples"][number];
+
+/** Plan-locked values a monthly lesson must carry verbatim (shared by the gate and the deterministic fill, WP1/D1). */
+export interface MonthlyLockedPlanExpectations {
+  grammarFormulas: string[];
+  /** v2 new lessons only. */
+  grammarCode: string | null;
+  grammarObjective: string | null;
+  pronunciationStage: string | null;
+  pronunciationObjective: string | null;
+  sounds: PlanSound[];
+  soundScopeResolved: boolean;
+  focus: string | null;
+  words: PlanExample[];
+  /** Full multi-target scope (reviews and multi-target days), else null. */
+  reviewTargets: Array<{ soundId: string; focus: string; words: PlanExample[] }> | null;
+  targetPositions: Array<{ soundId: string; exampleId: string }> | null;
+  targetPositionWords: string[];
+}
+
+export function monthlyLockedPlanExpectations(contract: MonthlyCurriculumContract, day: MonthlyDaySpec): MonthlyLockedPlanExpectations {
+  const review = day.kind === "review";
+  const daily = contract.planSchemaVersion === 2 && !review;
+  const grammarIds = review ? day.reviewGrammarStepIds ?? [] : day.grammarStepIds ?? [day.grammarStepId];
+  const allSteps = contract.grammarTopics.flatMap((topic) => topic.steps);
+  const grammarFormulas = grammarIds.map((id) => allSteps.find((step) => step.id === id)?.formula).filter((value): value is string => Boolean(value));
+  const soundIds = review ? day.reviewSoundIds ?? [] : day.pronunciationPlan?.targetIds ?? [day.soundId];
+  const exampleIds = review ? day.reviewPronunciationExampleIds ?? [] : day.pronunciationPlan?.exampleIds ?? day.pronunciationExampleIds;
+  const sounds = soundIds.map((soundId) => contract.sounds.find((candidate) => candidate.id === soundId)).filter((sound): sound is PlanSound => Boolean(sound));
+  const soundByExampleId = new Map(sounds.flatMap((sound) => sound.examples.map((example) => [example.id, { sound, example }] as const)));
+  const primarySound = sounds[0];
+  const primaryIds = review ? exampleIds.filter((id) => primarySound?.examples.some((example) => example.id === id)).slice(0, 3) : day.pronunciationExampleIds;
+  const words = primarySound ? primaryIds.map((id) => primarySound.examples.find((example) => example.id === id)).filter((example): example is PlanExample => Boolean(example)) : [];
+  const needsFullTargets = review || (day.pronunciationPlan?.targetIds.length ?? 0) > 1;
+  const reviewTargets = needsFullTargets ? sounds.map((sound) => ({
+    soundId: sound.id,
+    focus: sound.ipa,
+    words: exampleIds.map((id) => soundByExampleId.get(id)).filter((entry): entry is NonNullable<typeof entry> => entry !== undefined && entry.sound.id === sound.id).map((entry) => entry.example)
+  })) : null;
+  const required = daily ? day.pronunciationPlan?.requiredPositions ?? null : null;
+  return {
+    grammarFormulas,
+    grammarCode: daily ? day.grammarPlan?.code ?? null : null,
+    grammarObjective: daily ? day.grammarPlan?.objective ?? null : null,
+    pronunciationStage: daily ? day.pronunciationPlan?.stage ?? null : null,
+    pronunciationObjective: daily ? day.pronunciationPlan?.objective ?? null : null,
+    sounds,
+    soundScopeResolved: Boolean(sounds.length) && sounds.length === soundIds.length && exampleIds.length > 0 && exampleIds.every((id) => soundByExampleId.has(id)) && Boolean(primarySound),
+    focus: primarySound?.ipa ?? null,
+    words,
+    reviewTargets,
+    targetPositions: required ? required.map((position) => ({ soundId: position.soundId, exampleId: position.exampleId })) : null,
+    targetPositionWords: required ? required.map((position) => sounds.find((sound) => sound.id === position.soundId)?.examples.find((example) => example.id === position.exampleId)?.word ?? "") : []
+  };
+}
+
+/** Locked strings exempt from the B1+ English-only check and the internal-term check (WP1 1a). */
+export function monthlyLockedPlanValues(expected: MonthlyLockedPlanExpectations): Record<string, Record<string, string>> | undefined {
+  const grammar: Record<string, string> = {};
+  const pronunciation: Record<string, string> = {};
+  if (expected.grammarCode) grammar.dailyCode = expected.grammarCode;
+  if (expected.grammarObjective) grammar.objective = expected.grammarObjective;
+  if (expected.pronunciationStage) pronunciation.stage = expected.pronunciationStage;
+  if (expected.pronunciationObjective) pronunciation.objective = expected.pronunciationObjective;
+  const values: Record<string, Record<string, string>> = {};
+  if (Object.keys(grammar).length) values.grammar = grammar;
+  if (Object.keys(pronunciation).length) values.pronunciation = pronunciation;
+  return Object.keys(values).length ? values : undefined;
+}
+
+/** WP1 1c: compare formulas without whitespace, ellipsis, quote-style, dash or case differences. */
+export function normalizeFormula(value: string): string {
+  return value.normalize("NFKC")
+    .replace(/[‘’‚‛′]/gu, "'")
+    .replace(/[“”„‟″]/gu, "\"")
+    .replace(/[‐-―−]/gu, "-")
+    .replace(/\s+/gu, " ")
+    .replace(/\s*([+/()[\]|;,=])\s*/gu, "$1")
+    .toLocaleLowerCase("en-US")
+    .trim();
+}
+
+function formatExamples(examples: ReadonlyArray<{ word: string; ipa: string }>): string {
+  return examples.map((example) => `${example.word} ${example.ipa}`).join(", ");
+}
+
+const CHOICE_PARTS = ["listening", "reading", "writing", "word_class", "word_use", "grammar", "speaking"] as const;
+const SINGLE_GROUP = "single";
+
+interface ChoiceEntry { component: string; group: string; label: string; prompt: string; options: string[]; answer: string }
+
+/** Every graded choice in the lesson: top-level single questions, items[] and each variants[] entry. */
+export function collectMonthlyChoices(parts: ReadonlyArray<{ code: string; content: Record<string, unknown> }>): ChoiceEntry[] {
+  const entries: ChoiceEntry[] = [];
+  const entry = (component: string, group: string, label: string, raw: Record<string, unknown>) => {
+    const options = Array.isArray(raw.options) ? raw.options.filter((value): value is string => typeof value === "string") : [];
+    if (options.length >= 2) entries.push({ component, group, label, prompt: asString(raw.prompt) || asString(raw.question), options, answer: asString(raw.answer) });
+  };
+  for (const part of parts) {
+    if (!(CHOICE_PARTS as readonly string[]).includes(part.code)) continue;
+    const list = Array.isArray(part.content.items) ? part.content.items.filter(isRecord) : [];
+    entry(part.code, list.length ? `${part.code}:top` : SINGLE_GROUP, part.code, part.content);
+    list.forEach((item, index) => {
+      entry(part.code, part.code, `${part.code} item ${index + 1}`, item);
+      (Array.isArray(item.variants) ? item.variants.filter(isRecord) : []).forEach((variant, variantIndex) => entry(part.code, part.code, `${part.code} item ${index + 1} variant ${variantIndex + 1}`, variant));
+    });
+  }
+  return entries;
+}
+
+/** WP3 (distractors, HV-R49), WP7 (internal wording) and WP8 (offensive words) checks shared by daily lessons and reviews. */
+function evaluateChoiceAndWording(
+  contract: MonthlyCurriculumContract,
+  dayNumber: number,
+  parts: ReadonlyArray<{ code: string; content: Record<string, unknown> }>,
+  locked: Record<string, Record<string, string>> | undefined,
+  severe: MonthlyQualityFinding[],
+  light: MonthlyQualityFinding[]
+): void {
+  const grouped = new Map<string, { component: string; code: string; labels: string[]; detail: string; hint: string }>();
+  const flag = (code: string, component: string, label: string, detail: string, hint: string) => {
+    const key = `${code}:${component}`;
+    const current = grouped.get(key) ?? { component, code, labels: [], detail, hint };
+    current.labels.push(detail ? `${label} (${detail})` : label);
+    grouped.set(key, current);
+  };
+  const choices = collectMonthlyChoices(parts);
+  for (const choice of choices) {
+    const invented = inventedWordForms([...choice.options, choice.answer].join(" "));
+    if (invented.length) flag("MONTHLY_INVENTED_WORD_FORM", choice.component, choice.label, invented.join(", "), "Every option must be a real, correctly formed English word or phrase; replace invented forms such as sended/maked/feedbacked with real forms (sent, made, gave feedback)");
+    if (choice.component !== "word_class") continue;
+    if (mentionsWordClass(choice.prompt)) flag("MONTHLY_WORD_FORM_ASKS_WORD_CLASS", choice.component, choice.label, "", "Word form (HV-R49) must not ask for the word class / part of speech; write a workplace sentence with one blank (____) and ask the learner to choose the correct form of a week word");
+    if (optionsAreWordClassLabels(choice.options)) flag("MONTHLY_WORD_FORM_LABEL_OPTIONS", choice.component, choice.label, "", "Word form options must be 4 forms of the week word (e.g. decide / decision / decisive / decisively), never labels such as noun/verb/adjective/adverb");
+    if (bracketHintWords(choice.prompt).includes(normalize(choice.answer))) flag("MONTHLY_WORD_FORM_ANSWER_IS_HINT", choice.component, choice.label, choice.answer, "The Word form answer must not simply repeat the base word given in brackets; the bracketed word must need a change of form");
+  }
+  for (const group of grouped.values()) severe.push(finding(group.code, `${group.hint}. Fix: ${group.labels.join("; ")}`, dayNumber, group.component));
+
+  const groups = new Map<string, ChoiceEntry[]>();
+  for (const choice of choices) if (choice.options.length >= 3) groups.set(choice.group, [...(groups.get(choice.group) ?? []), choice]);
+  for (const [group, list] of groups) {
+    if (list.length < 2) continue;
+    const longest = list.filter((choice) => answerIsUniqueLongestOption(choice.options, choice.answer)).length;
+    if (longest / list.length > 0.5) light.push({ severity: "light", code: "MONTHLY_ANSWER_LONGEST_OPTION", message: `In ${group === SINGLE_GROUP ? "the lesson's single-question exercises" : group}, the correct answer is the only longest option in ${longest}/${list.length} questions; make distractors similar in length`, dayNumber, component: list[0]!.component });
+  }
+
+  const pasted = [contract.theme.communicationGoal].filter((value): value is string => typeof value === "string");
+  for (const part of parts) {
+    const offensive = new Set<string>();
+    const internal = new Set<string>();
+    const lockedPart = locked?.[part.code];
+    const visit = (value: unknown, key: string, depth: number) => {
+      if (typeof value === "string") {
+        if (depth === 1 && lockedPart?.[key] !== undefined && value.trim() === lockedPart[key]!.trim()) return;
+        for (const word of offensiveWords(value)) offensive.add(word);
+        if (!/meaning$|^id$|Id$|Ids$/u.test(key)) for (const term of internalLearnerTerms(value, pasted)) internal.add(term);
+        return;
+      }
+      if (Array.isArray(value)) { for (const item of value) visit(item, key, depth + 1); return; }
+      if (isRecord(value)) for (const [childKey, item] of Object.entries(value)) visit(item, childKey, depth + 1);
+    };
+    for (const [key, value] of Object.entries(part.content)) visit(value, key, 1);
+    if (offensive.size) severe.push(finding("MONTHLY_OFFENSIVE_WORD", `Remove vulgar or offensive words from learner content (including minimal pairs): ${[...offensive].join(", ")}`, dayNumber, part.code));
+    if (internal.size) severe.push(finding("MONTHLY_INTERNAL_TERM_EXPOSED", `Learner-facing text exposes internal planning wording: ${[...internal].map((term) => `"${term}"`).join(", ")}. Rewrite it for the learner (address them as "bạn"/"you", name the actual words) and never paste the plan's communication goal`, dayNumber, part.code));
+  }
 }
 
 function items(content: Record<string, unknown> | undefined): Array<Record<string, unknown>> {

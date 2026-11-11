@@ -453,7 +453,13 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     const ungrouped = items.filter(({ task }) => !groupedKeys.has(task.taskKey));
     let numberOffset = 0;
     if (!items.length && !groups.length) return <p className="small muted operator-answer-empty">Chưa có task hoặc câu trả lời được lưu cho phần này.</p>;
+    // A stored section score with no per-question answer matching this form's tasks
+    // (e.g. imported/fixture totals) must not read as "every question skipped, 0 points".
+    const knownTaskKeys = new Set([...items.map(({ task }) => task.taskKey), ...groupedKeys]);
+    const missingItemEvidence = (section === "listening" || section === "reading") && score?.score != null && Number(score.score) > 0
+      && !answers.some(answer => knownTaskKeys.has(answer.taskKey));
     return <div className="operator-answer-section-content">
+      {missingItemEvidence && <p className="small muted operator-answer-empty">Chưa có chi tiết từng câu cho phần này; điểm {sectionLabel(section)} là tổng đã lưu, không tính lại từ các câu bên dưới.</p>}
       {groups.map(group => {
         const groupMax = group.tasks.reduce((sum, task) => sum + (task.maxScore ?? 0), 0);
         const groupEarned = group.tasks.reduce((sum, task) => sum + (task.correctAnswer && answers.find(answer => answer.taskKey === task.taskKey)?.value === task.correctAnswer ? (task.maxScore ?? 0) : 0), 0);

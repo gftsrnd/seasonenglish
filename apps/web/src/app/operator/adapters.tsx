@@ -534,7 +534,7 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
   }
   if (code === "reading") return <div className="operator-practice-content"><div className="operator-reading-passage">{text("text", "passage", "script") || "—"}</div><p className="operator-question"><strong>Câu hỏi:</strong> <LessonPromptText value={text("prompt", "question") || "—"} /></p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
   if (code === "writing") return <div className="operator-practice-content"><p className="operator-question"><strong>Đề bài:</strong> <LessonPromptText value={text("prompt") || "—"} /></p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
-  if (code === "word_class" || code === "word_use") return <div className="operator-practice-content"><p className="operator-question"><strong>{code === "word_class" ? "Nhận diện từ loại:" : "Chọn cách dùng đúng:"}</strong> <LessonPromptText value={text("prompt", "question") || "—"} /></p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+  if (code === "word_class" || code === "word_use") return <div className="operator-practice-content"><p className="operator-question"><strong>{code === "word_class" ? "Chọn dạng từ đúng:" : "Chọn cách dùng đúng:"}</strong> <LessonPromptText value={text("prompt", "question") || "—"} /></p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
   if (code === "speaking") {
     const model = conciseSpeakingModel(text("answer", "modelAnswer", "sample"));
     const instruction = text("instruction", "prompt") || "Nói theo câu mẫu bên dưới và thay đổi một chi tiết cho phù hợp.";

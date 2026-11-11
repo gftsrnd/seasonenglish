@@ -164,10 +164,12 @@ export function ManagerMonthlyReport({ view, filter, selectFilter, loading, erro
           {view.survey.average !== null ? <Badge tone={view.survey.average >= 4 ? "ok" : "warn"}>{report.metrics[2].result}</Badge> : null}
           <span>{report.surveyDetail}</span>
         </div>
-        <h3>{sectionTitles[4]}</h3>
-        <ul className="manager-next-actions" aria-label="Việc cần làm tiếp">
-          {report.actions.map((action) => <ReportAction key={action.title} {...action} />)}
-        </ul>
+        <section className="manager-report-next-actions" aria-label="Phần việc cần làm tiếp">
+          <h3>{sectionTitles[4]}</h3>
+          <ul className="manager-next-actions" aria-label="Việc cần làm tiếp">
+            {report.actions.map((action) => <ReportAction key={action.title} {...action} />)}
+          </ul>
+        </section>
         <footer className="foot">Số liệu tính tự động từ dữ liệu của tháng và mức đã chọn.</footer>
       </> : null}
     </article> : null}

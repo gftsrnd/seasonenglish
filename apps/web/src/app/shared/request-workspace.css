@@ -134,6 +134,13 @@
   scrollbar-gutter: stable;
 }
 
+/* An expanded row holds the decision buttons: let the page scroll instead of
+   hiding them at the bottom of a nested scroll box. */
+.request-table:has(.request-expanded-row) {
+  max-height: none;
+  overflow: visible;
+}
+
 .request-table thead th {
   position: sticky;
   top: 0;
@@ -168,7 +175,19 @@
   .request-tabs > a { flex: 1 1 auto; min-height: 42px; padding-inline: 10px; }
 }
 
+/* Manager tracking tabs: four short labels stay on one line each. */
+@media (max-width: 640px) {
+  .manager-tracking-tabs > a { white-space: nowrap; padding-inline: 6px; }
+}
+
+@media (max-width: 400px) {
+  .manager-tracking-tabs { gap: 2px; }
+  .manager-tracking-tabs > a { padding-inline: 4px; font-size: .84rem; }
+}
+
 @container (max-width: 640px) {
+  /* Card layout on phones: one page scroll, no scroll box inside the card. */
+  .request-table { max-height: none; overflow: visible; }
   .request-table table, .request-table tbody { display: block; }
   .request-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .request-table .request-record { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
@@ -180,6 +199,10 @@
   .request-table .request-actions :is(button, a) { min-height: 40px; }
   .request-table .request-commands[data-empty] { display: none; }
   .request-table .request-date { color: var(--muted); font-size: .8rem; }
+  /* Cells are flex items here: paint the hover/tap tint on the whole record,
+     not on each cell (which showed as separate strips per line). */
+  .request-table tbody tr:hover > td { background: transparent; }
+  .request-table tbody tr.request-record:hover { background: var(--surface-3); }
 }
 
 

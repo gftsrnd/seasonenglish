@@ -8,6 +8,8 @@ import { z } from "zod";
 import { identityEmailDeliveryFailure, type IdentityEmailSender, type IdentityOtpPurpose } from "./email.js";
 
 const COOKIE_NAME = "e4s_session";
+/** Minimum seconds between two PIN-reset codes for the same email ("Gửi lại mã"). */
+export const PIN_RESET_RESEND_INTERVAL_SECONDS = 60;
 const staffLoginInput = z.object({ email: z.string().trim().email(), password: z.string().min(1) });
 const learnerLoginInput = z.object({ email: z.string().trim().email(), pin: z.string().regex(/^\d{6}$/) });
 const versionedLoginInput = z.object({
@@ -137,6 +139,20 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_EMAIL" });
     const emailSender = options.emailSender;
     if (!emailSender) return reply.code(503).send({ code: "EMAIL_DELIVERY_UNAVAILABLE" });
+    // Per-email resend interval (the route rate limit is per client). Challenges
+    // are stored for every email, so this does not reveal whether an account exists.
+    const recent = await options.pool.query<{ retry_after: number | string }>(
+      `select greatest(1, ceil(extract(epoch from (created_at + make_interval(secs => $2) - now()))))::int as retry_after
+       from auth_challenges
+       where kind = 'pin_reset' and lower(email) = lower($1) and created_at > now() - make_interval(secs => $2)
+       order by created_at desc limit 1`,
+      [parsed.data.email, PIN_RESET_RESEND_INTERVAL_SECONDS]
+    );
+    const retryAfter = recent.rows[0]?.retry_after;
+    if (retryAfter !== undefined && retryAfter !== null) {
+      const retryAfterSeconds = Math.min(PIN_RESET_RESEND_INTERVAL_SECONDS, Math.max(1, Number(retryAfter) || PIN_RESET_RESEND_INTERVAL_SECONDS));
+      return reply.code(429).header("retry-after", String(retryAfterSeconds)).send({ code: "PIN_RESET_RESEND_TOO_SOON", retryAfterSeconds });
+    }
     const account = await repositories.identity.findUserByEmail(parsed.data.email);
     const eligible = Boolean(emailSender) && account?.role === "learner" && account.status === "active";
     const challengeId = randomUUID();

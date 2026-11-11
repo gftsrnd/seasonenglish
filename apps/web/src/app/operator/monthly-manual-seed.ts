@@ -15,11 +15,11 @@ export function monthlyManualSeed(framework: Framework, lessonNumber: number): {
   if (carryover && resources) { resources = { ...resources, ...carryover }; day = carryover.day; }
   if (!resources || !day) return null;
   const review = day.kind === "review";
-  const ordinal = resources.roadmap!.days.filter((item) => item.kind === "new" && item.lessonNumber <= lessonNumber).length;
-  const coreIds = review ? day.reviewTermIds : day.coreTermIds;
-  const expandedIds = new Set(review ? day.reviewExpandedTermIds : day.expandedTermIds);
-  const cores = resources.coreTerms.filter((term) => coreIds.includes(term.id));
-  const supports = resources.supportTerms.filter((term) => expandedIds.has(term.id));
+  const ordinal = (resources.roadmap?.days ?? []).filter((item) => item.kind === "new" && item.lessonNumber <= lessonNumber).length;
+  const coreIds = (review ? day.reviewTermIds : day.coreTermIds) ?? [];
+  const expandedIds = new Set((review ? day.reviewExpandedTermIds : day.expandedTermIds) ?? []);
+  const cores = (resources.coreTerms ?? []).filter((term) => coreIds.includes(term.id));
+  const supports = (resources.supportTerms ?? []).filter((term) => expandedIds.has(term.id));
   const linked = (coreId: string, relation: string) => supports.filter((term) => term.relatedCoreTermId === coreId && term.relation === relation);
   const items = cores.map((core) => {
     const umbrella = linked(core.id, "umbrella")[0];
@@ -33,14 +33,14 @@ export function monthlyManualSeed(framework: Framework, lessonNumber: number): {
       ...(umbrella ? { umbrella: { word: umbrella.word, meaning: umbrella.meaning } } : {})
     };
   });
-  const stepIds = review ? day.reviewGrammarStepIds ?? [] : day.grammarStepIds;
-  const steps = resources.grammarTopics.flatMap((topic) => topic.steps).filter((step) => stepIds.includes(step.id));
+  const stepIds = (review ? day.reviewGrammarStepIds : day.grammarStepIds) ?? [];
+  const steps = (resources.grammarTopics ?? []).flatMap((topic) => topic.steps ?? []).filter((step) => stepIds.includes(step.id));
   const soundIds = review ? day.reviewSoundIds ?? [] : day.pronunciationPlan?.targetIds ?? (day.soundId ? [day.soundId] : []);
-  const sounds = resources.sounds.filter((sound) => soundIds.includes(sound.id));
-  const exampleIds = new Set(review ? day.reviewPronunciationExampleIds ?? [] : day.pronunciationPlan?.exampleIds ?? day.pronunciationExampleIds);
+  const sounds = (resources.sounds ?? []).filter((sound) => soundIds.includes(sound.id));
+  const exampleIds = new Set(review ? day.reviewPronunciationExampleIds ?? [] : day.pronunciationPlan?.exampleIds ?? day.pronunciationExampleIds ?? []);
   const examplesFor = (sound: (typeof sounds)[number]) => {
-    const chosen = sound.examples.filter((example) => exampleIds.has(example.id));
-    return chosen.length ? chosen : sound.examples.slice(0, 3);
+    const chosen = (sound.examples ?? []).filter((example) => exampleIds.has(example.id));
+    return chosen.length ? chosen : (sound.examples ?? []).slice(0, 3);
   };
   const first = sounds[0];
   const focusFor = (code: string) => day.skillExercises?.find((exercise) => exercise.exerciseCode === code)?.focus;
@@ -58,10 +58,10 @@ export function monthlyManualSeed(framework: Framework, lessonNumber: number): {
       { code: "objective", title: "Mục tiêu bài học", content: { items: [] } },
       { code: "instruction", title: "Hướng dẫn làm bài", content: {} },
       { code: "vocabulary", title: "Từ vựng", content: { items } },
-      { code: "grammar", title: "Ngữ pháp", content: steps.length ? { formula: steps.map((step) => step.formula).join("\n"), usage: steps.map((step) => step.usage || step.focus).filter(Boolean).join("\n"), examples: day.grammarPlan ? [] : steps.flatMap((step) => step.examples).slice(0, 3), ...(day.grammarPlan ? { dailyCode: day.grammarPlan.code, objective: day.grammarPlan.objective, items: [], milestoneIds: day.grammarPlan.milestoneIds, recallMilestoneIds: day.grammarPlan.recallMilestoneIds } : {}) } : {} },
+      { code: "grammar", title: "Ngữ pháp", content: steps.length ? { formula: steps.map((step) => step.formula).join("\n"), usage: steps.map((step) => step.usage || step.focus).filter(Boolean).join("\n"), examples: day.grammarPlan ? [] : steps.flatMap((step) => step.examples ?? []).slice(0, 3), ...(day.grammarPlan ? { dailyCode: day.grammarPlan.code, objective: day.grammarPlan.objective, items: [], milestoneIds: day.grammarPlan.milestoneIds, recallMilestoneIds: day.grammarPlan.recallMilestoneIds } : {}) } : {} },
       { code: "pronunciation", title: "Phát âm", content: first ? {
         focus: first.ipa,
-        words: (review ? examplesFor(first).slice(0, 3) : first.examples.filter(example => day.pronunciationExampleIds.includes(example.id))).map((example) => ({ word: example.word, ipa: example.ipa })),
+        words: (review ? examplesFor(first).slice(0, 3) : (first.examples ?? []).filter(example => (day.pronunciationExampleIds ?? []).includes(example.id))).map((example) => ({ word: example.word, ipa: example.ipa })),
         ...(day.pronunciationPlan ? { stage: day.pronunciationPlan.stage, objective: day.pronunciationPlan.objective, ...(day.pronunciationPlan.requiredPositions ? { targetPositions: day.pronunciationPlan.requiredPositions, passage: "" } : {}) } : {}),
         ...(review || sounds.length > 1 ? { reviewTargets: sounds.map((sound) => ({ soundId: sound.id, focus: sound.ipa, words: examplesFor(sound).map((example) => ({ word: example.word, ipa: example.ipa })) })) } : {})
       } : {} },

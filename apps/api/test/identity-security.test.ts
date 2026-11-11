@@ -137,6 +137,42 @@ it("sends the learner's PIN reset code by email", async () => {
   } finally { await app.close(); }
 });
 
+it("refuses a second PIN reset code for the same email within 60 seconds (Gửi lại mã)", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-11T08:00:00Z"));
+  const email = "learner@example.test";
+  const pool = identityPool({ id: "learner-1", display_name: "Học viên Demo", email, role: "learner", status: "active", credential_hash: "" });
+  // In-memory auth_challenges: the route's per-email interval query reads these rows.
+  const challenges: Array<{ email: string; createdAt: number }> = [];
+  const baseQuery = pool.query.getMockImplementation()!;
+  pool.query.mockImplementation((async (sql: string, parameters: unknown[] = []) => {
+    if (sql.includes("insert into auth_challenges")) challenges.push({ email: String(parameters[1]).toLowerCase(), createdAt: Date.now() });
+    if (sql.includes("from auth_challenges") && sql.includes("make_interval")) {
+      const intervalMs = Number(parameters[1]) * 1_000;
+      const latest = challenges.filter((item) => item.email === String(parameters[0]).toLowerCase() && item.createdAt > Date.now() - intervalMs).at(-1);
+      return latest ? { rowCount: 1, rows: [{ retry_after: Math.ceil((latest.createdAt + intervalMs - Date.now()) / 1_000) }] } : { rowCount: 0, rows: [] };
+    }
+    return baseQuery(sql, parameters);
+  }) as typeof baseQuery);
+  const sendOtp = vi.fn(async () => {});
+  const app = await makeApp(pool, { sendOtp });
+  try {
+    const start = () => app.inject({ method: "POST", url: "/api/auth/learner/pin-reset/start", payload: { email } });
+    expect((await start()).statusCode).toBe(202);
+    vi.setSystemTime(new Date("2026-11-11T08:00:15Z"));
+    const tooSoon = await start();
+    expect(tooSoon.statusCode).toBe(429);
+    expect(tooSoon.json()).toEqual({ code: "PIN_RESET_RESEND_TOO_SOON", retryAfterSeconds: 45 });
+    expect(tooSoon.headers["retry-after"]).toBe("45");
+    expect(sendOtp).toHaveBeenCalledTimes(1);
+    // Another email is not blocked by this one.
+    expect((await app.inject({ method: "POST", url: "/api/auth/learner/pin-reset/start", payload: { email: "other@example.test" } })).statusCode).toBe(202);
+    vi.setSystemTime(new Date("2026-11-11T08:01:01Z"));
+    expect((await start()).statusCode).toBe(202);
+    expect(sendOtp).toHaveBeenCalledTimes(2);
+  } finally { await app.close(); }
+});
+
 it.each(["manager", "operator"] as const)("signs in %s with only email and password", async (role) => {
   const email = "staff@example.test";
   const password = "Test-password-89";

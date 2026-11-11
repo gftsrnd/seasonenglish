@@ -11,6 +11,7 @@ import {
   positionCode, termCode, type MonthlyFinalAllocation
 } from "./monthly-final-spec.js";
 import { evaluateMonthlyFinal } from "./monthly-final-checks.js";
+import { rebalanceAnswerPositions as rebalanceChoicePositions } from "../shared/answer-order.js";
 
 /** The approved plan this exam is traceable to (phase hand-off). */
 export interface MonthlyFinalFrameworkRef {
@@ -133,41 +134,10 @@ interface ChoiceDraft { termId: string; prompt: string; options: string[]; corre
  * Balanced, non-patterned answer positions (GEN17): letter counts differ by at
  * most one, no letter repeats more than twice in a row, and the order is a
  * seeded shuffle rather than an A-B-C cycle. Distractors keep their order.
+ * Shared implementation: `../shared/answer-order.ts`.
  */
 export function rebalanceAnswerPositions<T extends ChoiceDraft>(items: T[], seed: string): T[] {
-  const n = items.length;
-  const letters: number[] = Array.from({ length: n }, (_, index) => index % MONTHLY_FINAL_OPTION_COUNT);
-  const random = seededRandom(seed);
-  for (let index = letters.length - 1; index > 0; index -= 1) {
-    const swap = Math.floor(random() * (index + 1));
-    [letters[index], letters[swap]] = [letters[swap]!, letters[index]!];
-  }
-  for (let pass = 0; pass < 4; pass += 1) {
-    for (let index = 2; index < letters.length; index += 1) {
-      if (letters[index] === letters[index - 1] && letters[index] === letters[index - 2]) {
-        const swapWith = letters.findIndex((value, candidate) => candidate > index && value !== letters[index]);
-        const target = swapWith >= 0 ? swapWith : letters.findIndex((value, candidate) => candidate < index - 2 && value !== letters[index] && letters[candidate - 1] !== letters[index] && letters[candidate + 1] !== letters[index]);
-        if (target >= 0) [letters[index], letters[target]] = [letters[target]!, letters[index]!];
-      }
-    }
-  }
-  return items.map((item, index) => {
-    const correct = item.options[item.correctIndex]!;
-    const distractors = item.options.filter((_, optionIndex) => optionIndex !== item.correctIndex);
-    const targetIndex = letters[index]!;
-    const options = [...distractors];
-    options.splice(targetIndex, 0, correct);
-    return { ...item, options, correctIndex: targetIndex };
-  });
-}
-
-function seededRandom(seed: string): () => number {
-  let state = 2166136261;
-  for (let index = 0; index < seed.length; index += 1) state = Math.imul(state ^ seed.charCodeAt(index), 16777619);
-  return () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 4294967296;
-  };
+  return rebalanceChoicePositions(items, seed, MONTHLY_FINAL_OPTION_COUNT);
 }
 
 function choiceTask(key: string, item: ChoiceDraft, maxScore: number): StoredAssessmentTask {

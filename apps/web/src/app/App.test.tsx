@@ -112,7 +112,7 @@ describe("App session shell", () => {
     await user.type(screen.getByRole("textbox", { name: "Lý do yêu cầu mở khóa" }), "Nhờ xem lại việc khóa tài khoản.");
     await user.click(screen.getByRole("button", { name: "Gửi yêu cầu" }));
     expect(learnerClient.submitLearnerComplaint).toHaveBeenCalledWith("account_unlock", "Nhờ xem lại việc khóa tài khoản.");
-    expect(await screen.findByText("Yêu cầu mở khóa đang chờ Quản lý xử lý.")).toBeInTheDocument();
+    expect(await screen.findByText(/Bạn đã gửi yêu cầu mở khóa, Quản lý đang xem xét/)).toBeInTheDocument();
   });
   it("shows a certificate without exam grades for a completed learner account", async () => {
     client.currentSession.mockResolvedValue({ ...learnerSession, courseCompleted: true });
@@ -393,6 +393,29 @@ describe("App session shell", () => {
 
     await waitFor(() => expect(screen.getByTestId("resolved-theme")).toHaveTextContent("spring"));
     expect(document.documentElement.dataset.themePattern).toBe("spring");
+  });
+
+  it("releases the push stream while the tab is hidden and reconnects when it is visible again", async () => {
+    const streams: Array<{ close: ReturnType<typeof vi.fn> }> = [];
+    class FakeEventSource {
+      close = vi.fn();
+      constructor(readonly url: string) { streams.push(this); }
+      addEventListener() {}
+    }
+    vi.stubGlobal("EventSource", FakeEventSource);
+    let visibility: DocumentVisibilityState = "visible";
+    vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
+    render(<App>{() => <ExperienceProbe />}</App>);
+
+    await waitFor(() => expect(streams).toHaveLength(1));
+    visibility = "hidden";
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(streams[0]!.close).toHaveBeenCalledOnce();
+
+    visibility = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await waitFor(() => expect(streams).toHaveLength(2));
+    expect(streams[1]!.close).not.toHaveBeenCalled();
   });
 
   it("passes the learner's approved CEFR into the account badge", async () => {

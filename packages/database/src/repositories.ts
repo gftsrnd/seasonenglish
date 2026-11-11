@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, monthlySeasonTurnTarget, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
+import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
 import { buildMonthlyCalendar, formatMonthlyDayLabel, evaluateMonthlyLessonAccess, monthlyAttendanceDates, mergedVietnamHolidays, withMonthlyExpandedTerms, type MonthlyLessonAccess, type MonthlyVocabularyCore } from "@e4s/domain/monthly";
@@ -141,6 +141,7 @@ const prototypeTaskPromptDefaults: Readonly<Record<string, string>> = {
   monthly_resource_generation: prototypePromptDefaults.monthlyResources,
   monthly_lessons: prototypePromptDefaults.monthlyLessons,
   monthly_final_generation: prototypePromptDefaults.monthlyFinal,
+  level_form_generation: prototypePromptDefaults.levelForm,
   micro_grading: prototypePromptDefaults.mgrade,
   coach_dialogue: prototypePromptDefaults.coach,
   weekly_practice_grading: prototypePromptDefaults.grade
@@ -1306,9 +1307,9 @@ class LearningRepository {
     if (access?.state !== "active") return [];
     const result = await this.pool.query<LearnerLessonQueryRow & { organization_id: string; review_gates_next_week: boolean | null; review_from_previous_month: boolean | null }>(
       `select l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content, mf.curriculum_contract->'coreTerms' as monthly_core_terms,
-              ${FROZEN_MONTHLY_ILLUSTRATIONS_SQL} as frozen_illustrations, (select spec from jsonb_array_elements(mf.curriculum_contract->'daySpecs') spec where (spec->>'lessonNumber')::int = ml.lesson_number limit 1) as monthly_day_spec,
-              (select count(*)::int from jsonb_array_elements(mf.curriculum_contract->'daySpecs') spec where spec->>'kind' = 'new' and (spec->>'lessonNumber')::int <= ml.lesson_number) as monthly_new_ordinal,
-              (select count(*)::int from jsonb_array_elements(mf.curriculum_contract->'daySpecs') spec where spec->>'kind' = 'review' and (spec->>'lessonNumber')::int <= ml.lesson_number) as monthly_review_ordinal, case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'review' else 'new' end as monthly_kind, ml.lesson_date::text as lesson_date, organization_system_date(pm.organization_id)::text as system_date,
+              ${FROZEN_MONTHLY_ILLUSTRATIONS_SQL} as frozen_illustrations, (select lesson_spec.item from jsonb_array_elements(mf.curriculum_contract->'daySpecs') as lesson_spec(item) where (lesson_spec.item->>'lessonNumber')::int = ml.lesson_number limit 1) as monthly_day_spec,
+              (select count(*)::int from jsonb_array_elements(mf.curriculum_contract->'daySpecs') as ordinal_spec(item) where ordinal_spec.item->>'kind' = 'new' and (ordinal_spec.item->>'lessonNumber')::int <= ml.lesson_number) as monthly_new_ordinal,
+              (select count(*)::int from jsonb_array_elements(mf.curriculum_contract->'daySpecs') as ordinal_spec(item) where ordinal_spec.item->>'kind' = 'review' and (ordinal_spec.item->>'lessonNumber')::int <= ml.lesson_number) as monthly_review_ordinal, case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'review' else 'new' end as monthly_kind, ml.lesson_date::text as lesson_date, organization_system_date(pm.organization_id)::text as system_date,
               (select count(*) from month_lessons count_ml where count_ml.framework_id = mf.id and count_ml.status = 'approved')::text as lesson_count,
               ml.lesson_date::text as opens_at, ml.lesson_date > organization_system_date(pm.organization_id) as opens_later,
               null::uuid as blocker_id, null::int as blocker_day_number, null::text as blocker_title,
@@ -1387,9 +1388,9 @@ class LearningRepository {
     if (!row) {
       const monthly = await this.pool.query<LearnerLessonQueryRow & { monthly_month: string }>(
         `select pm.month as monthly_month, l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content, lv.id as exercise_version_id, mf.curriculum_contract->'coreTerms' as monthly_core_terms,
-              ${FROZEN_MONTHLY_ILLUSTRATIONS_SQL} as frozen_illustrations, (select spec from jsonb_array_elements(mf.curriculum_contract->'daySpecs') spec where (spec->>'lessonNumber')::int = ml.lesson_number limit 1) as monthly_day_spec,
-              (select count(*)::int from jsonb_array_elements(mf.curriculum_contract->'daySpecs') spec where spec->>'kind' = 'new' and (spec->>'lessonNumber')::int <= ml.lesson_number) as monthly_new_ordinal,
-              (select count(*)::int from jsonb_array_elements(mf.curriculum_contract->'daySpecs') spec where spec->>'kind' = 'review' and (spec->>'lessonNumber')::int <= ml.lesson_number) as monthly_review_ordinal, case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'review' else 'new' end as monthly_kind, ml.lesson_date::text as lesson_date, organization_system_date((select organization_id from users where id = e.learner_id))::text as system_date,
+              ${FROZEN_MONTHLY_ILLUSTRATIONS_SQL} as frozen_illustrations, (select lesson_spec.item from jsonb_array_elements(mf.curriculum_contract->'daySpecs') as lesson_spec(item) where (lesson_spec.item->>'lessonNumber')::int = ml.lesson_number limit 1) as monthly_day_spec,
+              (select count(*)::int from jsonb_array_elements(mf.curriculum_contract->'daySpecs') as ordinal_spec(item) where ordinal_spec.item->>'kind' = 'new' and (ordinal_spec.item->>'lessonNumber')::int <= ml.lesson_number) as monthly_new_ordinal,
+              (select count(*)::int from jsonb_array_elements(mf.curriculum_contract->'daySpecs') as ordinal_spec(item) where ordinal_spec.item->>'kind' = 'review' and (ordinal_spec.item->>'lessonNumber')::int <= ml.lesson_number) as monthly_review_ordinal, case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'review' else 'new' end as monthly_kind, ml.lesson_date::text as lesson_date, organization_system_date((select organization_id from users where id = e.learner_id))::text as system_date,
                 (select count(*) from month_lessons count_ml where count_ml.framework_id = mf.id and count_ml.status = 'approved')::text as lesson_count,
                 ml.lesson_date::text as opens_at, ml.lesson_date > organization_system_date((select organization_id from users where id = e.learner_id)) as opens_later,
                 blocker.id as blocker_id, blocker.day_number as blocker_day_number, blocker.title as blocker_title,
@@ -7974,13 +7975,6 @@ function assessmentRuntimeFromState(state: {
   };
 }
 
-function lastWeekdayOfMonth(month: string): string {
-  const [year, monthNumber] = month.split("-").map(Number);
-  const date = new Date(Date.UTC(year!, monthNumber!, 0));
-  while (date.getUTCDay() === 0 || date.getUTCDay() === 6) date.setUTCDate(date.getUTCDate() - 1);
-  return date.toISOString().slice(0, 10);
-}
-
 const coachDailyLimitSql = `least(greatest(coalesce((case
   when to_char(organization_system_date(u.organization_id), 'YYYY-MM') < os.configuration->>'coachDailyLimitStartsMonth'
   then os.configuration->>'previousCoachDailyLimit'
@@ -8014,7 +8008,7 @@ class CoachRepository {
     const context = await this.pool.query<{
       display_name: string; cefr: CefrLevel; scenario: Record<string, unknown> | null;
       session_id: string | null; coach_daily_limit: number; system_month: string;
-      system_date: string; system_day_of_week: number; exam_date: string | null; level_approved_on: string;
+      system_date: string; system_day_of_week: number; exam_date: string | null;
     }>(
       `select u.display_name, e.cefr, cs.id as session_id, cs.scenario,
               ${coachDailyLimitSql} as coach_daily_limit,
@@ -8023,17 +8017,7 @@ class CoachRepository {
               extract(isodow from organization_system_date(p.organization_id))::int as system_day_of_week,
               (select pm.exam_date::text from program_months pm
                where pm.organization_id = p.organization_id
-                 and pm.month = to_char(organization_system_date(p.organization_id), 'YYYY-MM') limit 1) as exam_date,
-              coalesce((select to_char(max(change.effective_at)::date, 'YYYY-MM-DD')
-                from scheduled_level_changes change where change.learner_id = u.id
-                  and change.to_cefr = e.cefr and change.status = 'applied'),
-                (select to_char(max(decision.decided_at)::date, 'YYYY-MM-DD')
-                from assessment_decisions decision join assessment_attempts attempt on attempt.id = decision.attempt_id
-                join assessment_versions version on version.id = attempt.assessment_version_id
-                join assessment_definitions definition on definition.id = version.definition_id
-                where attempt.learner_id = u.id and definition.kind = 'placement'
-                  and decision.status = 'approved' and decision.approved_level = e.cefr),
-                to_char(e.enrolled_at::date, 'YYYY-MM-DD')) as level_approved_on
+                 and pm.month = to_char(organization_system_date(p.organization_id), 'YYYY-MM') limit 1) as exam_date
        from users u
        join enrollments e on e.learner_id = u.id
        join programs p on p.id = e.program_id and p.status = 'active'
@@ -8271,7 +8255,7 @@ class CoachRepository {
       persona: scenario.persona === "formal" ? "formal" : "informal",
       aiAvailable, daily: { used: Number(count.daily_used), limit: row.coach_daily_limit },
       chatAvailability,
-      monthly: { label: `Tháng ${row.system_month}`, turns: Number(count.monthly_turns), target: monthlySeasonTurnTarget(row.level_approved_on, row.system_month, row.exam_date ?? lastWeekdayOfMonth(row.system_month)) },
+      monthly: { label: `Tháng ${row.system_month}`, turns: Number(count.monthly_turns), target: learnerMonthlySeasonTarget(await learnerMonthlyAccess(this.pool, learnerId, row.system_month)) },
       messages, vocabulary,
       questionHistory,
       ...(monthlyContext ? { vocabularyProgress: { opened: openedVocabularyCount, total: allMonthlyVocabulary.size } } : {})
@@ -9444,11 +9428,16 @@ class EngagementRepository {
     const empty = { cefr: context.cefr, wordSet: null, learnedVocabularyAvailable, best: {} };
     if (!row) return empty;
     const payload = row.payload;
-    const words = Array.isArray(payload.words) ? payload.words as GameWordSetView["words"] : [];
+    const storedWords = Array.isArray(payload.words) ? payload.words as GameWordSetView["words"] : [];
     if (payload.source === "learned") {
       const eligibleWords = new Map(learned.map(word => [word.id, word.english]));
-      if (!words.length || words.some(word => eligibleWords.get(word.id) !== word.english)) return empty;
+      if (!storedWords.length || storedWords.some(word => eligibleWords.get(word.id) !== word.english)) return empty;
     }
+    // Monthly sets show the frozen illustration of each word, also for sets saved before the picture existed.
+    const learnedImages = new Map(learned.flatMap(word => word.imageUrl ? [[word.english.toLocaleLowerCase("en"), word.imageUrl] as const] : []));
+    const words = payload.source === "learned"
+      ? storedWords.map(word => word.imageUrl || !learnedImages.has(word.english.toLocaleLowerCase("en")) ? word : { ...word, imageUrl: learnedImages.get(word.english.toLocaleLowerCase("en"))! })
+      : storedWords;
     const distractors = Array.isArray(payload.distractors) ? payload.distractors as GameWordSetView["words"] : undefined;
     const bestRows = await this.pool.query<{ game_key: GameKey; score: number; max_score: number }>(
       `select distinct on (game_key) game_key, score, max_score

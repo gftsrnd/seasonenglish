@@ -13,6 +13,7 @@ import { buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationDistinctnes
 import { MonthlyCorePhaseShortfallError, runMonthlyCorePhase } from "./monthly-core-phase.js";
 import { runMonthlyEnrichmentWithRefill, type MonthlyCoreEnrichmentOutcome } from "./monthly-enrichment-phase.js";
 import { isPronunciationTargetAllowedForLevel, isValidMonthlyPronunciationIpaTarget } from "./monthly-resource-plan-spec.js";
+import { buildMonthlyCrossLevelCoreExclusions, buildMonthlyPronunciationExampleRepairInstruction, buildMonthlyPronunciationExampleRules, getMonthlyCoreLevelIssue, getMonthlyPronunciationExampleQualityIssue } from "./monthly-resource-quality-gates.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
 import { monthlyGenerationFailure } from "./monthly-generation-errors.js";
 import { applyMonthlyResourceEdit, blankMonthlyResourcePool, monthlyResourceEditInputSchema } from "./monthly-resource-manual-edit.js";
@@ -231,6 +232,11 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     if (overview.frameworks.some((framework) => framework.cefr === criteria.cefr && framework.status === "approved")) {
       return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_IMMUTABLE" });
     }
+    // The other levels' current (draft or approved) core words of this month are
+    // an exclusion list for the core phase: prompt context plus a selection gate.
+    const otherLevelCoreWords = buildMonthlyCrossLevelCoreExclusions(criteria.cefr, overview.frameworks
+      .filter((framework) => framework.cefr !== criteria.cefr && framework.resources)
+      .map((framework) => ({ cefr: framework.cefr, words: framework.resources!.coreTerms.map((term) => term.word) })));
     const calendar = buildMonthlyCalendar(month.month);
     const newLessonCount = calendar.effectiveDays.filter((_date, index) => monthlyDayKind(index + 1, calendar) === "new").length;
     const requiredVocabularyCount = newLessonCount * 3;
@@ -336,17 +342,22 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       // Multi-word expressions may fill up to 35% of the pool (umbrella group phrases included).
       const maxExpandedRepeats = maxMonthlySupportRepeats(criteria.expandedVocabularyCount);
       const maxExpandedPhrases = maxMonthlyPhrasePlacements(criteria.expandedVocabularyCount);
+      // Checkpointed cores must still pass the level gate (too easy for B2/C1,
+      // another level's core this month, non-word); failing ones are dropped
+      // and the core phase asks the AI for replacements.
+      const levelValidCores = coreTerms.filter((term) => !getMonthlyCoreLevelIssue(term, criteria.cefr, otherLevelCoreWords));
       const cachedCoreValid = coreTerms.length === criteria.vocabularyCount
+        && levelValidCores.length === coreTerms.length
         && coreTerms.every((term) => isSingleHeadword(term.word))
         && coreTerms.every((term) => hasSingleCoreSense(term.type, term.meaning))
         && new Set(coreTerms.map((term) => normalizeMonthlyResourceWord(term.word))).size === coreTerms.length;
       // A shorter, otherwise valid core list is progress saved by an earlier run
       // that ended short; the core phase continues from it instead of restarting.
       const partialCores = !cachedCoreValid
-        && coreTerms.length > 0 && coreTerms.length < criteria.vocabularyCount
-        && coreTerms.every((term) => isSingleHeadword(term.word))
-        && new Set(coreTerms.map((term) => normalizeMonthlyResourceWord(term.word))).size === coreTerms.length
-        ? [...coreTerms]
+        && levelValidCores.length > 0 && levelValidCores.length < criteria.vocabularyCount
+        && levelValidCores.every((term) => isSingleHeadword(term.word))
+        && new Set(levelValidCores.map((term) => normalizeMonthlyResourceWord(term.word))).size === levelValidCores.length
+        ? [...levelValidCores]
         : [];
       const partialSupports = partialCores.length
         ? (readCheckpointCategory("expandedTerms", monthlyResourcePlanOutputSchema.shape.expandedTerms) ?? []).filter((term) => partialCores.some((core) => core.id === term.relatesToCoreId))
@@ -366,6 +377,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         supportTargetPerCore: preflightSupportTarget,
         generate: runPhase,
         audit: runSupportAudit,
+        ...(otherLevelCoreWords.size ? { otherLevelCoreWords } : {}),
         ...(initial?.coreTerms.length ? { initial } : {}),
         ...(avoidWords.length ? { avoidWords } : {})
       });
@@ -415,7 +427,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       // never fails for lacking extras.
       const cachedGrammarTopics = readCheckpointCategory("grammarTopics", monthlyResourcePlanOutputSchema.shape.grammarTopics) ?? [];
       const cachedGrammarResult = { coreTerms: [], expandedTerms: [], grammarTopics: cachedGrammarTopics, pronunciationTargets: [] } as z.infer<typeof monthlyResourcePlanOutputSchema>;
-      const resumingAfterEnrichment = cachedCoreValid && getMonthlyGrammarPhaseIssues(cachedGrammarResult).length === 0;
+      const resumingAfterEnrichment = cachedCoreValid && getMonthlyGrammarPhaseIssues(cachedGrammarResult, criteria.cefr).length === 0;
       const isCompleteCoreSupportSet = (core: typeof coreTerms[number], coreIndex: number) => {
         const supports = expandedTerms.filter((term) => term.relatesToCoreId === core.id);
         const familyRequired = requiredSupportRelationsFor(core.type).includes("word_family");
@@ -726,18 +738,18 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
 
       const monthlyVocabularyForPronunciation = [...coreTerms, ...expandedTerms].map((term) => `${term.word} (${term.meaning})`).join("; ");
       updateProgress({phase:"grammarTopics",counts:{coreTerms:coreTerms.length,expandedTerms:expandedTerms.length}});
-      let grammarResult = getMonthlyGrammarPhaseIssues(cachedGrammarResult).length === 0 ? cachedGrammarResult : undefined;
+      let grammarResult = getMonthlyGrammarPhaseIssues(cachedGrammarResult, criteria.cefr).length === 0 ? cachedGrammarResult : undefined;
       if (!grammarResult) {
         grammarResult = await runMonthlyGrammarPhaseWithRetry((prompt) => runPhase(
           prompt,
           [],
           { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 2, pronunciationSoundCount: 0 }
-        ));
+        ), criteria.cefr);
         await saveCheckpointCategory("grammarTopics", grammarResult.grammarTopics);
       }
       updateProgress({phase:"pronunciationTargets",counts:{grammarTopics:grammarResult.grammarTopics.length}});
       const cachedPronunciationTargets = readCheckpointCategory("pronunciationTargets", monthlyResourcePlanOutputSchema.shape.pronunciationTargets) ?? [];
-      const cachedPronunciationTargetsValid = cachedPronunciationTargets.length <= 4 && cachedPronunciationTargets.every((target) => target.words.length >= pronunciationExampleCount && isValidMonthlyPronunciationIpaTarget(target.ipa) && isPronunciationTargetAllowedForLevel(criteria.cefr, target.ipa) && target.words.every((word) => doesMonthlyPronunciationExampleMatch(target.ipa, word.ipa)));
+      const cachedPronunciationTargetsValid = cachedPronunciationTargets.length <= 4 && cachedPronunciationTargets.every((target) => target.words.length >= pronunciationExampleCount && isValidMonthlyPronunciationIpaTarget(target.ipa) && isPronunciationTargetAllowedForLevel(criteria.cefr, target.ipa) && target.words.every((word) => doesMonthlyPronunciationExampleMatch(target.ipa, word.ipa, word.word) && !getMonthlyPronunciationExampleQualityIssue({ targetIpa: target.ipa, targetLabel: target.label, word: word.word, ipa: word.ipa, coreTerms })));
       const pronunciationTargets: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"] = cachedPronunciationTargetsValid ? cachedPronunciationTargets : [];
       const usedPronunciationWords = new Set<string>();
       for (const target of pronunciationTargets) for (const word of target.words) usedPronunciationWords.add(normalizeMonthlyResourceWord(word.word));
@@ -753,50 +765,65 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         let targetTemplate: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number] | undefined;
         const acceptedTargetWords: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number]["words"] = [];
         let issue = "";
+        // Once a target passes, a retry keeps that target and only replaces the
+        // rejected examples; the rejection reasons are the repair instruction.
+        let exampleRejections: string[] = [];
+        let schemaIssue = "";
         for (let attempt = 0; attempt < 3; attempt += 1) {
           const forbiddenForTarget = new Set([...usedPronunciationWords, ...acceptedTargetWords.map((word) => normalizeMonthlyResourceWord(word.word))]);
           const requiredExampleCount = pronunciationExampleCount;
           const neededExamples = requiredExampleCount - acceptedTargetWords.length;
-          const targetDistinctness = buildMonthlyPronunciationDistinctnessConstraint(pronunciationTargets, issue, !foundational);
-          const prompt = `PHASE 4 — ONE PRONUNCIATION TARGET ONLY. Return exactly one genuine English pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. ${pronunciationLevelConstraint} Generate a real, precise target for roadmap slot ${pronunciationSlots[soundIndex]}; its IPA, label and explanation must describe that target accurately. Format ipa as exactly one slash-delimited IPA form with no spaces, second transcription, label or prose (for example ${foundational ? "/ɪ/ or /θ/" : "/st/ for a consonant cluster or /ˈ/ for primary stress"}). Never combine forms such as "/θ/ and /ð/" in the ipa field. ${targetDistinctness} The roadmap requires four clearly distinct target categories across P1–P4; do not return a contrast-pair variant of an accepted target as a separate roadmap target. This is an unassigned month pool; do not output calendar day fields. Return at least ${Math.max(18, neededExamples * 2)} ordered candidate example words so the application can select ${neededExamples}. Every candidate must be a real word, no more than three syllables, and actually illustrate the target sound or stress pattern. Avoid all words already accepted for earlier targets: ${[...usedPronunciationWords].join("; ") || "none"}. For this same target, retain these already accepted examples and do not repeat them: ${acceptedTargetWords.map((word) => word.word).join("; ") || "none"}. Prefer authentic terms from this monthly vocabulary pool: ${monthlyVocabularyForPronunciation}. Use neutral workplace words; never invent cultural, historical or identity-based framing.`;
+          const targetDistinctness = buildMonthlyPronunciationDistinctnessConstraint(pronunciationTargets, targetTemplate ? "" : issue, !foundational);
+          const exampleRepair = targetTemplate
+            ? ` ${buildMonthlyPronunciationExampleRepairInstruction(targetTemplate, exampleRejections, neededExamples)}${schemaIssue ? ` ${schemaIssue}` : ""}`
+            : "";
+          const prompt = `PHASE 4 — ONE PRONUNCIATION TARGET ONLY. Return exactly one genuine English pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. ${pronunciationLevelConstraint} Generate a real, precise target for roadmap slot ${pronunciationSlots[soundIndex]}; its IPA, label and explanation must describe that target accurately. Format ipa as exactly one slash-delimited IPA form with no spaces, second transcription, label or prose (for example ${foundational ? "/ɪ/ or /θ/" : "/st/ for a consonant cluster or /ˈ/ for primary stress"}). Never combine forms such as "/θ/ and /ð/" in the ipa field. ${targetDistinctness} The roadmap requires four clearly distinct target categories across P1–P4; do not return a contrast-pair variant of an accepted target as a separate roadmap target. This is an unassigned month pool; do not output calendar day fields. Return at least ${Math.max(18, neededExamples * 2)} ordered candidate example words so the application can select ${neededExamples}. Every candidate must be a real word, no more than three syllables, and actually illustrate the target sound or stress pattern. Avoid all words already accepted for earlier targets: ${[...usedPronunciationWords].join("; ") || "none"}. For this same target, retain these already accepted examples and do not repeat them: ${acceptedTargetWords.map((word) => word.word).join("; ") || "none"}. Monthly vocabulary pool (use a word from it only when it genuinely contains the target): ${monthlyVocabularyForPronunciation}. ${buildMonthlyPronunciationExampleRules()} Use neutral workplace words; never invent cultural, historical or identity-based framing.${exampleRepair}`;
           let result: z.infer<typeof monthlyResourcePlanOutputSchema>;
           try {
             result = await runPhase(prompt, coreTerms, { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 1 });
           } catch (error) {
             if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
               issue = buildMonthlyPronunciationSchemaRepairIssue(safeGenerationDiagnosticIssues(error));
+              schemaIssue = issue;
               continue;
             }
             throw error;
           }
+          schemaIssue = "";
           if (result.coreTerms.length || result.expandedTerms.length || result.grammarTopics.length || result.pronunciationTargets.length !== 1) {
             issue = "response must contain one pronunciation target only";
+            schemaIssue = issue;
             continue;
           }
           const candidate = result.pronunciationTargets[0]!;
-          if (!isValidMonthlyPronunciationIpaTarget(candidate.ipa)) {
-            issue = `target IPA must be one slash-delimited IPA form with no spaces or prose; rejected "${candidate.ipa}"`;
-            continue;
+          if (!targetTemplate) {
+            if (!isValidMonthlyPronunciationIpaTarget(candidate.ipa)) {
+              issue = `target IPA must be one slash-delimited IPA form with no spaces or prose; rejected "${candidate.ipa}"`;
+              continue;
+            }
+            if (!isPronunciationTargetAllowedForLevel(criteria.cefr, candidate.ipa)) {
+              issue = foundational
+                ? `target IPA ${candidate.ipa} is outside the A1–A2 phoneme inventory; choose a foundational phoneme`
+                : `target IPA ${candidate.ipa} is an isolated phoneme; choose an advanced pattern such as a consonant cluster`;
+              continue;
+            }
+            const targetIssue = getMonthlyPronunciationTargetIssue(candidate, pronunciationTargets);
+            if (targetIssue) {
+              issue = targetIssue;
+              continue;
+            }
+            targetTemplate = candidate;
           }
-          if (!isPronunciationTargetAllowedForLevel(criteria.cefr, candidate.ipa)) {
-            issue = foundational
-              ? `target IPA ${candidate.ipa} is outside the A1–A2 phoneme inventory; choose a foundational phoneme`
-              : `target IPA ${candidate.ipa} is an isolated phoneme; choose an advanced pattern such as a consonant cluster`;
-            continue;
-          }
-          const targetIssue = getMonthlyPronunciationTargetIssue(candidate, pronunciationTargets);
-          if (targetIssue) {
-            issue = targetIssue;
-            continue;
-          }
-          targetTemplate ??= candidate;
-          const selection = selectMonthlyPronunciationCandidates({ candidates: candidate.words, forbiddenWords: forbiddenForTarget, needed: neededExamples, targetIpa: candidate.ipa });
+          // Examples are always checked against the accepted target (a retry that
+          // drifts to another IPA cannot smuggle in examples of a different sound).
+          const selection = selectMonthlyPronunciationCandidates({ candidates: candidate.words, forbiddenWords: forbiddenForTarget, needed: neededExamples, targetIpa: targetTemplate.ipa, targetLabel: targetTemplate.label, coreTerms });
           acceptedTargetWords.push(...selection.selected);
           if (acceptedTargetWords.length === requiredExampleCount) {
             acceptedTarget = { ...targetTemplate, words: acceptedTargetWords };
             break;
           }
-          issue = selection.rejected.join("; ") || `only ${acceptedTargetWords.length} of ${requiredExampleCount} usable examples have been returned`;
+          exampleRejections = selection.rejected.length ? selection.rejected : [`only ${acceptedTargetWords.length} of ${requiredExampleCount} usable examples have been returned`];
+          issue = exampleRejections.join("; ");
         }
         if (!acceptedTarget) throw new MonthlyResourcePlanError([`Pronunciation generation failed for ${pronunciationSlots[soundIndex]}: ${issue}.`]);
         pronunciationTargets.push(acceptedTarget);
@@ -845,6 +872,11 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     }
   });
 
+  // Core words already used by the other CEFR levels of the same month (WP9).
+  const otherLevelCoreTerms = async (actorId: string, month: string, cefr: string) =>
+    (await repositories.monthlyContent.getOverview(actorId, month)).frameworks
+      .filter((framework) => framework.cefr !== cefr && framework.resources)
+      .map((framework) => ({ cefr: framework.cefr, words: framework.resources!.coreTerms.map((term) => term.word) }));
   const manualResourcePool = async (actorId: string, month: string, cefr: z.infer<typeof resourceCheckpointQuery>["cefr"]) => {
     const overview = await repositories.monthlyContent.getOverview(actorId, month);
     if (!overview.monthWindow.writable) return { code: "MONTHLY_CONTENT_READ_ONLY" } as const;
@@ -866,9 +898,10 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const pool = await manualResourcePool(actorId, month, cefr);
     if ("code" in pool) return reply.code(409).send(pool);
     if (input.expectedVersion !== pool.theme.version) return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_VERSION_CONFLICT" });
-    const edited = applyMonthlyResourceEdit(pool, input);
-    if (!edited.ok) return reply.code(422).send({ code: "MONTHLY_RESOURCE_EDIT_INVALID", issues: edited.issues });
-    return repositories.monthlyContent.saveResourceDraft(actorId, edited.pool, "manual");
+    const edited = applyMonthlyResourceEdit(pool, input, { otherLevelCoreTerms: await otherLevelCoreTerms(actorId, month, cefr) });
+    if (!edited.ok) return reply.code(422).send({ code: "MONTHLY_RESOURCE_EDIT_INVALID", issues: edited.issues, warnings: edited.warnings });
+    const saved = await repositories.monthlyContent.saveResourceDraft(actorId, edited.pool, "manual");
+    return edited.warnings.length ? { ...saved, warnings: edited.warnings } : saved;
   });
 
   app.post("/api/v1/content/month-frameworks/:id/approve", { preHandler: contentOperator }, async (request, reply) => {
@@ -904,10 +937,11 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     if (draft.status !== "draft") return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_IMMUTABLE" });
     if (!draft.writable) return reply.code(409).send({ code: "MONTHLY_CONTENT_READ_ONLY" });
     if (draft.version !== parsed.data.expectedVersion) return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_VERSION_CONFLICT", currentVersion: draft.version });
-    const edited = applyMonthlyResourceEdit(draft.pool, parsed.data);
-    if (!edited.ok) return reply.code(422).send({ code: "MONTHLY_RESOURCE_EDIT_INVALID", issues: edited.issues });
+    const edited = applyMonthlyResourceEdit(draft.pool, parsed.data, { otherLevelCoreTerms: await otherLevelCoreTerms(actorId, draft.month, draft.cefr) });
+    if (!edited.ok) return reply.code(422).send({ code: "MONTHLY_RESOURCE_EDIT_INVALID", issues: edited.issues, warnings: edited.warnings });
     try {
-      return await repositories.monthlyContent.saveEditedResourceDraft(actorId, id, parsed.data.expectedVersion, edited.pool);
+      const saved = await repositories.monthlyContent.saveEditedResourceDraft(actorId, id, parsed.data.expectedVersion, edited.pool);
+      return edited.warnings.length ? { ...saved, warnings: edited.warnings } : saved;
     } catch (error) {
       if (error instanceof RangeError) return reply.code(422).send({ code: "MONTHLY_RESOURCE_EDIT_INVALID", issues: [{ section: "pool", message: error.message }] });
       throw error;

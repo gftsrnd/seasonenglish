@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import type { ArenaView, DuelView, GameDescriptor, GameHubView, GameKey, GameTopicModeration, GameWordSetView } from "@e4s/contracts";
-import { seasonRioRoundPlan } from "@e4s/domain/engagement";
+import { seasonRioRoundPlan, typingMaximum } from "@e4s/domain/engagement";
 import { ArrowLeft, ArrowLeftRight, ArrowRight, Flag, Gift, Grid3X3, Heart, Image as ImageIcon, Keyboard, Layers3, Lightbulb, MousePointerClick, Play, ScanText, ShoppingBasket, Shuffle, Sun, Target, Timer, Trophy, Volume2, type LucideIcon } from "lucide-react";
 import { CrosswordGame, ScrambleGame, SeasonCatchGame, SeasonRioGame, TypingRaceGame, WordSortGame } from "../games/index.js";
 import { crosswordEntryCount } from "../games/CrosswordGame.js";
-import type { GameWord } from "../games/types.js";
+import { gameRoundWordCount, type GameWord } from "../games/types.js";
 import type { LearnerCallbacks } from "./contracts.js";
 import { ErrorText, Notice, PageTitle, AppLink } from "./ui.js";
 import { useModal } from "../shared/ModalProvider.js";
@@ -104,7 +104,21 @@ export function getGameAvailability(key: GameKey, words: readonly GameWord[]): G
   return { available: true };
 }
 
-function getGameRoundSummary(descriptor: GameDescriptor, words: readonly GameWord[]) {
+export function getGameRoundSummary(descriptor: Pick<GameDescriptor, "key" | "goal" | "scoring">, words: readonly GameWord[]) {
+  // Server descriptors carry generic copy with the largest round size; the
+  // actual round depends on the word set, so counts are derived here.
+  if (descriptor.key === "typing") {
+    const rounds = gameRoundWordCount("typing", words);
+    return {
+      goal: `Gõ đúng ${rounds} từ thật nhanh, giữ chuỗi combo càng dài càng nhiều điểm.`,
+      scoring: `10 điểm × combo cho mỗi từ đúng; ${rounds} từ, tối đa ${typingMaximum(rounds)} điểm.`
+    };
+  }
+  if (descriptor.key === "scramble") return { goal: `Xếp đúng càng nhiều từ càng tốt (${gameRoundWordCount("scramble", words)} từ).`, scoring: descriptor.scoring };
+  if (descriptor.key === "eggs") {
+    const rounds = gameRoundWordCount("eggs", words);
+    return { goal: `Hứng đúng vật phẩm khớp với gợi ý, ${rounds} lượt.`, scoring: `+1 điểm mỗi vật phẩm hứng đúng, tối đa ${rounds}.` };
+  }
   if (descriptor.key !== "mario") return { goal: descriptor.goal, scoring: descriptor.scoring };
   const plan = seasonRioRoundPlan(words);
   return {

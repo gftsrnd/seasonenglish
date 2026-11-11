@@ -16,6 +16,7 @@ import { MONTHLY_FINAL_MANUAL_RULES } from "./monthly-final-checks.js";
 import { safeGenerationDiagnosticIssues } from "../content/generation-errors.js";
 import {generateMonthlyFinalProductive} from "./monthly-final-productive-generation.js";
 import {generateMonthlyFinalListening} from "./monthly-final-listening-generation.js";
+import {generateMonthlyFinalReading} from "./monthly-final-reading-generation.js";
 
 const frameworkParam = z.object({ frameworkId: z.uuid() });
 const versionParam = z.object({ versionId: z.uuid() });
@@ -104,70 +105,13 @@ export function registerMonthlyFinalRoutes(
     const task = await repositories.aiRuns.activeTaskPrompt(actorId, "monthly_final_generation");
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     let receptive: { output: MonthlyFinalReceptiveOutput; metadata: Awaited<ReturnType<AiTaskRunner["runTask"]>>["metadata"] }; let productive;
-    // Reading questions for a set of target terms. Like the level-up reading
-    // repair, a slice that still fails validation after its retries is split in
-    // half and each half is requested on its own (at most two levels deep).
-    type ReadingTerm = (typeof input.targets.reading)[number];
-    const generateReading = async (terms: ReadingTerm[], depth: number): Promise<MonthlyFinalReceptiveOutput["reading"]> => {
-      const sliceInput = { ...input, targets: { ...input.targets, reading: terms } };
-      try {
-        const balancedTerms = terms.filter((_, index) => index % 2 === 0).map(term => term.id);
-        const systemPrompt = [
-          task.prompt,
-          `Generate only Reading, one question for each of these ${terms.length} terms: ${terms.map(term => term.id).join(", ")}.`,
-          "Use fresh, short context sentences within levelProfile.readingItem.maxWords. Do not copy any taught grammar example.",
-          "Test the supplied meaning. All three options should use the same grammatical shape and different meanings, with exactly one correct interpretation. Do not use conjugations or plurals of the same word as distractors.",
-          "If you use a blank, each option must fit the blank without repeating other words in the prompt. For meaning paraphrases, put the target word in the context sentence and omit the blank.",
-          `For these specific IDs, at least one distractor must be as long as the correct option in characters: ${balancedTerms.join(", ")}.`,
-          "Keep the right meaning compact. Give the distractors a comparable amount of detail. For example, use 'get more details', 'wait until next week', and 'ask about the price' rather than a long explanation and two short labels.",
-          "Explain the answer by meaning in context. Before returning, compare the option lengths for the listed IDs and fix any uniquely longest correct option."
-        ].join("\n");
-        const result = await runner.runTask("monthly_final_reading_generation", sliceInput, {
-          systemPrompt,
-          maxOutputTokens: 8_000,
-          maxAttempts: 2
-        });
-        return (result.output as Pick<MonthlyFinalReceptiveOutput, "reading">).reading;
-      } catch (error) {
-        const retryable = error && typeof error === "object" && ["AI_OUTPUT_INVALID", "AI_OUTPUT_TRUNCATED"].includes(String((error as { code?: unknown }).code));
-        if (!retryable) throw error;
-        const diagnostic = (error as {details?: {invalidOutput?: string;issues?: {path: string;message: string}[]}}).details;
-        const lengthIssue = diagnostic?.issues?.find(issue =>
-          issue.path === "reading.questions" && issue.message.includes("uniquely longest"));
-        if (lengthIssue && typeof diagnostic?.invalidOutput === "string") {
-          try {
-            const repaired = await runner.runTask("monthly_final_reading_generation", sliceInput, {
-              systemPrompt: [
-                "Repair only the Reading answer options in the supplied draft. Preserve the term IDs, prompts, correct meanings and answer positions.",
-                "For every listed term, shorten the correct phrase or give a plausible wrong phrase comparable detail. All three choices must fit the same grammatical slot or use parallel meaning phrases. Never add empty padding or make two choices correct.",
-                "Compare character lengths. At least half of the correct choices must be tied with or shorter than another choice. Return the complete Reading result."
-              ].join("\n"),
-              messages: [
-                {role:"user",content:JSON.stringify(sliceInput)},
-                {role:"assistant",content:diagnostic.invalidOutput},
-                {role:"user",content:lengthIssue.message}
-              ],
-              maxOutputTokens:8000,maxAttempts:2
-            });
-            return (repaired.output as Pick<MonthlyFinalReceptiveOutput, "reading">).reading;
-          } catch (repairError) {
-            if (!repairError || typeof repairError !== "object" || !("code" in repairError) || repairError.code !== "AI_OUTPUT_INVALID") throw repairError;
-            error = repairError;
-          }
-        }
-        if (depth >= 2 || terms.length < 2) throw error;
-        const middle = Math.ceil(terms.length / 2);
-        const [first, second] = await Promise.all([generateReading(terms.slice(0, middle), depth + 1), generateReading(terms.slice(middle), depth + 1)]);
-        return { questions: [...first.questions, ...second.questions] };
-      }
-    };
     try {
       // Same slicing as the level-up form: one call producing both listening
       // and reading left the reading section empty, so they are separate calls,
       // and reading questions still missing are requested again for those terms.
       const [listening, reading, productiveResult] = await Promise.all([
         generateMonthlyFinalListening(runner,input,task.prompt),
-        generateReading(input.targets.reading, 0),
+        generateMonthlyFinalReading(runner, input, task.prompt),
         generateMonthlyFinalProductive(runner, input, `${task.prompt}\nGenerate ONLY the productive part now: title, GA/GB main and secondary components, the Writing task, Speaking A read-aloud with its 8 positions, and Speaking B voice note, with sample answers. First choose two different taught words per P1–P4, then write a natural passage containing ALL eight selected words within levelProfile.speakingA.maxWords. Check every selected word is present in the passage. Grammar evidence fields are exact quotes from the actual corresponding sample, without commentary or instructions to add a sentence later. Writing and Speaking B samples must use all their own assigned target words naturally. Keep Writing sample within the levelProfile writing word range. Write learner facts as short notes in the instruction language. Paraphrase those notes in the model answers. The learner task and facts must not copy taught grammar examples.`)
       ]);
       receptive = {

@@ -51,6 +51,7 @@ export const frameworkRef = { id: "11111111-1111-4111-8111-111111111111", versio
 /** A deterministic, rule-abiding stand-in for the two AI slices. */
 export function fakeMonthlyFinalAiOutput(input: MonthlyFinalGenerationInput): { receptive: MonthlyFinalReceptiveOutput; productive: MonthlyFinalProductiveOutput } {
   const profile = MONTHLY_FINAL_LEVEL_PROFILES[input.cefr];
+  const vi = profile.instructionLanguage === "vi";
   const listening = input.targets.listening;
   const split = Math.ceil(listening.length * 0.6);
   const ga = "Could you send me the numbers today?";
@@ -73,7 +74,7 @@ export function fakeMonthlyFinalAiOutput(input: MonthlyFinalGenerationInput): { 
   const receptive: MonthlyFinalReceptiveOutput = {
     listening: { messages: [message("A", listening.slice(0, split)), message("B", listening.slice(split))] },
     reading: { questions: input.targets.reading.map((term) => ({
-      termId: term.id, prompt: `Please check the ${term.word} before noon.`,
+      termId: term.id, prompt: `Please check the ${term.word} before noon. What should you do?`,
       options: [`The ${term.word} item`, `The ${term.word} memo`, `The ${term.word} card`], correctIndex: 0, explanation: `It means ${term.meaning}.`
     })) }
   };
@@ -88,14 +89,15 @@ export function fakeMonthlyFinalAiOutput(input: MonthlyFinalGenerationInput): { 
       secondaryStepId: topic.taughtSteps[1]!.stepId, secondaryLabel: `${topic.code} variant component`, secondaryPatterns: [topic.taughtSteps[1]!.formula]
     })),
     writing: {
-      task: input.cefr === "A1" ? 'Write a short message to your manager, Anna. Bắt đầu bằng câu gợi ý: "Hi Anna, could you extend the deadline?"' : "Write a short message to your manager, Anna.", facts: "The weekly draft is ready. Two teams have not sent their numbers. You want one more day.",
-      requirements: ["Say what is ready and what is still open.", "Ask Anna for one more day.", "Explain your plan for tomorrow."], sample: writingSample,
+      task: input.cefr === "A1" ? 'Write a short message to your manager, Anna. Bắt đầu bằng câu gợi ý: "Hi Anna, could you extend the deadline?"' : vi ? "Viết tin nhắn ngắn cho quản lý của bạn, Anna." : "Write a short message to your manager, Anna.",
+      facts: vi ? "Bản nháp tuần đã xong. Hai nhóm chưa gửi số liệu. Bạn cần thêm một ngày." : "The weekly draft is ready. Two teams have not sent their numbers. You want one more day.",
+      requirements: vi ? ["Nói việc gì đã xong và việc gì còn dở.", "Xin Anna thêm một ngày.", "Nêu kế hoạch cho ngày mai."] : ["Say what is ready and what is still open.", "Ask Anna for one more day.", "Explain your plan for tomorrow."], sample: writingSample,
       evidence: { gaMain: "Could you extend the deadline?", gaSecondary: "I have to wait for data.", gbMain: "If HR sends it, I will finish.", gbSecondary: "I wish I had it now." }
     },
     speakingA: { text: `Please read: ${words.map((item) => item.word).join(", ")}.`, positions: words },
     speakingB: {
-      task: "Leave a voice note for your manager.", facts: "The slides are ready. The client cannot join at 3 p.m.",
-      requirements: ["Say the slides are ready.", "Suggest a new time and ask for an answer."], sample: speakingSample,
+      task: vi ? "Ghi một tin nhắn thoại cho quản lý của bạn." : "Leave a voice note for your manager.", facts: vi ? "Slide đã xong. Khách hàng không họp được lúc 3 giờ chiều." : "The slides are ready. The client cannot join at 3 p.m.",
+      requirements: vi ? ["Nói rằng slide đã xong.", "Đề xuất giờ mới và xin câu trả lời."] : ["Say the slides are ready.", "Suggest a new time and ask for an answer."], sample: speakingSample,
       evidence: { gaMain: "Could you send me your answer?", gbMain: "If you agree, I will send the invitation." }
     }
   };

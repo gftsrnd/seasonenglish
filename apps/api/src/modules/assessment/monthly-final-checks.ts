@@ -1,7 +1,7 @@
 import type { MonthlyFinalCheckStatus, MonthlyFinalCheckView, MonthlyFinalExamMeta, MonthlyFinalExamStatus, MonthlyFinalGenCode } from "@e4s/contracts";
 import type { MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { publicAssessmentDefinition, type StoredAssessmentDefinition, type StoredAssessmentTask } from "@e4s/database";
-import {monthlyFinalContainsTerm as containsTerm,monthlyFinalWordCount as wordCount,monthlyFinalIsWordList,monthlyFinalWritingOpening} from "@e4s/ai";
+import {monthlyFinalContainsTerm as containsTerm,monthlyFinalWordCount as wordCount,monthlyFinalIsWordList,monthlyFinalWritingOpening,monthlyFinalReadingItemIssues} from "@e4s/ai";
 import {
   MONTHLY_FINAL_LEVEL_PROFILES, MONTHLY_FINAL_OPTION_COUNT, MONTHLY_FINAL_SECTION_MINUTES, MONTHLY_FINAL_SECTION_SCORE,
   MONTHLY_FINAL_SPEAKING_A_SCORE, MONTHLY_FINAL_SPEAKING_B_SCORE, MONTHLY_FINAL_TOTAL_MINUTES, MONTHLY_FINAL_TOTAL_SCORE,
@@ -66,7 +66,7 @@ export function evaluateMonthlyFinal(blueprint: StoredAssessmentDefinition, cont
   };
   const precheck: Partial<Record<MonthlyFinalGenCode, string[]>> = {
     GEN04: gen04Precheck(context), GEN05: gen05Precheck(context), GEN06: gen15(context).status === "fail" ? ["Thiếu trích đoạn bằng chứng trong script (xem GEN15)"] : [],
-    GEN10: gen10Precheck(context), GEN21: gen21Precheck(context)
+    GEN07: gen07Precheck(context), GEN10: gen10Precheck(context), GEN21: gen21Precheck(context)
   };
   const checks: MonthlyFinalCheckView[] = (Object.keys(TITLES) as MonthlyFinalGenCode[]).map((code) => {
     if (!MONTHLY_FINAL_MANUAL_RULES.includes(code)) {
@@ -92,7 +92,7 @@ function manualHint(code: MonthlyFinalGenCode): string {
     case "GEN04": return "Kiểm tra tự động: mỗi mục từ có mặt ở vị trí chấm. Cần người rà vai trò từng lần xuất hiện.";
     case "GEN05": return "Lắp từng lựa chọn vào ngữ cảnh và phản biện; cần người xác nhận.";
     case "GEN06": return "Đối chiếu câu hỏi với script; cần người xác nhận.";
-    case "GEN07": return "Đọc phần giải thích vì sao đáp án đúng về nghĩa; cần người xác nhận.";
+    case "GEN07": return "Kiểm tra tự động: mỗi câu có câu hỏi hoặc chỗ trống, từ đích nằm trong câu ngữ cảnh. Đọc phần giải thích vì sao đáp án đúng về nghĩa; cần người xác nhận.";
     case "GEN08": return "Đối chiếu tên, giờ, số tiền, vai trò giữa script, câu hỏi và dữ kiện.";
     case "GEN09": return "Soát từ/cấu trúc theo kiến thức nền và hồ sơ level.";
     case "GEN10": return "Kiểm tra tự động: có thành phần chính/phụ và bằng chứng trong bài mẫu. Cần người xác nhận tình huống gợi ra đủ GA, GB.";
@@ -221,6 +221,34 @@ function gen05Precheck(context: Context): string[] {
     const labels = (task.options ?? []).map((option) => normalizeText(option.label));
     if (!task.prompt.trim() || labels.some((label) => !label)) problems.push(`${task.key}: thiếu nội dung câu hỏi hoặc lựa chọn`);
     else if (new Set(labels).size !== labels.length) problems.push(`${task.key}: có lựa chọn trùng nhau`);
+  }
+  return problems;
+}
+
+/**
+ * GEN07 pre-check (WP10): a Reading item must ask something (a "?" question,
+ * an explicit choose/complete cue, or a gap) and must assess the target word
+ * in its context. A gap item assesses the word through its correct option;
+ * every other item must contain the word in the context sentence itself, not
+ * only in the question ("Which word is closest in meaning to 'X'?"). The rule
+ * lives in @e4s/ai so the Reading generation repair loop applies the same one.
+ */
+export function monthlyFinalReadingItemProblems(prompt: string, correctLabel: string, word: string): string[] {
+  return monthlyFinalReadingItemIssues(prompt, correctLabel, word).map((issue) => issue === "no_question"
+    ? "chưa có câu hỏi hoặc chỗ trống"
+    : issue === "gap_word_missing"
+      ? `"${word}" không có trong câu ngữ cảnh hoặc đáp án điền chỗ trống`
+      : `"${word}" không có trong câu ngữ cảnh (chỉ có ở câu hỏi/đáp án)`);
+}
+
+function gen07Precheck(context: Context): string[] {
+  const problems: string[] = [];
+  for (const row of context.exam.mapping) {
+    if (row.skill !== "reading") continue;
+    const found = context.taskByKey.get(row.taskKey);
+    if (!found) continue;
+    const correct = found.task.options?.find((option) => option.value === found.task.correctAnswer)?.label ?? "";
+    for (const problem of monthlyFinalReadingItemProblems(found.task.prompt, correct, row.word)) problems.push(`${row.position}: ${problem}`);
   }
   return problems;
 }
@@ -420,6 +448,13 @@ function gen22(context: Context): Result {
   const instructions = blueprint.sections.flatMap((section) => [...section.instructions, ...section.groups.map((group) => group.instruction)]).filter((item) => item.trim());
   if (profile.instructionLanguage === "vi" && instructions.some((item) => !VIETNAMESE.test(item))) problems.push("A1–A2: hướng dẫn phải bằng tiếng Việt");
   if (profile.instructionLanguage === "en" && instructions.some((item) => VIETNAMESE.test(item))) problems.push("B1–C1: hướng dẫn phải bằng tiếng Anh");
+  // WP6: the learner-facing Writing and Speaking B prompts (task, facts,
+  // requirements) follow the same language rule. The read-aloud text (SA) and
+  // the English sample answers are English by design and are not inspected.
+  for (const [key, label] of [["W", "Writing"], ["SB", "Speaking B"]] as const) {
+    const prompt = context.taskByKey.get(key)?.task.prompt;
+    if (prompt?.trim()) problems.push(...monthlyFinalProductivePromptLanguageProblems(prompt, profile.instructionLanguage).map((problem) => `${label}: ${problem}`));
+  }
   for (const [groupKey, script] of context.scriptByGroup) {
     const words = wordCount(script);
     if (words < Math.floor(profile.listeningScriptWords.min * 0.85) || words > Math.ceil(profile.listeningScriptWords.max * 1.15)) problems.push(`${groupKey}: bản nghe ${words} từ, hồ sơ ${profile.listeningScriptWords.min}–${profile.listeningScriptWords.max}`);
@@ -438,7 +473,40 @@ function gen22(context: Context): Result {
   return verdict(problems, `Ngôn ngữ hướng dẫn ${profile.instructionLanguage === "vi" ? "tiếng Việt" : "tiếng Anh"}; độ dài ngữ liệu đúng hồ sơ ${contract.cefr}.`);
 }
 
-const GRAMMAR_TERMS = /\b(grammar|tense|conditional|modal verbs?|passive voice|present perfect|past simple|present simple|present continuous|future simple|first conditional|second conditional|formula)\b|ngữ pháp|cấu trúc|công thức|câu điều kiện/iu;
+const PRODUCTIVE_FACTS_LABEL = /^(?:Dữ kiện|Facts)\s*:\s*/iu;
+const PRODUCTIVE_REQUIREMENTS_LABEL = /^(?:Bài viết cần|Tin nhắn thoại cần|Your message must|Your voice note must)\s*:\s*/iu;
+const PRODUCTIVE_WORDS_LABEL = /^(?:Dùng đủ \d+ từ sau|Use these \d+ words)\s*:/iu;
+// A lowercase word with Vietnamese diacritics. Capitalised names (Nguyễn, Hùng)
+// and a single loanword (café) are tolerated; Vietnamese sentences are not.
+const VIETNAMESE_WORD = /(?<![\p{L}])\p{Ll}*[ăâđêôơưàáạảãầấậẩẫằắặẳẵèéẹẻẽềếệểễìíịỉĩòóọỏõồốộổỗờớợởỡùúụủũừứựửữỳýỵỷỹ]\p{L}*/gu;
+
+/** Splits a W/SB prompt (task · facts · requirements · word list) built by productionPrompt or edited by hand. */
+function productivePromptParts(prompt: string): { task: string; facts: string; requirements: string } {
+  const parts = { task: [] as string[], facts: [] as string[], requirements: [] as string[] };
+  for (const block of prompt.split(/\n\s*\n/u).map((item) => item.trim()).filter(Boolean)) {
+    if (PRODUCTIVE_WORDS_LABEL.test(block)) continue;
+    if (PRODUCTIVE_FACTS_LABEL.test(block)) parts.facts.push(block.replace(PRODUCTIVE_FACTS_LABEL, ""));
+    else if (PRODUCTIVE_REQUIREMENTS_LABEL.test(block)) parts.requirements.push(block.replace(PRODUCTIVE_REQUIREMENTS_LABEL, ""));
+    else parts.task.push(block);
+  }
+  return { task: parts.task.join("\n"), facts: parts.facts.join("\n"), requirements: parts.requirements.join("\n") };
+}
+
+/** GEN22 language rule for the Writing / Speaking B prompt (WP6). */
+export function monthlyFinalProductivePromptLanguageProblems(prompt: string, language: "vi" | "en"): string[] {
+  const parts = productivePromptParts(prompt);
+  if (language === "en") {
+    const vietnamese = [parts.task, parts.facts, parts.requirements].join("\n").match(VIETNAMESE_WORD) ?? [];
+    return vietnamese.length >= 2 ? [`B1–C1: đề bài/dữ kiện/yêu cầu không được có tiếng Việt ("${vietnamese.slice(0, 3).join(" ")}")`] : [];
+  }
+  const problems: string[] = [];
+  if (!VIETNAMESE.test(parts.task)) problems.push("A1–A2: lời đề phải có tiếng Việt");
+  if (parts.requirements.trim() && !VIETNAMESE.test(parts.requirements)) problems.push("A1–A2: yêu cầu phải có tiếng Việt");
+  if (wordCount(parts.facts) >= 5 && !VIETNAMESE.test(parts.facts)) problems.push("A1–A2: dữ kiện phải có tiếng Việt");
+  return problems;
+}
+
+const GRAMMAR_TERMS =/\b(grammar|tense|conditional|modal verbs?|passive voice|present perfect|past simple|present simple|present continuous|future simple|first conditional|second conditional|formula)\b|ngữ pháp|cấu trúc|công thức|câu điều kiện/iu;
 
 function gen23(context: Context): Result {
   const problems: string[] = [];

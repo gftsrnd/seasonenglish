@@ -194,7 +194,7 @@ export const learnerLessonCopy: Record<LearnerLessonLanguage, LearnerLessonCopy>
     },
     vocabularyPartOfSpeech: (value, word) => {
       const normalized = value?.trim().toLocaleLowerCase() ?? "";
-      return vietnamesePartOfSpeech[normalized] ?? (normalized || knownVietnamesePartOfSpeech[word.trim().toLocaleLowerCase()] || "từ");
+      return vietnamesePartOfSpeech[normalized] ?? (normalized || knownVietnamesePartOfSpeech[word.trim().toLocaleLowerCase()] || "");
     },
     vocabulary: {
       collocations: "Cụm từ thường dùng", examples: "Ví dụ", relations: "Các nhóm từ liên quan",
@@ -269,7 +269,7 @@ export const learnerLessonCopy: Record<LearnerLessonLanguage, LearnerLessonCopy>
       const normalized = value?.trim().toLocaleLowerCase() ?? "";
       return normalized && Object.prototype.hasOwnProperty.call(vietnamesePartOfSpeech, normalized)
         ? normalized
-        : knownEnglishPartOfSpeech[word.trim().toLocaleLowerCase()] ?? "word";
+        : knownEnglishPartOfSpeech[word.trim().toLocaleLowerCase()] ?? "";
     },
     vocabulary: {
       collocations: "Common collocations", examples: "Examples", relations: "Related word groups",

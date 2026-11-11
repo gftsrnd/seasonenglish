@@ -329,7 +329,7 @@ export interface AssessmentLevelFormDetailView extends AssessmentLevelFormView {
     }>;
   }>;
   warnings: Array<{
-    code: "missing_section" | "short_section" | "missing_task_prompt" | "missing_answer_key" | "missing_audio" | "in_use";
+    code: "missing_section" | "short_section" | "missing_task_prompt" | "missing_answer_key" | "missing_audio" | "in_use" | "quality_check";
     message: string;
     severity: "warning" | "error";
   }>;

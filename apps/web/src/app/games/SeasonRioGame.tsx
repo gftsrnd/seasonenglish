@@ -66,7 +66,14 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     const scene = sceneRef.current;
     const main = scene?.closest<HTMLElement>("main");
     if (main) main.scrollTop = 0;
+    // Phones: bring the whole stage, controls included, above the bottom bar so
+    // the thumbs land on ← → ↑ without scrolling first.
+    // Deferred one frame: the game page resets its scroll to the top after this effect.
+    const frame = scene && typeof window.matchMedia === "function" && window.matchMedia("(max-width: 720px)").matches
+      ? window.requestAnimationFrame(() => scene.scrollIntoView?.({ block: "nearest" }))
+      : 0;
     scene?.focus({ preventScroll: true });
+    return () => { if (frame) window.cancelAnimationFrame(frame); };
   }, []);
 
   useEffect(() => {
@@ -218,6 +225,24 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     if (busy || quiz) return;
     hold(direction < 0 ? "ArrowLeft" : "ArrowRight", true);
   };
+  // Touch: press and hold the left or right half of the stage to run that way.
+  const stagePointer = useRef<{ id: number; key: "ArrowLeft" | "ArrowRight" } | null>(null);
+  const pressStage = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse" || busy || quiz || stagePointer.current) return;
+    event.preventDefault();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const key = event.clientX - bounds.left < bounds.width / 2 ? "ArrowLeft" : "ArrowRight";
+    stagePointer.current = { id: event.pointerId, key };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    sceneRef.current?.focus({ preventScroll: true });
+    hold(key, true);
+  };
+  const releaseStage = (event: React.PointerEvent<HTMLDivElement>) => {
+    const pressed = stagePointer.current;
+    if (!pressed || pressed.id !== event.pointerId) return;
+    stagePointer.current = null;
+    hold(pressed.key, false);
+  };
   const jump = () => { if (busy || quiz) return; hold("jump", true); if (velocityY.current === 0) velocityY.current = 11; };
   const trapQuizFocus = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Tab") return;
@@ -236,7 +261,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   return <div className="game-runner" aria-busy={busy || undefined}>
     <div className="game-hud"><h2>Season-rio</h2><span><Trophy size={16} aria-hidden="true" /><strong>{score}/{roundPlan.total}</strong></span><span><Gift size={16} aria-hidden="true" />Quà <strong>{gateStates.filter((gate) => gate !== "closed").length}/{roundPlan.gateCount}</strong></span><span><Target size={16} aria-hidden="true" />Boss <strong>{bossHealth > 0 ? bossHealth : "xong"}</strong>{bossHealth > 0 ? <><Timer size={14} aria-hidden="true" />{bossSeconds}s</> : null}</span><span className="game-lives" aria-label={`${lives} mạng còn lại`}>{[0, 1, 2].map((life) => <Heart className={life < lives ? "is-active" : "is-lost"} fill={life < lives ? "currentColor" : "none"} size={17} strokeWidth={2} aria-hidden="true" key={life} />)}</span></div>
     <div ref={sceneRef} className="rio-scene" role="application" aria-label="Màn chơi Season-rio" tabIndex={0} onKeyDown={(event) => { if (["ArrowLeft", "ArrowRight", "ArrowUp", " ", "a", "d", "w"].includes(event.key)) event.preventDefault(); }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { keys.current = {}; setMotion(null); } }}>
-      <div className="rio-viewport"><div className="rio-world" style={{ width: worldWidth, transform: `translateX(-${camera}px)` }}>
+      <div className="rio-viewport" onPointerDown={pressStage} onPointerUp={releaseStage} onPointerCancel={releaseStage} onLostPointerCapture={releaseStage} onContextMenu={(event) => event.preventDefault()}><div className="rio-world" style={{ width: worldWidth, transform: `translateX(-${camera}px)` }}>
         <div className="rio-cloud rio-cloud--one" /><div className="rio-cloud rio-cloud--two" />
         {platforms.map((platform, index) => <div data-testid="rio-platform" className="rio-platform" style={{ left: platform.left, width: platform.width, height: platform.height }} key={`${platform.left}-${index}`} />)}
         {activeGateLayout.map((gate, index) => <div data-testid="gift-gate" data-state={gateStates[index] ?? "closed"} data-tier={gate.tier} className={`gift-gate ${(gateStates[index] ?? "closed") !== "closed" ? "is-open" : ""}`} style={{ left: gate.left, bottom: 28 + gate.tier }} key={gate.left}><i className="gate-beam" /><GiftArt state={gateStates[index] ?? "closed"} /><i className="gate-post" /></div>)}
@@ -249,7 +274,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
       {quiz ? <div ref={quizDialogRef} className="rio-quiz" role="dialog" aria-modal="true" aria-label={quiz.phase === "gate" ? "Câu hỏi hộp quà" : "Câu hỏi Boss"} tabIndex={-1} onKeyDown={trapQuizFocus}><div><span className="eyebrow">{quiz.phase === "gate" ? `Hộp quà ${quiz.index + 1}/${roundPlan.gateCount} hỏi` : `${season.food.emoji} Boss hỏi · ${bossSeconds}s`}</span><h3>{quiz.word.vietnamese}</h3><p>{quiz.word.definition}</p><div>{choices(words, quiz.word, 4, attemptSeed ^ quiz.index).map((choice) => <button type="button" disabled={busy} key={choice.id} onClick={() => answerQuiz(choice)}>{choice.english}</button>)}</div></div></div> : null}
       {ending ? <div className="game-ending" role="status">{ending === "dinosaur" ? <DinoGameOverArt /> : <span>{season.food.emoji}</span>}<strong>{ending === "dinosaur" ? "Hết mạng!" : "Hết 10 giây!"}</strong><small>{ending === "dinosaur" ? "Khủng long đã bắt kịp bạn." : `${season.food.name} khổng lồ đã hỏng.`}</small></div> : null}
     </div>
-    <p className="catch-help">← → di chuyển hoặc dùng nút. Chạm hộp/cột để trả lời; trả lời xong cổng mở, sai mất ❤️. Hộp trên bục cần leo lên trước. Cuối màn, chạm {season.food.emoji} rồi trả lời đúng 3 câu trong 10 giây; sau đó chạm cờ về đích.</p>
+    <p className="catch-help">Giữ ← → để chạy, ↑ để nhảy. Chạm hộp quà để trả lời: trả lời xong cổng mở, sai mất ❤️. Cuối màn: đúng 3 câu với {season.food.emoji} trong 10 giây rồi về cờ.</p>
      {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
      <GameFeedback message={notice} tone={noticeTone === "is-success" ? "success" : noticeTone === "is-error" ? "error" : noticeTone === "is-warning" ? "warning" : "info"} />
   </div>;
@@ -266,5 +291,5 @@ function RioControl({ label, disabled, icon, onPress, onRelease, focusScene, cla
     focusScene();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     onPress();
-  }} onPointerUp={release} onPointerCancel={release} onLostPointerCapture={onRelease} onClick={(event) => event.preventDefault()}>{icon}</button>;
+  }} onPointerUp={release} onPointerCancel={release} onLostPointerCapture={onRelease} onContextMenu={(event) => event.preventDefault()} onClick={(event) => event.preventDefault()}>{icon}</button>;
 }

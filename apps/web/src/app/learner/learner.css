@@ -698,6 +698,7 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .test-page .assessment-runtime-header{padding:14px 18px!important;margin-bottom:16px!important}
 .test-page .assessment-runtime-header>.row.between{gap:16px;row-gap:10px}
 .test-page .assessment-runtime-header>.progress{margin-top:10px}
+@media(max-width:1023px){.test-page .assessment-runtime-header .btn-sm.btn-primary{min-height:44px}}
 .test-page .assessment-content-card{margin-top:0!important}
 .test-page .assessment-section-groups{display:grid;gap:32px;margin-top:16px}
 .test-page .assessment-choice.sel{background:var(--surface);box-shadow:inset 0 0 0 2px var(--primary)}
@@ -750,6 +751,12 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .test-page .assessment-speaking-table th,.test-page .assessment-speaking-table td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line)}
 .test-page .assessment-speaking-table th{color:var(--muted);font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;font-weight:600}
 .test-page .assessment-speaking-table td:first-child{font-weight:600}
+.test-page .assessment-section-groups>*,.test-page .assessment-task-content>*{min-width:0}
+.test-page .assessment-stimulus-card:has(>.assessment-speaking-table){overflow-x:auto}
+@media(max-width:560px){
+  .test-page .assessment-speaking-table th,.test-page .assessment-speaking-table td{padding:8px 6px;overflow-wrap:normal;word-break:normal}
+  .test-page .assessment-speaking-table th{letter-spacing:.04em;white-space:normal}
+}
 .test-page .speaking-evidence-controls{display:grid;gap:10px;margin-top:12px;align-items:start}
 .test-page .speaking-evidence-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .test-page .speaking-evidence-status{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0;color:var(--muted);font-size:.82rem;line-height:1.4}
@@ -1454,6 +1461,33 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .profile-compact-edit .profile-form .onboard-actions button { min-height: 44px; }
 .profile-compact-edit .profile-form .onboard-actions { display: grid; grid-template-columns: auto minmax(0, 1fr); }
 .profile-compact-edit .profile-form .onboard-actions button { width: 100%; }
+.app-learner-page .profile-info-line>summary{cursor:pointer}
+/* Phone profile form: one tab row, one-column option rows, tight rhythm. */
+@media(max-width:720px){
+  .profile-edit-sections{gap:2px;padding:3px;overflow-x:auto;scrollbar-width:none}
+  .profile-edit-sections button{padding:4px 2px;font-size:.84rem;white-space:nowrap}
+  .app-learner-page .profile-form>section{padding:16px;gap:12px}
+  .app-learner-page .profile-form>section>[role="group"]+[role="group"],
+  .app-learner-page .profile-form>section>[role="group"]+label:not(.opt),
+  .app-learner-page .profile-form>section>[role="group"]+.card,
+  .app-learner-page .profile-form>section>.card+[role="group"],
+  .app-learner-page .profile-form>section>div+[role="group"],
+  .app-learner-page .profile-form>section>.grid+[role="group"],
+  .app-learner-page .profile-form>section>.grid+label:not(.opt){margin-top:6px}
+  .app-learner-page .profile-form :is(section, .profile-edit-usage)>[role="group"]>p.small{margin:0 0 8px!important;line-height:1.4!important}
+  .app-learner-page .profile-form :is(section, .profile-edit-usage)>[role="group"]>.row:not(.duration-choice-grid),
+  .profile-compact-edit .profile-edit-usage>[role="group"]>.row,
+  .profile-compact-edit .learning-style-grid{display:grid!important;grid-template-columns:minmax(0,1fr);row-gap:6px!important}
+  .app-learner-page .profile-form :is(section, .profile-edit-usage)>[role="group"] .opt,
+  .profile-compact-edit .profile-edit-usage label.opt{min-height:44px;padding:8px 12px;gap:10px;overflow-wrap:normal}
+  .app-learner-page .profile-form .duration-choice-grid{row-gap:6px!important;column-gap:6px!important}
+  .app-learner-page .profile-form>section>.card.soft.small.profile-info-line{padding:10px 12px}
+  .app-learner-page .profile-form>section[aria-label="Về tiếng Anh"]>div.profile-certificates{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px!important}
+  .app-learner-page .profile-form>section[aria-label="Về tiếng Anh"]>div.profile-certificates>p{grid-column:1/-1;margin:0 0 2px!important}
+  .app-learner-page .profile-form>section[aria-label="Về tiếng Anh"]>div.profile-certificates>.row.is-checked{grid-column:1/-1}
+  .app-learner-page .profile-form .profile-certificates>.row>label.opt{min-height:44px;padding:8px 12px;flex-basis:100%!important}
+}
+@media(max-width:360px){.profile-edit-sections button{font-size:.8rem}}
 .app-learner-page.home-page .home-context{gap:16px !important}
 .app-learner-page.home-page .home-context>.card+.card{margin-top:0 !important}
 .app-learner-page.home-page .home-week-axis{box-sizing:border-box;width:100%;padding-left:0!important;padding-right:0!important;margin-left:0!important;margin-right:0!important}
@@ -1803,6 +1837,11 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .coach-page .chat .msg.user{border:1px solid var(--secondary-line);background:var(--secondary-soft)}
 .coach-page .coach-vocabulary{margin-top:14px!important;border-top:1px solid var(--primary-line)!important;border-bottom:1px solid var(--primary-line)!important;background:#fff!important}
 .coach-page .coach-vocabulary h2{color:#4c453e;font-size:.9rem;letter-spacing:.01em}
+.coach-page .coach-vocabulary-details>summary{cursor:pointer;list-style:none;align-items:center;min-height:44px}
+.coach-page .coach-vocabulary-details>summary::-webkit-details-marker{display:none}
+.coach-page .coach-vocabulary-details>summary h2{margin:0}
+.coach-page .coach-vocabulary-details>summary h2::after{content:" ▾";color:var(--muted)}
+.coach-page .coach-vocabulary-details[open]>summary h2::after{content:" ▴"}
 .coach-page .coach-word-list{gap:8px}
 .coach-page .coach-surface .coach-word-chip{width:38px;height:38px;min-width:38px;min-height:38px;justify-content:center;border:1px solid #ddd8d0;border-radius:11px;background:#f5f4f1;padding:0;color:#746d65;box-shadow:none}
 .coach-page .coach-surface .coach-word-chip.is-locked:hover{border-color:var(--primary-line);background:var(--primary-soft);color:var(--primary-dark);transform:translateY(-1px)}
@@ -1814,7 +1853,10 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .coach-turn-audio{display:inline-flex;align-items:center;gap:5px;margin-top:8px;padding:5px 9px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--muted);font:inherit;font-size:.78rem;cursor:pointer}
 .coach-turn-audio:hover{color:var(--ink);border-color:var(--primary)}
 .coach-page .chat-compose{gap:7px!important;margin:10px 14px 12px!important;padding-top:0!important;border-top:0!important}
-.coach-page .chat-compose textarea{height:42px!important;min-height:42px!important;max-height:42px!important;border-radius:14px;padding:10px 14px;overflow:hidden}
+.coach-page .chat-compose textarea{min-height:42px!important;max-height:132px!important;border-radius:14px;padding:10px 14px}
+/* The placeholder is a hint, not content: it stays on the single resting line
+   (ellipsis on the narrowest phones) so the empty composer never reads as two lines. */
+.coach-page .chat-compose textarea::placeholder{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .coach-page .coach-compose-icon{width:42px;height:42px;min-width:42px;min-height:42px;border-radius:13px}
 .coach-page .coach-send{border-radius:13px;background:var(--primary)}
 .coach-page .audio-capture-control--compact{display:block;min-width:0;flex:0 1 auto}
@@ -2042,3 +2084,10 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
 .test-page .assessment-prep-compact .assessment-start-actions{display:flex;flex-direction:column;margin-top:12px;gap:4px}
 .test-page .assessment-prep-compact .assessment-start-actions > :is(button,a){min-height:44px}
 .test-page .assessment-prep-compact .assessment-start-actions > a{border:0;background:transparent;box-shadow:none}
+/* Monthly exam eligibility complaint: the scope field, evidence picker, reason and submit
+   button sat flush against each other. Give the card the same rhythm as the support forms. */
+.monthly-complaint-form{display:grid;gap:12px;align-content:start}
+.monthly-complaint-form > :is(h3,p){margin:0}
+.monthly-complaint-form > label{display:grid;gap:6px}
+.monthly-complaint-form > .request-evidence-upload{margin:0}
+.monthly-complaint-form > button{justify-self:start;min-height:44px}

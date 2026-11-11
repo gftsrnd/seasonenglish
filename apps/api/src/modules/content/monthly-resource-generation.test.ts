@@ -5,6 +5,7 @@ import { isValidMonthlyPronunciationIpaTarget, MONTHLY_RESOURCE_PLAN_SYSTEM_PROM
 import {
   buildMonthlyResourcesFromAiPlan,
   getMonthlyGrammarPhaseIssues,
+  doesMonthlyPronunciationExampleMatch,
   buildMonthlyGrammarPhasePrompt,
   runMonthlyGrammarPhaseWithRetry,
   MonthlyResourceCriteriaError,
@@ -760,6 +761,40 @@ describe("monthly AI resource generation", () => {
     expect(retryPrompt).toContain("coreTerms, expandedTerms and pronunciationTargets must be empty arrays");
     expect(retryPrompt).toContain("Previous response rejected");
     expect(retryPrompt).toContain(issues.join("; "));
+  });
+
+  it("flags Vietnamese dailyObjectives from B1 and keeps them valid at A1 (WP9)", async () => {
+    const clean = planFor();
+    clean.coreTerms = [];
+    clean.expandedTerms = [];
+    clean.pronunciationTargets = [];
+    expect(getMonthlyGrammarPhaseIssues(clean)).toEqual([]);
+    expect(getMonthlyGrammarPhaseIssues(clean, "A1")).toEqual([]);
+    expect(getMonthlyGrammarPhaseIssues(clean, "B1")).toEqual([
+      expect.stringContaining("grammarTopics[0] dailyObjectives must be in simple English for B1"),
+      expect.stringContaining("grammarTopics[1] dailyObjectives must be in simple English for B1")
+    ]);
+    const english = structuredClone(clean);
+    for (const topic of english.grammarTopics) for (const step of topic.steps) step.dailyObjectives = [`Recognise ${step.id} in a short email`, `Use ${step.id} to answer a client`];
+    expect(getMonthlyGrammarPhaseIssues(english, "C1")).toEqual([]);
+    expect(buildMonthlyGrammarPhasePrompt()).toContain("written in Vietnamese for A1/A2 and in simple English for B1, B2 and C1");
+    expect(buildMonthlyGrammarPhasePrompt([], "B1")).toContain("write dailyObjectives in simple English with no Vietnamese words");
+    const prompts: string[] = [];
+    const result = await runMonthlyGrammarPhaseWithRetry(async (prompt) => { prompts.push(prompt); return prompts.length === 1 ? clean : english; }, "B1");
+    expect(result).toBe(english);
+    expect(prompts[1]).toContain("dailyObjectives must be in simple English for B1");
+  });
+
+  it("matches example IPA against the literal target only (no legacy X placeholder)", () => {
+    expect(doesMonthlyPronunciationExampleMatch("/iː/", "/miːt/")).toBe(true);
+    expect(doesMonthlyPronunciationExampleMatch("/ˈ/", "/ˈklaɪənt/")).toBe(true);
+    expect(doesMonthlyPronunciationExampleMatch("/iː/", "/wɜːk/")).toBe(false);
+    expect(doesMonthlyPronunciationExampleMatch("/ˈXx/", "/ˈklaɪənt/")).toBe(false);
+    expect(doesMonthlyPronunciationExampleMatch("/st/", "/ɪkˈstend/", "extend")).toBe(false);
+    expect(doesMonthlyPronunciationExampleMatch("/nd/", "/ɪkˈstend/", "extend")).toBe(true);
+    expect(doesMonthlyPronunciationExampleMatch("/æ/", "/ðæt/", "that")).toBe(false);
+    expect(doesMonthlyPronunciationExampleMatch("/æ/", "/hæv/", "have")).toBe(false);
+    expect(doesMonthlyPronunciationExampleMatch("/æ/", "/plæn/", "plan")).toBe(true);
   });
 
   it("retries a mixed grammar response once with its concrete errors and accepts only a clean result", async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MonthlyCurriculumContract } from "@e4s/domain";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
+import { evaluateMonthlyReviewSections } from "./monthly-review-quality.js";
 
 const requiredCodes = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"];
 
@@ -24,7 +25,7 @@ describe("monthly lesson quality", () => {
     day.pronunciationPlan = {slot:"P1",stage:"recognize",objective:"Identify and repeat the target",targetIds:["sound-1"],exampleIds:day.pronunciationExampleIds,exampleSet:1};
     const candidate = lesson();
     const grammar = candidate.parts.find(part => part.code === "grammar")!.content;
-    Object.assign(grammar, {dailyCode:"A1",objective:day.grammarPlan.objective,examples:["We use core-one in our report.","She sends core-two today.","They review the plan every week."],items:[1,2,3].map(i => ({id:"q"+i,prompt:"Choose the form " + i,options:["send","sends","sending","sent"],answer:"send",explanation:"The plural subject uses the base form.",milestoneId:"grammar-step"}))});
+    Object.assign(grammar, {dailyCode:"A1",objective:day.grammarPlan.objective,examples:["We use core-one in our report.","She sends core-two today.","They review the plan every week."],items:[1,2,3].map(i => ({id:"q"+i,prompt:"Chọn dạng đúng " + i,options:["send","sends","sending","sent"],answer:"send",explanation:"The plural subject uses the base form.",milestoneId:"grammar-step"}))});
     Object.assign(candidate.parts.find(part => part.code === "pronunciation")!.content, {stage:"recognize",objective:day.pronunciationPlan.objective});
     expect(evaluateMonthlyLessonQuality(plan,1,candidate).severe).toEqual([]);
     expect(evaluateMonthlyLessonQuality(plan,1,candidate,["We use core-one in our report."]).severe.map(row => row.code)).toContain("MONTHLY_DAILY_GRAMMAR_REPEATED");
@@ -78,7 +79,12 @@ describe("monthly lesson quality", () => {
     spec.reviewSoundIds = ["review-sound"];
     spec.reviewPronunciationExampleIds = ["review-1", "review-2", "review-3"];
     const candidate = lesson({ parts: reviewParts() });
-    candidate.parts = candidate.parts.map((item) => item.code === "grammar" ? part(item.code, { ...item.content, formula: "Review formula" }) : item.code === "pronunciation" ? part(item.code, { focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }], reviewTargets: [{ soundId: "review-sound", focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }] }] }) : item);
+    candidate.parts = candidate.parts.map((item) => item.code === "grammar" ? part(item.code, { ...item.content, formula: "Review formula" }) : item.code === "pronunciation" ? part(item.code, { focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }], reviewTargets: [{ soundId: "review-sound", focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }] }] }) : item.code === "speaking" ? part(item.code, { items: [
+      { id: "s1", prompt: "Nghe và chọn từ", audioText: "see", options: ["see", "she"], answer: "see", explanation: "Âm /s/." },
+      { id: "s2", prompt: "Nghe và chọn từ", audioText: "soon", options: ["soon", "noon"], answer: "soon", explanation: "Âm /s/." },
+      { id: "s3", prompt: "Đọc to câu sau", passage: "We will see the sales report soon." },
+      (item.content.items as unknown[])[3]
+    ] }) : item);
 
     expect(evaluateMonthlyLessonQuality(review, 2, candidate).severe).toEqual([]);
     candidate.parts = candidate.parts.map((item) => item.code === "pronunciation" ? part(item.code, { ...item.content, reviewTargets: [] }) : item);
@@ -138,7 +144,7 @@ function contract(): MonthlyCurriculumContract {
 function lesson(overrides: { parts?: Array<{ code: string; content: Record<string, unknown> }> } = {}) {
   return { title: "A usable title", parts: overrides.parts ?? requiredCodes.map((code) => {
     if (code === "objective") return part(code, { text: "Identify three budget words." });
-    if (code === "instruction") return part(code, { steps: ["Read the example.", "Answer the question."] });
+    if (code === "instruction") return part(code, { steps: ["Đọc ví dụ.", "Trả lời câu hỏi."] });
     if (code === "vocabulary") return part(code, { items: [
       { word: "core-one", synonyms: [], antonyms: [], collocations: ["core-one plan", "a core-one", "core-one cost"] },
       { word: "core-two", synonyms: ["second"], antonyms: [], collocations: ["core-two plan", "a core-two", "core-two cost"] },
@@ -148,10 +154,10 @@ function lesson(overrides: { parts?: Array<{ code: string; content: Record<strin
     if (code === "pronunciation") return part(code, { focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }] });
     if (["listening", "reading", "word_class", "word_use"].includes(code)) return part(code, {
       ...(code === "listening" ? { script: "The cost is high." } : code === "reading" ? { text: "The cost is high." } : {}),
-      prompt: "What is high?", options: ["The cost", "The room", "The plan", "The date"], answer: "The cost"
+      prompt: "Chọn đáp án đúng: What is high?", options: ["The cost", "The room", "The plan", "The date"], answer: "The cost"
     });
-    if (code === "writing") return part(code, { prompt: "Write one sentence about cost.", answer: "The cost is high." });
-    if (code === "speaking") return part(code, { prompt: "Say a sentence about cost.", sample: "The cost is high." });
+    if (code === "writing") return part(code, { prompt: "Viết một câu về cost.", answer: "The cost is high." });
+    if (code === "speaking") return part(code, { prompt: "Nói một câu về cost.", sample: "The cost is high." });
     return part(code);
   }) };
 }
@@ -160,7 +166,7 @@ function part(code: string, content: Record<string, unknown> = {}) { return { co
 
 /** A valid Friday review: study parts plus the six item sections (3 core words, 1 grammar step). */
 function reviewParts() {
-  const choice = (id: string, prompt: string, answer: string, others: string[]) => ({ id, prompt, options: [answer, ...others], answer, explanation: "Vì câu này đúng nghĩa.", variants: [{ id: `${id}-v1`, prompt: `${prompt} (again)`, options: [answer, ...others], answer, explanation: "Giải thích." }] });
+  const choice = (id: string, prompt: string, answer: string, others: string[]) => ({ id, prompt: `Chọn đáp án đúng: ${prompt}`, options: [answer, ...others], answer, explanation: "Vì câu này đúng nghĩa.", variants: [{ id: `${id}-v1`, prompt: `Chọn lại: ${prompt}`, options: [answer, ...others], answer, explanation: "Giải thích." }] });
   const base = lesson().parts.filter((item) => ["objective", "instruction", "vocabulary", "grammar", "pronunciation"].includes(item.code));
   return [
     ...base,
@@ -172,7 +178,7 @@ function reviewParts() {
       { id: "s1", prompt: "Nghe và chọn từ", audioText: "cost", options: ["cost", "coast"], answer: "cost", explanation: "Âm /ɒ/." },
       { id: "s2", prompt: "Nghe và chọn từ", audioText: "can", options: ["can", "cane"], answer: "can", explanation: "Âm /æ/." },
       { id: "s3", prompt: "Đọc to câu sau", passage: "The key cost can change." },
-      { id: "s4", prompt: "Tell your manager about the plan.", requiredWords: ["core-one", "core-two", "core-three"], minRequiredWords: 2 }
+      { id: "s4", prompt: "Hãy nói với quản lý về kế hoạch.", requiredWords: ["core-one", "core-two", "core-three"], minRequiredWords: 2 }
     ] })
   ].map((item) => item.code === "grammar" ? part("grammar", { ...item.content, items: [choice("g1", "She ____ every day.", "works", ["work", "working", "worked"])] })
     : item.code === "pronunciation" ? part("pronunciation", { ...item.content, reviewTargets: [{ soundId: "sound-1", focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }] }] })
@@ -182,3 +188,210 @@ function reviewParts() {
 function exercises(resourceIds: string[]) {
   return ["listening", "reading", "writing", "word_class", "word_use", "speaking"].map((exerciseCode) => ({ exerciseCode: exerciseCode as "listening" | "reading" | "writing" | "word_class" | "word_use" | "speaking", focus: "Use assigned materials.", resourceIds }));
 }
+
+describe("monthly lesson quality – AI quality plan 11/11 (WP1, WP3, WP7, WP8)", () => {
+  const codes = (report: ReturnType<typeof evaluateMonthlyLessonQuality>) => report.severe.map((row) => row.code);
+  const withPart = (candidate: ReturnType<typeof lesson>, code: string, content: Record<string, unknown>) => ({ ...candidate, parts: candidate.parts.map((item) => item.code === code ? part(code, content) : item) });
+  const v2Day = (cefr: "A1" | "B1" = "A1") => {
+    const plan = contract(); plan.planSchemaVersion = 2; plan.cefr = cefr;
+    const day = plan.daySpecs[0]!;
+    day.newLessonNumber = 1;
+    day.grammarPlan = { code: "A1", objective: "Dùng quá khứ đơn để kể lại việc đã làm.", mode: "recognize", milestoneIds: ["grammar-step"], recallMilestoneIds: [] };
+    day.pronunciationPlan = { slot: "P1", stage: "recognize", objective: "Hear, identify and produce the target sound", targetIds: ["sound-1"], exampleIds: day.pronunciationExampleIds, exampleSet: 1 };
+    const candidate = lesson();
+    const grammar = candidate.parts.find((item) => item.code === "grammar")!.content;
+    Object.assign(grammar, { dailyCode: "A1", objective: day.grammarPlan.objective, examples: ["We use core-one in our report.", "She sends core-two today.", "They review the plan every week."], items: [1, 2, 3].map((i) => ({ id: `q${i}`, prompt: `Chọn dạng đúng ${i}: They ____ the plan.`, options: ["send", "sends", "sending", "sent"], answer: "send", explanation: "Chủ ngữ số nhiều dùng động từ nguyên mẫu.", milestoneId: "grammar-step" })) });
+    Object.assign(candidate.parts.find((item) => item.code === "pronunciation")!.content, { stage: "recognize", objective: day.pronunciationPlan.objective });
+    return { plan, day, candidate };
+  };
+  const englishB1 = (candidate: ReturnType<typeof lesson>) => ({ ...candidate, parts: candidate.parts.map((item) => {
+    if (item.code === "instruction") return part("instruction", { steps: ["Read the example.", "Answer the question."] });
+    if (item.code === "grammar") return part("grammar", { ...item.content, items: (item.content.items as Array<Record<string, unknown>>).map((question) => ({ ...question, prompt: "Choose the correct form: They ____ the plan.", explanation: "A plural subject takes the base form." })) });
+    if (typeof item.content.prompt === "string") return part(item.code, { ...item.content, prompt: "What is high?" });
+    return item;
+  }) });
+
+  it("1a: a B1 grammar.objective copied verbatim from the Vietnamese plan is exempt from the English-only check", () => {
+    const { plan, candidate } = v2Day("B1");
+    const b1 = englishB1(candidate);
+    expect(evaluateMonthlyLessonQuality(plan, 1, b1).severe).toEqual([]);
+    const grammar = b1.parts.find((item) => item.code === "grammar")!.content;
+    const vietnameseNote = withPart(b1, "grammar", { ...grammar, text: "Dùng quá khứ đơn cho việc đã xong." });
+    expect(evaluateMonthlyLessonQuality(plan, 1, vietnameseNote).severe).toEqual(expect.arrayContaining([expect.objectContaining({ code: "MONTHLY_CONTENT_INVALID", component: "grammar" })]));
+    const drifted = withPart(b1, "grammar", { ...grammar, objective: "Dùng quá khứ đơn để kể việc." });
+    expect(codes(evaluateMonthlyLessonQuality(plan, 1, drifted))).toEqual(expect.arrayContaining(["MONTHLY_CONTENT_INVALID", "MONTHLY_DAILY_GRAMMAR_OBJECTIVE"]));
+  });
+
+  it("1b: repair messages state the exact expected plan strings", () => {
+    const { plan, candidate } = v2Day();
+    const grammar = candidate.parts.find((item) => item.code === "grammar")!.content;
+    const broken = withPart(withPart(candidate, "grammar", { ...grammar, formula: "Something else", dailyCode: "B9", objective: "Paraphrased" }), "pronunciation", { focus: "/g/", words: [{ word: "cost", ipa: "/kɒst/" }], stage: "sentence", objective: "Other" });
+    const messages = Object.fromEntries(evaluateMonthlyLessonQuality(plan, 1, broken).severe.map((row) => [row.code, row.message]));
+    expect(messages.MONTHLY_GRAMMAR_SCOPE_MISMATCH).toContain("\"Core formula\"");
+    expect(messages.MONTHLY_DAILY_GRAMMAR_OBJECTIVE).toContain("grammar.dailyCode to \"A1\"");
+    expect(messages.MONTHLY_DAILY_GRAMMAR_OBJECTIVE).toContain("\"Dùng quá khứ đơn để kể lại việc đã làm.\"");
+    expect(messages.MONTHLY_DAILY_PRONUNCIATION_STAGE).toContain("pronunciation.stage to \"recognize\"");
+    expect(messages.MONTHLY_DAILY_PRONUNCIATION_STAGE).toContain("\"Hear, identify and produce the target sound\"");
+    expect(messages.MONTHLY_SOUND_SCOPE_MISMATCH).toContain("pronunciation.focus to \"/k/\"");
+    expect(messages.MONTHLY_SOUND_SCOPE_MISMATCH).toContain("cost /kɒst/, can /kæn/, key /kiː/");
+  });
+
+  it("1b: the read-aloud position message lists the exact positions and word counts", () => {
+    const { plan, day, candidate } = v2Day();
+    day.pronunciationPlan = { ...day.pronunciationPlan!, stage: "read_aloud", requiredPositions: [{ soundId: "sound-1", exampleId: "sound-example-1" }, { soundId: "sound-1", exampleId: "sound-example-2" }] };
+    const pron = candidate.parts.find((item) => item.code === "pronunciation")!.content;
+    const report = evaluateMonthlyLessonQuality(plan, 1, withPart(candidate, "pronunciation", { ...pron, stage: "read_aloud", passage: "The cost is high.", targetPositions: [] }));
+    const message = report.severe.find((row) => row.code === "MONTHLY_COMBINED_PRONUNCIATION_POSITIONS")?.message ?? "";
+    expect(message).toContain("{soundId \"sound-1\", exampleId \"sound-example-2\"}");
+    expect(message).toContain("\"can\" ×1");
+  });
+
+  it("1c: formulas match after normalising spaces, ellipsis, quote style and case", () => {
+    const plan = contract();
+    plan.grammarTopics[0]!.steps[0]!.formula = "Can / Could + subject + base verb …? (‘please’)";
+    const ok = withPart(lesson(), "grammar", { formula: "can/could +  Subject + base verb ...? ('please')" });
+    expect(codes(evaluateMonthlyLessonQuality(plan, 1, ok))).not.toContain("MONTHLY_GRAMMAR_SCOPE_MISMATCH");
+    const paraphrased = withPart(lesson(), "grammar", { formula: "Could you + verb?" });
+    expect(codes(evaluateMonthlyLessonQuality(plan, 1, paraphrased))).toContain("MONTHLY_GRAMMAR_SCOPE_MISMATCH");
+  });
+
+  it("WP3: a Word form that asks for the word class with label options is severe (real sample a1-L4)", () => {
+    const asksClass = withPart(lesson(), "word_class", { prompt: "Từ 'quick' trong câu 'The client gave us quick feedback' thuộc từ loại nào?", options: ["noun", "verb", "adjective", "adverb"], answer: "adjective" });
+    expect(codes(evaluateMonthlyLessonQuality(contract(), 1, asksClass))).toEqual(expect.arrayContaining(["MONTHLY_WORD_FORM_ASKS_WORD_CLASS", "MONTHLY_WORD_FORM_LABEL_OPTIONS"]));
+    const english = withPart(lesson(), "word_class", { prompt: "Chọn đáp án: What is the word class of 'video' in the sentence 'We will update the video before Friday.'?", options: ["noun", "verb", "adjective", "adverb"], answer: "noun" });
+    expect(codes(evaluateMonthlyLessonQuality(contract(), 1, english))).toContain("MONTHLY_WORD_FORM_ASKS_WORD_CLASS");
+    // Real sample b1-L5: choose the right form in a sentence.
+    const wordForm = withPart(lesson(), "word_class", { prompt: "Chọn dạng đúng của từ: Please send the updated ____ to the client before Friday's meeting.", options: ["document", "documented", "documenting", "documentary"], answer: "document" });
+    expect(codes(evaluateMonthlyLessonQuality(contract(), 1, wordForm)).filter((code) => code.startsWith("MONTHLY_WORD_FORM"))).toEqual([]);
+  });
+
+  it("WP3: the Word form answer must not repeat the bracketed hint word", () => {
+    const hint = withPart(lesson(), "word_class", { prompt: "Chọn dạng đúng: Please send the ____ (document) today.", options: ["document", "documents", "documented", "documenting"], answer: "document" });
+    expect(codes(evaluateMonthlyLessonQuality(contract(), 1, hint))).toContain("MONTHLY_WORD_FORM_ANSWER_IS_HINT");
+    const changed = withPart(lesson(), "word_class", { prompt: "Chọn dạng đúng: We need a quick ____ (decide) today.", options: ["decide", "decision", "decisive", "decisively"], answer: "decision" });
+    expect(codes(evaluateMonthlyLessonQuality(contract(), 1, changed))).not.toContain("MONTHLY_WORD_FORM_ANSWER_IS_HINT");
+  });
+
+  it("WP3: invented verb forms and nonsense suffixes in options are severe, real forms pass", () => {
+    const invented = withPart(lesson(), "grammar", { formula: "Core formula", items: [{ id: "g1", prompt: "Chọn dạng đúng: Yesterday we ____ the file.", options: ["sent", "sended", "maked", "send"], answer: "sent", explanation: "Quá khứ của send là sent." }] });
+    expect(evaluateMonthlyLessonQuality(contract(), 1, invented).severe.find((row) => row.code === "MONTHLY_INVENTED_WORD_FORM")?.message).toContain("sended, maked");
+    const suffix = withPart(lesson(), "word_use", { prompt: "Chọn từ đúng: The client ____ on the design.", options: ["feedbacked", "colleagued", "commented", "accurating"], answer: "commented" });
+    expect(codes(evaluateMonthlyLessonQuality(contract(), 1, suffix))).toContain("MONTHLY_INVENTED_WORD_FORM");
+    const real = withPart(lesson(), "grammar", { formula: "Core formula", items: [{ id: "g1", prompt: "Chọn dạng đúng: Yesterday we ____ the file.", options: ["sent", "send", "sends", "sending"], answer: "sent", explanation: "Quá khứ của send là sent." }] });
+    expect(codes(evaluateMonthlyLessonQuality(contract(), 1, real))).not.toContain("MONTHLY_INVENTED_WORD_FORM");
+  });
+
+  it("WP3: a part where the answer is usually the only longest option gets a light finding", () => {
+    const long = (answer: string, index: number) => ({ id: `r${index}`, prompt: "Chọn đáp án đúng", options: [answer, "No.", "Yes.", "Maybe."], answer, explanation: "Vì đúng." });
+    const cued = lesson({ parts: reviewParts().map((item) => item.code === "reading" ? part("reading", { ...item.content, items: ["The budget is ready now.", "The team is late again.", "The plan changed today."].map(long) }) : item) });
+    expect(evaluateMonthlyLessonQuality(contract(), 2, cued).light.map((row) => row.code)).toContain("MONTHLY_ANSWER_LONGEST_OPTION");
+    expect(evaluateMonthlyLessonQuality(contract(), 2, lesson({ parts: reviewParts() })).light.map((row) => row.code)).not.toContain("MONTHLY_ANSWER_LONGEST_OPTION");
+  });
+
+  it("WP7: A1–A2 prompts must contain Vietnamese (real sample r1-a1-n8), B1 is unaffected", () => {
+    const english = withPart(lesson(), "word_use", { prompt: "Which sentence uses 'learn' correctly in a workplace meeting?", options: ["We learn from the client feedback every week.", "We learn the feedback every week to the client.", "We learn feedback the client every week.", "We learns from the client feedback every week."], answer: "We learn from the client feedback every week." });
+    expect(evaluateMonthlyLessonQuality(contract(), 1, english).severe).toEqual(expect.arrayContaining([expect.objectContaining({ code: "MONTHLY_A1A2_INSTRUCTION_LANGUAGE", component: "word_use" })]));
+    const englishInstruction = withPart(lesson(), "instruction", { text: "Review today's study tab first.", steps: ["Read each word card."] });
+    expect(codes(evaluateMonthlyLessonQuality(contract(), 1, englishInstruction))).toContain("MONTHLY_A1A2_INSTRUCTION_LANGUAGE");
+    const reviewEnglish = lesson({ parts: reviewParts().map((item) => item.code === "word_class" ? part("word_class", { items: (item.content.items as Array<Record<string, unknown>>).map((row) => ({ ...row, prompt: "Read the message and choose the best answer." })) }) : item) });
+    expect(evaluateMonthlyLessonQuality(contract(), 2, reviewEnglish).severe).toEqual(expect.arrayContaining([expect.objectContaining({ code: "MONTHLY_A1A2_INSTRUCTION_LANGUAGE", component: "word_class" })]));
+    const { plan, candidate } = v2Day("B1");
+    expect(codes(evaluateMonthlyLessonQuality(plan, 1, englishB1(candidate)))).not.toContain("MONTHLY_A1A2_INSTRUCTION_LANGUAGE");
+  });
+
+  it("WP7: internal planning terms and a pasted communicationGoal are blocked; a vocabulary meaning is not", () => {
+    const plan = contract();
+    plan.theme.communicationGoal = "Trong tháng 11, người học có thể cập nhật tiến độ dự án với khách hàng.";
+    const internal = withPart(lesson(), "speaking", { prompt: "Nói 2 câu, dùng one core term và one expanded term.", sample: "The cost is high." });
+    expect(evaluateMonthlyLessonQuality(plan, 1, internal).severe.find((row) => row.code === "MONTHLY_INTERNAL_TERM_EXPOSED")?.message).toContain("core term");
+    const pasted = withPart(lesson(), "speaking", { prompt: "Hãy nói về 'Trong tháng 11, người học có thể cập nhật tiến độ dự án'", sample: "The cost is high." });
+    expect(codes(evaluateMonthlyLessonQuality(plan, 1, pasted))).toContain("MONTHLY_INTERNAL_TERM_EXPOSED");
+    const vocabulary = lesson().parts.find((item) => item.code === "vocabulary")!.content;
+    const meaning = withPart(lesson(), "vocabulary", { items: (vocabulary.items as Array<Record<string, unknown>>).map((row, index) => index === 0 ? { ...row, meaning: "người học" } : row) });
+    expect(codes(evaluateMonthlyLessonQuality(plan, 1, meaning))).not.toContain("MONTHLY_INTERNAL_TERM_EXPOSED");
+  });
+
+  it("WP8: review minimal pairs need a week example word and no offensive word (real sample sheet/shit)", () => {
+    const base = reviewParts().find((item) => item.code === "speaking")!.content.items as unknown[];
+    const speaking = (items: unknown[]) => lesson({ parts: reviewParts().map((item) => item.code === "speaking" ? part("speaking", { items }) : item) });
+    const offensive = speaking([{ id: "s1", prompt: "Nghe và chọn từ", audioText: "sheet", options: ["sheet", "shit"], answer: "sheet", explanation: "Âm /iː/ dài." }, ...base.slice(1)]);
+    expect(evaluateMonthlyLessonQuality(contract(), 2, offensive).severe).toEqual(expect.arrayContaining([expect.objectContaining({ code: "MONTHLY_OFFENSIVE_WORD", component: "speaking" }), expect.objectContaining({ code: "MONTHLY_REVIEW_MINIMAL_PAIR_SCOPE" })]));
+    const outside = speaking([{ id: "s1", prompt: "Nghe và chọn từ", audioText: "team", options: ["team", "tim"], answer: "team", explanation: "Âm /iː/." }, ...base.slice(1)]);
+    expect(codes(evaluateMonthlyLessonQuality(contract(), 2, outside))).toContain("MONTHLY_REVIEW_MINIMAL_PAIR_SCOPE");
+    expect(codes(evaluateMonthlyLessonQuality(contract(), 2, speaking(base)))).toEqual([]);
+  });
+
+  it("WP8: the read-aloud needs ≥2 week example words and requiredWords outside the week are severe", () => {
+    const base = reviewParts().find((item) => item.code === "speaking")!.content.items as Array<Record<string, unknown>>;
+    const speaking = (items: unknown[]) => lesson({ parts: reviewParts().map((item) => item.code === "speaking" ? part("speaking", { items }) : item) });
+    const weak = speaking([base[0], base[1], { id: "s3", prompt: "Đọc to câu sau", passage: "The project manager will learn the work problem." }, base[3]]);
+    expect(codes(evaluateMonthlyLessonQuality(contract(), 2, weak))).toContain("MONTHLY_REVIEW_READ_ALOUD_WORDS");
+    const inflected = speaking([base[0], base[1], { id: "s3", prompt: "Đọc to câu sau", passage: "The costs can change soon." }, base[3]]);
+    expect(codes(evaluateMonthlyLessonQuality(contract(), 2, inflected))).not.toContain("MONTHLY_REVIEW_READ_ALOUD_WORDS");
+    const required = speaking([base[0], base[1], base[2], { ...base[3], requiredWords: ["core-one", "could", "already"] }]);
+    expect(evaluateMonthlyLessonQuality(contract(), 2, required).severe.find((row) => row.code === "MONTHLY_REVIEW_REQUIRED_WORD_SCOPE")?.message).toContain("could, already");
+  });
+});
+
+describe("Friday review gate (AI quality round 2, 11/11)", () => {
+  const sections = (overrides: Record<string, Record<string, unknown>> = {}) => new Map(reviewParts().map((item) => [item.code, { content: overrides[item.code] ?? item.content }] as const));
+  const english = (cefr: "B1" | "C1") => {
+    const plan = contract(); plan.cefr = cefr;
+    const choice = (id: string, prompt: string, answer: string, others: string[]) => ({ id, prompt, options: [answer, ...others], answer, explanation: "It fits the sentence.", variants: [{ id: `${id}-v1`, prompt: `${prompt}?`, options: [answer, ...others], answer, explanation: "Same reason." }] });
+    const listening = { items: ["core-one", "core-two", "core-three"].map((word, index) => ({ ...choice(`l${index}`, "Listen and choose the meaning", ["một", "hai", "ba"][index]!, ["bốn", "năm", "sáu"]), audioText: word })) };
+    const speaking = { items: [
+      { id: "s1", prompt: "Listen and choose the word", audioText: "cost", options: ["cost", "coast"], answer: "cost", explanation: "Short /ɒ/." },
+      { id: "s2", prompt: "Listen and choose the word", audioText: "can", options: ["can", "cane"], answer: "can", explanation: "Short /æ/." },
+      { id: "s3", prompt: "Read this sentence aloud", passage: "The key cost can change." },
+      { id: "s4", prompt: "Tell your manager about the plan.", requiredWords: ["core-one", "core-two", "core-three"], minRequiredWords: 2 }
+    ] };
+    const parts = new Map([...sections()].map(([code, value]) => [code, { content: code === "listening" ? listening : code === "speaking" ? speaking : !["word_use", "word_class", "grammar", "reading"].includes(code) ? value.content : { ...value.content, items: (value.content.items as Array<Record<string, unknown>>).map((item, index) => choice(`${code}${index}`, String(item.prompt).replace(/^Chọn đáp án đúng: /u, ""), String(item.answer), (item.options as string[]).slice(1))) } }] as const));
+    return { plan, parts };
+  };
+  const codes = (result: { severe: Array<{ code: string }> }) => result.severe.map((item) => item.code);
+
+  it("B1+: accepts English sections with Vietnamese listening meanings, rejects Vietnamese prompts (\"Nghe và chọn nghĩa đúng\" at B1, C1)", () => {
+    for (const cefr of ["B1", "C1"] as const) {
+      const { plan, parts } = english(cefr);
+      expect(evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, parts).severe).toEqual([]);
+      const listening = parts.get("listening")!.content as { items: Array<Record<string, unknown>> };
+      parts.set("listening", { content: { items: listening.items.map((item) => ({ ...item, prompt: "Nghe và chọn nghĩa đúng" })) } });
+      parts.set("word_class", { content: { items: [{ ...(parts.get("word_class")!.content.items as Array<Record<string, unknown>>)[0]!, prompt: "Chọn dạng đúng của từ để điền vào chỗ trống: We ____ it yesterday." }, ...(parts.get("word_class")!.content.items as unknown[]).slice(1)] } });
+      const result = evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, parts);
+      expect(result.severe.filter((item) => item.code === "MONTHLY_REVIEW_INSTRUCTION_LANGUAGE").map((item) => item.component).sort()).toEqual(["listening", "word_class"]);
+      expect(result.severe.find((item) => item.component === "listening")!.message).toContain("Nghe và chọn nghĩa đúng");
+    }
+  });
+
+  it("A1-A2 reviews keep their Vietnamese prompts (the English-only check does not apply)", () => {
+    const plan = contract();
+    expect(codes(evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, sections()))).not.toContain("MONTHLY_REVIEW_INSTRUCTION_LANGUAGE");
+  });
+
+  it("rejects non-minimal pairs from the remeasure and keeps real ones", () => {
+    const plan = contract();
+    plan.sounds[0]!.examples.push({ id: "sound-example-4", word: "event", ipa: "/ɪˈvent/" }, { id: "sound-example-5", word: "bat", ipa: "/bæt/" });
+    plan.daySpecs[1]!.reviewPronunciationExampleIds = [...plan.daySpecs[1]!.reviewPronunciationExampleIds!, "sound-example-4", "sound-example-5"];
+    const speaking = (first: string[], second: string[]) => sections({ speaking: { items: [
+      { id: "s1", prompt: "Nghe và chọn từ", audioText: first[0], options: first, answer: first[0], explanation: "Âm." },
+      { id: "s2", prompt: "Nghe và chọn từ", audioText: second[0], options: second, answer: second[0], explanation: "Âm." },
+      { id: "s3", prompt: "Đọc to câu sau", passage: "The key cost can change." },
+      { id: "s4", prompt: "Hãy nói với quản lý về kế hoạch.", requiredWords: ["core-one", "core-two", "core-three"], minRequiredWords: 2 }
+    ] } });
+    expect(codes(evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, speaking(["cost", "coast"], ["can", "cane"])))).not.toContain("MONTHLY_REVIEW_MINIMAL_PAIR_NOT_MINIMAL");
+    const bad = evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, speaking(["event", "segment"], ["bat", "box"])).severe.filter((item) => item.code === "MONTHLY_REVIEW_MINIMAL_PAIR_NOT_MINIMAL");
+    expect(bad.map((item) => item.message.split(" is not")[0])).toEqual(["\"event / segment\"", "\"bat / box\""]);
+  });
+
+  it("names the section, the exact count and how many items are missing (MONTHLY_REVIEW_COUNT, A1 W2 returned 1 item per section)", () => {
+    const plan = contract();
+    const one = (code: string) => ({ ...reviewParts().find((item) => item.code === code)!.content, items: [(reviewParts().find((item) => item.code === code)!.content.items as unknown[])[0]] });
+    const result = evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, sections({ listening: one("listening"), reading: one("reading"), word_use: one("word_use"), word_class: one("word_class"), speaking: { items: [] } }));
+    const message = (component: string, code: string) => result.severe.find((item) => item.component === component && item.code === code)?.message ?? "";
+    expect(message("listening", "MONTHLY_REVIEW_COUNT")).toContain("listening.items must contain exactly 3 items, one word-recognition item per core word (core-one, core-two, core-three); it has 1 (2 missing)");
+    expect(message("reading", "MONTHLY_REVIEW_COUNT")).toContain("reading.items must contain exactly 3 comprehension questions about the passage; it has 1 (2 missing)");
+    expect(message("word_use", "MONTHLY_REVIEW_COUNT")).toContain("word_use.items must contain exactly 2 items; it has 1 (1 missing)");
+    expect(message("word_class", "MONTHLY_REVIEW_COUNT")).toContain("word_class.items must contain exactly 2 Word form items; it has 1 (1 missing)");
+    expect(message("speaking", "MONTHLY_REVIEW_MINIMAL_PAIRS")).toContain("it has 0 minimal pair(s), 0 read-aloud, 0 free response");
+  });
+});

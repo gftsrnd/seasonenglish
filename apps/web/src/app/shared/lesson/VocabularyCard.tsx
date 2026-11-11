@@ -27,7 +27,7 @@ export function VocabularyCard({ item, loadImage, speak, relations = [], languag
     <div className="vocabulary-card-heading">
       <ContentImage term={item.word} unavailable="hide" load={loadImage} />
       <div className="vocabulary-card-main">
-        <div className="vocabulary-card-word"><h3>{item.word}</h3><span className="vocabulary-card-type">{type}</span>{item.pronunciation ? <span className="ipa vocabulary-card-pronunciation">{item.pronunciation}</span> : null}</div>
+        <div className="vocabulary-card-word"><h3>{item.word}</h3>{type ? <span className="vocabulary-card-type">{type}</span> : null}{item.pronunciation ? <span className="ipa vocabulary-card-pronunciation">{item.pronunciation}</span> : null}</div>
         {item.audioUrl ? <VocabularyAudioButton src={item.audioUrl} label={`Nghe từ ${item.word}`} fallback={() => speak(item.word)} /> : <VocabularySpeechButton text={item.word} label={`Nghe từ ${item.word}`} iconOnly speak={speak} />}
         {item.meaning ? <p className="vocabulary-card-meaning">{item.meaning}</p> : null}
       </div>

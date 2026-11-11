@@ -107,7 +107,62 @@ export function normalizeMonthlyFinalReadingOutput(value: unknown): unknown {
   if (!isRecord(output)) return output;
   const reading = "reading" in output ? decodeJson(output.reading) : output;
   if (!isRecord(reading)) return { reading };
-  return { reading: { questions: decodeQuestions(reading.questions) } };
+  const questions = decodeQuestions(reading.questions);
+  return {
+    reading: {
+      questions: Array.isArray(questions)
+        ? questions.map((question) => isRecord(question) && typeof question.prompt === "string" ? { ...question, prompt: monthlyFinalReadingQuestionMark(question.prompt) } : question)
+        : questions
+    }
+  };
+}
+
+const READING_GAP = /_{2,}/u;
+const READING_QUESTION_CUE = /^(?:choose|select|pick|complete|chọn|hãy chọn|điền)\b/iu;
+// An English sentence opening with one of these is a question even when the
+// model forgot its "?" ("What should the team do next." / "Why was it moved").
+// "Will", "Have" and "Do" can open a statement or an instruction, so they are left alone.
+const READING_INTERROGATIVE = /^(?:what|why|which|who|whom|whose|when|where|how|is|are|was|were|does|did|can|could|should|would)\b/iu;
+
+function readingParts(prompt: string): string[] {
+  return prompt.split(/(?<=[.!?])\s+|\n+/u).map((item) => item.trim()).filter(Boolean);
+}
+
+/**
+ * Deterministic repair for a Reading item whose final sentence is plainly an
+ * English question but lacks its "?". Nothing else is rewritten: a statement
+ * or instruction without a question stays as it is for the AI repair loop.
+ */
+export function monthlyFinalReadingQuestionMark(prompt: string): string {
+  if (READING_GAP.test(prompt)) return prompt;
+  const parts = readingParts(prompt);
+  const last = parts.at(-1);
+  if (!last || parts.some((part) => part.endsWith("?") || READING_QUESTION_CUE.test(part))) return prompt;
+  if (!READING_INTERROGATIVE.test(last) || /[!?]$/u.test(last)) return prompt;
+  const trimmed = prompt.trimEnd();
+  return /[.:;]$/u.test(trimmed) ? `${trimmed.slice(0, -1)}?` : `${trimmed}?`;
+}
+
+export type MonthlyFinalReadingItemIssue = "no_question" | "gap_word_missing" | "word_not_in_context";
+
+/**
+ * GEN07 pre-check (WP10), shared by the AI repair loop and the API checks: a
+ * Reading item must ask something (a "?" question, an explicit choose/complete
+ * cue, or a gap) and must assess the target word in its context. A gap item
+ * assesses the word through its correct option; every other item must contain
+ * the word in the context sentence itself, not only in the question.
+ */
+export function monthlyFinalReadingItemIssues(prompt: string, correctLabel: string, word: string): MonthlyFinalReadingItemIssue[] {
+  const issues: MonthlyFinalReadingItemIssue[] = [];
+  const parts = readingParts(prompt);
+  const isQuestion = (part: string) => part.endsWith("?") || READING_QUESTION_CUE.test(part);
+  const gap = READING_GAP.test(prompt);
+  if (!gap && !parts.some(isQuestion)) issues.push("no_question");
+  const context = parts.filter((part) => !isQuestion(part) || READING_GAP.test(part)).join(" ");
+  if (gap) {
+    if (!monthlyFinalContainsTerm(`${context}\n${correctLabel}`, word)) issues.push("gap_word_missing");
+  } else if (!monthlyFinalContainsTerm(context, word)) issues.push("word_not_in_context");
+  return issues;
 }
 
 const grammarEvidence = z.string().trim().min(1).max(400);
@@ -348,7 +403,13 @@ export function validateMonthlyFinalReadingOutput(output: MonthlyFinalReadingOut
       });
     }
     const target=input.targets.reading.find(term=>term.id===question.termId);
-    if(target && !monthlyFinalContainsTerm(`${question.prompt}\n${question.options[question.correctIndex] ?? ""}`,target.word)) issues.push({path:`reading.questions.${index}.termId`,message:`Assess "${target.word}" in the reading prompt or correct answer; a distractor alone does not assess it.`});
+    // Same GEN07 pre-check the assembled exam must pass, so the existing
+    // bounded repair loop fixes such items before assembly.
+    for (const problem of target ? monthlyFinalReadingItemIssues(question.prompt, question.options[question.correctIndex] ?? "", target.word) : []) {
+      if (problem === "no_question") issues.push({path:`reading.questions.${index}.prompt`,message:`The item for ${question.termId} has no question. Keep the context sentence containing "${target!.word}" and end the prompt with one short question ending in "?" (or use a single ____ blank that "${target!.word}" fills).`});
+      else if (problem === "gap_word_missing") issues.push({path:`reading.questions.${index}.termId`,message:`The blank item for ${question.termId} must be filled by "${target!.word}": make "${target!.word}" the correct option, or write it in the context sentence.`});
+      else issues.push({path:`reading.questions.${index}.termId`,message:`"${target!.word}" must appear verbatim in the context sentence before the question, not only in the question or options. Rewrite the context so it contains "${target!.word}", then ask one short question about it ending in "?".`});
+    }
     issues.push(...choiceIssues(`reading.questions.${index}`,question));
     if (grammarExamples.some(example => normalizeEvidence(example).length >= 6 &&
       [question.prompt, ...question.options].some(text => includesEvidence(text, example)))) {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionView } from "@e4s/contracts";
@@ -252,6 +252,72 @@ describe("EntryScreen interaction", () => {
     expect(client.completeLearnerPinReset).toHaveBeenCalledWith({ resetToken: "reset-token", pin: "789012" });
     expect(window.location.pathname).toBe("/");
     expect(screen.getByText(/Đã cập nhật mã PIN/)).toBeInTheDocument();
+  });
+
+  describe("Gửi lại mã on the verification screen", { timeout: 20_000 }, () => {
+    // Fake timers drive the once-a-second tick; Date.now is pinned so the countdown does not drift with real time.
+    let now = 0;
+    afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
+    const advance = async (ms: number) => { now += ms; await act(async () => { vi.advanceTimersByTime(ms); }); };
+
+    async function openOtpScreen(client: AuthClient) {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      now = new Date("2026-11-11T08:00:00Z").getTime();
+      vi.spyOn(Date, "now").mockImplementation(() => now);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      window.history.replaceState({}, "", "/forgot-pin");
+      render(<EntryScreen client={client} onAuthenticated={vi.fn()} />);
+      await user.type(screen.getByLabelText("Email"), "learner@e4s.local");
+      await user.click(screen.getByRole("button", { name: "Gửi mã qua email" }));
+      expect(await screen.findByRole("heading", { name: "Nhập mã xác minh" })).toBeInTheDocument();
+      return user;
+    }
+
+    it("re-requests the code for the same email after a 60-second cooldown shown on the button", async () => {
+      const client = stubClient();
+      vi.mocked(client.startLearnerPinReset).mockResolvedValueOnce({ challengeId: "challenge-1", expiresAt: new Date().toISOString() });
+      const user = await openOtpScreen(client);
+      expect(screen.getByRole("button", { name: "Gửi lại mã (60s)" })).toBeDisabled();
+      await advance(15_000);
+      expect(screen.getByRole("button", { name: "Gửi lại mã (45s)" })).toBeDisabled();
+      await advance(45_000);
+      const resend = screen.getByRole("button", { name: "Gửi lại mã" });
+      expect(resend).toBeEnabled();
+      await user.type(screen.getByLabelText("Mã xác minh"), "111");
+      await user.click(resend);
+      expect(client.startLearnerPinReset).toHaveBeenCalledTimes(2);
+      expect(client.startLearnerPinReset).toHaveBeenLastCalledWith({ email: "learner@e4s.local" });
+      expect(await screen.findByText("Nếu email thuộc tài khoản người học, mã xác minh đã được gửi.")).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: "Gửi lại mã (60s)" })).toBeDisabled();
+      expect(screen.getByLabelText("Mã xác minh")).toHaveValue("");
+      // The new challenge is the one verified.
+      await user.type(screen.getByLabelText("Mã xác minh"), "123456");
+      await user.click(screen.getByRole("button", { name: "Xác minh mã" }));
+      expect(client.verifyLearnerPinReset).toHaveBeenCalledWith({ challengeId: "challenge-2", code: "123456" });
+    });
+
+    it("disables the button while sending and shows the server's resend interval error", async () => {
+      const client = stubClient();
+      const user = await openOtpScreen(client);
+      await advance(60_000);
+      let reject: (error: unknown) => void = () => {};
+      vi.mocked(client.startLearnerPinReset).mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+      await user.click(screen.getByRole("button", { name: "Gửi lại mã" }));
+      expect(screen.getByRole("button", { name: "Gửi lại mã" })).toBeDisabled();
+      await act(async () => { reject(new ApiError("PIN_RESET_RESEND_TOO_SOON", "http", 429, { code: "PIN_RESET_RESEND_TOO_SOON", retryAfterSeconds: 20 })); });
+      expect(await screen.findByRole("alert")).toHaveTextContent("Mã vừa được gửi. Vui lòng đợi 20 giây rồi gửi lại mã.");
+      expect(screen.getByRole("button", { name: "Gửi lại mã (20s)" })).toBeDisabled();
+    });
+
+    it("shows the existing delivery error when the resend fails", async () => {
+      const client = stubClient();
+      const user = await openOtpScreen(client);
+      await advance(60_000);
+      vi.mocked(client.startLearnerPinReset).mockRejectedValueOnce(new ApiError("EMAIL_DELIVERY_FAILED", "http", 503, { code: "EMAIL_DELIVERY_FAILED" }));
+      await user.click(screen.getByRole("button", { name: "Gửi lại mã" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("Chưa thể gửi mã xác minh. Vui lòng thử lại.");
+      expect(screen.getByRole("button", { name: "Gửi lại mã" })).toBeEnabled();
+    });
   });
 
   it("lets staff send a generic password-help notification to the Manager", async () => {

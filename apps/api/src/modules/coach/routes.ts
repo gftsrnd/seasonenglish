@@ -130,12 +130,17 @@ export function registerCoachRoutes(
       let scored: Awaited<ReturnType<typeof runCoachWithPersonaRepair>>;
       try {
         scored = await runCoachWithPersonaRepair(
-          runner, aiInput, `${coachPersonaPrompt(task.prompt, existing.persona, existing.cefr, audio)}\n\n${coachPracticeTurnPolicy(existing.cefr, existing.topic, (existing.questionHistory ?? []).slice(-20))}`, existing.persona, validationContext
+          runner, aiInput, `${coachPersonaPrompt(task.prompt, existing.persona, existing.cefr, audio)}\n\n${coachPracticeTurnPolicy(existing.cefr, existing.topic, (existing.questionHistory ?? []).slice(-20), {
+            learnerWordCount: countCoachWords(parsed.data.message),
+            currentQuestion,
+            unopenedVocabulary: (existing.vocabulary ?? []).filter((item) => !item.opened).map((item) => item.word)
+          })}`, existing.persona, validationContext
         );
       } catch (error) {
         return await saveOutageTurn(safeAiErrorCode(error));
       }
       const { result, output, feedbackErrorCode } = scored;
+      logRoleplayDiagnostics(request.log, parsed.data.requestId, "practice", scored.roleplay);
       if (feedbackErrorCode) return await saveOutageTurn(feedbackErrorCode, output);
       const normalizedOutput = normalizeCoachVocabularyUnlocks(
         repeatCurrentQuestionForOffTopic(output, currentQuestion), parsed.data.message, existing.vocabulary
@@ -225,12 +230,13 @@ export function registerCoachRoutes(
         currentQuestion: coachCurrentQuestion(existing.messages, `Tell me about your work at ${existing.targetLevel} level.`),
         priorTurns: []
       };
-      const { result, output } = await runCoachWithPersonaRepair(
+      const { result, output, roleplay } = await runCoachWithPersonaRepair(
         runner, aiInput, coachPersonaPrompt(task.prompt, "formal", existing.targetLevel, audio), "formal", {
           learnerMessage: parsed.data.message,
           previousSuggestedAnswer: coachPreviousSuggestedAnswer(existing.messages)
         }
       );
+      logRoleplayDiagnostics(request.log, parsed.data.requestId, "challenge", roleplay);
       const normalizedOutput = normalizeCoachVocabularyUnlocks(repeatCurrentQuestionForOffTopic(
         output, coachCurrentQuestion(existing.messages, `Tell me about your work at ${existing.targetLevel} level.`)
       ), parsed.data.message, []);
@@ -331,7 +337,10 @@ export function coachPersonaPrompt(
     : "";
   const requiredGrammarGuard = "GRAMMAR CHECK: Every complete clause needs an explicit subject and any required copula. Do not mark a message correct if it starts with a clipped or missing subject/copula such as 'm a project manager' or 'I a project manager'. Correct the first to 'I'm a project manager' and the second to 'I am a project manager'; make equivalent fixes for he/she/it is and you/we/they are. The grammar evidence must name the missing subject/copula and the correction must include it.";
   const correctionCompactnessGuard = "CORRECTION DISPLAY: Each corrections[].reason must be one concise explanation of at most 12 words. Do not restate the corrected sentence in the reason. Keep correctedText empty when it would duplicate a corrections[].corrected value; the UI already shows the corrected form.";
-  return [prompt, instruction, correctionGuard, requiredGrammarGuard, correctionCompactnessGuard, cefrGuidance, asrGuidance].filter(Boolean).join("\n\n");
+  const registerGuard = persona === "formal"
+    ? "LEARNER REGISTER: Slang or overly casual wording in the learner message (for example lol, gimme, mate, 'em, no big deal) is a register problem, never a reason for off_topic. If the message still responds to currentQuestion, use status valid, result partially_correct, countsTowardGoal true, lower only rubric.meaning (appropriateness) to at most 3, and explain the register issue in noteVi and rubric.meaning.improvement. Use off_topic only when the content does not address currentQuestion."
+    : "";
+  return [prompt, instruction, correctionGuard, requiredGrammarGuard, correctionCompactnessGuard, registerGuard, cefrGuidance, asrGuidance].filter(Boolean).join("\n\n");
 }
 
 export function isAcknowledgementOnly(message: string): boolean {
@@ -341,10 +350,29 @@ export function isAcknowledgementOnly(message: string): boolean {
 
 export function isInsufficientCoachInput(message: string, cefr: string = "A1"): boolean {
   if (isAcknowledgementOnly(message)) return true;
-  const normalized = message.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}'’\s]/gu, "").replace(/\s+/g, " ");
-  const words = normalized.split(" ").filter(Boolean);
+  const normalized = normalizedCoachWords(message);
   if (/^(?:i do not know|i don't know|i dont know|idk)$/u.test(normalized.replaceAll("’", "'"))) return true;
-  return words.length < minimumSeasonTurnWords(cefr);
+  return countCoachWords(message) < minimumSeasonTurnWords(cefr);
+}
+
+function normalizedCoachWords(message: string): string {
+  return message.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}'’\s]/gu, "").replace(/\s+/g, " ");
+}
+
+/** The single, code-side word count used by the Season turn gate. */
+export function countCoachWords(message: string): number {
+  return normalizedCoachWords(message).split(" ").filter(Boolean).length;
+}
+
+/**
+ * Vietnamese prose in a learner answer: a lower-case token carrying a
+ * Vietnamese/Latin diacritic ("vào", "nhé", "thứ"). Capitalised tokens are
+ * skipped so an English sentence containing a name such as "Lê" or "José"
+ * is not rejected.
+ */
+export function containsVietnameseLearnerText(message: string): boolean {
+  return (message.normalize("NFC").match(/[\p{L}\p{M}'’-]+/gu) ?? [])
+    .some((token) => /[\u00c0-\u024f\u1e00-\u1eff]/u.test(token) && !/^\p{Lu}/u.test(token));
 }
 
 function minimumSeasonTurnWords(cefr: string): number {
@@ -357,6 +385,7 @@ export function coachPracticeTurnGateReason(
   messages: CoachView["messages"]
 ): string | undefined {
   if (isRepeatedSeasonMessage(message, messages)) return "Câu trả lời trùng hoàn toàn với một câu trước đó; hãy tự viết câu mới.";
+  if (containsVietnameseLearnerText(message)) return "Câu trả lời còn chứa tiếng Việt nên chưa được tính lượt; hãy viết toàn bộ câu bằng tiếng Anh.";
   if (isInsufficientCoachInput(message, cefr)) return `Câu trả lời chưa đủ ${minimumSeasonTurnWords(cefr)} từ hoặc chưa thành ý; hãy viết một câu tiếng Anh có chủ ngữ và động từ.`;
   return undefined;
 }
@@ -371,9 +400,25 @@ function isRepeatedSeasonMessage(message: string, messages: CoachView["messages"
   });
 }
 
-function coachPracticeTurnPolicy(cefr: string, topic: string, priorQuestions: readonly string[] = []): string {
-  const history = priorQuestions.length ? ` Exact questions already asked in this topic: ${JSON.stringify(priorQuestions)}.` : "";
-  return `SEASON TURN ELIGIBILITY (practice only): A valid turn must be entirely English, answer the current in-character question, contain at least ${minimumSeasonTurnWords(cefr)} words, and include at least one clause with a subject and verb. Reject acknowledgements, fragments, word lists, and an exact copy of any prior Season or learner sentence as insufficient; name the short reason in Vietnamese. Ignore grammatical correctness when deciding whether the turn counts: grammar errors may still count if the other four gates pass. Set countsTowardGoal=true only when all five gates pass. These gates do not change the language score or monthly exam score. ROLEPLAY CONTINUITY: Stay in the workplace topic “${topic}”. Respond to the details in the learner's latest message, then ask one concise, natural in-character follow-up about that detail. Do not use classroom instructions such as asking them to write a complete sentence. If the learner has already stated their role or job, acknowledge it and ask about a project, task, or next step instead of asking about their role again. Do not repeat any exact question from the supplied priorQuestions.${history}`;
+export function coachPracticeTurnPolicy(
+  cefr: string,
+  topic: string,
+  priorQuestions: readonly string[] = [],
+  context: { learnerWordCount?: number; unopenedVocabulary?: readonly string[]; currentQuestion?: string } = {}
+): string {
+  // The current question is still open: re-asking it after an unanswered turn
+  // is a natural re-prompt, so only the earlier questions are forbidden.
+  const currentKey = coachQuestionKey(context.currentQuestion ?? "");
+  const earlierQuestions = priorQuestions.filter((question) => !currentKey || coachQuestionKey(question) !== currentKey);
+  const history = earlierQuestions.length ? ` Exact questions already asked in this topic: ${JSON.stringify(earlierQuestions)}.` : "";
+  const wordCount = typeof context.learnerWordCount === "number"
+    ? ` WORD COUNT: The learner message has exactly ${context.learnerWordCount} words, counted by code, and it already passed the code checks for minimum word count and Vietnamese text. Do not recount words and never state a different word count in noteVi.`
+    : "";
+  const vocabulary = [...new Set((context.unopenedVocabulary ?? []).map((word) => word.trim()).filter(Boolean))].slice(0, 15);
+  const monthVocabulary = vocabulary.length
+    ? ` MONTH VOCABULARY: This month's lesson words the learner has not used yet: ${JSON.stringify(vocabulary)}. When it fits the scenario naturally, ask a follow-up that gives the learner a chance to use one of them; never list, define, or teach these words in seasonReply.`
+    : "";
+  return `SEASON TURN ELIGIBILITY (practice only): A valid turn must be entirely English, answer the current in-character question, contain at least ${minimumSeasonTurnWords(cefr)} words, and include at least one clause with a subject and verb. Reject acknowledgements, fragments, word lists, and an exact copy of any prior Season or learner sentence as insufficient; name the short reason in Vietnamese. Ignore grammatical correctness when deciding whether the turn counts: grammar errors may still count if the other four gates pass. Set countsTowardGoal=true only when all five gates pass. These gates do not change the language score or monthly exam score. ROLEPLAY CONTINUITY: Stay in the workplace topic “${topic}”. Respond to the details in the learner's latest message, then ask one concise, natural in-character follow-up about that detail. Do not use classroom instructions such as asking them to write a complete sentence. If the learner has already stated their role or job, acknowledge it and ask about a project, task, or next step instead of asking about their role again. Do not repeat any earlier question from the supplied priorQuestions. Asking currentQuestion again (in the same or different words) is allowed only when the learner did not answer it; otherwise move forward with a new follow-up about the same topic.${history}${wordCount}${monthVocabulary}`;
 }
 
 export function coachInsufficientFollowUp(
@@ -385,8 +430,15 @@ export function coachInsufficientFollowUp(
 ): { seasonReply: string; seasonReplyTranslation: string; nextQuestion: string; nextQuestionTranslation: string } {
   const roleAlreadyStated = /\b(?:i am|i'm|i work as|my role is|i work in)\b/iu.test(message);
   const words = message.match(/[\p{L}][\p{L}'’-]{2,}/gu) ?? [];
-  const stopWords = new Set(["the", "and", "for", "with", "this", "that", "you", "your", "are", "was", "were", "have", "has", "had", "from", "about", "what", "when", "where", "which", "would", "could", "should", "hello", "hi", "yes", "okay", "ok"]);
-  const focus = [...words].reverse().find((word) => !stopWords.has(word.toLocaleLowerCase("en-US")));
+  // Time words and adverbs make a meaningless focus ("the next step for “day”").
+  const stopWords = new Set(["the", "and", "for", "with", "this", "that", "you", "your", "are", "was", "were", "have", "has", "had", "from", "about", "what", "when", "where", "which", "would", "could", "should", "hello", "hi", "yes", "okay", "ok",
+    "day", "days", "today", "tomorrow", "yesterday", "week", "weekend", "month", "morning", "afternoon", "evening", "night", "time", "now", "later", "earlier", "longer", "soon",
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "every", "also", "just", "really", "very", "much", "more", "some", "will", "can", "need", "want", "like", "our", "they", "them", "their", "there", "then", "than", "maybe", "because"]);
+  // A Vietnamese answer must never become the topic of the English follow-up
+  // ("What is the next step for “nhé”?").
+  const focus = containsVietnameseLearnerText(message)
+    ? undefined
+    : [...words].reverse().find((word) => !stopWords.has(word.toLocaleLowerCase("en-US")));
   const options: Array<[string, string]> = roleAlreadyStated
     ? [
         ["Which project are you working on this week?", "Tuần này bạn đang làm dự án nào?"],
@@ -425,7 +477,9 @@ export function coachInsufficientFollowUp(
   const acknowledgement = roleAlreadyStated
     ? persona === "formal" ? "Thank you for sharing your role." : "I'm glad you told me about your work."
     : focus
-      ? persona === "formal" ? `I hear you mention “${focus}.”` : `I'm glad you mentioned “${focus}.”`
+      // The full stop stays outside the quotes: “x.” splits into a sentence
+      // that starts with ” and leaked into the next turn's question anchor.
+      ? persona === "formal" ? `I hear you mention “${focus}”.` : `I'm glad you mentioned “${focus}”.`
       : persona === "formal" ? "Thank you for sharing that." : "I'm glad you shared that.";
   const seasonReply = `${acknowledgement} ${nextQuestion}${persona === "informal" ? " 😊" : ""}`;
   const translatedAcknowledgement = roleAlreadyStated
@@ -444,7 +498,23 @@ export function coachCurrentQuestion(
   fallback: string
 ): string {
   const latestCoach = [...messages].reverse().find((message) => message.speaker === "coach" && message.text.trim());
-  return latestCoach?.feedback?.nextQuestion?.trim() || latestCoach?.text.trim() || fallback;
+  return cleanCoachQuestionAnchor(latestCoach?.feedback?.nextQuestion ?? "") || latestCoach?.text.trim() || fallback;
+}
+
+/** Drops quote/punctuation debris left at the start of a split sentence (”). */
+function cleanCoachQuestionAnchor(value: string): string {
+  return value.trim().replace(/^[\s”"’'.,;:]+/u, "").trim();
+}
+
+/**
+ * Comparison key for "was this question already asked": case, punctuation,
+ * quotes, emoji, contractions, "please" and a leading lead-in clause
+ * ("Before we agree on an extra week, could you…") are ignored.
+ */
+export function coachQuestionKey(value: string): string {
+  const question = cleanCoachQuestionAnchor(formalizeText(value));
+  const core = question.replace(/^[^,?]{1,120},\s+(?=(?:could|can|would|will|what|which|how|when|where|who|why|do|does|did|is|are|please)\b)/iu, "");
+  return normalizeCoachTurnText(core).replace(/\bplease\b/gu, " ").replace(/\s+/gu, " ").trim();
 }
 
 export function coachQuestionForPersona(question: string, persona: "informal" | "formal"): string {
@@ -463,11 +533,15 @@ export function repeatCurrentQuestionForOffTopic(output: CoachTaskOutput, curren
   if (output.evaluation.status !== "off_topic") return output;
   const reply = output.seasonReply.trim();
   const hasQuestion = normalizeCoachTurnText(reply).includes(normalizeCoachTurnText(currentQuestion));
-  return {
-    ...output,
-    nextQuestion: currentQuestion,
-    seasonReply: hasQuestion ? reply : `${reply} ${currentQuestion}`.trim()
-  };
+  if (hasQuestion) return { ...output, nextQuestion: currentQuestion, seasonReply: reply };
+  // Season already steered back with its own final question; appending the
+  // old question as well would ask the learner two questions in one turn.
+  if (endsWithCoachQuestion(reply)) return alignNextQuestionWithSeasonReply({ ...output, seasonReply: reply });
+  return { ...output, nextQuestion: currentQuestion, seasonReply: `${reply} ${currentQuestion}`.trim() };
+}
+
+function endsWithCoachQuestion(value: string): boolean {
+  return /\?\s*(?:[\p{Extended_Pictographic}\uFE0F]\s*)*$/u.test(value.trim());
 }
 
 export function normalizeCoachVocabularyUnlocks(
@@ -567,7 +641,11 @@ function validateInCharacterTurn(output: CoachTaskOutput): string[] {
   const replyWithoutGreetingName = reply.replace(/^(?:hi|hello|hey|dear)\s+[\p{L}'-]+[!,.]?\s*/iu, "");
   const containsVietnameseProse = /[\u00c0-\u024f\u1e00-\u1eff]/u;
   const metaNarration = /\b(?:your (?:opening|answer|response|colleague)|great\s*now|how do you ask|what could you say|what would you say|you should say|the learner|as a coach|let'?s practise|roleplay)\b/iu;
-  const directMetaQuestion = /\b(?:how|what)\s+(?:would|do|should|can)\s+you\s+(?:reply|respond|answer|ask|say)\b/iu;
+  // "What do you say to the client?" is an in-character question about a
+  // third party in the scenario; only an unaddressed "What do you say?" is a
+  // meta prompt. (Teacher phrasing like "what would you say" is still caught
+  // by metaNarration above.)
+  const directMetaQuestion = /\b(?:how|what)\s+(?:would|do|should|can)\s+you\s+(?:reply|respond|answer|ask|say)\b(?!\s+(?:to|with)\s+(?:the|our|this|that|my|him|her|them)\b)/iu;
   return [
     ...(containsVietnameseProse.test(replyWithoutGreetingName) ? ["Season reply must be English-only; Vietnamese belongs in seasonReplyTranslation."] : []),
     ...(metaNarration.test(reply) ? ["Season reply contains teacher or examiner narration."] : []),
@@ -613,7 +691,8 @@ function normalizeCoachTurnText(value: string): string {
 }
 
 function coachSentenceCount(value: string): number {
-  return value.split(/[.!?]+(?:\s+|$)/u).map((part) => part.trim()).filter(Boolean).length;
+  // A trailing emoji ("…next? 😊") is not a sentence of its own.
+  return value.split(/[.!?]+(?:\s+|$)/u).map((part) => part.trim()).filter((part) => /[\p{L}\p{N}]/u.test(part)).length;
 }
 
 function validateSuggestedAnswerReplay(output: CoachTaskOutput, context?: CoachValidationContext): string[] {
@@ -653,16 +732,31 @@ function validateSuggestedAnswer(output: CoachTaskOutput): string[] {
  * turn first, then ask for feedback separately and never let feedback replace
  * the accepted turn.
  */
+export interface CoachRoleplayDiagnostics {
+  /** Violations found in the model's roleplay turn before local repair. */
+  modelViolations: string[];
+  /** Non-blocking findings (contraction, emoji, sentence count…) on the turn that was kept. */
+  warnings: string[];
+  /** Blocking violations that replaced the model's turn with the local fallback. */
+  fallbackViolations?: string[];
+  /** Error code of a failed feedback call (for example AI_OUTPUT_TRUNCATED). */
+  feedbackErrorCode?: string;
+}
+
+/** Output budgets of the two Season calls. coach_dialogue was truncated at 1 400 tokens on long C1 turns. */
+export const COACH_ROLEPLAY_MAX_OUTPUT_TOKENS = 1_200;
+export const COACH_FEEDBACK_MAX_OUTPUT_TOKENS = 2_400;
+
 export async function runCoachWithPersonaRepair(
   runner: AiTaskRunner,
   input: unknown,
   systemPrompt: string,
   persona: "informal" | "formal",
   validationContext?: CoachValidationContext
-): Promise<{ result: AiRunResult; output: CoachTaskOutputWithFeedbackStatus; feedbackErrorCode?: string }> {
-  const roleplayPrompt = `${systemPrompt}\n\nROLEPLAY TURN ONLY. Return ONLY this compact JSON object: {"seasonReply":"...","learnerQuestion":"...","suggestedLearnerReply":"..."}. All three fields are English-only. Speak as the colleague/customer, not as a teacher. seasonReply has 2-4 direct in-character sentences and ends with learnerQuestion verbatim. learnerQuestion must be a natural question/request to the learner, never 'What would you say?' or other teaching language. suggestedLearnerReply directly answers learnerQuestion. Do not return evaluation, translations, rubric, corrections, headings, Vietnamese, or commentary.`;
+): Promise<{ result: AiRunResult; output: CoachTaskOutputWithFeedbackStatus; feedbackErrorCode?: string; roleplay: CoachRoleplayDiagnostics }> {
+  const roleplayPrompt = `${systemPrompt}\n\nROLEPLAY TURN ONLY. Return ONLY this compact JSON object: {"seasonReply":"...","learnerQuestion":"...","suggestedLearnerReply":"...","seasonReplyTranslation":"...","learnerQuestionTranslation":"...","suggestedLearnerReplyTranslation":"..."}. seasonReply, learnerQuestion, and suggestedLearnerReply are English-only. Speak as the colleague/customer, not as a teacher. seasonReply has 2-4 direct in-character sentences and ends with learnerQuestion verbatim. learnerQuestion must be a natural question/request to the learner, never 'What would you say?' or other teaching language. suggestedLearnerReply directly answers learnerQuestion. seasonReplyTranslation, learnerQuestionTranslation, and suggestedLearnerReplyTranslation are natural Vietnamese translations of exactly your own seasonReply, learnerQuestion, and suggestedLearnerReply. Do not return evaluation, rubric, corrections, headings, or commentary, and never put Vietnamese in the three English fields.`;
   const roleplayResult = await runner.runTask("coach_roleplay_turn", input, {
-    systemPrompt: roleplayPrompt, temperature: 0, maxAttempts: 2, maxOutputTokens: 700
+    systemPrompt: roleplayPrompt, temperature: 0, maxAttempts: 2, maxOutputTokens: COACH_ROLEPLAY_MAX_OUTPUT_TOKENS
   });
   const roleplay = inspectRoleplayTurn(roleplayResult.output, persona, validationContext);
   if (!roleplay.turn) throw Object.assign(new Error("Coach roleplay turn invalid"), { code: "AI_OUTPUT_INVALID", issues: roleplay.violations });
@@ -673,7 +767,12 @@ export async function runCoachWithPersonaRepair(
   let feedbackResult: AiRunResult | undefined;
   let feedbackErrorCode: string | undefined;
   try {
-    const generated = await runCoachFeedbackWithPersonaRepair(runner, input, `${systemPrompt}\n\nFEEDBACK ONLY: evaluate the learner response. The roleplay turn below is already accepted and must not be changed. Return the standard JSON object, but its seasonReply/nextQuestion/suggestedAnswer fields will be ignored.\nACCEPTED TURN: ${JSON.stringify(roleplay.turn)}`, validationContext);
+    const acceptedTurn = {
+      seasonReply: roleplay.turn.seasonReply,
+      learnerQuestion: roleplay.turn.learnerQuestion,
+      suggestedLearnerReply: roleplay.turn.suggestedLearnerReply
+    };
+    const generated = await runCoachFeedbackWithPersonaRepair(runner, input, `${systemPrompt}\n\nFEEDBACK ONLY: evaluate the learner response. The roleplay turn below is already accepted and must not be changed. Return the standard JSON object with seasonReply copied verbatim from ACCEPTED TURN.seasonReply, nextQuestion copied verbatim from ACCEPTED TURN.learnerQuestion, and suggestedAnswer.text copied verbatim from ACCEPTED TURN.suggestedLearnerReply. COPY FIRST, THEN TRANSLATE: copy each of those three strings character for character (same words, punctuation, contractions, and emoji), even where the persona style rules above would phrase them differently; those style rules were already applied to the accepted turn. Then seasonReplyTranslation, nextQuestionTranslation, and suggestedAnswer.translation must be faithful Vietnamese translations of exactly those copied texts; never write or translate a different Season reply, question, or example.\nACCEPTED TURN: ${JSON.stringify(acceptedTurn)}`, validationContext);
     feedback = generated.output;
     feedbackResult = generated.result;
   } catch (error) {
@@ -682,11 +781,169 @@ export async function runCoachWithPersonaRepair(
     // valid roleplay turn. This is deliberately modest rather than fabricated.
     feedback = localCoachFeedback(roleplay.turn, validationContext?.learnerMessage ?? "");
   }
-  const output = mergeAcceptedRoleplay(feedback!, roleplay.turn);
-  return { result: feedbackResult ?? roleplayResult, output, ...(feedbackErrorCode ? { feedbackErrorCode } : {}) };
+  const merged = mergeAcceptedRoleplay(feedback!, roleplay.turn, roleplay.fallbackTranslations, roleplay.modelTurn);
+  const output = feedbackErrorCode ? merged : finalizeCoachEvaluation(merged, persona, validationContext);
+  return {
+    result: feedbackResult ?? roleplayResult,
+    output,
+    ...(feedbackErrorCode ? { feedbackErrorCode } : {}),
+    roleplay: {
+      modelViolations: roleplay.modelViolations,
+      warnings: roleplay.warnings,
+      ...(roleplay.fallbackViolations ? { fallbackViolations: roleplay.fallbackViolations } : {}),
+      ...(feedbackErrorCode ? { feedbackErrorCode } : {})
+    }
+  };
 }
 
-function inspectRoleplayTurn(raw: unknown, persona: "informal" | "formal", context?: CoachValidationContext): { turn?: CoachRoleplayTurnOutput; violations: string[] } {
+const INFORMAL_REGISTER_MARKER = /(?<![\p{L}\p{N}'’])(?:lol|lmao|omg|btw|bro|dude|mate|gimme|gonna|wanna|gotta|kinda|sorta|dunno|ain['’]t|nah|yeah|yep|chill|whatever|thx|pls|no big deal|['’]em)(?![\p{L}\p{N}])|^\s*hey\b/giu;
+const WORKPLACE_TERM = /\b(?:client|customer|file|report|deadline|meeting|project|team|manager|boss|ship|release|deliver\w*|scope|design|feature|bug|test\w*|plan|schedule|timeline|task|email|call|budget|contract|work|slide|deck|update|feedback|request)s?\b/iu;
+const NOTE_DENIES_COUNT = /(?:chưa|không)\s+(?:được\s+)?(?:tính|đếm)|(?:chưa|không)\s+(?:đạt|đủ)\s+(?:điều\s+kiện|yêu\s+cầu\s+(?:tính|đếm))/iu;
+const NOTE_CLAIMS_COUNT = /(?<!(?:chưa|không)\s)(?:được|đã)\s+tính\s+(?:lượt|vào)/iu;
+
+/** Learner slang / overly casual markers, lower-cased and de-duplicated. */
+export function informalRegisterMarkers(message: string): string[] {
+  return [...new Set([...message.matchAll(INFORMAL_REGISTER_MARKER)].map((match) => match[0].trim().toLocaleLowerCase("en-US").replace("’", "'")))];
+}
+
+/**
+ * Deterministic last step on a graded turn:
+ * 1. Formal register: slang in an on-topic answer is an appropriateness
+ *    problem, not off_topic. The turn counts and only the meaning ("Ý")
+ *    score is capped at 3.
+ * 2. noteVi never contradicts countsTowardGoal; a sentence claiming the
+ *    opposite counting status is replaced by a code-derived one.
+ */
+export function finalizeCoachEvaluation(
+  output: CoachTaskOutputWithFeedbackStatus,
+  persona: "informal" | "formal",
+  context?: Pick<CoachValidationContext, "learnerMessage" | "currentQuestion" | "topic">
+): CoachTaskOutputWithFeedbackStatus {
+  let next = output;
+  const message = context?.learnerMessage ?? "";
+  const markers = persona === "formal" ? informalRegisterMarkers(message) : [];
+  if (markers.length && next.evaluation.status !== "insufficient") {
+    const listed = markers.map((marker) => `“${marker}”`).join(", ");
+    const registerImprovement = "Thay từ lóng bằng cách nói lịch sự, chuyên nghiệp phù hợp hội thoại trang trọng.";
+    if (next.evaluation.status === "off_topic" && learnerMessageAddressesScenario(message, context)) {
+      next = {
+        ...next,
+        evaluation: {
+          status: "valid", result: "partially_correct", countsTowardGoal: true,
+          noteVi: `Câu trả lời đúng chủ đề nên được tính lượt, nhưng cách nói suồng sã (${listed}) không phù hợp hội thoại trang trọng nên bị trừ điểm Ý. ${registerImprovement}`
+        },
+        rubric: {
+          ...next.rubric,
+          meaning: {
+            score: Math.min(3, Math.max(2, next.rubric.meaning.score)),
+            evidence: `Ý trả lời đúng trọng tâm nhưng văn phong suồng sã (${listed}) không phù hợp hội thoại trang trọng.`,
+            improvement: registerImprovement
+          }
+        }
+      };
+    } else if (next.evaluation.status === "valid" && next.rubric.meaning.score > 3) {
+      next = {
+        ...next,
+        evaluation: { ...next.evaluation, result: "partially_correct" },
+        rubric: {
+          ...next.rubric,
+          meaning: { ...next.rubric.meaning, score: 3, improvement: next.rubric.meaning.improvement.trim() || registerImprovement }
+        }
+      };
+    }
+  }
+  return { ...next, evaluation: { ...next.evaluation, noteVi: consistentCoachNote(next.evaluation) } };
+}
+
+function learnerMessageAddressesScenario(
+  message: string,
+  context?: Pick<CoachValidationContext, "currentQuestion" | "topic">
+): boolean {
+  if (WORKPLACE_TERM.test(message)) return true;
+  // "tell 'em no", "they're being a pain": the client/team being discussed.
+  if (/(?:\bthey\b|\bthem\b|\btheir\b|['’]em\b)/iu.test(message)) return true;
+  const contentWords = (value: string) => new Set((formalizeText(value).toLocaleLowerCase("en-US").match(/\p{L}{4,}/gu) ?? [])
+    .filter((word) => !["what", "which", "would", "could", "should", "about", "there", "their", "with", "this", "that", "your", "have", "will", "tell", "please"].includes(word)));
+  const learner = contentWords(message);
+  const scenario = new Set([...contentWords(context?.currentQuestion ?? ""), ...contentWords(context?.topic ?? "")]);
+  return [...learner].some((word) => scenario.has(word));
+}
+
+function consistentCoachNote(evaluation: CoachTaskOutput["evaluation"]): string {
+  const note = evaluation.noteVi.trim();
+  const contradicts = evaluation.countsTowardGoal ? NOTE_DENIES_COUNT : NOTE_CLAIMS_COUNT;
+  const sentences = note.split(/(?<=[.!?])\s+/u).filter(Boolean);
+  if (!sentences.some((sentence) => contradicts.test(sentence))) return note;
+  const kept = sentences.filter((sentence) => !contradicts.test(sentence));
+  const lead = evaluation.countsTowardGoal
+    ? "Lượt này được tính vào mục tiêu."
+    : evaluation.status === "off_topic"
+      ? "Lượt này chưa được tính vì câu trả lời chưa đúng trọng tâm câu hỏi."
+      : "Lượt này chưa được tính vì câu trả lời chưa đủ ý.";
+  return [lead, ...kept].join(" ").slice(0, 500);
+}
+
+const ROLEPLAY_REPEATED_QUESTION = "Season repeated a question already asked in this month's topic.";
+const ROLEPLAY_ROLE_AGAIN = "Season asked for the learner's role after it had already been stated.";
+const ROLEPLAY_NO_QUESTION = "Season reply has no in-character question after repair.";
+
+/**
+ * Only these violations replace a model turn with the local fallback:
+ * Vietnamese prose, teacher narration, a broken question anchor, or a
+ * repeated question. Style findings (contraction, emoji, exclamation mark,
+ * sentence count, length) are normalised locally and logged as warnings.
+ */
+export function isBlockingRoleplayViolation(violation: string): boolean {
+  return isEnglishOnlyViolation(violation)
+    || isTeacherNarrationViolation(violation)
+    || isInCharacterAnchorViolation(violation)
+    || violation === ROLEPLAY_REPEATED_QUESTION
+    || violation === ROLEPLAY_ROLE_AGAIN
+    || violation === ROLEPLAY_NO_QUESTION;
+}
+
+type RoleplayFallbackTranslations = { seasonReply: string; nextQuestion: string; suggestedAnswer: string };
+const FALLBACK_SUGGESTED_REPLY = "I will share one update about the project and explain the next step.";
+const FALLBACK_SUGGESTED_REPLY_TRANSLATION = "Tôi sẽ chia sẻ một cập nhật về dự án và giải thích bước tiếp theo.";
+
+export function logRoleplayDiagnostics(
+  log: { warn: (details: object, message: string) => void; info: (details: object, message: string) => void },
+  requestId: string,
+  mode: "practice" | "challenge",
+  diagnostics: CoachRoleplayDiagnostics
+): void {
+  if (diagnostics.feedbackErrorCode === "AI_OUTPUT_TRUNCATED") {
+    // A truncated evaluator leaves the turn without feedback; log it under
+    // its own code so the output budget can be monitored.
+    log.warn({
+      code: "COACH_FEEDBACK_TRUNCATED", requestId, mode, maxOutputTokens: COACH_FEEDBACK_MAX_OUTPUT_TOKENS
+    }, "Season feedback output was truncated at the output-token limit");
+  }
+  if (diagnostics.fallbackViolations) {
+    log.warn({
+      code: "SEASON_ROLEPLAY_FALLBACK", requestId, mode,
+      violations: diagnostics.fallbackViolations, modelViolations: diagnostics.modelViolations
+    }, "Season roleplay turn replaced by the local fallback");
+    return;
+  }
+  if (diagnostics.modelViolations.length) {
+    log.info({
+      code: "SEASON_ROLEPLAY_REPAIRED", requestId, mode,
+      modelViolations: diagnostics.modelViolations, warnings: diagnostics.warnings
+    }, "Season roleplay turn repaired locally");
+  }
+}
+
+function inspectRoleplayTurn(raw: unknown, persona: "informal" | "formal", context?: CoachValidationContext): {
+  turn?: CoachRoleplayTurnOutput;
+  violations: string[];
+  modelViolations: string[];
+  warnings: string[];
+  fallbackViolations?: string[];
+  fallbackTranslations?: RoleplayFallbackTranslations;
+  /** The parsed model turn with its own translations, before any local repair. */
+  modelTurn?: CoachRoleplayTurnOutput;
+} {
   // Accepting the legacy composite shape here keeps persisted/mock outputs
   // readable during rollout; live calls use the compact task above.
   const candidate = coachRoleplayTurnOutputSchema.safeParse(raw).success
@@ -695,32 +952,41 @@ function inspectRoleplayTurn(raw: unknown, persona: "informal" | "formal", conte
       ? { seasonReply: (raw as CoachTaskOutput).seasonReply, learnerQuestion: (raw as CoachTaskOutput).nextQuestion, suggestedLearnerReply: (raw as CoachTaskOutput).suggestedAnswer.text }
       : raw;
   const parsed = coachRoleplayTurnOutputSchema.safeParse(candidate);
-  if (!parsed.success) return { violations: ["Coach roleplay turn does not match its compact schema."] };
+  if (!parsed.success) return { violations: ["Coach roleplay turn does not match its compact schema."], modelViolations: [], warnings: [] };
   const turn = parsed.data;
   const probe = localCoachFeedback(turn, "");
   const validate = (value: CoachRoleplayTurnOutput) => validateCoachPersonaOutput({ ...probe, seasonReply: value.seasonReply, nextQuestion: value.learnerQuestion, suggestedAnswer: { text: value.suggestedLearnerReply, translation: "" } }, persona)
     .filter((violation) => !violation.startsWith("Suggested answer") && !violation.includes("translation"));
-  const repeatedQuestion = (question: string) => (context?.priorQuestions ?? []).some((prior) => normalizeCoachTurnText(prior) === normalizeCoachTurnText(question));
+  // A genuine repeat is an *earlier* question asked again. questionHistory
+  // also holds the current, still-open question; re-asking it after an
+  // unanswered turn is a natural re-prompt and must not trigger the fallback.
+  const currentKey = coachQuestionKey(context?.currentQuestion ?? "");
+  const earlierKeys = new Set((context?.priorQuestions ?? []).map(coachQuestionKey).filter((key) => key && key !== currentKey));
+  const repeatedQuestion = (question: string) => {
+    const key = coachQuestionKey(question);
+    return Boolean(key) && earlierKeys.has(key);
+  };
   const learnerAlreadyStatedRole = /\b(?:i am|i'm|i work as|my role is|i work in)\b/iu.test(context?.learnerMessage ?? "");
   const asksForRoleAgain = (question: string) => learnerAlreadyStatedRole
     && /\b(?:what(?:'s| is) your role|what do you do|what is your job|tell me about your role|where do you work)\b/iu.test(question);
-  const violations = [
-    ...validate(turn),
-    ...(repeatedQuestion(turn.learnerQuestion) ? ["Season repeated a question already asked in this month's topic."] : []),
-    ...(asksForRoleAgain(turn.learnerQuestion) ? ["Season asked for the learner's role after it had already been stated."] : [])
+  const collect = (value: CoachRoleplayTurnOutput) => [
+    ...validate(value),
+    ...(repeatedQuestion(value.learnerQuestion) ? [ROLEPLAY_REPEATED_QUESTION] : []),
+    ...(asksForRoleAgain(value.learnerQuestion) ? [ROLEPLAY_ROLE_AGAIN] : [])
   ];
-  if (!violations.length) return { turn, violations: [] };
-  // Defensive final boundary: strip any leaked teacher/mixed prose rather
-  // than persisting it. Provider retries remain the primary path; this makes
-  // a malformed optional phrase recoverable instead of turning into a 502.
-  const enforced = enforceEnglishRoleplayTurn({ ...probe, seasonReply: turn.seasonReply, nextQuestion: turn.learnerQuestion, suggestedAnswer: { text: turn.suggestedLearnerReply, translation: "" } }, persona, context);
+  const modelViolations = collect(turn);
+  if (!modelViolations.length) return { turn, violations: [], modelViolations: [], warnings: [], modelTurn: turn };
+  // Defensive final boundary: strip leaked teacher/mixed prose and normalise
+  // the persona style locally rather than persisting it. No extra model call.
+  const enforced = enforceEnglishRoleplayTurn({ ...probe, seasonReply: turn.seasonReply, nextQuestion: turn.learnerQuestion, suggestedAnswer: { text: turn.suggestedLearnerReply, translation: "" } }, persona);
   const recovered = { seasonReply: enforced.seasonReply, learnerQuestion: enforced.nextQuestion, suggestedLearnerReply: enforced.suggestedAnswer.text };
   const remaining = [
-    ...validate(recovered),
-    ...(repeatedQuestion(recovered.learnerQuestion) ? ["Season repeated a question already asked in this month's topic."] : []),
-    ...(asksForRoleAgain(recovered.learnerQuestion) ? ["Season asked for the learner's role after it had already been stated."] : [])
+    ...collect(recovered),
+    ...(/\?/u.test(recovered.seasonReply) ? [] : [ROLEPLAY_NO_QUESTION])
   ];
-  if (!remaining.length) return { turn: recovered, violations: [] };
+  const blocking = remaining.filter(isBlockingRoleplayViolation);
+  // Style-only findings never discard a usable in-character turn.
+  if (!blocking.length) return { turn: recovered, violations: [], modelViolations, warnings: remaining, modelTurn: turn };
   const fallbackFollowUp = coachInsufficientFollowUp(
     context?.learnerMessage ?? "", context?.currentQuestion ?? "", context?.topic ?? "workplace conversation",
     persona, context?.priorQuestions ?? []
@@ -728,20 +994,66 @@ function inspectRoleplayTurn(raw: unknown, persona: "informal" | "formal", conte
   const fallback: CoachRoleplayTurnOutput = {
     seasonReply: fallbackFollowUp.seasonReply,
     learnerQuestion: fallbackFollowUp.nextQuestion,
-    suggestedLearnerReply: "I will share one update about the project and explain the next step."
+    suggestedLearnerReply: FALLBACK_SUGGESTED_REPLY
   };
-  return { turn: fallback, violations: [] };
+  return {
+    turn: fallback,
+    violations: [],
+    modelViolations,
+    warnings: [],
+    fallbackViolations: blocking,
+    // The fallback carries its own translations; feedback translations
+    // describe a different (rejected) turn and must never be shown with it.
+    fallbackTranslations: {
+      seasonReply: fallbackFollowUp.seasonReplyTranslation,
+      nextQuestion: fallbackFollowUp.nextQuestionTranslation,
+      suggestedAnswer: FALLBACK_SUGGESTED_REPLY_TRANSLATION
+    }
+  };
 }
 
-function mergeAcceptedRoleplay(feedback: CoachTaskOutputWithFeedbackStatus, turn: CoachRoleplayTurnOutput): CoachTaskOutputWithFeedbackStatus {
+function mergeAcceptedRoleplay(
+  feedback: CoachTaskOutputWithFeedbackStatus,
+  turn: CoachRoleplayTurnOutput,
+  fallbackTranslations?: RoleplayFallbackTranslations,
+  modelTurn?: CoachRoleplayTurnOutput
+): CoachTaskOutputWithFeedbackStatus {
+  // A translation is shown only when it translates the text that is actually
+  // displayed; otherwise it is left empty (the UI hides it). The feedback
+  // copy is tried first, then the roleplay call's own translation of its own
+  // text. Local style repair (contraction expansion, emoji) keeps the match;
+  // a reworded or trimmed turn does not.
+  const translationFor = (displayedText: string, ...candidates: Array<[string | undefined, string | undefined]>) => {
+    const displayed = coachTranslationKey(displayedText);
+    if (!displayed) return "";
+    const match = candidates.find(([text, translation]) => text && translation?.trim() && coachTranslationKey(text) === displayed);
+    return match?.[1]?.trim() ?? "";
+  };
   return {
     ...feedback,
     seasonReply: turn.seasonReply,
     nextQuestion: turn.learnerQuestion,
-    suggestedAnswer: { text: turn.suggestedLearnerReply, translation: feedback.suggestedAnswer.translation || "" },
-    seasonReplyTranslation: feedback.seasonReplyTranslation || "",
-    nextQuestionTranslation: feedback.nextQuestionTranslation || ""
+    suggestedAnswer: {
+      text: turn.suggestedLearnerReply,
+      translation: fallbackTranslations?.suggestedAnswer
+        ?? translationFor(turn.suggestedLearnerReply,
+          [feedback.suggestedAnswer.text, feedback.suggestedAnswer.translation],
+          [modelTurn?.suggestedLearnerReply, modelTurn?.suggestedLearnerReplyTranslation])
+    },
+    seasonReplyTranslation: fallbackTranslations?.seasonReply
+      ?? translationFor(turn.seasonReply,
+        [feedback.seasonReply, feedback.seasonReplyTranslation],
+        [modelTurn?.seasonReply, modelTurn?.seasonReplyTranslation]),
+    nextQuestionTranslation: fallbackTranslations?.nextQuestion
+      ?? translationFor(turn.learnerQuestion,
+        [feedback.nextQuestion, feedback.nextQuestionTranslation],
+        [modelTurn?.learnerQuestion, modelTurn?.learnerQuestionTranslation])
   };
+}
+
+/** Text identity for translation matching: style-only differences are ignored. */
+function coachTranslationKey(value: string): string {
+  return normalizeCoachTurnText(formalizeText(value));
 }
 
 function localCoachFeedback(turn: CoachRoleplayTurnOutput, learnerMessage: string): CoachTaskOutputWithFeedbackStatus {
@@ -784,7 +1096,7 @@ async function runCoachFeedbackWithPersonaRepair(
   // rubric data. Keep the full structured contract for required feedback
   // fields and retry malformed structured output once before falling back.
   const result = await runner.runTask("coach_dialogue", input, {
-    systemPrompt, temperature: 0, maxAttempts: 2, maxOutputTokens: 1_400
+    systemPrompt, temperature: 0, maxAttempts: 2, maxOutputTokens: COACH_FEEDBACK_MAX_OUTPUT_TOKENS
   });
   const parsed = coachOutputSchema.safeParse(result.output);
   if (!parsed.success) {
@@ -794,22 +1106,6 @@ async function runCoachFeedbackWithPersonaRepair(
   const violations = validateRequiredSubjectCopulaFeedback(parsed.data, validationContext);
   if (violations.length) throw Object.assign(new Error("Coach feedback output invalid"), { code: "AI_OUTPUT_INVALID", issues: violations });
   return { result, output: parsed.data };
-}
-
-function inspectCoachOutput(
-  rawOutput: unknown,
-  persona: "informal" | "formal",
-  validationContext?: CoachValidationContext
-): {
-  output?: CoachTaskOutput;
-  violations: string[];
-} {
-  const parsed = coachOutputSchema.safeParse(rawOutput);
-  if (!parsed.success) {
-    const details = parsed.error.issues.slice(0, 8).map((issue) => `${issue.path.join(".") || "output"}: ${issue.message}`);
-    return { violations: [`Coach output does not match schema. ${details.join(" ")}`] };
-  }
-  return { output: parsed.data, violations: validateCoachPersonaOutput(parsed.data, persona, validationContext) };
 }
 
 function safeCoachOutputJson(output: unknown): string {
@@ -849,7 +1145,7 @@ function alignNextQuestionWithSeasonReply(output: CoachTaskOutput): CoachTaskOut
   const turns = output.seasonReply.match(/[^.!?]+[.!?]+|[^.!?]+$/gu)
     ?.map((turn) => turn.trim().replace(/[\p{Extended_Pictographic}\uFE0F]+$/gu, "").trim())
     .filter(Boolean) ?? [];
-  const terminalQuestion = [...turns].reverse().find((turn) => turn.endsWith("?")) ?? turns.at(-1);
+  const terminalQuestion = cleanCoachQuestionAnchor([...turns].reverse().find((turn) => turn.endsWith("?")) ?? turns.at(-1) ?? "");
   return terminalQuestion ? { ...output, nextQuestion: terminalQuestion } : output;
 }
 
@@ -871,7 +1167,7 @@ function enforceDirectRoleplayQuestion(output: CoachTaskOutput): CoachTaskOutput
  * direct partner turn if no safe dialogue remains. Vietnamese stays exclusively
  * in the schema's translation fields.
  */
-function enforceEnglishRoleplayTurn(output: CoachTaskOutput, persona: "informal" | "formal", context?: CoachValidationContext): CoachTaskOutput {
+function enforceEnglishRoleplayTurn(output: CoachTaskOutput, persona: "informal" | "formal"): CoachTaskOutput {
   const segments = output.seasonReply.match(/[^.!?]+[.!?]+|[^.!?]+$/gu)
     ?.map((segment) => segment.trim()).filter(Boolean) ?? [];
   const isGreetingWithName = (segment: string) => /^(?:hi|hello|hey|dear)\s+[\p{L}'-]+[!,.]?\s*/iu.test(segment);
@@ -891,15 +1187,10 @@ function enforceEnglishRoleplayTurn(output: CoachTaskOutput, persona: "informal"
   );
   const safe = segments.map(directSegment)
     .filter((segment) => !hasVietnameseProse(segment) && !isTeacherSentence(segment));
-  let reply = safe.join(" ");
-  const containsDirectQuestion = /\?\s*(?:[\p{Extended_Pictographic}\uFE0F]+)?$/u.test(reply);
-  if (!reply || !containsDirectQuestion) {
-    reply = coachInsufficientFollowUp(
-      context?.learnerMessage ?? "", context?.currentQuestion ?? "", context?.topic ?? "workplace conversation",
-      persona, context?.priorQuestions ?? []
-    ).seasonReply;
-  }
-  const normalized = alignNextQuestionWithSeasonReply({ ...output, seasonReply: reply });
+  // No local substitution here: a turn left without a direct question is a
+  // blocking violation, replaced and logged by inspectRoleplayTurn.
+  const bounded = enforceReplySentenceCount({ ...output, seasonReply: safe.join(" ") });
+  const normalized = alignNextQuestionWithSeasonReply(bounded);
   return persona === "informal" ? enforceInformalStyle(normalized) : enforceFormalStyle(normalized);
 }
 
@@ -918,21 +1209,29 @@ function isLocallyEnforceableCoachViolation(violation: string): boolean {
     || isSuggestedAnswerReplayViolation(violation);
 }
 
-function enforceReplySentenceCount(output: CoachTaskOutput, persona: "informal" | "formal"): CoachTaskOutput {
-  const sentences = output.seasonReply.match(/[^.!?]+[.!?]+|[^.!?]+$/gu)?.map((part) => part.trim()).filter(Boolean) ?? [];
-  const bounded = sentences.slice(0, 4);
-  if (bounded.length < 2) {
-    bounded.push(persona === "formal" ? "That addresses the current question." : "That's helpful.");
-  }
-  return { ...output, seasonReply: bounded.join(" ") };
+/**
+ * Keeps at most four spoken sentences and always keeps the final question,
+ * so the anchor survives trimming. Emoji-only fragments are dropped (the
+ * persona style step restores the Informal emoji). A short turn is left
+ * short: padding it with canned text is worse than a style warning.
+ */
+function enforceReplySentenceCount(output: CoachTaskOutput): CoachTaskOutput {
+  const sentences = output.seasonReply.match(/[^.!?]+[.!?]+|[^.!?]+$/gu)
+    ?.map((part) => part.trim()).filter((part) => /[\p{L}\p{N}]/u.test(part)) ?? [];
+  if (sentences.length <= 4) return { ...output, seasonReply: sentences.join(" ") };
+  const isQuestion = (sentence: string) => sentence.replace(/[\p{Extended_Pictographic}\uFE0F]/gu, "").trim().endsWith("?");
+  const questionIndex = sentences.findLastIndex(isQuestion);
+  if (questionIndex < 0) return { ...output, seasonReply: sentences.slice(0, 4).join(" ") };
+  const others = sentences.filter((_, index) => index !== questionIndex).slice(0, 3);
+  return { ...output, seasonReply: [...others, sentences[questionIndex]!].join(" ") };
 }
 
 function enforceInformalStyle(output: CoachTaskOutput): CoachTaskOutput {
   const stripEmoji = (value: string) => value.replace(/[\p{Extended_Pictographic}\uFE0F]/gu, "").replace(/\s+/gu, " ").trim();
-  let seasonReply = stripEmoji(output.seasonReply);
+  // Exactly one emoji is the designed Informal style. A missing contraction
+  // is only a style warning; never patch it with canned text.
+  const seasonReply = stripEmoji(output.seasonReply);
   const nextQuestion = stripEmoji(output.nextQuestion);
-  const combined = `${seasonReply} ${nextQuestion}`;
-  if (!/\b\p{L}+['’](?:s|re|ve|ll|d|m|t)\b/iu.test(combined)) seasonReply = `That's clear: ${seasonReply}`;
   return { ...output, seasonReply: `${seasonReply} 😊`, nextQuestion };
 }
 

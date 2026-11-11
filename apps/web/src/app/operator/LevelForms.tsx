@@ -5,6 +5,7 @@ import type { AssessmentLevelFormDetailView, AssessmentLevelFormUpdateInput, Cef
 import { operatorDateTime } from "./adapters.js";
 import { ApiError } from "../../api/runtime.js";
 import { ScrollJumpButton, useScrollJump } from "../shared/ScrollJump.js";
+import { useMediaQuery } from "../shared/useMediaQuery.js";
 
 type LevelFormsUiView = OperatorLevelFormsView & {
   loading?: boolean;
@@ -74,7 +75,8 @@ type LevelFormDetailProps = {
   editing?: boolean;
   onClose(): void;
   onSave?(input: AssessmentLevelFormUpdateInput): void | Promise<void>;
-  onPublish?(): Promise<void>;
+  /** Level-up publication: the Operator must confirm a human read of every answer key (D3). */
+  onPublish?(confirmation: { answersReviewed: true }): Promise<void>;
   publicationReady?: boolean;
   onConfirmDiscard?(): Promise<boolean>;
   uploadAudio?(file: Blob, filename: string): Promise<{ url: string }>;
@@ -118,6 +120,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
   const [audioJob, setAudioJob] = useState<{ groupKey: string; kind: "upload" | "generate" } | null>(null);
   const [audioError, setAudioError] = useState<{ groupKey: string; message: string } | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [answersReviewed, setAnswersReviewed] = useState(false);
   const [actionError, setActionError] = useState<string>();
   const dirty = Boolean(onConfirmDiscard || onPublish) && (draft.title !== detail.title || JSON.stringify(draft.sections) !== JSON.stringify(detail.sections));
   const close = async () => {
@@ -131,7 +134,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
   };
   closeRef.current = () => { void close(); };
   draftChangeRef.current = onDraftChange;
-  useEffect(() => setDraft({ title: detail.title, sections: structuredClone(detail.sections) }), [detail]);
+  useEffect(() => { setDraft({ title: detail.title, sections: structuredClone(detail.sections) }); setAnswersReviewed(false); }, [detail]);
   useEffect(() => { draftChangeRef.current?.(draft); }, [draft]);
 
   const updatePrompt = (sectionIndex: number, groupIndex: number, taskIndex: number, prompt: string) => setDraft((current) => ({
@@ -217,13 +220,14 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
     finally { setSaving(false); }
   };
   const publishBlocker = dirty ? "Lưu các thay đổi trước khi phát hành."
-    : publicationReady !== true ? "Cần hoàn thiện đề trước khi phát hành." : undefined;
+    : publicationReady !== true ? "Cần hoàn thiện đề trước khi phát hành."
+    : !answersReviewed ? "Đánh dấu đã đọc lại đáp án từng câu trước khi phát hành." : undefined;
   const publish = async () => {
     if (!onPublish || readOnly || !editing || publishBlocker || saving || audioJob || interactionLocked.current) return;
     interactionLocked.current = true;
     setPublishing(true);
     setActionError(undefined);
-    try { await onPublish(); }
+    try { await onPublish({ answersReviewed: true }); }
     catch { setActionError("Không phát hành được đề lên mức. Hãy kiểm tra lại bản nháp."); }
     finally { interactionLocked.current = false; setPublishing(false); }
   };
@@ -310,6 +314,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
             <div><b>Trạng thái đề</b> <Badge tone={publishBlocker ? "warn" : "ok"}>{dirty ? "Có thay đổi chưa lưu" : publicationReady ? "Sẵn sàng phát hành" : "Cần hoàn thiện"}</Badge></div>
             <button className="btn btn-primary" type="button" disabled={saving || publishing || Boolean(audioJob) || Boolean(publishBlocker)} title={publishBlocker} onClick={() => void publish()}>{publishing ? "Đang phát hành…" : "Duyệt & phát hành"}</button>
           </header>
+          <label className="row small"><input type="checkbox" checked={answersReviewed} disabled={saving || publishing || dirty} onChange={(event) => setAnswersReviewed(event.target.checked)} />Tôi đã đọc lại đáp án từng câu</label>
           {publishBlocker ? <p className="small muted">{publishBlocker}</p> : null}
         </section> : null}
         {actionError ? <p className="small form-error" role="alert">{actionError}</p> : null}
@@ -327,7 +332,9 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
 }
 
 function LevelFormWarnings({ warnings }: { warnings: LevelFormEditorDetail["warnings"] }) {
-  return <section className="operator-level-validation" aria-label="Cảnh báo kiểm tra đề"><header><b>Cần hoàn thiện trước khi phát hành</b><span className="badge warn">{warnings.length} mục</span></header><ul className="small">{warnings.map((warning, index) => <li key={`${warning.code}-${index}`}><Badge tone={warning.severity === "error" ? "danger" : "warn"}>{warning.code === "missing_answer_key" ? "Đáp án" : warning.code === "missing_task_prompt" ? "Đề bài" : warning.code === "missing_audio" ? "Audio" : "Cấu trúc"}</Badge> {warning.message}</li>)}</ul></section>;
+  // Phones keep the checklist folded to its count so the editor stays reachable.
+  const phone = useMediaQuery("(max-width: 767px)");
+  return <section className="operator-level-validation" aria-label="Cảnh báo kiểm tra đề"><details key={phone ? "phone" : "wide"} open={!phone}><summary><b>Cần hoàn thiện trước khi phát hành</b><span className="badge warn">{warnings.length} mục</span></summary><ul className="small">{warnings.map((warning, index) => <li key={`${warning.code}-${index}`}><Badge tone={warning.severity === "error" ? "danger" : "warn"}>{warning.code === "missing_answer_key" ? "Đáp án" : warning.code === "missing_task_prompt" ? "Đề bài" : warning.code === "missing_audio" ? "Audio" : warning.code === "quality_check" ? "Nội dung" : "Cấu trúc"}</Badge> {warning.message}</li>)}</ul></details></section>;
 }
 
 function LevelFormVersionHistory({ versions }: { versions: LevelFormEditorDetail["versions"] }) {

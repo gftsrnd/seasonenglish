@@ -23,7 +23,9 @@ const complaintNames: Record<string, string> = {
   attendance: "điểm danh", lesson_count: "số bài học", account: "tài khoản"
 };
 const categoryLabels = { support: "Khiếu nại", reopen: "Yêu cầu mở lại", appeal: "Kháng nghị học tập", exam: "Bài thi", account: "Tài khoản", learning: "Học tập" };
-function notificationCategory(kind: InboxNotificationView["kind"]): keyof typeof categoryLabels {
+function notificationCategory(value: InboxNotificationView["kind"]): keyof typeof categoryLabels {
+  // Server kinds are free text in the database; unknown kinds must never break the inbox.
+  const kind: string = typeof value === "string" ? value : "";
   if (kind.startsWith("complaint_")) return "support";
   if (kind.startsWith("reopen_")) return "reopen";
   if (kind.startsWith("appeal_")) return "appeal";
@@ -40,7 +42,7 @@ function notificationContent(item: InboxNotificationView): { title: string; desc
   const complaint = complaintNames[item.context];
   const focus = item.relatedId ? `&id=${encodeURIComponent(item.relatedId)}` : "";
   const appealSubject = item.context === "assessment" ? "bài thi" : item.context === "practice" ? "bài thực hành" : "bài học";
-  switch (item.kind) {
+  switch (item.kind as string) {
     case "complaint_received":
       return { title: complaint ? `Khiếu nại về ${complaint}` : "Có khiếu nại mới", description: "Học viên đã gửi đơn. Quản lý cần xem xét và phản hồi.", path: `/mgr/requests?kind=complaint${focus}`, action: "Mở khiếu nại" };
     case "complaint_approved":
@@ -82,7 +84,7 @@ function notificationContent(item: InboxNotificationView): { title: string; desc
     case "deletion_resolved":
       return { title: item.context === "approved" ? "Yêu cầu xóa tài khoản đã được duyệt" : "Yêu cầu xóa tài khoản đã bị từ chối", description: "Quản lý đã xử lý yêu cầu của bạn.", path: `/op/review?tab=sent${focus}`, action: "Xem yêu cầu" };
     case "level_changed": {
-      const [direction, level] = item.context.split(":");
+      const [direction, level] = (item.context ?? "").split(":");
       if (level === "C1" && direction !== "lower") return { title: "Bạn đã đạt mức cao nhất C1", description: "C1 là trình độ cao nhất. Trang chủ hiển thị trạng thái Bài thi đầu ra.", path: "/home", action: "Về Trang chủ" };
       return { title: direction === "lower" ? `Mức học được điều chỉnh xuống ${level}` : `Mức ${level} đã có hiệu lực`, description: "Xem mức hiện tại và lộ trình học trong hồ sơ.", path: "/profile", action: "Xem hồ sơ" };
     }
@@ -120,6 +122,9 @@ function notificationContent(item: InboxNotificationView): { title: string; desc
     case "challenge_passed":
     case "challenge_retry":
       return { title: item.kind === "challenge_passed" ? "Đã hoàn thành thử thách lên mức" : "Có kết quả thử thách lên mức", description: "Xem kết quả và bước tiếp theo trong hồ sơ.", path: "/profile", action: "Xem hồ sơ" };
+    default:
+      // Unknown or newer server kinds get a neutral row instead of crashing the whole inbox.
+      return { title: "Có thông báo mới", description: "Mở trang chính để xem cập nhật mới nhất.", path: "/", action: "Về trang chính" };
   }
 }
 

@@ -12,6 +12,7 @@ import {
   selectMonthlyCoreCandidates,
   selectMonthlySupportCandidates
 } from "./monthly-resource-generation.js";
+import { isMonthlyCoreLevelReason, summarizeMonthlyCoreLevelRejections } from "./monthly-resource-quality-gates.js";
 
 type CoreTerm = MonthlyResourcePlanTaskOutput["coreTerms"][number];
 type SupportTerm = MonthlyResourcePlanTaskOutput["expandedTerms"][number];
@@ -108,6 +109,8 @@ export async function runMonthlyCorePhase(input: {
   initial?: { coreTerms: CoreTerm[]; supportTerms: SupportTerm[] };
   /** Headwords that must not become cores again (e.g. cores dropped by enrichment); treated as already tried. */
   avoidWords?: readonly string[];
+  /** Core words of the month's other CEFR levels (word -> level): an exclusion list in the prompt and a gate in selection. */
+  otherLevelCoreWords?: ReadonlyMap<string, CefrLevel>;
   now?: () => number;
 }): Promise<{ coreTerms: CoreTerm[]; supportTerms: SupportTerm[]; stats: MonthlyCorePhaseStats }> {
   const now = input.now ?? (() => Date.now());
@@ -128,6 +131,9 @@ export async function runMonthlyCorePhase(input: {
   const acceptedSupports = () => accepted.flatMap((entry) => entry.supports);
   const triedWords = new Set<string>();
   const failures: string[] = [];
+  // Level-gate rejections (too easy, another level's core, non-word) are fed
+  // back in full on the next round so the AI replaces them at the right level.
+  const levelRejections: Array<{ word: string; reason: string }> = [];
   for (const core of (input.initial?.coreTerms ?? []).slice(0, input.neededCount)) {
     const supports = (input.initial?.supportTerms ?? []).filter((term) => term.relatesToCoreId === core.id);
     accepted.push({ core, supports, synonyms: supports.filter((term) => term.relation === "synonym").map((term) => term.word) });
@@ -180,8 +186,10 @@ export async function runMonthlyCorePhase(input: {
       ...acceptedSupports().map((term) => term.word),
       ...triedWords
     ])];
+    const levelRepair = summarizeMonthlyCoreLevelRejections(input.cefr, levelRejections);
+    const otherFailures = failures.filter((failure) => !isMonthlyCoreLevelReason(failure));
     const previousIssue = round > 0 && failures.length
-      ? `an earlier round left ${missing} core slot${missing === 1 ? "" : "s"} unfilled. Recent failures: ${failures.slice(-8).join("; ")}`
+      ? `an earlier round left ${missing} core slot${missing === 1 ? "" : "s"} unfilled.${otherFailures.length ? ` Recent failures: ${otherFailures.slice(-8).join("; ")}.` : ""}${levelRepair ? ` ${levelRepair}` : ""}`
       : "";
 
     // 1. Parallel month-wide generation, one sub-area per call.
@@ -206,6 +214,7 @@ export async function runMonthlyCorePhase(input: {
         preflightRelations: true,
         relationOptionsPerRequired: relationOptions,
         subArea,
+        ...(input.otherLevelCoreWords?.size ? { otherLevelCoreWords: input.otherLevelCoreWords } : {}),
         ...(round > 0 ? { rejectedWords: [...triedWords], previousIssue } : {})
       });
       stats.generationCalls += 1;
@@ -247,8 +256,12 @@ export async function runMonthlyCorePhase(input: {
 
     // Cheap deterministic core screen before any AI audit.
     const eligible = ordered.filter((entry) => {
-      const result = selectMonthlyCoreCandidates({ candidates: [entry.core], existingCoreWords: roundStartCoreWords, needed: 1, cefr: input.cefr });
-      if (result.selected.length !== 1) failures.push(`${entry.core.word}: ${result.rejected[0] ?? "duplicate, mixed-sense, or overlapping core"}`);
+      const result = selectMonthlyCoreCandidates({ candidates: [entry.core], existingCoreWords: roundStartCoreWords, needed: 1, cefr: input.cefr, ...(input.otherLevelCoreWords ? { otherLevelCoreWords: input.otherLevelCoreWords } : {}) });
+      if (result.selected.length !== 1) {
+        const reason = result.rejected[0] ?? "duplicate, mixed-sense, or overlapping core";
+        failures.push(`${entry.core.word}: ${reason}`);
+        if (isMonthlyCoreLevelReason(reason)) levelRejections.push({ word: entry.core.word, reason });
+      }
       return result.selected.length === 1;
     }).map((entry) => {
       // The core's own level label only serves the screen above; drop it so
@@ -322,7 +335,7 @@ export async function runMonthlyCorePhase(input: {
       const candidate = entry.core;
       if (failure) { failures.push(failure); continue; }
       const coreWords = acceptedCoreWords();
-      const eligibleCore = selectMonthlyCoreCandidates({ candidates: [candidate], existingCoreWords: coreWords, needed: 1, cefr: input.cefr }).selected[0];
+      const eligibleCore = selectMonthlyCoreCandidates({ candidates: [candidate], existingCoreWords: coreWords, needed: 1, cefr: input.cefr, ...(input.otherLevelCoreWords ? { otherLevelCoreWords: input.otherLevelCoreWords } : {}) }).selected[0];
       if (!eligibleCore) { failures.push(`${candidate.word}: duplicate, mixed-sense, or overlapping core`); continue; }
       const word = normalize(candidate.word);
       const supportOwner = accepted.find((other) => other.supports.some((term) => normalize(term.word) === word));

@@ -297,6 +297,24 @@ describe("Operator assessment audio playback", () => {
     expect(screen.getByText("bỏ qua")).toBeVisible();
   });
 
+  it("says per-question detail is missing instead of implying a stored listening score came from skipped answers", () => {
+    const detail = assessmentDetail();
+    detail.taskPrompts = [{ section: "listening", taskKey: "LA_0", title: "Part A", prompt: "What time is the meeting?" }];
+    detail.sections = [{
+      section: "listening", label: "Nghe", maxScore: 20, durationMinutes: 15, actualSeconds: 600,
+      score: 17, cefr: "B1", source: "deterministic", criteria: {}, state: "scored",
+      groups: [{ key: "part-a", label: "Part A – Thông báo của quản lý", tasks: [{ taskKey: "LA_0", title: "Part A", prompt: "What time is the meeting?", answer: null, maxScore: 5 }] }]
+    }];
+    detail.answers = [{ section: "listening", taskKey: "listening-fixture", value: "listening response" }] as ContentReviewAssessmentDetailView["answers"];
+    const { unmount } = render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} />);
+    expect(screen.getByText(/Chưa có chi tiết từng câu cho phần này; điểm Nghe là tổng đã lưu/)).toBeInTheDocument();
+    unmount();
+
+    detail.answers = [{ section: "listening", taskKey: "LA_0", value: "B" }] as ContentReviewAssessmentDetailView["answers"];
+    render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} />);
+    expect(screen.queryByText(/Chưa có chi tiết từng câu/)).not.toBeInTheDocument();
+  });
+
   it("keeps objective section lists open and manual scoring sections collapsed", () => {
     const detail = assessmentDetail();
     detail.sections = [

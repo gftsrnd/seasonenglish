@@ -15,6 +15,15 @@ export function monthlySeasonTurnTarget(approvalDate: string, month: string, exa
   return monthlyLearnerWindow(month, examDate, approvalDate).seasonTarget;
 }
 
+/**
+ * Single rule for the Season target a learner sees for a month (Coach, home,
+ * monthly-exam eligibility): the prorated window target only applies when the
+ * learner is actually in this month's cohort; otherwise the full target holds.
+ */
+export function learnerMonthlySeasonTarget(access: { readonly state: string; readonly seasonTarget: number } | null | undefined): number {
+  return access?.state === "active" ? access.seasonTarget : MONTHLY_SEASON_TURN_TARGET;
+}
+
 export function monthlyLearnerWindow(month: string, examDate: string, approvalDate: string) {
   const end = new Date(`${examDate}T00:00:00Z`);
   const dates: string[] = [];

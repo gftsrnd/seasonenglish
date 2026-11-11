@@ -31,6 +31,20 @@
   background: var(--surface);
 }
 
+/* Locks the page while a guide is open: pointer input never reaches the cards behind it. */
+.app-guide-blocker {
+  position: fixed;
+  z-index: 67;
+  inset: 0;
+  background: transparent;
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+.app-guide-blocker[data-popup] {
+  z-index: 179;
+}
+
 .app-guide-spotlight {
   position: fixed;
   z-index: 68;
@@ -81,6 +95,11 @@ body:has(.app-guide-panel:not([data-popup])) > #root > main.app-content::after {
   content: "";
   display: block;
   block-size: 220px;
+}
+
+/* The page is locked while the guide is open, so its floating scroll button is hidden too. */
+body:has(.app-guide-panel) .app-scroll-jump {
+  display: none;
 }
 
 .app-guide-panel[data-popup] {
@@ -157,6 +176,7 @@ body:has(.app-guide-panel:not([data-popup])) > #root > main.app-content::after {
 
 @media print {
   .app-guide-panel,
+  .app-guide-blocker,
   .app-guide-spotlight {
     display: none;
   }

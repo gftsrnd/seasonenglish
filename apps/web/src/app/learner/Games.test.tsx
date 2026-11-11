@@ -208,6 +208,22 @@ describe("app games affordances", () => {
     expect(onFinish).not.toHaveBeenCalled();
   });
 
+  it("clamps the submitted Word sort combo to the API range after a long correct streak", async () => {
+    vi.useFakeTimers();
+    const onFinish = vi.fn();
+    const words = Array.from({ length: 8 }, (_, index) => ({ id: `noun-${index}`, english: `noun${index}`, vietnamese: `danh từ ${index}`, definition: "a thing", partOfSpeech: "noun" }));
+    render(<WordSortGame words={words} onFinish={onFinish} />);
+
+    for (let index = 0; index < words.length; index += 1) {
+      fireEvent.click(screen.getByRole("button", { name: "Noun" }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    }
+
+    expect(onFinish).toHaveBeenCalledTimes(1);
+    const combos = (onFinish.mock.calls[0]![0] as { answers: Array<{ combo: number }> }).answers.map((answer) => answer.combo);
+    expect(combos).toEqual([1, 2, 3, 4, 5, 5, 5, 5]);
+  });
+
   it("restores Scramble focus and clears transient feedback before the retry", async () => {
     vi.useFakeTimers();
     render(<ScrambleGame words={[

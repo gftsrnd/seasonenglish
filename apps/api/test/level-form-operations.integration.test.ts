@@ -159,7 +159,11 @@ describe("level-form preview/version/delete API", () => {
     const detail = await app.inject({ method: "GET", url: `/api/v1/assessment-level-forms/${draftVersionId}`, headers: { cookie: operatorCookie } });
     expect(detail.json().warnings).toEqual(expect.arrayContaining([expect.objectContaining({ code: "missing_audio", severity: "error" })]));
 
-    const blocked = await app.inject({ method: "POST", url: `/api/v1/assessment-level-forms/${draftVersionId}/publication`, headers: { cookie: operatorCookie } });
+    const unreviewed = await app.inject({ method: "POST", url: `/api/v1/assessment-level-forms/${draftVersionId}/publication`, headers: { cookie: operatorCookie } });
+    expect(unreviewed.statusCode, unreviewed.body).toBe(400);
+    expect(unreviewed.json()).toEqual({ code: "LEVEL_FORM_ANSWER_REVIEW_REQUIRED" });
+
+    const blocked = await app.inject({ method: "POST", url: `/api/v1/assessment-level-forms/${draftVersionId}/publication`, headers: { cookie: operatorCookie }, payload: { answersReviewed: true } });
     expect(blocked.statusCode, blocked.body).toBe(409);
     expect(blocked.json()).toEqual({ code: "LEVEL_FORM_AUDIO_REQUIRED" });
 
@@ -170,7 +174,7 @@ describe("level-form preview/version/delete API", () => {
         : { type: "audio_script", audioSrc: "/media/audio/level-up-b1.ogg", lines: [{ speaker: "Narrator", text: group.instruction }] };
     }
     await pool.query("update assessment_versions set blueprint = $2::jsonb where id = $1", [draftVersionId, JSON.stringify(withAudio)]);
-    const published = await app.inject({ method: "POST", url: `/api/v1/assessment-level-forms/${draftVersionId}/publication`, headers: { cookie: operatorCookie } });
+    const published = await app.inject({ method: "POST", url: `/api/v1/assessment-level-forms/${draftVersionId}/publication`, headers: { cookie: operatorCookie }, payload: { answersReviewed: true } });
     expect(published.statusCode, published.body).toBe(200);
     expect(published.json()).toMatchObject({ versionId: draftVersionId, status: "published" });
   });

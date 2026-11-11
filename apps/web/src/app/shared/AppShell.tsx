@@ -151,8 +151,10 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
     if (to === "/home") return location.pathname === "/home" || location.pathname.startsWith("/lesson") || location.pathname.startsWith("/test");
     if (to === "/profile" && (location.pathname === "/support" || location.pathname === "/survey/monthly")) return true;
     if (role === "operator" && to === "/op/review" && location.pathname === "/op/requests") return true;
+    // "Đề lên mức" is a tab of "Kết quả bài thi" (same as managerNavigationPath for /mgr/ops/level-forms).
+    if (role === "operator" && to === "/op/tests" && matchesPath(location.pathname, "/op/levelforms")) return true;
     if (role === "operator" && to === "/op") {
-      return location.pathname === "/op" || (location.pathname.startsWith("/op/") && !items.some((item) => item.to !== "/op" && matchesPath(location.pathname, item.to)));
+      return location.pathname === "/op" || (location.pathname.startsWith("/op/") && !matchesPath(location.pathname, "/op/levelforms") && !items.some((item) => item.to !== "/op" && matchesPath(location.pathname, item.to)));
     }
     if (role === "manager") {
       return to === "/settings" ? matchesPath(location.pathname, to) : managerSectionForPath(location.pathname)?.to === to;

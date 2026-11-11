@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameAnswerInput } from "@e4s/contracts";
 import { Delete, Lightbulb } from "lucide-react";
-import { letters, prepareGameAttempt, seededShuffle, type FinishGame, type GameWord } from "./types.js";
+import { letters, prepareGameAttempt, SCRAMBLE_ROUND_SIZE, seededShuffle, type FinishGame, type GameWord } from "./types.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import { GameFeedback } from "./GameFeedback.js";
 
 export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { words: GameWord[]; onFinish: FinishGame; attemptSeed?: number }) {
-  const words = useMemo(() => prepareGameAttempt(source.filter((word) => letters(word.english).length >= 3), attemptSeed).slice(0, 8), [attemptSeed, source]);
+  const words = useMemo(() => prepareGameAttempt(source.filter((word) => letters(word.english).length >= 3), attemptSeed).slice(0, SCRAMBLE_ROUND_SIZE), [attemptSeed, source]);
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<number[]>([]);
   const [wrong, setWrong] = useState(0);

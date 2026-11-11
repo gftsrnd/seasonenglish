@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coachInsufficientFollowUp, coachPersonaPrompt } from "../src/modules/coach/routes.js";
+import { coachInsufficientFollowUp, coachPersonaPrompt, coachPracticeTurnPolicy } from "../src/modules/coach/routes.js";
 import { prototypePromptDefaults } from "../../../packages/database/src/prototype-prompts.js";
 
 describe("Coach prompt safeguards", () => {
@@ -73,5 +73,35 @@ describe("Coach prompt safeguards", () => {
     expect(b2AudioPrompt).toContain("connected clauses");
     expect(b2AudioPrompt).toContain("ASR / SPOKEN TRANSCRIPT TOLERANCE:");
     expect(b2AudioPrompt).toContain("Ignore speech-recognition punctuation, capitalization, and minor filler words");
+  });
+
+  it("WP4 (e, i) gives Season the code word count and this month's unopened vocabulary", () => {
+    const policy = coachPracticeTurnPolicy("B1", "Handling Client Feedback Meetings", ["What did the client say?"], {
+      learnerWordCount: 12,
+      unopenedVocabulary: ["deadline", "agenda", "deadline", " "]
+    });
+
+    expect(policy).toContain("The learner message has exactly 12 words, counted by code");
+    expect(policy).toContain("never state a different word count in noteVi");
+    expect(policy).toContain(`MONTH VOCABULARY: This month's lesson words the learner has not used yet: ["deadline","agenda"]`);
+    expect(policy).toContain("never list, define, or teach these words in seasonReply");
+    expect(policy).toContain('Exact questions already asked in this topic: ["What did the client say?"]');
+    expect(coachPracticeTurnPolicy("B1", "Topic")).not.toMatch(/MONTH VOCABULARY|WORD COUNT/u);
+  });
+
+  it("round 2: lists only earlier questions as forbidden and lets Season re-ask the open question", () => {
+    const policy = coachPracticeTurnPolicy("A1", "Handling Client Feedback Meetings",
+      ["What did the client say?", "Could you tell me when we can expect the final report?"],
+      { currentQuestion: "Could you tell me when we can expect the final report?" });
+    expect(policy).toContain('Exact questions already asked in this topic: ["What did the client say?"]');
+    expect(policy).toContain("Asking currentQuestion again (in the same or different words) is allowed only when the learner did not answer it");
+  });
+
+  it("round 2: a Formal prompt treats learner slang as a register deduction, not off_topic", () => {
+    const formal = coachPersonaPrompt("Base coach prompt", "formal", "B1");
+    expect(formal).toContain("LEARNER REGISTER");
+    expect(formal).toContain("never a reason for off_topic");
+    expect(formal).toContain("lower only rubric.meaning (appropriateness) to at most 3");
+    expect(coachPersonaPrompt("Base coach prompt", "informal", "B1")).not.toContain("LEARNER REGISTER");
   });
 });

@@ -43,14 +43,26 @@ export function LockedLearnerSupport({ onLogout }: { onLogout: () => void }) {
   };
 
   const pending = complaint?.status === "pending";
+  const when = (iso: string | null | undefined) => {
+    if (!iso) return null;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return null;
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)} lúc ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+  const sent = when(complaint?.submittedAt);
+  const due = when(complaint?.dueAt);
+  // Short sentences per state, key facts in bold (same style as the app guide).
+  const summary = !complaint
+    ? <>Tài khoản của bạn đang <b>tạm dừng</b> nên chưa vào học được. Bấm <b>Liên hệ Quản lý</b> để xin mở khóa.</>
+    : pending
+      ? <>Tài khoản của bạn đang <b>tạm dừng</b>. Bạn đã gửi yêu cầu mở khóa{sent ? <> ngày <b>{sent}</b></> : null}, Quản lý {due ? <>sẽ trả lời trước <b>{due}</b></> : <>đang xem xét</>}. Được duyệt thì bạn đăng nhập lại để học tiếp.</>
+      : complaint.status === "rejected"
+        ? <>Yêu cầu mở khóa đã <b>bị từ chối</b>{complaint.resolution ? <>: {complaint.resolution}</> : null}. Bạn có thể <b>gửi lại</b> kèm lý do rõ hơn.</>
+        : <>Quản lý đã <b>mở khóa</b> tài khoản{complaint.resolution ? <>: {complaint.resolution}</> : null}. Hãy <b>đăng xuất</b> rồi đăng nhập lại để học tiếp.</>;
   return <>
-    {complaint && <p role="status">
-      {pending ? "Yêu cầu mở khóa đang chờ Quản lý xử lý."
-        : complaint.status === "rejected" ? "Yêu cầu mở khóa đã bị từ chối."
-          : "Quản lý đã duyệt yêu cầu mở khóa."}
-      {complaint.resolution && <><br />{complaint.resolution}</>}
-    </p>}
-    {complaint ? <RequestEvidenceDetails kind="complaint" item={complaint} /> : null}
+    <p role="status" className="locked-account-summary">{summary}</p>
+    {complaint?.hasEvidence ? <RequestEvidenceDetails kind="complaint" item={{ ...complaint, scope: undefined }} /> : null}
     <div className="locked-account-actions">
       {!pending && <button type="button" className="btn btn-primary" aria-expanded={open} aria-controls={open ? formId : undefined}
         disabled={loading} onClick={() => { setOpen(value => !value); setEvidence({}); }}>Liên hệ Quản lý</button>}

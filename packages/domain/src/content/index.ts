@@ -3,6 +3,19 @@ import { validateLessonPartOrder } from "../learning/index.js";
 
 export { CURATED_LEXICAL_RELATIONS, curatedRelationEvidence, lexicalRelationCoverageSatisfied, relationExemptionIsCredible } from "./lexical-relations.js";
 export {
+  answerIsUniqueLongestOption,
+  bracketHintWords,
+  containsVietnameseLetters,
+  INTERNAL_LEARNER_TERMS,
+  internalLearnerTerms,
+  inventedWordForms,
+  isPlausibleMinimalPair,
+  mentionsWordClass,
+  offensiveWords,
+  optionsAreWordClassLabels
+} from "./choice-quality.js";
+import { containsVietnameseLetters } from "./choice-quality.js";
+export {
   buildLevelVocabularyRegistry,
   evaluateGeneratedLessonQuality,
   type GeneratedLessonQuality,
@@ -37,6 +50,21 @@ export interface ContentValidationIssue {
   dayNumber: number;
   code: LessonPartCode | "title" | "order" | "weekly_practice" | "generation";
   message: string;
+  /** Set only by opt-in rules (see {@link LessonPublicationOptions}) so callers can route them separately. */
+  rule?: "vietnamese_instructions";
+}
+
+/** Opt-in rules for monthly lessons. Defaults keep weekly-lesson validation unchanged. */
+export interface LessonPublicationOptions {
+  /**
+   * Values copied verbatim from a locked teaching plan, by part code and
+   * top-level content key (e.g. grammar.objective, grammar.dailyCode). A field
+   * equal to its locked value is exempt from the B1+ English-only check; the
+   * caller checks it against the plan separately.
+   */
+  readonly lockedPlanValues?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  /** A1–A2: every learner prompt/instruction must contain Vietnamese (monthly lessons only). */
+  readonly requireVietnameseInstructions?: boolean;
 }
 
 export function validateGenerationFindingsForPublication(
@@ -85,12 +113,13 @@ export function validateLessonDraft(lessons: readonly ContentLessonDraft[]): {
 export function validateLessonPublication(
   lessons: readonly ContentLessonDraft[],
   weeklyPractice?: WeeklyPracticePublicationInput,
-  cefr?: string
+  cefr?: string,
+  options: LessonPublicationOptions = {}
 ): { valid: boolean; issues: ContentValidationIssue[] } {
   const issues = [...validateLessonDraft(lessons).issues];
-  const add = (lesson: ContentLessonDraft, code: ContentValidationIssue["code"], message: string) => {
+  const add = (lesson: ContentLessonDraft, code: ContentValidationIssue["code"], message: string, rule?: ContentValidationIssue["rule"]) => {
     if (!issues.some((issue) => issue.dayNumber === lesson.dayNumber && issue.code === code && issue.message === message)) {
-      issues.push({ dayNumber: lesson.dayNumber, code, message });
+      issues.push({ dayNumber: lesson.dayNumber, code, message, ...(rule ? { rule } : {}) });
     }
   };
 
@@ -152,9 +181,21 @@ export function validateLessonPublication(
     if (isEnglishOnlyLevel(cefr)) {
       if (containsVietnameseLearnerText(lesson.title)) add(lesson, "title", "B1+ requires the learner-facing lesson title to be in English.");
       for (const part of lesson.parts) {
-        if (containsVietnameseLearnerText(part.title) || learnerFacingPartContainsVietnamese(part)) {
+        if (containsVietnameseLearnerText(part.title) || learnerFacingPartContainsVietnamese(part, options.lockedPlanValues?.[part.code])) {
           add(lesson, part.code, "B1+ requires all learner-facing content in this section to be in English; only vocabulary meanings may be Vietnamese.");
         }
+      }
+    }
+
+    if (options.requireVietnameseInstructions && (cefr === "A1" || cefr === "A2")) {
+      const instruction = parts.get("instruction");
+      if (instruction && (hasText(instruction.text) || nonEmptyArray(instruction.steps)) && !containsVietnameseLetters([text(instruction.text), ...textArray(instruction.steps)].join(" "))) {
+        add(lesson, "instruction", `${cefr} requires the lesson instruction (text and steps) to be written in Vietnamese.`, "vietnamese_instructions");
+      }
+      for (const part of lesson.parts) {
+        if (part.code === "vocabulary") continue;
+        const english = englishOnlyPrompts(part.content);
+        if (english.length) add(lesson, part.code, `${cefr} requires every prompt/instruction the learner reads to be written in Vietnamese (keep only the English target sentence, options and answer in English). English-only: ${english.slice(0, 3).map((value) => `"${value.length > 80 ? `${value.slice(0, 80)}…` : value}"`).join("; ")}.`, "vietnamese_instructions");
       }
     }
   }
@@ -262,7 +303,7 @@ export function containsVietnameseLearnerText(value: unknown): boolean {
   return words.some((word) => vietnameseLearnerWords.has(word));
 }
 
-function learnerFacingPartContainsVietnamese(part: LessonPart): boolean {
+function learnerFacingPartContainsVietnamese(part: LessonPart, locked?: Readonly<Record<string, string>>): boolean {
   const visit = (value: unknown, parentKey = ""): boolean => {
     if (/meaning$/i.test(parentKey) && part.code === "vocabulary") return false;
     if (containsVietnameseLearnerText(value)) return true;
@@ -270,7 +311,25 @@ function learnerFacingPartContainsVietnamese(part: LessonPart): boolean {
     if (!value || typeof value !== "object") return false;
     return Object.entries(value as Record<string, unknown>).some(([key, item]) => visit(item, key));
   };
-  return visit(part.content);
+  const content = asRecord(part.content);
+  if (!locked) return visit(part.content);
+  // Locked plan values are copied verbatim (and checked against the plan by the caller).
+  return Object.entries(content).some(([key, value]) => !(typeof value === "string" && typeof locked[key] === "string" && value.trim() === locked[key]!.trim()) && visit(value, key));
+}
+
+/** Learner prompts/instructions (any depth: items, variants) that contain no Vietnamese. */
+function englishOnlyPrompts(content: unknown): string[] {
+  const found: string[] = [];
+  const visit = (value: unknown, key = "") => {
+    if (typeof value === "string") {
+      if ((key === "prompt" || key === "instruction" || key === "question") && value.trim() && !containsVietnameseLetters(value) && !containsVietnameseLearnerText(value)) found.push(value.trim());
+      return;
+    }
+    if (Array.isArray(value)) { for (const item of value) visit(item, key === "items" || key === "variants" || key === "steps" ? "" : key); return; }
+    if (value && typeof value === "object") for (const [childKey, item] of Object.entries(value as Record<string, unknown>)) visit(item, childKey);
+  };
+  visit(content);
+  return found;
 }
 
 function nonEmptyArray(value: unknown): boolean {

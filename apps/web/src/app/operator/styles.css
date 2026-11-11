@@ -208,6 +208,51 @@
   margin-top: 12px;
 }
 
+/* Pending review card: one tidy action row. The delete action stays last but
+   next to the others instead of floating at the far edge; phones get a
+   two-column grid instead of ragged wrapping. */
+.app-operator .operator-pending-review-body > .row:last-child {
+  gap: 8px;
+}
+
+.app-operator .operator-pending-review-body > .row:last-child > button:last-child {
+  margin-left: 8px !important;
+}
+
+.app-operator .operator-pending-review-body > .operator-review-flags,
+.app-operator .operator-pending-review-body > .grid.cols-2 {
+  margin-top: 14px !important;
+}
+
+.app-operator .operator-pending-review-body .progress {
+  height: 8px;
+}
+
+@media (max-width: 560px) {
+  .app-operator .operator-pending-review-body > .row:last-child {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-operator .operator-pending-review-body > .row:last-child > .btn-danger:last-child,
+  .app-operator .operator-pending-review-body > .row:last-child > button.danger:last-child {
+    grid-column: 1 / -1;
+    margin-top: 6px;
+  }
+
+  .app-operator .operator-pending-review-body > .row:last-child > * {
+    width: 100% !important;
+    min-width: 0;
+    margin-left: 0 !important;
+  }
+}
+
+/* Readable minimum for small print on tablet and desktop. */
+@media (min-width: 768px) {
+  .app-operator .xs { font-size: .8125rem; }
+  .app-operator .badge { font-size: .8rem; }
+}
+
 .app-operator .operator-pending-list {
   display: grid;
   gap: 10px;
@@ -2055,6 +2100,10 @@ body:has(.app-operator) #modal > .dialog > .field {
   margin: 0;
 }
 
+body:has(.app-operator) #modal > .dialog > .small + .field {
+  margin-top: 18px;
+}
+
 body:has(.app-operator) #modal > .dialog > .field > span {
   margin-bottom: 8px;
 }
@@ -2155,7 +2204,7 @@ body:has(.app-operator) #modal > .dialog > .row {
 
 .operator-profile-rows {
   display: grid;
-  gap: 4px;
+  gap: 8px;
   margin-top: 6px;
 }
 
@@ -2175,6 +2224,19 @@ body:has(.app-operator) #modal > .dialog > .row {
 .operator-profile-value {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+/* Phones: label above value so long values (emails) get the full width and
+   only break when they truly cannot fit. */
+@media (max-width: 480px) {
+  .operator-profile-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .operator-profile-value {
+    overflow-wrap: break-word;
+  }
 }
 
 .app-operator button.operator-profile-disclosure {
@@ -2432,6 +2494,11 @@ body:has(.app-operator) #modal > .dialog > .row {
     padding: 6px 10px;
     white-space: normal;
     text-align: center;
+  }
+
+  /* Three queues: the odd last tab takes the full second row instead of half of it. */
+  .app-operator .tabs.operator-review-tabs > :is(button, a):last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
 
   .app-operator[aria-label="Prompt"] > .card > .row.between > h3 {
@@ -3912,6 +3979,27 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 .operator-level-validation ul { display: grid; gap: 7px; margin: 0; padding-left: 18px; }
 .operator-level-validation li { padding-left: 2px; }
 .operator-level-validation .badge { margin-right: 6px; }
+/* Grid children of the editor body may shrink to the dialog width. */
+.operator-level-form-dialog-content > * { min-width: 0; }
+.operator-level-validation > details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  cursor: pointer;
+}
+.operator-level-validation > details[open] > summary { margin-bottom: 10px; }
+.operator-level-validation > details > summary > b { flex: 1 1 auto; min-width: 0; }
+.operator-level-validation > details > summary::before { content: "\25B8"; flex: none; color: var(--muted); transition: transform .15s; }
+.operator-level-validation > details[open] > summary::before { transform: rotate(90deg); }
+@media (max-width: 767px) {
+  .operator-level-validation { padding: 10px 12px; }
+  .operator-level-validation > details > summary { min-height: 44px; }
+  .operator-level-validation ul { gap: 6px; padding-left: 0; list-style: none; }
+  .operator-level-validation li { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 6px; padding-left: 0; line-height: 1.35; }
+  .operator-level-validation li .badge { margin-right: 0; }
+}
 
 .operator-level-editor-dialog .operator-level-section-list { display: grid; gap: 10px; }
 .operator-level-editor-dialog .operator-level-section {
@@ -4272,6 +4360,10 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 .operator-skill-score-head, .operator-skill-score-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
 .operator-skill-score-head { margin-bottom: 3px; }
 .operator-skill-score-meta:empty { display: none; }
+/* Use the row width: skill and score on the left, source/level/time on the right. */
+.operator-skill-scores > li { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 16px; }
+.operator-skill-scores > li > .operator-skill-score-head { margin-bottom: 0; }
+.operator-skill-scores > li > .operator-skill-score-meta { justify-content: flex-end; margin-left: auto; }
 
 
 @media (max-width: 620px) {
@@ -4298,3 +4390,167 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
     grid-area: auto / 1 / auto / -1;
   }
 }
+/* Compact manual editor (<= 900 px): the form has 80-150 fields, so each part
+   collapses behind a 48 px summary row and opens on demand or when it has issues. */
+.operator-modal-scope .operator-editor-collapsible {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+.operator-modal-scope .operator-editor-collapsible > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 14px;
+  cursor: pointer;
+  font-weight: 700;
+  list-style: none;
+  color: var(--text);
+}
+.operator-modal-scope .operator-editor-collapsible > summary::-webkit-details-marker { display: none; }
+.operator-modal-scope .operator-editor-collapsible > summary::after {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+.operator-modal-scope .operator-editor-collapsible[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+.operator-modal-scope .operator-editor-collapsible > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; border-radius: 14px; }
+.operator-modal-scope .operator-editor-collapsible-issue {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fff1d6;
+  color: #7a4300;
+  font-size: .75rem;
+  font-weight: 700;
+}
+.operator-modal-scope .operator-editor-collapsible[data-issue] { border-color: #e2a54b; }
+body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-section {
+  margin: 0;
+  padding: 14px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 14px 14px;
+  background: transparent;
+}
+.operator-modal-scope .operator-editor-collapsible > .operator-editor-section > legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+/* The guide's help button is portaled into the sticky header: keep it on the title row. */
+.operator-modal-scope .dialog > .operator-editor-sticky-header:has(> .app-guide-popup-trigger) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.operator-modal-scope .dialog > .operator-editor-sticky-header > .operator-editor-heading { flex: 1 1 auto; min-width: 0; }
+.operator-modal-scope .dialog > .operator-editor-sticky-header > .app-guide-popup-trigger { flex: none; margin-inline-start: 0; }
+/* Phones: the title shares the row with "Đóng" (and the help button) instead of
+   running under an absolutely positioned close button. */
+@media (max-width: 560px) {
+  .operator-modal-scope .dialog > .operator-editor-sticky-header .operator-editor-heading {
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 0;
+  }
+  .operator-modal-scope .dialog > .operator-editor-sticky-header .operator-editor-heading h3 { flex: 1 1 auto; font-size: 1.05rem; line-height: 1.3; }
+  .operator-modal-scope .dialog > .operator-editor-sticky-header .operator-editor-heading > button {
+    position: static;
+    flex: none;
+    min-height: 44px;
+  }
+}
+
+/* Phones and tablets: no fixed-height scroll boxes inside cards; the page
+   scrolls naturally. Desktop keeps a taller bounded box for scanning. */
+@media (max-width: 1023px) {
+  .app-operator .operator-pending-list,
+  .app-operator .operator-bounded-list,
+  .app-operator .operator-action-table-wrap,
+  .operator-pending-list,
+  .operator-bounded-list,
+  .operator-action-table-wrap {
+    max-height: none !important;
+    overflow-y: visible !important;
+    scrollbar-gutter: auto;
+  }
+
+  .app-operator .operator-action-table-wrap,
+  .operator-action-table-wrap { overflow-x: auto !important; }
+
+  .app-operator .operator-action-table-wrap thead th { position: static; }
+}
+
+@media (min-width: 1024px) {
+  .app-operator .operator-bounded-list,
+  .app-operator .operator-action-table-wrap,
+  .operator-bounded-list,
+  .operator-action-table-wrap { max-height: min(70vh, 720px) !important; }
+}
+
+/* Phone tab groups stay one row: equal compact segments, every tab visible. */
+@media (max-width: 480px) {
+  .app-operator .tabs.operator-review-tabs {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .app-operator .tabs.operator-review-tabs > :is(button, a) {
+    min-height: 44px;
+    padding: 4px 3px;
+    font-size: .8rem;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .app-operator .tabs.operator-review-tabs > :is(button, a):last-child:nth-child(odd) { grid-column: auto; }
+}
+
+@media (max-width: 359px) {
+  .app-operator .tabs.operator-review-tabs > :is(button, a) { white-space: normal; font-size: .76rem; }
+}
+
+/* Card layout of the results table: the row tint covers the whole record,
+   not separate strips behind each cell. */
+@media (max-width: 900px) {
+  .app-operator .operator-action-table-wrap .operator-results-table tbody tr:nth-child(n) td { background: transparent; }
+  .app-operator .operator-action-table-wrap .operator-results-table tbody tr:nth-child(even) { background: #f5f2ea; }
+  .app-operator .operator-action-table-wrap .operator-results-table tbody tr:nth-child(odd) { background: #fbfaf6; }
+}
+
+/* Attempt evidence: long transcripts and questions read at a comfortable
+   measure and leading instead of 110-character lines at 1.35. */
+.operator-stimulus,
+.operator-answer-question,
+.operator-answer-result,
+.operator-answer-task-title { max-width: 75ch; line-height: 1.5; }
+.operator-stimulus { margin-bottom: 10px; }
+
+/* Phones: short profile values pair up two per row; long values keep the
+   full width. Keeps the profile short enough to reach the decision buttons. */
+@media (min-width: 360px) and (max-width: 480px) {
+  .operator-profile-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: row dense; column-gap: 12px; row-gap: 10px; }
+  .operator-profile-rows > .operator-profile-row { grid-column: 1 / -1; }
+  .operator-profile-rows > .operator-profile-row[data-short] { grid-column: auto; }
+}
+
+.operator-profile-more { margin-top: 10px; }
+.operator-profile-more > summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; font-weight: 650; color: var(--text); }
+.operator-profile-more > .operator-profile-rows { margin-top: 4px; }
+.operator-profile-more > summary::before { content: "\25B8"; margin-right: 8px; color: var(--muted); transition: transform .15s; }
+.operator-profile-more[open] > summary::before { transform: rotate(90deg); }
+/* Level-form editor: the version-history header cells stayed on one line, so on phones "Số lượt thi" and
+   "Phát hành" ran into each other. Let the header cells wrap. */
+.operator-level-form-dialog-body table th{white-space:normal;vertical-align:bottom;padding-inline:6px}

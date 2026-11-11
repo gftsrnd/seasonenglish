@@ -5,6 +5,7 @@ import { ModalProvider } from "../shared/ModalProvider.js";
 import "@testing-library/jest-dom/vitest";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildMonthlyCalendar, monthlyDayKind, monthlyNewLessonOrdinal } from "@e4s/domain/monthly";
 import { MonthlyLessonPreview, OperatorMonths } from "./Months.js";
 import { ToastProvider } from "../shared/design-system.js";
 import { monthlyFinalView } from "../../../test/support/monthly-final-view.js";
@@ -133,6 +134,26 @@ describe("Operator monthly planner", () => {
     expect(within(container).queryByRole("button", { name: "Duyệt tài nguyên" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Tiếp tục nhóm còn thiếu" }));
     expect(onGenerateFramework).toHaveBeenCalledWith("2026-11", { cefr: "A2", vocabularyCount: 48, expandedVocabularyCount: 432, grammarTopicCount: 2, pronunciationSoundCount: 4 });
+  });
+
+  it("treats a gateway timeout while generating resources as still running, not as a failure", async () => {
+    const user = userEvent.setup();
+    const onGenerateFramework = vi.fn().mockRejectedValue(Object.assign(new Error("HTTP_504"), { code: "HTTP_504", status: 504 }));
+    const onLoadManualResources = vi.fn();
+    render(<ToastProvider><OperatorMonths
+      month="2026-11" todayMonth="2026-11" cefr="A2" busy={false}
+      overview={{ systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: { month: "2026-11", title: "Customer handover", brief: "Prepare a handover.", context: "Customer success", communicationGoal: "Explain risks", version: 1, status: "approved" }, frameworks: [] }}
+      resourceCheckpoint={{ state: "draft_checkpoint", draftOnly: true, publishable: false, retryOnlyMissing: true, generationId: "generation-1", version: 2, briefVersion: 1, updatedAt: "2026-11-04T00:00:00.000Z", categories: {
+        coreTerms: { state: "complete", count: 48, target: 48 }, expandedTerms: { state: "complete", count: 288, target: 432 }, grammarTopics: { state: "missing", count: 0, target: 2 }, pronunciationTargets: { state: "missing", count: 0, target: 4 }
+      } }}
+      actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework, onLoadManualResources, onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
+    /></ToastProvider>);
+
+    await user.click(screen.getByRole("button", { name: "Tiếp tục nhóm còn thiếu" }));
+
+    expect(await screen.findByText(/Máy chủ vẫn đang sinh tài nguyên tháng/)).toBeInTheDocument();
+    expect(screen.queryByText(/AI không tạo được đủ tài nguyên/)).not.toBeInTheDocument();
+    expect(onLoadManualResources).not.toHaveBeenCalled();
   });
 
   it("presents four pronunciation targets in the fixed responsive grid", async () => {
@@ -301,9 +322,44 @@ describe("Operator monthly planner", () => {
     const card = within(screen.getByRole("region", { name: "Tiến độ công bố B1" }));
     expect(card.getByText(detail, { exact: true })).toBeInTheDocument();
     expect(card.queryByText(/Bài ngày|Bài ôn|Đề thi|Chờ công bố/)).not.toBeInTheDocument();
-    if (!ready) expect(card.getByRole("link")).toHaveAttribute("href", "#monthly-day-1");
+    if (!ready) expect(card.getByRole("link")).toHaveAttribute("href", `#monthly-day-${buildMonthlyCalendar("2026-11").effectiveDays[0]}`);
     if (ready && !readOnly && !publishedOn) expect(card.getByRole("button", { name: "Công bố tháng" })).toBeEnabled();
     else expect(card.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  describe("calendar cell ids and manual-compose titles", () => {
+    const calendar = buildMonthlyCalendar("2026-11");
+    const firstReview = calendar.effectiveDays.findIndex((_date, index) => monthlyDayKind(index + 1, calendar) === "review") + 1;
+    const afterReview = firstReview + 1;
+    const renderCalendar = (onComposeDay = vi.fn()) => {
+      const overviewCalendar = calendar.effectiveDays.map((date, index) => ({ date, kind: monthlyDayKind(index + 1, calendar), lessonNumber: index + 1, ...(monthlyDayKind(index + 1, calendar) === "review" ? { reviewWeekNumber: 1 } : {}) }));
+      const view = render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="B1" busy={false}
+        overview={{ systemDate: "2026-11-03", monthWindow, brief: { month: "2026-11", title: "Updates", brief: "Project updates", context: "Office", communicationGoal: "Report", version: 1, status: "approved" }, calendar: overviewCalendar, frameworks: [{ ...approvedFramework, publication: { ready: false, publishedOn: null } }] } as never}
+        actions={monthActions({ onComposeDay }) as never} /></ToastProvider>);
+      return { ...view, onComposeDay };
+    };
+
+    it("gives every day cell a unique id based on its date", () => {
+      const { container } = renderCalendar();
+      const ids = Array.from(container.querySelectorAll<HTMLElement>("[id^='monthly-day-']")).map((cell) => cell.id);
+      expect(ids.length).toBeGreaterThan(0);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(ids).toContain(`monthly-day-${calendar.effectiveDays[0]}`);
+      expect(ids.every((id) => /^monthly-day-2026-11-[0-3][0-9]$/.test(id))).toBe(true);
+    });
+
+    it("passes the calendar's new-lesson ordinal and review label as the editor title", async () => {
+      const user = userEvent.setup();
+      const { container, onComposeDay } = renderCalendar();
+      const ordinal = monthlyNewLessonOrdinal(afterReview, calendar)!;
+      expect(ordinal).toBeLessThan(afterReview);
+      const newCell = container.querySelector<HTMLElement>(`#monthly-day-${calendar.effectiveDays[afterReview - 1]}`)!;
+      await user.click(within(newCell).getByRole("button", { name: `Soạn tay bài ${ordinal}` }));
+      expect(onComposeDay).toHaveBeenLastCalledWith("framework-b1", afterReview, { kind: "new", date: calendar.effectiveDays[afterReview - 1], title: `Bài ${ordinal}` });
+      const reviewCell = container.querySelector<HTMLElement>(`#monthly-day-${calendar.effectiveDays[firstReview - 1]}`)!;
+      await user.click(within(reviewCell).getByRole("button", { name: "Soạn tay bài ôn" }));
+      expect(onComposeDay).toHaveBeenLastCalledWith("framework-b1", firstReview, { kind: "review", date: calendar.effectiveDays[firstReview - 1], title: "Bài ôn tuần 1" });
+    });
   });
 
   it.each(["new", "review"] as const)("shows a spinner and blocks duplicate %s generation until the request settles", async (kind) => {

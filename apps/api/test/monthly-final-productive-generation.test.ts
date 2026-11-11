@@ -1,7 +1,7 @@
 import {expect,it} from "vitest";
 import type {AiTaskRunner} from "@e4s/ai";
 import {buildMonthlyFinalGenerationInput} from "../src/modules/assessment/monthly-final-builder.js";
-import {generateMonthlyFinalProductive} from "../src/modules/assessment/monthly-final-productive-generation.js";
+import {generateMonthlyFinalProductive,withAcceptedGrammarReviewMemo} from "../src/modules/assessment/monthly-final-productive-generation.js";
 import {monthlyFinalContract,frameworkRef,fakeMonthlyFinalAiOutput} from "./support/monthly-final-fixture.js";
 
 it("repairs only an overlong read-aloud after the full productive response exhausted its retries",async()=>{
@@ -15,7 +15,8 @@ it("repairs only an overlong read-aloud after the full productive response exhau
     calls.push(taskId);
     if(calls.length===1)throw Object.assign(new Error("AI_OUTPUT_INVALID"),{code:"AI_OUTPUT_INVALID",details:{invalidOutput:JSON.stringify(candidate)}});
     const start=(raw.pools as any[])[0].code==="P1"?0:2;
-    expect(raw.pools).toEqual(input.pronunciation.slice(start,start+2).map(p=>({code:p.code,focus:p.ipa,examples:p.taughtExamples})));expect(raw.maxWords).toBe(start===0?14:15);
+    expect(raw.pools).toEqual(input.pronunciation.slice(start,start+2).map(p=>({code:p.code,focus:p.ipa,examples:p.taughtExamples})));// Requested size is 12–13 words per sentence; a sentence is accepted up to the passage cap (25) minus a minimal 6-word second sentence.
+    expect(raw.maxWords).toBe(19);
     return {output:{candidates:[start===0?"Our client will attend to the tasks and desks.":"Hold the old list and check the cost."]},metadata:{}};
   }} as unknown as AiTaskRunner;
   const result=await generateMonthlyFinalProductive(runner,input,"Generate exam");
@@ -81,7 +82,9 @@ it("selects complete candidate combinations using each role's own taught grammar
   expect(taskId).toBe("monthly_final_writing_block_repair");repairs++;return {output:{candidates:[blocks[raw.key as keyof typeof blocks]]},metadata:{}};
  }} as unknown as AiTaskRunner;
  const result=await generateMonthlyFinalProductive(runner,input,"Generate exam");
- expect(reviews).toBe(16);expect(repairs).toBe(4);
+ // 6 first reviews + the new gaMain block candidate + the rewritten gaMain with its sample. Unchanged accepted quotes (block candidates equal to the
+ // accepted secondary quotes, untouched Speaking B evidence) are not re-reviewed.
+ expect(reviews).toBe(8);expect(repairs).toBe(4);
  expect((result.output as any).writing.task).toBe(candidate.writing.task);expect((result.output as any).speakingB).toEqual(candidate.speakingB);
  expect((result.output as any).writing.evidence).toEqual(blocks);
 });
@@ -100,4 +103,47 @@ it("uses three sentence groups for C1 and checks the complete composed passage",
  expect(groups).toEqual([["P1","P2"],["P3"],["P4"]]);
  expect((result.output as any).speakingA.text.split(/(?<=[.!?])\s/u)).toHaveLength(3);
  expect((result.output as any).speakingA.positions).toHaveLength(8);
+});
+it("accepts a longer first read-aloud sentence when the whole passage still fits (B1 'The passage has 17 words; use at most 14.')",async()=>{
+ const input=buildMonthlyFinalGenerationInput(monthlyFinalContract("B1"),frameworkRef),candidate=fakeMonthlyFinalAiOutput(input).productive;
+ candidate.speakingA.text+=" Please check the design before the meeting starts.".repeat(3);
+ const first="Our client will attend to the tasks and desks in the main office after lunch today.";
+ const calls:string[]=[];
+ const runner={runTask:async(taskId:string,raw:any)=>{
+  if(taskId==="monthly_final_grammar_evidence_review")return {output:{items:raw.items.map((item:any)=>({key:item.key,matches:true,reason:"Matches."}))},metadata:{}};
+  calls.push(taskId);
+  if(taskId==="monthly_final_productive_generation")throw Object.assign(new Error("invalid"),{code:"AI_OUTPUT_INVALID",details:{invalidOutput:JSON.stringify(candidate)}});
+  return {output:{candidates:[raw.pools[0].code==="P1"?first:"Hold the old list and check the cost."]},metadata:{}};
+ }} as unknown as AiTaskRunner;
+ const result=await generateMonthlyFinalProductive(runner,input,"Generate exam");
+ // 16 + 8 = 24 words within the B1 cap of 25: no failure and no shortening call.
+ expect(calls).toEqual(["monthly_final_productive_generation","monthly_final_read_aloud_repair","monthly_final_read_aloud_repair"]);
+ expect((result.output as any).speakingA.text).toBe(`${first} Hold the old list and check the cost.`);
+ expect((result.output as any).speakingA.positions).toHaveLength(8);
+});
+it("shortens a long first sentence only when the composed passage exceeds the cap",async()=>{
+ const input=buildMonthlyFinalGenerationInput(monthlyFinalContract("B1"),frameworkRef),candidate=fakeMonthlyFinalAiOutput(input).productive;
+ candidate.speakingA.text+=" Please check the design before the meeting starts.".repeat(3);
+ const long="Our client will attend to the tasks and desks in the main office after the long lunch break today.";
+ const limits:number[]=[];
+ const runner={runTask:async(taskId:string,raw:any)=>{
+  if(taskId==="monthly_final_grammar_evidence_review")return {output:{items:raw.items.map((item:any)=>({key:item.key,matches:true,reason:"Matches."}))},metadata:{}};
+  if(taskId==="monthly_final_productive_generation")throw Object.assign(new Error("invalid"),{code:"AI_OUTPUT_INVALID",details:{invalidOutput:JSON.stringify(candidate)}});
+  if(raw.pools[0].code!=="P1")return {output:{candidates:["Hold the old list and check the cost."]},metadata:{}};
+  limits.push(raw.maxWords);
+  return {output:{candidates:[raw.previousText?"Our client will attend to the tasks and desks.":long]},metadata:{}};
+ }} as unknown as AiTaskRunner;
+ const result=await generateMonthlyFinalProductive(runner,input,"Generate exam");
+ // 19 + 8 > 25: the existing rebalancing asks for the first sentence within 25 - 8 = 17 words.
+ expect(limits).toEqual([19,17]);
+ expect((result.output as any).speakingA.text).toBe("Our client will attend to the tasks and desks. Hold the old list and check the cost.");
+});
+it("does not send an already accepted grammar quote to the reviewer again, but re-reviews rejected ones",async()=>{
+ let reviews=0;
+ const base={runTask:async(_taskId:string,raw:any)=>{reviews++;return {output:{items:raw.items.map((item:any)=>({key:item.key,matches:item.quote.startsWith("Good"),reason:"r"}))},metadata:{}};}} as unknown as AiTaskRunner;
+ const runner=withAcceptedGrammarReviewMemo(base);
+ const item=(quote:string)=>({items:[{key:"writing.gbMain",grammar:{focus:"f",formula:"x",usage:"u"},quote}]});
+ for(let i=0;i<3;i++)await runner.runTask("monthly_final_grammar_evidence_review",item("Good quote."),{systemPrompt:"p"});
+ for(let i=0;i<2;i++)await runner.runTask("monthly_final_grammar_evidence_review",item("Bad quote."),{systemPrompt:"p"});
+ expect(reviews).toBe(3);
 });

@@ -64,3 +64,32 @@ describe("monthly lesson day output schema", () => {
     expect(monthlyLessonDayOutputSchema.safeParse({ title: "Day 1", parts: [{ code: "objective", content: "plain text" }] }).success).toBe(false);
   });
 });
+
+describe("monthly lesson parts returned as a broken string (AI quality round 2, 11/11)", () => {
+  // Shape of the review exercise call that died with "lesson.parts: expected array, received string"
+  // (review-B1-W4, review-B2-W1, review-C1-W4): the contract's quoted prompt copied unescaped.
+  const listening = "{\"code\":\"listening\",\"content\":{\"items\":[{\"id\":\"l1\",\"audioText\":\"deadline\",\"prompt\":\"Listen and choose the meaning\",\"options\":[\"thời hạn\",\"cuộc họp\",\"báo cáo\",\"khách hàng\"],\"answer\":\"thời hạn\",\"explanation\":\"\"Deadline\" means the time limit.\"}]}}";
+  const reading = "{\"code\":\"reading\",\"content\":{\"passage\":\"Hi team,\nthe report is late.\",\"items\":[],}}";
+
+  it("recovers parts wrapped in fences and prose, with unescaped quotes, raw newlines and trailing commas", () => {
+    const parsed = monthlyLessonDayOutputSchema.safeParse({ title: "Weekly review", parts: `Here are the sections:\n\`\`\`json\n[${listening},${reading}]\n\`\`\`` });
+    expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
+    expect(parsed.data!.lesson.parts.map((part) => part.code)).toEqual(["listening", "reading"]);
+    const item = (parsed.data!.lesson.parts[0]!.content.items as Array<Record<string, unknown>>)[0]!;
+    expect(item.explanation).toBe("\"Deadline\" means the time limit.");
+    expect(parsed.data!.lesson.parts[1]!.content.passage).toBe("Hi team,\nthe report is late.");
+  });
+
+  it("keeps every complete part of a cut-off array and decodes an object string that wraps parts", () => {
+    const cut = monthlyLessonDayOutputSchema.safeParse({ title: "Weekly review", parts: `[${listening},{"code":"reading","content":{"passage":"Hi te` });
+    expect(cut.success, JSON.stringify(cut.error?.issues)).toBe(true);
+    expect(cut.data!.lesson.parts.map((part) => part.code)).toEqual(["listening"]);
+    const wrapped = monthlyLessonDayOutputSchema.safeParse({ title: "Weekly review", parts: JSON.stringify({ parts: [{ code: "objective", content: { text: "Review the week." } }] }) });
+    expect(wrapped.data!.lesson.parts[0]!.code).toBe("objective");
+  });
+
+  it("still rejects a string with no recoverable part", () => {
+    expect(monthlyLessonDayOutputSchema.safeParse({ title: "Weekly review", parts: "Sorry, I cannot do that." }).success).toBe(false);
+    expect(monthlyLessonDayOutputSchema.safeParse({ title: "Weekly review", parts: "[{\"code\":\"objective\",\"content\":{]" }).success).toBe(false);
+  });
+});

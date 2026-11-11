@@ -68,6 +68,14 @@ describe("monthlyManualSeed", () => {
     expect(seed?.parts.find(part => part.code === "listening")?.content).toEqual({});
     expect(seed?.parts.find(part => part.code === "grammar")?.content).toMatchObject({ formula: "S + V(s)" });
   });
+  it("opens a legacy review day whose allocation arrays are missing", () => {
+    const legacy = structuredClone(framework) as any;
+    const day = legacy.resources.roadmap.days[2];
+    for (const key of ["reviewTermIds", "reviewExpandedTermIds", "reviewGrammarStepIds", "reviewSoundIds", "reviewPronunciationExampleIds", "skillExercises", "grammarStepIds", "pronunciationExampleIds", "coreTermIds", "expandedTermIds"]) delete day[key];
+    const seed = monthlyManualSeed(legacy, 5)!;
+    expect(seed.kind).toBe("review");
+    expect(seed.title.startsWith("Weekly review")).toBe(true);
+  });
   it("prefills a review day with the whole week and every review sound", () => {
     const seed = monthlyManualSeed(framework, 5)!;
     expect(seed).toMatchObject({ kind: "review", date: "2026-11-06", vocabularyCount: 3, title: "Weekly review: client, report" });

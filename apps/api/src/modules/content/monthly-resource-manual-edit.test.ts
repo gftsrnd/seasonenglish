@@ -7,7 +7,8 @@ import { registerMonthlyContentRoutes } from "./monthly-routes.js";
 
 const repository = vi.hoisted(() => ({
   getResourceDraftForEdit: vi.fn(),
-  saveEditedResourceDraft: vi.fn()
+  saveEditedResourceDraft: vi.fn(),
+  getOverview: vi.fn()
 }));
 vi.mock("@e4s/database", () => ({ createRepositories: () => ({ monthlyContent: repository, aiRuns: {} }) }));
 vi.mock("../identity/policy.js", () => ({
@@ -45,7 +46,7 @@ function draftPoolFixture(month = "2026-11"): MonthlyResourcePoolContract {
       id: `a1-sound-${soundIndex + 1}`,
       ipa,
       label: `Sound ${soundIndex + 1}`,
-      examples: Array.from({ length: 9 }, (_, exampleIndex) => ({ id: `a1-sound-${soundIndex + 1}-word-${exampleIndex + 1}`, word: `zz${letters(soundIndex * 9 + exampleIndex)}`, ipa: "/x/" }))
+      examples: Array.from({ length: 9 }, (_, exampleIndex) => ({ id: `a1-sound-${soundIndex + 1}-word-${exampleIndex + 1}`, word: `zz${letters(soundIndex * 9 + exampleIndex)}`, ipa: `/z${ipa.slice(1, -1)}z/` }))
     }))
   };
 }
@@ -158,6 +159,70 @@ describe("manual monthly resource edit (VH-R30/VH-R35)", () => {
   });
 });
 
+function levelPoolFixture(cefr: "A1" | "B1" | "C1"): MonthlyResourcePoolContract {
+  const pool = draftPoolFixture();
+  if (cefr === "A1") return pool;
+  return {
+    ...pool, cefr,
+    sounds: pool.sounds.map((sound, index) => {
+      const ipa = ["/st/", "/nd/", "/kt/", "/ˈ/"][index]!;
+      return { ...sound, ipa, examples: sound.examples.map((example) => ({ ...example, ipa: `/z${ipa.slice(1, -1)}z/` })) };
+    })
+  };
+}
+
+describe("manual monthly resource edit quality gates (WP9)", () => {
+  it("accepts the level fixtures unchanged", () => {
+    for (const cefr of ["A1", "B1", "C1"] as const) {
+      const pool = levelPoolFixture(cefr);
+      expect(applyMonthlyResourceEdit(pool, editInputFrom(pool)), cefr).toMatchObject({ ok: true, warnings: [] });
+    }
+  });
+
+  it("rejects an example whose IPA lacks the target sound", () => {
+    const pool = levelPoolFixture("A1");
+    const input = editInputFrom(pool);
+    input.sounds[0]!.examples[0]!.ipa = "/wɜːk/";
+    const result = applyMonthlyResourceEdit(pool, input);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues).toEqual([expect.objectContaining({ section: "sounds", rowId: "a1-sound-1-word-1", field: "ipa", message: expect.stringContaining("/iː/") })]);
+  });
+
+  it("requires English dailyObjectives from B1 and keeps Vietnamese ones valid at A1", () => {
+    const vietnamese = ["Nhận diện cách dùng bước này trong email", "Vận dụng trong phản hồi với khách hàng"];
+    const a1 = levelPoolFixture("A1");
+    const a1Input = editInputFrom(a1);
+    a1Input.grammarTopics[0]!.steps[0]!.dailyObjectives = vietnamese;
+    expect(applyMonthlyResourceEdit(a1, a1Input).ok).toBe(true);
+    const b1 = levelPoolFixture("B1");
+    const b1Input = editInputFrom(b1);
+    b1Input.grammarTopics[0]!.steps[0]!.dailyObjectives = vietnamese;
+    const rejected = applyMonthlyResourceEdit(b1, b1Input);
+    expect(rejected.ok).toBe(false);
+    if (rejected.ok) return;
+    expect(rejected.issues).toEqual([expect.objectContaining({ section: "grammarTopics", rowId: "a1-grammar-1-step-1", field: "dailyObjectives" })]);
+    b1Input.grammarTopics[0]!.steps[0]!.dailyObjectives = ["Recognise the form in a short email", "Use the form to answer a client"];
+    expect(applyMonthlyResourceEdit(b1, b1Input).ok).toBe(true);
+  });
+
+  it("blocks C1 core words that are B1 cores of the same month and only warns for other levels", () => {
+    const c1 = levelPoolFixture("C1");
+    const input = editInputFrom(c1);
+    const word = input.coreTerms[0]!.word;
+    const blocked = applyMonthlyResourceEdit(c1, input, { otherLevelCoreTerms: [{ cefr: "B1", words: [word.toUpperCase()] }] });
+    expect(blocked.ok).toBe(false);
+    if (blocked.ok) return;
+    expect(blocked.issues).toEqual([expect.objectContaining({ section: "coreTerms", rowId: "a1-core-1", field: "word", message: expect.stringContaining("B1") })]);
+    const warned = applyMonthlyResourceEdit(c1, input, { otherLevelCoreTerms: [{ cefr: "B2", words: [word] }, { cefr: "C1", words: [word] }] });
+    expect(warned).toMatchObject({ ok: true, warnings: [expect.objectContaining({ rowId: "a1-core-1", message: expect.stringContaining("B2") })] });
+    const b1 = levelPoolFixture("B1");
+    expect(applyMonthlyResourceEdit(b1, editInputFrom(b1), { otherLevelCoreTerms: [{ cefr: "C1", words: [word] }] }).ok).toBe(false);
+    const a1 = levelPoolFixture("A1");
+    expect(applyMonthlyResourceEdit(a1, editInputFrom(a1), { otherLevelCoreTerms: [{ cefr: "A2", words: [word] }] })).toMatchObject({ ok: true, warnings: [expect.objectContaining({ field: "word" })] });
+  });
+});
+
 describe("PUT /api/v1/content/month-frameworks/:id/resources", () => {
   const frameworkId = "7f1f5b8e-8d2a-4a64-9a39-5d6f0f7c1a11";
   const url = `/api/v1/content/month-frameworks/${frameworkId}/resources`;
@@ -171,6 +236,23 @@ describe("PUT /api/v1/content/month-frameworks/:id/resources", () => {
   beforeEach(() => {
     repository.getResourceDraftForEdit.mockReset();
     repository.saveEditedResourceDraft.mockReset();
+    repository.getOverview.mockReset();
+    repository.getOverview.mockResolvedValue({ frameworks: [] });
+  });
+
+  it("blocks a core word shared with B1 when saving C1 and warns for other levels (WP9)", async () => {
+    const c1 = { ...draftPoolFixture(), cefr: "C1" as const };
+    repository.getResourceDraftForEdit.mockResolvedValue(draft({ cefr: "C1", pool: c1 }));
+    repository.getOverview.mockResolvedValue({ frameworks: [{ cefr: "B1", resources: { coreTerms: [{ word: "Invoice" }] } }, { cefr: "C1", resources: { coreTerms: [{ word: "invoice" }] } }] });
+    const app = await build();
+    const input = editInputFrom(c1);
+    input.coreTerms[0]!.word = "invoice";
+    const response = await app.inject({ method: "PUT", url, payload: input });
+    expect(response.statusCode).toBe(422);
+    expect(response.json().issues).toEqual(expect.arrayContaining([expect.objectContaining({ rowId: "a1-core-1", field: "word", message: expect.stringContaining("B1") })]));
+    expect(repository.getOverview).toHaveBeenCalledWith("operator-1", "2026-11");
+    expect(repository.saveEditedResourceDraft).not.toHaveBeenCalled();
+    await app.close();
   });
 
   it("saves a valid edit as the next draft version", async () => {

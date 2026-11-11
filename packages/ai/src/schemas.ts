@@ -7,6 +7,9 @@ export const coachInputSchema = z.object({
   mode: z.enum(["practice", "challenge"]),
   scenario: z.string().trim().min(1).max(500),
   currentQuestion: z.string().trim().min(1).max(2_000),
+  // Exact questions Season already asked in this topic; the roleplay prompt
+  // forbids repeating them, so they must survive input parsing.
+  priorQuestions: z.array(z.string().trim().max(2_000)).max(20).optional(),
   priorTurns: z.array(z.object({
     speaker: z.enum(["learner", "coach"]),
     text: z.string().trim().min(1).max(2_000)
@@ -21,17 +24,26 @@ export const coachInputSchema = z.object({
 export const coachRoleplayTurnOutputSchema = z.object({
   seasonReply: z.string().trim().min(1).max(800),
   learnerQuestion: z.string().trim().min(1).max(500),
-  suggestedLearnerReply: z.string().trim().min(1).max(500)
+  suggestedLearnerReply: z.string().trim().min(1).max(500),
+  // The roleplay call translates its own three English strings. They are used
+  // only when the displayed turn still matches that model text, and remain
+  // optional so legacy/mocked turns without translations keep parsing.
+  seasonReplyTranslation: z.string().trim().max(1_000).optional(),
+  learnerQuestionTranslation: z.string().trim().max(700).optional(),
+  suggestedLearnerReplyTranslation: z.string().trim().max(500).optional()
 });
 
 export const coachRoleplayTurnOutputJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["seasonReply", "learnerQuestion", "suggestedLearnerReply"],
+  required: ["seasonReply", "learnerQuestion", "suggestedLearnerReply", "seasonReplyTranslation", "learnerQuestionTranslation", "suggestedLearnerReplyTranslation"],
   properties: {
     seasonReply: { type: "string", maxLength: 800 },
     learnerQuestion: { type: "string", maxLength: 500 },
-    suggestedLearnerReply: { type: "string", maxLength: 500 }
+    suggestedLearnerReply: { type: "string", maxLength: 500 },
+    seasonReplyTranslation: { type: "string", maxLength: 1_000 },
+    learnerQuestionTranslation: { type: "string", maxLength: 700 },
+    suggestedLearnerReplyTranslation: { type: "string", maxLength: 500 }
   }
 } satisfies Record<string, unknown>;
 
@@ -692,6 +704,109 @@ function mergeDuplicateLessonParts(parts: unknown[]): unknown[] {
   return merged;
 }
 
+/**
+ * Round 2 (11/11): a review exercise call sometimes returned `lesson.parts` as a
+ * JSON-encoded string that `parseModelJson` could not read (prose or fences
+ * around it, unescaped quotes copied from the contract such as
+ * "Nghe và chọn nghĩa đúng", trailing commas, a cut-off last part). Recover the
+ * array without changing what the model is asked: strip fences, take the JSON
+ * span, repair the text, and as a last resort keep every complete part (the
+ * quality gate then repairs the missing components). Returns the input
+ * unchanged when nothing can be recovered.
+ */
+export function parseMonthlyLessonParts(value: unknown, depth = 0): unknown {
+  const direct = parseModelJson(value);
+  if (typeof direct !== "string") {
+    if (direct && typeof direct === "object" && !Array.isArray(direct) && Array.isArray((direct as Record<string, unknown>).parts)) return (direct as Record<string, unknown>).parts;
+    if (direct && typeof direct === "object" && !Array.isArray(direct) && (direct as Record<string, unknown>).lesson && typeof (direct as Record<string, unknown>).lesson === "object") return parseMonthlyLessonParts((direct as Record<string, Record<string, unknown>>).lesson!.parts, depth + 1);
+    return direct;
+  }
+  const text = direct.replace(/```(?:json)?/giu, "").trim();
+  const start = text.search(/[[{]/u);
+  if (start < 0) return value;
+  const body = text.slice(start);
+  const end = Math.max(body.lastIndexOf("]"), body.lastIndexOf("}"));
+  const candidates = [...new Set([end >= 0 ? body.slice(0, end + 1) : body, body])];
+  for (const candidate of candidates) {
+    for (const attempt of [candidate, escapeControlCharactersInJsonStrings(candidate), repairModelJsonText(candidate)]) {
+      try {
+        const parsed = JSON.parse(attempt) as unknown;
+        if (typeof parsed === "string" && depth < 2) return parseMonthlyLessonParts(parsed, depth + 1);
+        if (Array.isArray(parsed)) return parsed;
+        if (parsed && typeof parsed === "object") {
+          const record = parsed as Record<string, unknown>;
+          if (Array.isArray(record.parts)) return record.parts;
+          if (record.lesson && typeof record.lesson === "object") return parseMonthlyLessonParts((record.lesson as Record<string, unknown>).parts, depth + 1);
+          if (typeof record.code === "string") return [record];
+        }
+      } catch { /* try the next repair */ }
+    }
+  }
+  const salvaged = salvageCompleteArrayElements(repairModelJsonText(body.startsWith("[") ? body : `[${body}`));
+  return salvaged.length ? salvaged : value;
+}
+
+/** Escapes stray quotes and control characters inside strings and drops trailing commas. */
+function repairModelJsonText(text: string): string {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]!;
+    if (inString) {
+      if (escaped) { escaped = false; result += character; continue; }
+      if (character === "\\") { escaped = true; result += character; continue; }
+      if (character === "\"") {
+        // A quote closes the string only when JSON punctuation follows; otherwise it is text.
+        const next = text.slice(index + 1).match(/^\s*(.)/u)?.[1];
+        if (next === undefined || next === "," || next === ":" || next === "}" || next === "]") { inString = false; result += character; }
+        else result += "\\\"";
+        continue;
+      }
+      const code = character.charCodeAt(0);
+      if (code < 0x20) { result += character === "\n" ? "\\n" : character === "\r" ? "\\r" : character === "\t" ? "\\t" : `\\u${code.toString(16).padStart(4, "0")}`; continue; }
+      result += character;
+      continue;
+    }
+    if (character === "\"") { inString = true; result += character; continue; }
+    if (character === "," && /^\s*[}\]]/u.test(text.slice(index + 1))) continue;
+    result += character;
+  }
+  return result;
+}
+
+/** Parses every complete top-level element of a (possibly cut-off) JSON array. */
+function salvageCompleteArrayElements(text: string): unknown[] {
+  if (!text.startsWith("[")) return [];
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let lastComplete = -1;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]!;
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === "\"") inString = false;
+      continue;
+    }
+    if (character === "\"") inString = true;
+    else if (character === "{" || character === "[") depth += 1;
+    else if (character === "}" || character === "]") {
+      depth -= 1;
+      if (depth === 1) lastComplete = index;
+      if (depth === 0) { lastComplete = index - 1; break; }
+    }
+  }
+  if (lastComplete < 0) return [];
+  try {
+    const parsed = JSON.parse(`${text.slice(0, lastComplete + 1).replace(/,\s*$/u, "")}]`) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item === "object") : [];
+  } catch {
+    return [];
+  }
+}
+
 export function normalizeMonthlyLessonDayOutput(value: unknown): unknown {
   const parsed = parseModelJson(value);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return parsed;
@@ -701,7 +816,7 @@ export function normalizeMonthlyLessonDayOutput(value: unknown): unknown {
   const rest = isFlat ? {} : output;
   if (!lesson || typeof lesson !== "object" || Array.isArray(lesson)) return { ...rest, lesson };
   const lessonRecord = lesson as Record<string, unknown>;
-  const parts = parseModelJson(lessonRecord.parts);
+  const parts = parseMonthlyLessonParts(lessonRecord.parts);
   return {
     ...rest,
     lesson: {
@@ -1551,16 +1666,19 @@ export const weeklyLessonDayOutputJsonSchema = {
  */
 /** Field names the publication quality gate reads for each part (packages/domain content validation). */
 export const MONTHLY_LESSON_PART_CONTENT_CONTRACT = [
-  "This component's fields as a JSON object (never a JSON-encoded string). Use exactly these keys per code:",
+  "This component's fields as a JSON object (never a JSON-encoded string). Use at least these keys per code; when a DAILY TEACHING PLAN / dailyTeachingPlan is supplied, also return the extra keys it lists (grammar dailyCode, objective, items; pronunciation stage, objective and, when asked, reviewTargets, passage, targetPositions), copying locked plan values verbatim:",
   "objective { text, items }; instruction { text, steps };",
   "vocabulary { items: [{ word, type, ipa, meaning, collocations, synonyms, antonyms }] } - collocations is exactly 3 short, natural English phrases that each contain the word (e.g. client: \"meet a client\", \"a new client\", \"client feedback\"); never empty;",
-  "grammar { formula, text, examples } - text is a concise usage note: 1-2 short sentences, at most 45 words, focused on the day's goal; do not repeat the formula or add a lecture. When lockedScope.grammarSteps has more than one step (review days), also return grammar.steps: [{ formula, text, examples }] with one entry per step in order, each with its own concise usage note and 1-2 examples;",
-  "pronunciation { focus: \"/IPA/\", words: [{ word, ipa }] x3 };",
+  "grammar { formula, text, examples } - formula copies the locked grammar step formula(s) verbatim; text is a concise usage note: 1-2 short sentences, at most 45 words, focused on the day's goal; do not repeat the formula or add a lecture. When lockedScope.grammarSteps has more than one step (review days), also return grammar.steps: [{ formula, text, examples }] with one entry per step in order, each with its own concise usage note and 1-2 examples;",
+  "pronunciation { focus: \"/IPA/\", words: [{ word, ipa }] x3 } (+ stage, objective with a daily teaching plan);",
   "listening { script, prompt, options x4, answer } - script is the full spoken transcript, never empty;",
   "reading { text, prompt, options x4, answer } - text is the reading passage, never empty;",
   "writing { type, prompt, answer } - answer is the correct answer or model sentence, never empty;",
-  "word_class / word_use { prompt, options x4, answer };",
-  "speaking { prompt, sample } - sample is a model answer, never empty."
+  "word_class (Word form) { prompt, options x4, answer } - a workplace sentence with one blank (____) where the learner chooses the correct form of a core word (e.g. decide / decision / decisive / decisively, or the right tense/plural); never ask for the word class or part of speech, never use labels such as noun/verb/adjective/adverb as options, and never give the answer word unchanged in brackets;",
+  "word_use { prompt, options x4, answer };",
+  "speaking { prompt, sample } - sample is a model answer, never empty.",
+  "In every choice task each option is a real, correctly spelled English word or phrase of the same kind as the answer (never invented forms such as sended, maked, feedbacked), and options are similar in length so the answer is not simply the longest one.",
+  "Learner-facing text never mentions internal planning terms (core term, expanded term, người học) and never pastes the theme's communication goal; for A1/A2 every prompt and instruction is written in Vietnamese."
 ].join(" ");
 
 export const monthlyLessonDayOutputJsonSchema = {
@@ -1580,7 +1698,7 @@ export const monthlyLessonDayOutputJsonSchema = {
             description: MONTHLY_LESSON_PART_CONTENT_CONTRACT,
             properties: {
               text: { type: "string", description: "objective/instruction text; for reading this is the reading passage (required for reading)." },
-              items: { type: "array", description: "objective items, or vocabulary items [{ word, type, ipa, meaning, collocations: exactly 3 short English phrases containing the word, synonyms, antonyms }] (vocabulary needs at least 3)." },
+              items: { type: "array", description: "objective items, or vocabulary items [{ word, type, ipa, meaning, collocations: exactly 3 short English phrases containing the word, synonyms, antonyms }] (vocabulary needs at least 3), or - in a Friday review exercise section - the complete list of review items with the exact count the review contract gives for that section (never a single item)." },
               steps: { type: "array", items: { anyOf: [
                 { type: "string" },
                 { type: "object", required: ["formula", "text", "examples"], additionalProperties: false, properties: {

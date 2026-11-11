@@ -44,6 +44,11 @@ import { registerMonthlyFinalRoutes } from "./monthly-final-routes.js";
 import { createRoleGuard } from "../identity/policy.js";
 import { monthlyExamEligibility } from "../learning/routes.js";
 import { gradeProductiveAssessment } from "./productive-grading.js";
+import { rebalanceAnswerPositions } from "../shared/answer-order.js";
+import {
+  evaluateLevelFormQuality, levelFormExamTitle, levelFormQualityInputFromOutput, levelFormQualityInputFromSections, LevelFormQualityError,
+  splitLevelFormListeningParts, type LevelFormQualityRecord, type LevelFormQualityReport
+} from "./level-form-quality.js";
 
 const kindParam = z.object({ kind: z.enum(["placement", "levelup", "level-up", "monthly", "final", "pass-course", "passcourse"]) });
 const formPreviewKindParam = z.object({ kind: z.enum(["placement", "level_up", "final", "pass_course"]) });
@@ -136,6 +141,8 @@ const violationInput = z.object({
 const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing", "speaking"];
 const levelFormParam = z.object({ targetLevel: z.enum(["A2", "B1", "B2", "C1"]) });
 const levelFormVersionParam = z.object({ versionId: z.uuid() });
+// D3: a level-up form is published only after the Operator confirms a human read of every answer key.
+const levelFormPublicationInput = z.object({ answersReviewed: z.literal(true) });
 const levelFormTaskInput = z.object({
   key: z.string().trim().min(1).max(80), prompt: z.string().trim().max(20_000),
   responseType: z.enum(["single_choice", "long_text", "speaking_evidence"]), maxScore: z.number().positive().max(100),
@@ -498,7 +505,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const params = levelFormVersionParam.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_LEVEL_FORM_VERSION" });
     const form = await repositories.assessments.getLevelFormDetail(request.e4sSession!.user.id, params.data.versionId);
-    return form ?? reply.code(404).send({ code: "LEVEL_FORM_NOT_FOUND" });
+    return form ? withLevelFormQualityWarnings(form) : reply.code(404).send({ code: "LEVEL_FORM_NOT_FOUND" });
   });
 
   app.get("/api/v1/assessment-level-forms/:targetLevel/versions", { preHandler: assessmentReaders }, async (request, reply) => {
@@ -513,7 +520,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const body = levelFormUpdateInput.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_LEVEL_FORM_UPDATE" });
     const updated = await repositories.assessments.updateLevelFormDraft(request.e4sSession!.user.id, params.data.versionId, body.data as AssessmentLevelFormUpdateInput);
-    return updated ?? reply.code(409).send({ code: "LEVEL_FORM_NOT_EDITABLE" });
+    return updated ? withLevelFormQualityWarnings(updated) : reply.code(409).send({ code: "LEVEL_FORM_NOT_EDITABLE" });
   });
 
   app.post("/api/v1/assessment-level-forms/:versionId/draft", { preHandler: levelFormOperators }, async (request, reply): Promise<AssessmentLevelFormDetailView | void> => {
@@ -548,18 +555,13 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       // output ceiling. Generate three independently schema-checked slices,
       // then validate their assembled canonical form before persistence.
       const [listening, reading, production] = await Promise.all([
-        runner.runTask("level_form_listening_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only the title, listening script, and exactly 20 listening questions. The script must contain exactly five clearly labelled parts (Part 1 through Part 5), with four questions for each part in the same order. ${LEVEL_FORM_QUESTION_GUIDANCE}`, maxOutputTokens: 7_000 }),
+        runner.runTask("level_form_listening_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only the title of the whole promotion test (never a section name such as "Listening Section"), the listening script, and exactly 20 listening questions. The script must contain exactly five clearly labelled parts (Part 1 through Part 5), with four questions for each part in the same order. ${LEVEL_FORM_QUESTION_GUIDANCE}`, maxOutputTokens: 7_000 }),
         runner.runTask("level_form_reading_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only the reading passage and exactly 40 reading questions. Keep every prompt and option concise; questions 1–10, 11–20, 21–30 and 31–40 must each form a distinct workplace-reading part. ${LEVEL_FORM_QUESTION_GUIDANCE}`, maxOutputTokens: 12_000 }),
         runner.runTask("level_form_production_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only exactly two writing prompts and four speaking prompts.`, maxOutputTokens: 2_000 })
       ]);
       const completedReading = await completeLevelFormReading(runner, params.data.targetLevel, reading.output as { passage: string; questions: LevelFormTaskOutput["reading"]["questions"][number][] });
-      const completeOutput = levelFormOutputSchema.parse({
-        title: (listening.output as { title: string }).title,
-        listening: { ...(listening.output as { script: string; questions: unknown[] }), questions: (listening.output as { questions: unknown[] }).questions.slice(0, 20) },
-        reading: completedReading,
-        writingPrompts: (production.output as { writingPrompts: string[] }).writingPrompts,
-        speakingPrompts: (production.output as { speakingPrompts: string[] }).speakingPrompts
-      });
+      const assembled = assembleLevelFormFromAi(params.data.targetLevel, { listening: listening.output, reading: completedReading, production: production.output });
+      const completeOutput = assembled.output;
       if (task) await repositories.aiRuns.recordSucceeded({
         userId: actorId,
         requestId: `level-form:${params.data.targetLevel}:${Date.now()}`,
@@ -568,10 +570,14 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
         output: completeOutput,
         metadata: listening.metadata
       });
-      const blueprint = normalizeLevelFormQuestionPrompts(levelFormBlueprint(params.data.targetLevel, completeOutput));
-      const form = await repositories.assessments.createLevelFormDraft(actorId, params.data.targetLevel, blueprint);
+      if (!assembled.quality.passed) throw new LevelFormQualityError(assembled.quality.severe);
+      const form = await repositories.assessments.createLevelFormDraft(actorId, params.data.targetLevel, assembled.blueprint);
       return reply.code(201).send({ ...form, publishedAt: null });
     } catch (error) {
+      if (error instanceof LevelFormQualityError) {
+        request.log.warn({ issues: error.issues }, "Level form generation failed the content gate");
+        return reply.code(502).send({ code: "LEVEL_FORM_GENERATION_FAILED", issues: error.issues });
+      }
       request.log.warn({ error }, "Level form generation failed");
       return reply.code(502).send({ code: "LEVEL_FORM_GENERATION_FAILED" });
     }
@@ -580,6 +586,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
   app.post("/api/v1/assessment-level-forms/:versionId/publication", { preHandler: levelFormOperators }, async (request, reply) => {
     const params = levelFormVersionParam.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_LEVEL_FORM_VERSION" });
+    if (!levelFormPublicationInput.safeParse(request.body ?? {}).success) return reply.code(400).send({ code: "LEVEL_FORM_ANSWER_REVIEW_REQUIRED" });
     try {
       const form = await repositories.assessments.publishLevelForm(request.e4sSession!.user.id, params.data.versionId);
       return form ? { ...form, publishedAt: form.publishedAt?.toISOString() ?? null } : reply.code(409).send({ code: "LEVEL_FORM_NOT_PUBLISHABLE" });
@@ -1128,6 +1135,74 @@ function manualLevelFormBlueprint(targetLevel: "A2" | "B1" | "B2" | "C1"): Store
     ]
   };
 }
+/** The three AI slices of one level-up form (reading already completed to 40 questions). */
+export interface LevelFormAiSlices {
+  listening: unknown;
+  reading: { passage: string; questions: LevelFormTaskOutput["reading"]["questions"][number][] };
+  production: unknown;
+}
+
+export interface AssembledLevelForm {
+  /** Canonical, schema-checked AI output in the order the model returned it (recorded on the AI run). */
+  output: LevelFormTaskOutput;
+  /** The same output after the seeded answer-position shuffle; the blueprint is built from this. */
+  shuffled: LevelFormTaskOutput;
+  quality: LevelFormQualityReport;
+  /** Draft blueprint; light gate warnings are stored on it as `levelFormQuality`. */
+  blueprint: StoredAssessmentDefinition & { levelFormQuality: LevelFormQualityRecord };
+}
+
+/**
+ * AI slices -> canonical output -> seeded answer shuffle (correctIndex remapped)
+ * -> content gate -> draft blueprint. Pure: the route persists the result only
+ * when `quality.passed`; the quality harness calls this same function.
+ */
+export function assembleLevelFormFromAi(
+  targetLevel: "A2" | "B1" | "B2" | "C1", slices: LevelFormAiSlices, options: { seed?: string; now?: Date } = {}
+): AssembledLevelForm {
+  const listening = slices.listening as { title: string; script: string; questions: unknown[] };
+  const production = slices.production as { writingPrompts: string[]; speakingPrompts: string[] };
+  const output = levelFormOutputSchema.parse({
+    title: levelFormExamTitle(listening.title, targetLevel),
+    listening: { ...listening, questions: listening.questions.slice(0, 20) },
+    reading: slices.reading,
+    writingPrompts: production.writingPrompts,
+    speakingPrompts: production.speakingPrompts
+  });
+  const seed = options.seed ?? `level-form:${targetLevel}:${output.title}\n${output.listening.script}\n${output.reading.passage}`;
+  const shuffled: LevelFormTaskOutput = {
+    ...output,
+    listening: { ...output.listening, questions: rebalanceAnswerPositions(output.listening.questions, `${seed}:listening`, 4) },
+    reading: { ...output.reading, questions: rebalanceAnswerPositions(output.reading.questions, `${seed}:reading`, 4) }
+  };
+  const quality = evaluateLevelFormQuality(levelFormQualityInputFromOutput(shuffled));
+  const blueprint = {
+    ...normalizeLevelFormQuestionPrompts(levelFormBlueprint(targetLevel, shuffled)),
+    levelFormQuality: { checkedAt: (options.now ?? new Date()).toISOString(), warnings: quality.light }
+  };
+  return { output, shuffled, quality, blueprint };
+}
+
+/**
+ * Re-runs the content gate on the saved (possibly Operator-edited) sections and
+ * adds its findings to the detail warnings. Skipped while choice questions are
+ * still blank: the completeness warnings already cover that state.
+ */
+export function withLevelFormQualityWarnings(detail: AssessmentLevelFormDetailView): AssessmentLevelFormDetailView {
+  const choiceTasks = detail.sections.filter((section) => section.code === "listening" || section.code === "reading")
+    .flatMap((section) => section.groups.flatMap((group) => group.tasks.filter((task) => task.responseType === "single_choice")));
+  const complete = choiceTasks.length > 0 && choiceTasks.every((task) => task.prompt.trim() && task.correctAnswer && (task.options ?? []).length >= 2 && (task.options ?? []).every((option) => option.label.trim()));
+  if (!complete) return detail;
+  const report = evaluateLevelFormQuality(levelFormQualityInputFromSections(detail.sections));
+  return {
+    ...detail,
+    warnings: [
+      ...detail.warnings,
+      ...[...report.severe, ...report.light].map((issue) => ({ code: "quality_check" as const, message: issue.message, severity: issue.severity === "severe" ? "error" as const : "warning" as const }))
+    ]
+  };
+}
+
 function levelFormBlueprint(targetLevel: "A2" | "B1" | "B2" | "C1", output: LevelFormTaskOutput): StoredAssessmentDefinition {
   const options = ["A", "B", "C", "D"] as const;
   const choiceTasks = (prefix: string, questions: LevelFormTaskOutput["listening"]["questions"], maxScore: number) => questions.map((question, index) => ({
@@ -1151,28 +1226,6 @@ function levelFormBlueprint(targetLevel: "A2" | "B1" | "B2" | "C1", output: Leve
   };
 }
 
-function splitLevelFormListeningParts(script: string): Array<{ title: string; script: string }> {
-  const matches = [...script.matchAll(/(?:^|\n)\s*Part\s+([1-5])\s*[.:–-]?\s*/gi)];
-  if (matches.length === 5 && matches.every((match, index) => Number(match[1]) === index + 1)) {
-    const intro = script.slice(0, matches[0]!.index).trim();
-    return matches.map((match, index) => {
-      const nextOffset = matches[index + 1]?.index ?? script.length;
-      const body = script.slice((match.index ?? 0) + match[0].length, nextOffset).trim();
-      const firstLine = body.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
-      const firstSentence = body.match(/^(.{1,90}?[.!?])(?:\s|$)/)?.[1]?.trim();
-      return {
-        title: firstLine && firstLine.length <= 90 && !/:\s/.test(firstLine)
-          ? firstLine
-          : firstSentence && !/:\s/.test(firstSentence) ? firstSentence : `Listening ${index + 1}`,
-        script: [index === 0 ? intro : "", body].filter(Boolean).join("\n\n")
-      };
-    });
-  }
-  return Array.from({ length: 5 }, (_, index) => ({
-    title: `Listening ${index + 1}`,
-    script: index === 0 ? script : `Audio script for Part ${index + 1} is required.`
-  }));
-}
 function normalizeKind(kind: "placement" | "levelup" | "level-up" | "monthly" | "final" | "pass-course" | "passcourse"): AssessmentKind {
   if (kind === "levelup") return "level-up";
   if (kind === "passcourse") return "pass-course";

@@ -95,9 +95,9 @@ describe("app audio controls", () => {
 
 describe("app shell navigation and logout", () => {
   it.each([
-    ["learner", "/profile", "profile-identity-actions"],
-    ["operator", "/op/months", "monthly-brief-summary"],
-    ["manager", "/mgr", "manager-progress-card-actions"]
+    ["learner", "/profile", "profile-identity-card"],
+    ["operator", "/op/months", "monthly-topic-card"],
+    ["manager", "/mgr", "manager-progress-card"]
   ] as const)("puts account details in the desktop avatar menu and keeps sidebar logout for %s", async (role, path, anchor) => {
     const visibleTarget = vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([new DOMRect(12, 70, 180, 65)] as unknown as DOMRectList);
     const { container } = render(<ExperienceProvider><MemoryRouter initialEntries={[path]}><AppShell session={session(role)} onLogout={vi.fn()}><div className={anchor}><div className={role === "learner" ? "profile-identity-actions" : undefined}><button type="button" aria-expanded="false">Mở chi tiết</button></div>{role === "learner" ? <button className="btn-primary" type="button">Đổi avatar</button> : null}</div></AppShell></MemoryRouter></ExperienceProvider>);
@@ -238,6 +238,17 @@ describe("app shell navigation and logout", () => {
     expect(screen.queryByRole("link", { name: "Luyện với Season" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Bài tuần" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Trang chủ" })).toHaveLength(2);
+  });
+
+  it("highlights Kết quả bài thi (not Duyệt mức) on the level-form tab route", () => {
+    render(<ExperienceProvider><MemoryRouter initialEntries={["/op/levelforms"]}><AppShell session={session("operator")} onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
+
+    for (const name of ["Điều hướng người vận hành", "Điều hướng trên thiết bị di động"]) {
+      const navigation = screen.getByRole("navigation", { name });
+      const current = within(navigation).getAllByRole("link").filter(link => link.getAttribute("aria-current") === "page");
+      expect(current).toHaveLength(1);
+      expect(current[0]).toHaveAttribute("href", "/op/tests");
+    }
   });
 
   it("keeps the primary operator item active for an unlisted operator child route", () => {

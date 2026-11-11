@@ -340,27 +340,35 @@
 }
 
 .crossword-mode {
+  /* One compact status line, sized to its content rather than a full-width box. */
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  min-height: 38px;
+  justify-self: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 36px;
   border: 1px solid #c4d0c9;
   border-radius: 10px;
   background: rgba(255, 255, 255, .68);
-  padding: 6px 10px;
+  padding: 3px 4px 3px 12px;
   color: #40514d;
   font-size: .78rem;
+  white-space: nowrap;
 }
+
+.crossword-mode-sep { color: #8a9692; }
 
 .crossword-mode b {
   color: #1f2b29;
 }
 
 .crossword-mode .btn-sm {
-  min-height: 34px;
-  padding: 5px 9px;
+  min-height: 30px;
+  margin-inline-start: 4px;
+  padding: 3px 10px;
+  font-size: .76rem;
 }
 
 .crossword-active-clue {
@@ -536,6 +544,33 @@
 
 .crossword-clues li > button[aria-current="true"] > b { color: var(--primary); }
 .crossword-clues small { white-space: nowrap; }
+
+/* Phones: the full clue lists stay in the DOM (cells reference them) but sit
+   behind one collapsed row; the selected clue above the grid does the work. */
+.crossword-clues-toggle {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.crossword-clues-toggle > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  color: var(--text);
+  font-size: .86rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.crossword-clues-toggle > summary::-webkit-details-marker { display: none; }
+.crossword-clues-toggle > summary small { color: var(--muted); font-weight: 400; }
+.crossword-clues-chevron { margin-inline-start: auto; color: var(--muted); transition: transform 160ms ease; }
+.crossword-clues-toggle[open] .crossword-clues-chevron { transform: rotate(180deg); }
+.crossword-clues-toggle > .crossword-clues { border: 0; border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; padding-top: 8px; }
 
 .catch-arena,
 .rio-scene {
@@ -943,7 +978,22 @@
   pointer-events: auto;
   touch-action: none;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
+
+/* Holding a control or the stage must never scroll, zoom or select the page. */
+.rio-viewport {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* The page-level scroll button would sit on top of the jump control. */
+body:has(.rio-scene) > #root > .app-scroll-jump,
+body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: none; }
 
 .mario-controls .jump {
   min-width: 72px;
@@ -1031,23 +1081,37 @@
   gap: 16px;
 }
 
+/* Flex, not fixed grid columns: when the picture is hidden its slot disappears
+   and the copy takes all remaining width instead of a 44px column. */
 .typing-clue {
-  grid-template-columns: 72px 44px minmax(0, 1fr);
+  display: flex;
   align-items: center;
+  gap: 12px;
   width: min(620px, 100%);
   text-align: left;
 }
 
+.typing-clue > .typing-clue-image,
+.typing-clue > .typing-clue-speak { flex: none; }
+
 .typing-clue-copy {
   display: grid;
+  flex: 1 1 auto;
   gap: 5px;
   min-width: 0;
 }
 
+/* Break between words only; a single over-long word may still wrap rather than overflow. */
 .typing-clue-copy > strong,
 .typing-clue-copy > small {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* No picture for this word (custom topics, or a monthly word without an illustration): drop the empty frame. */
+.typing-clue-image:has(> .content-image--hidden) {
+  display: none !important;
 }
 
 .typing-clue-image {
@@ -1233,7 +1297,20 @@
   }
 
   .mario-controls {
-    margin: 10px 12px 12px;
+    margin: 8px 10px 10px;
+  }
+
+  /* Thumb-sized pads: two wide arrows on the left thumb, a large jump on the right. */
+  .mario-controls > div { gap: 10px; }
+
+  .mario-controls button {
+    min-width: 72px;
+    min-height: 64px;
+  }
+
+  .mario-controls .jump {
+    min-width: 84px;
+    min-height: 76px;
   }
 
   .crossword-clues {
@@ -1243,6 +1320,21 @@
 
   .crossword-grid { gap: 2px; padding: 5px; }
 
+  .crossword-scene { gap: 10px; }
+
+  .crossword-mode-long { display: none; }
+
+  /* The selected clue is the phone's reading surface: larger and left-aligned. */
+  .crossword-active-clue {
+    padding: 10px 12px;
+    font-size: .95rem;
+    text-align: left;
+  }
+
+  .crossword-clues ol { font-size: .84rem; }
+
+  .game-runner .crossword-clues li > button { min-height: 40px; padding: 3px 6px; }
+
   .crossword-cell small { top: 1px; left: 1px; }
 
   .crossword-cell input { padding: 3px 0 0; font-size: 1rem; }
@@ -1251,9 +1343,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .typing-clue {
-    grid-template-columns: 60px 42px minmax(0, 1fr);
-  }
+  .typing-clue { gap: 10px; }
 
   .typing-clue-image {
     width: 60px;
@@ -1286,7 +1376,6 @@
   }
 
   .typing-clue {
-    grid-template-columns: 52px 38px minmax(0, 1fr);
     gap: 8px;
   }
 
@@ -1658,3 +1747,18 @@
 }
 
 .games-play-first .game-vocabulary-tools[open] > summary::before { transform: rotate(135deg); }
+
+/* Result card when saving failed: the notice is a `.banner` (from Notice), not `.notice`, so it fell into the
+   icon column and stretched it. Give the notice and the actions their own full rows. */
+.game-result.is-error > .banner,
+.game-result.is-error > .game-result__actions { grid-column: 1 / -1; }
+.game-result__actions > :is(button, a) { min-height: 44px; }
+
+/* Phones: letter keys share the row evenly (10 keys on the top row) instead of shrinking to their glyph,
+   so every key is the same width and the keyboard spans the play card. */
+@media (max-width: 720px) {
+  .keyboard-row:not(.keyboard-row--actions) > button { flex: 0 0 calc((100% - 9 * 5px) / 10); min-width: 0; max-width: 44px; }
+}
+@media (max-width: 420px) {
+  .keyboard-row:not(.keyboard-row--actions) > button { flex-basis: calc((100% - 9 * 3px) / 10); }
+}

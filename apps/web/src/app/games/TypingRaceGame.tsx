@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ContentImageView, GameAnswerInput, GameEvidenceEventInput } from "@e4s/contracts";
 import { CornerDownLeft, Delete, Volume2 } from "lucide-react";
-import { normalize, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
+import { isTypingWord, normalize, prepareGameAttempt, TYPING_ROUND_SIZE, type FinishGame, type GameWord } from "./types.js";
 import { typingMaximum } from "@e4s/domain/engagement";
 import { useExperience } from "../../features/experience/Experience.js";
 import { ContentImage } from "../shared/media/ContentImage.js";
@@ -15,7 +15,7 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, image
   imageSetId?: string;
   resolveImage?: ((setId: string, wordId: string) => Promise<ContentImageView>) | undefined;
 }) {
-  const words = useMemo(() => prepareGameAttempt(source.filter((word) => /^[a-z][a-z\s'-]*$/i.test(word.english)), attemptSeed).slice(0, 10), [attemptSeed, source]);
+  const words = useMemo(() => prepareGameAttempt(source.filter(isTypingWord), attemptSeed).slice(0, TYPING_ROUND_SIZE), [attemptSeed, source]);
   const [index, setIndex] = useState(0);
   const [typed, setTyped] = useState("");
   const [score, setScore] = useState(0);

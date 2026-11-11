@@ -1,4 +1,5 @@
 import { AiProviderError, type AiProvider, type AiProviderRequest, type AiProviderResponse } from "../types.js";
+import { stripLeakedToolMarkup } from "../tool-markup.js";
 
 /**
  * Large monthly outputs where Claude Haiku was observed returning a whole
@@ -118,7 +119,9 @@ export function createAnthropicProvider(options: {
       const toolInput = body?.content?.find((block) => block.type === "tool_use")?.input;
       if (toolInput && typeof toolInput === "object" && !Array.isArray(toolInput)) {
         return {
-          output: toolInput,
+          // Leaked tool-call serialisation ("</field><parameter name=...>")
+          // is removed from every string before any task schema parses it.
+          output: stripLeakedToolMarkup(toolInput),
           ...(body.stop_reason ? { stopReason: body.stop_reason } : {}),
           usage: anthropicUsage(body.usage)
         };
@@ -128,7 +131,7 @@ export function createAnthropicProvider(options: {
       // usable text block. Retry only this failed call; never persist it.
       if (typeof text !== "string") throw new AiProviderError("AI_PROVIDER_MALFORMED_RESPONSE", true);
       let output: unknown;
-      try { output = parseJsonResponse(text); }
+      try { output = stripLeakedToolMarkup(parseJsonResponse(text)); }
       catch { throw new AiProviderError("AI_PROVIDER_MALFORMED_RESPONSE", true); }
       return {
         output,

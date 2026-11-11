@@ -87,6 +87,28 @@ describe("Anthropic provider", () => {
     })).resolves.toMatchObject({ output: { reply: "Hello" } });
   });
 
+  it("strips leaked tool-call markup from every string of the tool input before schema parsing", async () => {
+    const leaked = "Bạn nghĩ đội QA có giúp được không? 😊</seasonReplyTranslation>\n<parameter name=\"nextQuestion\">Do you think the QA team can help?";
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      content: [{ type: "tool_use", input: {
+        seasonReplyTranslation: leaked,
+        corrections: [{ translation: "Bản dịch.</translation>\n<parameter name=\"reason\">x" }],
+        lesson: { body: "Use <b>deadline</b> here." }
+      } }]
+    }), { status: 200 }));
+    const provider = createAnthropicProvider({ apiKey: "test-secret-key", model: "claude-haiku-5-5", fetch });
+
+    const result = await provider.complete({
+      taskId: "monthly_lesson_day", systemPrompt: "Return lessons.", input: {},
+      outputJsonSchema: { type: "object" }, signal: new AbortController().signal, traceId: "trace-leak"
+    });
+    expect(result.output).toEqual({
+      seasonReplyTranslation: "Bạn nghĩ đội QA có giúp được không? 😊",
+      corrections: [{ translation: "Bản dịch." }],
+      lesson: { body: "Use <b>deadline</b> here." }
+    });
+  });
+
   it("uses Anthropic tool input when structured output is returned", async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       content: [{ type: "tool_use", input: { reply: "Hello" } }],

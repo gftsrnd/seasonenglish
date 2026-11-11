@@ -14,7 +14,7 @@ import type {
 import { buildPronunciationAssets, microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
 import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerConsecutiveLearningAbsences, learnerMonthlyAccess, learnerMonthlyAttendanceDates, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
 import { gradeLessonAnswer, validateGeneratedFeedback } from "@e4s/domain/content";
-import { evaluateMonthlyExamEligibility, MONTHLY_EXAM_ENTRY_CUTOFF, monthlyExamEntryState } from "@e4s/domain/progression";
+import { evaluateMonthlyExamEligibility, learnerMonthlySeasonTarget, MONTHLY_EXAM_ENTRY_CUTOFF, monthlyExamEntryState } from "@e4s/domain/progression";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
@@ -1102,7 +1102,7 @@ export async function monthlyExamEligibility(pool: Pool, learnerId: string, opti
     completedLessons: Number(row.completed_lessons) || 0, seasonTurns: Number(row.season_turns) || 0,
     attendanceOverride: Boolean(row.attendance_appeal_approved),
     frameworkApproved: Boolean(row.framework_approved), formPublished: Boolean(row.form_published),
-    seasonTarget: cohortEligible ? access.seasonTarget : 100, learnerEligible: cohortEligible,
+    seasonTarget: learnerMonthlySeasonTarget(access), learnerEligible: cohortEligible,
     windowOpen: entryState === "open"
   });
   return {

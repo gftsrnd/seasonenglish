@@ -109,7 +109,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
       payload: { title: levelFormTitle, sections }
     });
     expect(saved.statusCode, saved.body).toBe(200);
-    const published = await app.inject({ method: "POST", url: `/api/v1/assessment-level-forms/${levelUpVersionId}/publication`, headers });
+    const published = await app.inject({ method: "POST", url: `/api/v1/assessment-level-forms/${levelUpVersionId}/publication`, headers, payload: { answersReviewed: true } });
     expect(published.statusCode, published.body).toBe(200);
   }, 30_000);
 
