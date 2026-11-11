@@ -85,10 +85,12 @@ html:has(.app-guide-panel[data-compact]:not([data-popup])) {
   scroll-padding-block: 64px 282px;
 }
 
+/* Room after the last card while the guide is open, so the engine can scroll even the final card up to just
+   below the header (the page is locked, so this blank end is never reached by the learner). */
 body:has(.app-guide-panel:not([data-popup])) > #root > main.app-content::after {
   content: "";
   display: block;
-  block-size: 220px;
+  block-size: max(220px, calc(100dvh - 140px));
 }
 
 .operator-lesson-editor:has(.app-guide-trigger[aria-expanded="true"])::after {

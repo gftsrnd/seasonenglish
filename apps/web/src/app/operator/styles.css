@@ -2546,26 +2546,29 @@ body:has(.app-operator) #modal > .dialog > .row {
     min-width: 0;
   }
 
-  /* Detail modals contain small evidence/version tables.  On a phone they
-     should wrap within the dialog instead of exposing a clipped 560px table
-     with the last columns unreachable. */
+  /* Detail modals contain evidence/version/mapping tables. Squeezing them into the phone width split words
+     ("dead line", "Rubri c") and made headers overlap; keep each column at its natural width, wrap only
+     between words, and let the table's own box scroll sideways (with a visible bar) when it does not fit. */
   .operator-detail-modal .table-wrap {
-    overflow-x: hidden;
+    overflow-x: auto;
+    scrollbar-width: thin;
   }
 
   .operator-detail-modal .table-wrap table {
-    width: 100%;
-    min-width: 0;
-    table-layout: fixed;
+    width: max-content;
+    min-width: 100%;
+    table-layout: auto;
   }
 
   .operator-detail-modal .table-wrap th,
   .operator-detail-modal .table-wrap td {
-    min-width: 0;
-    padding: 8px 6px;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    max-width: 15rem;
+    padding: 8px 8px;
+    overflow-wrap: break-word;
+    word-break: normal;
   }
+
+  .operator-detail-modal .table-wrap th { white-space: nowrap; }
 
   .operator-detail-modal .table-wrap code {
     overflow-wrap: anywhere;
@@ -4554,3 +4557,18 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 /* Level-form editor: the version-history header cells stayed on one line, so on phones "Số lượt thi" and
    "Phát hành" ran into each other. Let the header cells wrap. */
 .operator-level-form-dialog-body table th{white-space:normal;vertical-align:bottom;padding-inline:6px}
+
+/* Exam editors (level-up and monthly): the "Trạng thái đề" header stacked its badges under the label while the
+   big publish button squeezed it. Keep label + badges on one wrapping line and give the button its own full row
+   on phones. The dialog header also left a wide empty gap above the buttons on phones; tighten it. */
+.operator-modal-scope .dialog :is(.operator-level-publication, .monthly-final-review) > header.row { display: flex; flex-wrap: wrap !important; align-items: center; gap: 10px 12px; }
+.operator-modal-scope .dialog :is(.operator-level-publication, .monthly-final-review) > header.row > div { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 1 1 14rem !important; min-width: 0; }
+:is(.operator-level-publication, .monthly-final-review) > header > div > .badge { margin: 0; }
+@media (max-width: 600px) {
+  .operator-modal-scope .dialog :is(.operator-level-publication, .monthly-final-review) > header.row > .btn { flex: 1 1 100% !important; min-height: 44px; }
+}
+@media (max-width: 720px) {
+  .operator-level-editor-dialog .operator-level-form-dialog-header { gap: 8px; padding: 8px 0 10px; margin-bottom: 10px; }
+  .operator-level-editor-dialog .operator-level-form-dialog-actions { justify-content: flex-start; }
+  .operator-level-editor-dialog .operator-level-form-dialog-actions .btn-sm { min-height: 44px; padding-inline: 14px; }
+}

@@ -245,6 +245,29 @@ describe("AppGuide", () => {
     expect(document.querySelector(".app-guide-blocker")).toBeNull();
   });
 
+  it("scrolls the page up or down so the highlighted card sits just below the header, above the guide box", () => {
+    const root = document.scrollingElement ?? document.documentElement;
+    let cardTop = -300;
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("app-guide-panel")) return new DOMRect(12, 600, 360, 200);
+      if (this.matches('[data-home-block="primary"]')) return new DOMRect(12, cardTop, 360, 120);
+      return new DOMRect(0, 0, 0, 0);
+    });
+    render(<><AppGuide role="learner" pathname="/home" compact />
+      <section data-home-block="primary"><a href="/lesson/1">Bài học</a></section>
+    </>);
+    // Opened after scrolling to the bottom: the first card is above the screen, so the page scrolls up.
+    root.scrollTop = 500;
+    fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
+    expect(root.scrollTop).toBe(500 + (-300 - 64));
+    fireEvent.keyDown(document, { key: "Escape" });
+    // Opened with the card under the guide box: the page scrolls down until its top is below the header.
+    cardTop = 650;
+    root.scrollTop = 0;
+    fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
+    expect(root.scrollTop).toBe(650 - 64);
+  });
+
   it("blocks user scrolling while open and restores it on close", () => {
     render(<><AppGuide role="learner" pathname="/home" compact />
       <section data-home-block="primary"><a href="/lesson/1">Bài học</a></section>

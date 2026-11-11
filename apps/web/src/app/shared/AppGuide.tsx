@@ -58,6 +58,17 @@ function guideText(text: string) {
   return text.split(/\*\*(.+?)\*\*/g).map((part, index) => index % 2 ? <b key={index}>{part}</b> : part);
 }
 
+/** The container that actually scrolls the card: `#root > main` on phones/tablets, the document on desktop, or a popup body. */
+function guideScroller(target: HTMLElement): Element {
+  for (let node = target.parentElement; node && node !== document.body; node = node.parentElement) {
+    const overflow = getComputedStyle(node).overflowY;
+    // Bounded list boxes inside a card also scroll; only a page-sized container (main, a dialog body) moves the card.
+    const pageSized = node.matches("#root > main, [role=dialog], .dialog") || node.clientHeight > window.innerHeight * 0.75;
+    if (pageSized && (overflow === "auto" || overflow === "scroll") && node.scrollHeight > node.clientHeight + 1) return node;
+  }
+  return document.scrollingElement ?? document.documentElement;
+}
+
 function getSpotlight(target: HTMLElement): Spotlight | null {
   if (!target.isConnected || !target.getClientRects().length) return null;
   const rect = target.getBoundingClientRect();
@@ -160,17 +171,37 @@ export function AppGuide({ role, pathname, compact }: { role: GuideRole; pathnam
     return () => window.cancelAnimationFrame(frame);
   }, [activeTarget, isOpen]);
   useEffect(() => () => { for (const opened of engineOpened.current.splice(0)) opened.restore(); }, []);
+  // Keeps the highlighted card readable above the fixed guide box: whenever its top is above the visible band
+  // (scrolled past) or its top part sits under the box, the real scroll container is moved so the card's top lands
+  // just below the app header. Works in both directions and re-runs once layout settles (fonts, async content).
+  const openedAt = useRef(0);
+  useLayoutEffect(() => { if (isOpen) openedAt.current = Date.now(); }, [isOpen]);
   useLayoutEffect(() => {
     if (!activeTarget) return;
-    const rect = activeTarget.getBoundingClientRect();
-    const panel = closeButton.current?.closest(".app-guide-panel")?.getBoundingClientRect();
-    const top = compact ? 64 : 12;
-    if (panel && (rect.top < top || rect.bottom > panel.top - 10)) {
-      // A region taller than the space above the guide panel is aligned by its top so its heading stays readable.
-      const tall = rect.height > panel.top - 10 - top;
-      engineScrollUntil.current = Date.now() + 1500;
-      activeTarget.scrollIntoView?.({ block: tall ? "start" : "center", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
-    }
+    const reveal = (behavior: ScrollBehavior) => {
+      if (!activeTarget.isConnected) return;
+      const panel = closeButton.current?.closest(".app-guide-panel")?.getBoundingClientRect();
+      if (!panel || !panel.height) return; // not laid out yet (or a test DOM without layout)
+      // The app bar across the top (desktop also has a tall sidebar <header>; ignore it).
+      const header = Array.from(document.querySelectorAll("#root > header"), element => element.getBoundingClientRect())
+        .find(box => box.height > 0 && box.height < 160 && box.width > window.innerWidth / 2);
+      const top = Math.max(compact ? 64 : 12, header && header.bottom > 0 && header.top <= 0 ? header.bottom + 8 : 0);
+      const bottom = panel.top - 10;
+      if (bottom - top < 80) return; // no usable band above the box (e.g. a very short window)
+      const rect = activeTarget.getBoundingClientRect();
+      const fits = rect.height <= bottom - top;
+      const hidden = rect.top < top - 1 || (fits ? rect.bottom > bottom + 1 : rect.top > bottom - 72);
+      if (!hidden) return;
+      const scroller = guideScroller(activeTarget);
+      engineScrollUntil.current = Date.now() + 2000;
+      if (typeof scroller.scrollBy === "function") scroller.scrollBy({ top: rect.top - top, behavior });
+      else scroller.scrollTop += rect.top - top;
+    };
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    // Right after opening, jump instantly (the page lock starts now); later step changes may glide.
+    reveal(reducedMotion || Date.now() - openedAt.current < 400 ? "instant" : "smooth");
+    const settle = window.setTimeout(() => reveal("instant"), 450);
+    return () => window.clearTimeout(settle);
   }, [activeTarget, compact]);
 
   useEffect(() => {

@@ -365,12 +365,18 @@ const SUFFIX_STRESS: ReadonlyArray<{ suffix: string; fromEnd: number }> = [
   { suffix: "tion", fromEnd: 2 }, { suffix: "sion", fromEnd: 2 }, { suffix: "ian", fromEnd: 2 }, { suffix: "ion", fromEnd: 2 }, { suffix: "ic", fromEnd: 2 }
 ];
 
-function phraseIssue(word: string, ipa: string, min = 2, max = 12): string | undefined {
+function phraseIssue(word: string, ipa: string, min = 2, max = 12, mergedWords = 0): string | undefined {
   const words = wordsOf(word);
   if (!words.some((token) => /\p{L}/u.test(token))) return `"${word}" is not a real phrase or sentence`;
   if (words.length < min) return `"${word}" must be a phrase or short sentence of at least ${min} words for this item`;
   if (words.length > max) return `"${word}" has ${words.length} words; keep it to at most ${max}`;
-  if (!stripIpa(ipa)) return `"${word}" needs an IPA transcription`;
+  const body = stripIpa(ipa);
+  if (!body) return `"${word}" needs an IPA transcription`;
+  // Spelling left inside the transcription ("team", "list", "check") is not IPA.
+  if (/[cqx]|ea|ee|oo|th|sh|ch|ck|ph|wh/u.test(body.replace(/\([^)]*\)/gu, ""))) return `IPA ${ipa} contains English spelling, not a real transcription`;
+  // Every word of the phrase must be transcribed (a form for the team /ˈfɔːm ðə ˈteam/ drops words).
+  const chunks = body.split(/[\s‿|]+/u).filter((chunk) => /[\p{L}ə]/u.test(chunk));
+  if (words.length >= 2 && chunks.length < words.length - mergedWords) return `IPA ${ipa} transcribes ${chunks.length} words, but "${word}" has ${words.length}; transcribe the whole phrase`;
   return undefined;
 }
 
@@ -499,7 +505,8 @@ export function monthlyPronunciationPhenomenonExampleIssue(item: MonthlyPronunci
       const marker = form.marker;
       const sentenceMax = 12;
       const minWords = marker === "symbols" || marker === "abbreviation" || marker === "elision" ? 1 : marker === "pause" || marker === "long_link" ? 5 : marker === "sentence" ? 4 : 2;
-      const issue = phraseIssue(word, ipa, minWords, sentenceMax);
+      // Assimilated or reduced forms may join two written words into one spoken chunk (did you /ˈdɪdʒu/).
+      const issue = phraseIssue(word, ipa, minWords, sentenceMax, marker === "assimilation" || marker === "reduced_forms" ? 2 : 0);
       if (issue) return issue;
       const words = wordsOf(lower);
       const capsTokens = word.split(/\s+/u).map((token) => token.replace(/[^A-Za-z']/gu, "")).filter((token) => token.length >= 2 && token === token.toUpperCase() && /[A-Z]/u.test(token));

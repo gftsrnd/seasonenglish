@@ -116,6 +116,9 @@ describe("example gates by item type", () => {
     expect(monthlyPronunciationPhenomenonExampleIssue(ndCoda, { word: "spend", ipa: "/spend/" })).toBeUndefined();
     const weak = item("B2", "b2-weak-articles");
     expect(monthlyPronunciationPhenomenonExampleIssue(weak, { word: "send the file", ipa: "/ˈsend ðə ˈfaɪl/" })).toBeUndefined();
+    // B2 attempt 1 (11/11): dropped words and spelling inside the IPA.
+    expect(monthlyPronunciationPhenomenonExampleIssue(weak, { word: "a form for the team", ipa: "/ə ˈfɔːm ðə ˈteam/" })).toMatch(/English spelling|transcribes/u);
+    expect(monthlyPronunciationPhenomenonExampleIssue(item("B2", "b2-weak-prepositions"), { word: "a form for the team", ipa: "/ə ˈfɔːm ðə ˈtiːm/" })).toMatch(/transcribes 4 words/u);
     // A B1-style cluster word is not an example of a B2 weak form.
     expect(monthlyPronunciationPhenomenonExampleIssue(weak, { word: "contrast", ipa: "/ˈkɒntrɑːst/" })).toMatch(/at least 2 words/u);
     const link = item("B2", "b2-link-cv");

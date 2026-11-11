@@ -1363,3 +1363,10 @@ body:has(#root > main :is(textarea, select, input:not([type="checkbox"], [type="
 )::-webkit-scrollbar-thumb { border: 2px solid #eeeae3; border-radius: 999px; background: #9b958b; }
 /* An opened request row shows its decision buttons; let that box grow so they are never hidden in the scroll. */
 #root .request-table:has(.request-expanded-row) { max-height: none !important; overflow-y: visible !important; }
+
+/* Tables inside cards and dialogs inherited `overflow-wrap: anywhere` from .card/.dialog, so columns were squeezed
+   until words split mid-word ("probl em", "khác h hàng"). Cells now only wrap between words; when the columns
+   no longer fit, the table's own .table-wrap scrolls sideways instead of crushing the text. */
+#root :is(.card, .dialog) .table-wrap { overflow-x: auto; }
+#root :is(.card, .dialog) .table-wrap > table :is(th, td) { overflow-wrap: break-word; word-break: normal; hyphens: none; }
+#root :is(.card, .dialog) .table-wrap > table th { white-space: nowrap; }
