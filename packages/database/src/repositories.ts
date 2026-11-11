@@ -8797,6 +8797,19 @@ const monthlyCoachFallbackTopics = [
 function randomMonthlyCoachTopic(): string {
   return monthlyCoachFallbackTopics[Math.floor(Math.random() * monthlyCoachFallbackTopics.length)]!;
 }
+/** Manager monthly state for a learner without an approved level. "Chờ duyệt
+ * mức" must match the operator review queue (`listPending`), which only holds
+ * `pending_review` attempts: a `submitted` placement is saved but not graded
+ * yet, so it is not in the queue and is reported separately. */
+export function managerPlacementState(
+  status: "in_progress" | "submitted" | "pending_review" | "approved" | "needs_retry" | null
+): "unplaced" | "placement_in_progress" | "placement_submitted" | "placement_pending" | "placement_retry" {
+  if (status === "in_progress") return "placement_in_progress";
+  if (status === "needs_retry") return "placement_retry";
+  if (status === "submitted") return "placement_submitted";
+  return status ? "placement_pending" : "unplaced";
+}
+
 export function coachOpeningQuestion(firstName: string, topic: string, previousQuestions: readonly string[] | string = []): string {
   const normalized = topic.toLocaleLowerCase();
   let prompts: string[];
@@ -11464,9 +11477,7 @@ class ManagerRepository {
         const historicalWindow = cefr && (cefr !== access?.cefr || (month < currentMonth && access?.state !== "active" && facts.framework_published))
           ? monthlyLearnerWindow(month, examDate, row.enrolled_on ?? `${month}-01`) : null;
         const learningWindow = historicalWindow ?? access;
-        const placementState = row.placement_status === "in_progress" ? "placement_in_progress"
-          : row.placement_status === "needs_retry" ? "placement_retry"
-          : row.placement_status ? "placement_pending" : "unplaced";
+        const placementState = managerPlacementState(row.placement_status);
         const state = row.status === "disabled" ? "locked"
           : access?.graduated && month === currentMonth ? "graduated"
           : !cefr ? placementState

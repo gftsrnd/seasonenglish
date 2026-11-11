@@ -18,7 +18,8 @@ import {
 import type { CefrLevel, MonthlyResourceEditInput, MonthlyResourceEditIssue, SharedMonthBriefView } from "@e4s/contracts";
 import { z } from "zod";
 import { isPronunciationTargetAllowedForLevel, isValidMonthlyPronunciationIpaTarget } from "./monthly-resource-plan-spec.js";
-import { doesMonthlyPronunciationExampleMatch, isVietnameseMonthlyText, monthlyDailyObjectivesMustBeEnglish } from "./monthly-resource-generation.js";
+import { isVietnameseMonthlyText, monthlyDailyObjectivesMustBeEnglish } from "./monthly-resource-generation.js";
+import { findMonthlyPronunciationCatalogItem, monthlyPronunciationExampleIssue, monthlyPronunciationMaxSyllables } from "@e4s/domain";
 
 /**
  * Manual editing of a DRAFT monthly resource pool (VH-R30/VH-R35).
@@ -70,7 +71,6 @@ function isBlockingLevelOverlap(left: CefrLevel, right: CefrLevel): boolean {
 
 const MIN_GRAMMAR_EXAMPLES = 3;
 const MIN_PRONUNCIATION_EXAMPLES = 9;
-const MAX_PRONUNCIATION_SYLLABLES = 3;
 
 export function blankMonthlyResourcePool(brief: SharedMonthBriefView, level: CefrLevel): MonthlyResourcePoolContract {
   const calendar = buildMonthlyCalendar(brief.month);
@@ -242,9 +242,9 @@ export function applyMonthlyResourceEdit(existing: MonthlyResourcePoolContract, 
     for (const example of sound.examples) {
       const word = example.word.trim();
       if (!word) add({ section: "sounds", rowId: example.id, field: "word", message: "Từ ví dụ không được để trống." });
-      else if (syllableCount(word) > MAX_PRONUNCIATION_SYLLABLES) add({ section: "sounds", rowId: example.id, field: "word", message: "Từ ví dụ phát âm tối đa 3 âm tiết." });
+      else if (syllableCount(word) > (monthlyPronunciationMaxSyllables(existing.cefr, { ipa }, word) ?? Infinity)) add({ section: "sounds", rowId: example.id, field: "word", message: "Từ ví dụ phát âm tối đa 3 âm tiết." });
       if (!example.ipa.trim()) add({ section: "sounds", rowId: example.id, field: "ipa", message: "IPA của từ ví dụ không được để trống." });
-      else if (isValidMonthlyPronunciationIpaTarget(ipa) && !doesMonthlyPronunciationExampleMatch(ipa, example.ipa, word)) {
+      else if (isValidMonthlyPronunciationIpaTarget(ipa) && monthlyPronunciationExampleIssue(existing.cefr, { ipa }, { word, ipa: example.ipa })) {
         add({ section: "sounds", rowId: example.id, field: "ipa", message: `IPA ${example.ipa.trim()} của "${word}" không chứa âm mục tiêu ${ipa}.` });
       }
       const key = normalizeWord(word);
@@ -261,7 +261,12 @@ export function applyMonthlyResourceEdit(existing: MonthlyResourcePoolContract, 
     cefr: existing.cefr,
     theme: existing.theme,
     version: existing.version,
-    coreTerms: input.coreTerms.map((core) => ({ id: core.id, word: core.word.trim(), meaning: core.meaning.trim(), type: core.type.trim(), ipa: core.ipa.trim(), source: "core_registry", component: "core" })),
+    coreTerms: input.coreTerms.map((core) => {
+      // The generator's CEFR label stays only while the word itself is unchanged.
+      const previous = existing.coreTerms.find((term) => term.id === core.id);
+      const cefr = previous?.cefr && previous.word.trim().toLocaleLowerCase("en-US") === core.word.trim().toLocaleLowerCase("en-US") ? previous.cefr : undefined;
+      return { id: core.id, word: core.word.trim(), meaning: core.meaning.trim(), type: core.type.trim(), ipa: core.ipa.trim(), source: "core_registry" as const, component: "core" as const, ...(cefr ? { cefr } : {}) };
+    }),
     supportTerms: input.supportTerms.map((support) => ({
       id: support.id,
       word: support.word.trim(),
@@ -283,7 +288,11 @@ export function applyMonthlyResourceEdit(existing: MonthlyResourcePoolContract, 
       id: sound.id,
       ipa: sound.ipa.trim(),
       label: sound.label.trim(),
-      examples: sound.examples.map((example) => ({ id: example.id, word: example.word.trim(), ipa: example.ipa.trim() }))
+      examples: sound.examples.map((example) => ({ id: example.id, word: example.word.trim(), ipa: example.ipa.trim() })),
+      ...(() => {
+        const catalogId = findMonthlyPronunciationCatalogItem(existing.cefr, { ipa: sound.ipa })?.id;
+        return catalogId ? { catalogId } : {};
+      })()
     }))
   };
 

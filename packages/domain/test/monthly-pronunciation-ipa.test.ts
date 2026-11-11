@@ -22,9 +22,20 @@ describe("monthly pronunciation IPA gate (phoneme tokens, not substrings)", () =
     expect(monthlyIpaExampleMatchesTarget("/st/", "/ɪkˈstend/", "extend")).toBe(false);
   });
 
-  it("rejects weak-form function words for a vowel target", () => {
-    expect(monthlyIpaExampleMatchesTarget("/æ/", "/ðæt/", "that")).toBe(false);
-    expect(monthlyIpaExampleMatchesTarget("/æ/", "/hæv/", "have")).toBe(false);
+  it("rejects function words only in their weak form (roadmap: weak forms are B2), not strong-form examples", () => {
+    expect(monthlyIpaExampleMatchesTarget("/æ/", "/ðæt/", "that")).toBe(true);
+    expect(monthlyIpaExampleMatchesTarget("/æ/", "/hæv/", "have")).toBe(true);
+    expect(monthlyIpaExampleMatchesTarget("/ə/", "/tə/", "to")).toBe(false);
+    expect(monthlyIpaExampleMatchesTarget("/ə/", "/ðə/", "the")).toBe(false);
+    expect(monthlyIpaExampleMatchesTarget("/ʊ/", "/ʃəd/", "should")).toBe(false);
+  });
+
+  it("matches a stressed-vowel target on the stressed syllable (C1 false rejections, 11/11)", () => {
+    expect(monthlyIpaExampleMatchesTarget("/ˈɪ/", "/ˈfɪnəns/", "finance")).toBe(true);
+    expect(monthlyIpaExampleMatchesTarget("/ˈɪ/", "/ˈmɪsaɪl/", "missile")).toBe(true);
+    expect(monthlyIpaExampleMatchesTarget("/ˈɪ/", "/ˈdɪstrɪkt/", "district")).toBe(true);
+    expect(monthlyIpaExampleMatchesTarget("/ˈɪ/", "/ˈmiːtɪŋ/", "meeting")).toBe(false);
+    expect(monthlyIpaExampleMatchesTarget("/ˈɪ/", "/ˈdɒkjumənt/", "document")).toBe(false);
   });
 
   it("does not match part of a diphthong or affricate", () => {

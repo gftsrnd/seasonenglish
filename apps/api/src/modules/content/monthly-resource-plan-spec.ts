@@ -1,4 +1,4 @@
-import { isMonthlySupportLevelAllowed, maxMonthlySupportRepeats, monthlySupportLevelRule, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, describeRequiredSupportRelations, hasRequiredMonthlySupportRelations } from "@e4s/domain";
+import { isMonthlyPronunciationCatalogNotation, monthlyPronunciationMaxSyllables, isMonthlySupportLevelAllowed, maxMonthlySupportRepeats, monthlySupportLevelRule, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, describeRequiredSupportRelations, hasRequiredMonthlySupportRelations } from "@e4s/domain";
 
 /**
  * Reusable contract for AI generation of monthly hard learning resources.
@@ -104,9 +104,12 @@ GRAMMAR PLAN
 PRONUNCIATION PLAN
 - Return exactly four distinct, genuine English pronunciation targets with
   accurate target IPA. The approval planner uses P1–P4 for N1–N12, then K1–K3 for
-  N13–N15 and M1–M3 for N16–N18 where available. Every pronunciation word
-  must have no more than three syllables and actually illustrate the target
-  sound or stress pattern. Each has accurate IPA,
+  N13–N15 and M1–M3 for N16–N18 where available. The application chooses the
+  four roadmap items (docs/pronunciation-roadmap.md) and the phase prompt
+  names them. Single-word examples of phonemes, confusable pairs and word
+  stress have no more than three syllables; phenomenon items (linking, weak
+  forms, sentence stress, intonation) may use short phrases or sentences.
+  Every example must actually illustrate the item. Each has accurate IPA,
   a meaningful Vietnamese label, and a list
   of real words from this month's approved vocabulary or closely related,
   non-duplicate examples. Explain the actual sound contrast or stress pattern.
@@ -137,6 +140,8 @@ const A1_A2_ENGLISH_44_PHONEMES = new Set([
 ]);
 
 export function isPronunciationTargetAllowedForLevel(cefr: "A1" | "A2" | "B1" | "B2" | "C1", ipa: string): boolean {
+  // Roadmap catalog items of this level (phonemes, confusable pairs, phenomena) are always allowed.
+  if (isMonthlyPronunciationCatalogNotation(ipa, cefr)) return true;
   const isFoundationalPhoneme = A1_A2_ENGLISH_44_PHONEMES.has(ipa.trim().toLocaleLowerCase("en-US"));
   return cefr === "A1" || cefr === "A2" ? isFoundationalPhoneme : !isFoundationalPhoneme;
 }
@@ -395,7 +400,10 @@ export function validateMonthlyResourcePlanShape(
     if (!isValidMonthlyPronunciationIpaTarget(target.ipa)) errors.push(`Pronunciation target ${index + 1} needs a valid IPA target.`);
     if (!target.label.trim() || !target.explanation.trim()) errors.push(`Pronunciation target ${index + 1} needs an authentic label and sound explanation.`);
     if (target.words.length < 9) errors.push(`Pronunciation target ${index + 1} needs at least nine real words.`);
-    if (target.words.some((word) => syllableCount(word.word) > 3)) errors.push(`Pronunciation target ${index + 1} contains a word with more than three syllables.`);
+    if (target.words.some((word) => {
+      const limit = cefr ? monthlyPronunciationMaxSyllables(cefr, target, word.word) : 3;
+      return limit !== undefined && syllableCount(word.word) > limit;
+    })) errors.push(`Pronunciation target ${index + 1} contains a word with more than three syllables.`);
   }
   const pronunciationWords = plan.pronunciationTargets.flatMap((target) => target.words.map((word) => normalize(word.word)));
   if (new Set(pronunciationWords).size !== pronunciationWords.length) errors.push("Pronunciation examples repeat between targets.");
@@ -404,6 +412,8 @@ export function validateMonthlyResourcePlanShape(
 
 /** Accept one slash-delimited IPA form, never a list of transcriptions or prose. */
 export function isValidMonthlyPronunciationIpaTarget(value: string): boolean {
+  // Roadmap notations (/ɪ/–/iː/, /-ed=t/, /C‿V/, /↘ Wh-/ …) are fixed by the catalog.
+  if (isMonthlyPronunciationCatalogNotation(value)) return true;
   const match = value.trim().match(/^\/([^/\s]+)\/$/u);
   if (!match) return false;
   const symbols = match[1]!;

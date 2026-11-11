@@ -1,4 +1,4 @@
-import { buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlyPhrasePlacements, maxMonthlySupportRepeats, monthlyDayKind, monthlyScopeHash, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, hasRequiredMonthlySupportRelations, requiredSupportRelationsFor, type MonthlyCurriculumContract } from "@e4s/domain";
+import { monthlyPronunciationCatalog, MONTHLY_PRONUNCIATION_MEMORY_MONTHS, selectMonthlyPronunciationItems, buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlyPhrasePlacements, maxMonthlySupportRepeats, monthlyDayKind, monthlyScopeHash, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, hasRequiredMonthlySupportRelations, requiredSupportRelationsFor, type MonthlyCurriculumContract } from "@e4s/domain";
 import { monthlyResourcePlanOutputSchema, monthlyTopicSuggestionOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import { MonthlyResourceProgressStore } from "./monthly-resource-progress.js";
@@ -9,11 +9,10 @@ import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { generateMonthlyDayWithAi, generateMonthlyReviewWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
-import { buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationDistinctnessConstraint, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, doesMonthlyPronunciationExampleMatch, getMonthlyGrammarPhaseIssues, getMonthlyPronunciationTargetIssue, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
+import { buildMonthlyCatalogPronunciationPrompt, getMonthlyPronunciationTextIssues, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, getMonthlyGrammarPhaseIssues, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
 import { MonthlyCorePhaseShortfallError, runMonthlyCorePhase } from "./monthly-core-phase.js";
 import { runMonthlyEnrichmentWithRefill, type MonthlyCoreEnrichmentOutcome } from "./monthly-enrichment-phase.js";
-import { isPronunciationTargetAllowedForLevel, isValidMonthlyPronunciationIpaTarget } from "./monthly-resource-plan-spec.js";
-import { buildMonthlyCrossLevelCoreExclusions, buildMonthlyPronunciationExampleRepairInstruction, buildMonthlyPronunciationExampleRules, getMonthlyCoreLevelIssue, getMonthlyPronunciationExampleQualityIssue } from "./monthly-resource-quality-gates.js";
+import { buildMonthlyCrossLevelCoreExclusions, getMonthlyCoreLevelIssue } from "./monthly-resource-quality-gates.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
 import { monthlyGenerationFailure } from "./monthly-generation-errors.js";
 import { applyMonthlyResourceEdit, blankMonthlyResourcePool, monthlyResourceEditInputSchema } from "./monthly-resource-manual-edit.js";
@@ -314,7 +313,8 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         cefr: criteria.cefr,
         theme: { title: theme.title, brief: theme.brief, context: theme.context, communicationGoal: theme.communicationGoal },
         newLessonCount,
-        coreTermBatch,
+        // Stored cores may carry their own CEFR label; the AI task input schema is strict.
+        coreTermBatch: coreTermBatch.map(({ id, word, meaning, type, ipa }) => ({ id, word, meaning, type, ipa })),
         targets
       });
       const runPhase = async (phasePrompt: string, coreTermBatch: Array<{ id: string; word: string; meaning: string; type: string; ipa: string }>, targets: { vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number }, options: { temperature?: number; maxOutputTokens?: number } = {}) => {
@@ -748,42 +748,74 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         await saveCheckpointCategory("grammarTopics", grammarResult.grammarTopics);
       }
       updateProgress({phase:"pronunciationTargets",counts:{grammarTopics:grammarResult.grammarTopics.length}});
+      // Roadmap pronunciation (11/11): the four items are picked deterministically
+      // from the level catalog with a 12-month memory of the same level; the AI
+      // only writes each item's label, explanation and examples.
+      const pronunciationHistory = typeof repositories.monthlyContent.listPronunciationHistory === "function"
+        ? await repositories.monthlyContent.listPronunciationHistory(actorId, criteria.cefr, month.month, MONTHLY_PRONUNCIATION_MEMORY_MONTHS)
+        : [];
+      const pronunciationSelection = selectMonthlyPronunciationItems({ cefr: criteria.cefr, month: month.month, history: pronunciationHistory });
+      const pronunciationItems = pronunciationSelection.items;
+      const pronunciationCatalog = monthlyPronunciationCatalog(criteria.cefr);
+      request.log.info({ month: month.month, cefr: criteria.cefr, phase: "pronunciation-selection", items: pronunciationItems.map((item) => item.id), taught: pronunciationSelection.taughtIds, newCycle: pronunciationSelection.newCycle }, "Monthly pronunciation items selected");
+      const coreWordList = coreTerms.map((term) => term.word);
       const cachedPronunciationTargets = readCheckpointCategory("pronunciationTargets", monthlyResourcePlanOutputSchema.shape.pronunciationTargets) ?? [];
-      const cachedPronunciationTargetsValid = cachedPronunciationTargets.length <= 4 && cachedPronunciationTargets.every((target) => target.words.length >= pronunciationExampleCount && isValidMonthlyPronunciationIpaTarget(target.ipa) && isPronunciationTargetAllowedForLevel(criteria.cefr, target.ipa) && target.words.every((word) => doesMonthlyPronunciationExampleMatch(target.ipa, word.ipa, word.word) && !getMonthlyPronunciationExampleQualityIssue({ targetIpa: target.ipa, targetLabel: target.label, word: word.word, ipa: word.ipa, coreTerms })));
-      const pronunciationTargets: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"] = cachedPronunciationTargetsValid ? cachedPronunciationTargets : [];
+      // A checkpointed target is reused only when it is the selected item for its slot and every gate still passes.
+      const cachedPrefix: typeof cachedPronunciationTargets = [];
+      for (const [index, target] of cachedPronunciationTargets.entries()) {
+        const item = pronunciationItems[index];
+        if (!item || target.ipa !== item.notation || target.words.length < pronunciationExampleCount || getMonthlyPronunciationTextIssues(criteria.cefr, target).length) break;
+        const recheck = selectMonthlyPronunciationCandidates({ candidates: target.words, forbiddenWords: new Set(cachedPrefix.flatMap((prior) => prior.words.map((word) => normalizeMonthlyResourceWord(word.word)))), needed: target.words.length, catalogItem: item, coreTerms, totalForTarget: target.words.length });
+        if (recheck.selected.length !== target.words.length) break;
+        cachedPrefix.push(target);
+      }
+      const pronunciationTargets: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"] = cachedPrefix;
       const usedPronunciationWords = new Set<string>();
       for (const target of pronunciationTargets) for (const word of target.words) usedPronunciationWords.add(normalizeMonthlyResourceWord(word.word));
       const pronunciationSlots = ["P1 (N1–N3)", "P2 (N4–N6)", "P3 (N7–N9)", "P4 (N10–N12)"];
-      const foundational = criteria.cefr === "A1" || criteria.cefr === "A2";
-      const pronunciationLevelConstraint = foundational
-        ? "LEVEL TRACK: A1–A2 only. Choose a foundational English phoneme from the standard British English 44-sound inventory (monophthong, diphthong, or consonant). Do not use advanced connected-speech, intonation, or multi-syllable stress phenomena as the target."
-        : "LEVEL TRACK: B1–C1 only. Choose an advanced pronunciation phenomenon appropriate to this level, such as final consonants or clusters, word/sentence stress, weak forms, linking, assimilation, rhythm, or intonation. Do not make this a beginner isolated-phoneme lesson from the 44-sound inventory.";
       updateProgress({counts:{pronunciationTargets:pronunciationTargets.length}});
       for (let soundIndex = pronunciationTargets.length; soundIndex < 4; soundIndex += 1) {
         updateProgress({current:soundIndex+1,total:4,counts:{pronunciationTargets:pronunciationTargets.length}});
-        let acceptedTarget: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number] | undefined;
-        let targetTemplate: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number] | undefined;
+        const item = pronunciationItems[soundIndex]!;
         const acceptedTargetWords: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number]["words"] = [];
+        let acceptedText: { id: string; label: string; explanation: string } | undefined;
         let issue = "";
-        // Once a target passes, a retry keeps that target and only replaces the
-        // rejected examples; the rejection reasons are the repair instruction.
+        // The item is fixed; a retry keeps accepted examples and text and only
+        // repairs what the gates rejected (examples, explanation length, schema).
         let exampleRejections: string[] = [];
+        let textIssues: string[] = [];
         let schemaIssue = "";
         for (let attempt = 0; attempt < 3; attempt += 1) {
           const forbiddenForTarget = new Set([...usedPronunciationWords, ...acceptedTargetWords.map((word) => normalizeMonthlyResourceWord(word.word))]);
-          const requiredExampleCount = pronunciationExampleCount;
-          const neededExamples = requiredExampleCount - acceptedTargetWords.length;
-          const targetDistinctness = buildMonthlyPronunciationDistinctnessConstraint(pronunciationTargets, targetTemplate ? "" : issue, !foundational);
-          const exampleRepair = targetTemplate
-            ? ` ${buildMonthlyPronunciationExampleRepairInstruction(targetTemplate, exampleRejections, neededExamples)}${schemaIssue ? ` ${schemaIssue}` : ""}`
-            : "";
-          const prompt = `PHASE 4 — ONE PRONUNCIATION TARGET ONLY. Return exactly one genuine English pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. ${pronunciationLevelConstraint} Generate a real, precise target for roadmap slot ${pronunciationSlots[soundIndex]}; its IPA, label and explanation must describe that target accurately. Format ipa as exactly one slash-delimited IPA form with no spaces, second transcription, label or prose (for example ${foundational ? "/ɪ/ or /θ/" : "/st/ for a consonant cluster or /ˈ/ for primary stress"}). Never combine forms such as "/θ/ and /ð/" in the ipa field. ${targetDistinctness} The roadmap requires four clearly distinct target categories across P1–P4; do not return a contrast-pair variant of an accepted target as a separate roadmap target. This is an unassigned month pool; do not output calendar day fields. Return at least ${Math.max(18, neededExamples * 2)} ordered candidate example words so the application can select ${neededExamples}. Every candidate must be a real word, no more than three syllables, and actually illustrate the target sound or stress pattern. Avoid all words already accepted for earlier targets: ${[...usedPronunciationWords].join("; ") || "none"}. For this same target, retain these already accepted examples and do not repeat them: ${acceptedTargetWords.map((word) => word.word).join("; ") || "none"}. Monthly vocabulary pool (use a word from it only when it genuinely contains the target): ${monthlyVocabularyForPronunciation}. ${buildMonthlyPronunciationExampleRules()} Use neutral workplace words; never invent cultural, historical or identity-based framing.${exampleRepair}`;
+          const neededExamples = pronunciationExampleCount - acceptedTargetWords.length;
+          const prompt = buildMonthlyCatalogPronunciationPrompt({
+            cefr: criteria.cefr,
+            slot: pronunciationSlots[soundIndex]!,
+            item,
+            monthItems: pronunciationItems,
+            catalog: pronunciationCatalog,
+            taughtIds: pronunciationSelection.taughtIds,
+            neededExamples: Math.max(1, neededExamples),
+            usedWords: [...usedPronunciationWords],
+            acceptedWords: acceptedTargetWords.map((word) => word.word),
+            coreWords: coreWordList,
+            vocabulary: monthlyVocabularyForPronunciation,
+            exampleRejections,
+            textIssues,
+            schemaIssue
+          });
           let result: z.infer<typeof monthlyResourcePlanOutputSchema>;
           try {
             result = await runPhase(prompt, coreTerms, { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 1 });
           } catch (error) {
             if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
               issue = buildMonthlyPronunciationSchemaRepairIssue(safeGenerationDiagnosticIssues(error));
+              schemaIssue = issue;
+              continue;
+            }
+            if (error instanceof z.ZodError) {
+              // The output parsed as JSON but broke a field limit (e.g. explanation > 360 characters): repair it.
+              issue = buildMonthlyPronunciationSchemaRepairIssue(error.issues.map((entry) => ({ path: entry.path.join("."), message: entry.message })));
               schemaIssue = issue;
               continue;
             }
@@ -796,36 +828,23 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
             continue;
           }
           const candidate = result.pronunciationTargets[0]!;
-          if (!targetTemplate) {
-            if (!isValidMonthlyPronunciationIpaTarget(candidate.ipa)) {
-              issue = `target IPA must be one slash-delimited IPA form with no spaces or prose; rejected "${candidate.ipa}"`;
-              continue;
-            }
-            if (!isPronunciationTargetAllowedForLevel(criteria.cefr, candidate.ipa)) {
-              issue = foundational
-                ? `target IPA ${candidate.ipa} is outside the A1–A2 phoneme inventory; choose a foundational phoneme`
-                : `target IPA ${candidate.ipa} is an isolated phoneme; choose an advanced pattern such as a consonant cluster`;
-              continue;
-            }
-            const targetIssue = getMonthlyPronunciationTargetIssue(candidate, pronunciationTargets);
-            if (targetIssue) {
-              issue = targetIssue;
-              continue;
-            }
-            targetTemplate = candidate;
+          if (!acceptedText) {
+            textIssues = getMonthlyPronunciationTextIssues(criteria.cefr, candidate);
+            if (!textIssues.length) acceptedText = { id: candidate.id, label: candidate.label.trim(), explanation: candidate.explanation.trim() };
           }
-          // Examples are always checked against the accepted target (a retry that
-          // drifts to another IPA cannot smuggle in examples of a different sound).
-          const selection = selectMonthlyPronunciationCandidates({ candidates: candidate.words, forbiddenWords: forbiddenForTarget, needed: neededExamples, targetIpa: targetTemplate.ipa, targetLabel: targetTemplate.label, coreTerms });
-          acceptedTargetWords.push(...selection.selected);
-          if (acceptedTargetWords.length === requiredExampleCount) {
-            acceptedTarget = { ...targetTemplate, words: acceptedTargetWords };
-            break;
+          // Examples are always checked against the fixed catalog item, whatever ipa the response used.
+          if (acceptedTargetWords.length < pronunciationExampleCount) {
+            const selection = selectMonthlyPronunciationCandidates({ candidates: candidate.words, forbiddenWords: forbiddenForTarget, needed: neededExamples, catalogItem: item, coreTerms, acceptedForTarget: acceptedTargetWords, totalForTarget: pronunciationExampleCount });
+            acceptedTargetWords.push(...selection.selected);
+            exampleRejections = acceptedTargetWords.length === pronunciationExampleCount ? [] : selection.rejected.length ? selection.rejected : [`only ${acceptedTargetWords.length} of ${pronunciationExampleCount} usable examples have been returned`];
           }
-          exampleRejections = selection.rejected.length ? selection.rejected : [`only ${acceptedTargetWords.length} of ${requiredExampleCount} usable examples have been returned`];
-          issue = exampleRejections.join("; ");
+          if (acceptedText && acceptedTargetWords.length === pronunciationExampleCount) break;
+          issue = [...textIssues, ...exampleRejections].join("; ");
         }
-        if (!acceptedTarget) throw new MonthlyResourcePlanError([`Pronunciation generation failed for ${pronunciationSlots[soundIndex]}: ${issue}.`]);
+        if (!acceptedText || acceptedTargetWords.length !== pronunciationExampleCount) {
+          throw new MonthlyResourcePlanError([`Pronunciation generation failed for ${pronunciationSlots[soundIndex]} (${item.id} ${item.notation}): ${issue || "incomplete target"}.`]);
+        }
+        const acceptedTarget = { id: acceptedText.id, ipa: item.notation, label: acceptedText.label, explanation: acceptedText.explanation, words: acceptedTargetWords };
         pronunciationTargets.push(acceptedTarget);
         for (const word of acceptedTarget.words) usedPronunciationWords.add(normalizeMonthlyResourceWord(word.word));
         await saveCheckpointCategory("pronunciationTargets", pronunciationTargets);
@@ -841,7 +860,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         grammarTopics: grammarResult.grammarTopics,
         pronunciationTargets
       });
-      const pool = buildMonthlyResourcesFromAiPlan(month.month, criteria.cefr, theme, criteria, plan);
+      const pool = buildMonthlyResourcesFromAiPlan(month.month, criteria.cefr, theme, criteria, plan, pronunciationItems.map((item) => item.id));
       updateProgress({phase:"saving",counts:{coreTerms:pool.coreTerms.length,expandedTerms:pool.supportTerms.length,grammarTopics:pool.grammarTopics.length,pronunciationTargets:pool.sounds.length}});
       const framework = await repositories.monthlyContent.saveResourceDraft(actorId, pool);
       updateProgress({status:"completed"});

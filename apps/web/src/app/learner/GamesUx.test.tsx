@@ -201,18 +201,20 @@ describe("learner game visual and interaction regressions", () => {
     render(<LearnerGame descriptor={typing} wordSet={eightWords} result={null} actions={actions} />);
 
     expect(screen.getByText("Gõ đúng 8 từ thật nhanh, giữ chuỗi combo càng dài càng nhiều điểm.")).toBeInTheDocument();
-    expect(screen.getByText("10 điểm × combo cho mỗi từ đúng; 8 từ, tối đa 300 điểm.")).toBeInTheDocument();
+    expect(screen.getByText(/10 điểm × combo cho mỗi từ đúng; 8 từ, tối đa 300 điểm\./)).toBeInTheDocument();
     expect(screen.queryByText(/10 từ/)).not.toBeInTheDocument();
   });
 
   it("derives Scramble and Season catch round counts from the word set", () => {
     const scramble = descriptor("scramble", []);
+    scramble.goal = "Xếp đúng càng nhiều từ càng tốt (8 từ).";
     const { unmount } = render(<LearnerGame descriptor={scramble} wordSet={wordSet} result={null} actions={actions} />);
     expect(screen.getByText("Xếp đúng càng nhiều từ càng tốt (3 từ).")).toBeInTheDocument();
     unmount();
-    render(<LearnerGame descriptor={descriptor("eggs", [])} wordSet={wordSet} result={null} actions={actions} />);
+    const eggs = { ...descriptor("eggs", []), goal: "Hứng đúng vật phẩm khớp với gợi ý, 10 lượt.", scoring: "+1 điểm mỗi vật phẩm hứng đúng, tối đa 10." };
+    render(<LearnerGame descriptor={eggs} wordSet={wordSet} result={null} actions={actions} />);
     expect(screen.getByText("Hứng đúng vật phẩm khớp với gợi ý, 3 lượt.")).toBeInTheDocument();
-    expect(screen.getByText("+1 điểm mỗi vật phẩm hứng đúng, tối đa 3.")).toBeInTheDocument();
+    expect(screen.getByText(/\+1 điểm mỗi vật phẩm hứng đúng, tối đa 3\./)).toBeInTheDocument();
   });
 
   it("resets the learner main scroll container when a game starts", async () => {

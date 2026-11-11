@@ -325,8 +325,11 @@ export function OperatorReview({ view, actions, readOnly = false, unavailable = 
   return embedded ? content : <OperatorPage title="Chấm & Kháng nghị">{content}</OperatorPage>;
 }
 
+// Covers every attempt status for every kind (placement, monthly, level-up,
+// pass-course); "completed" is listed so finished monthly/pass-course rows keep
+// their status label in the ≤900px card layout.
 const assessmentStatusLabels: Record<string, string> = {
-  submitted: "Đã nộp", pending_review: "Chờ duyệt", approved: "Đã duyệt", in_progress: "Đang làm", needs_retry: "Cần làm lại", retry: "Cần làm lại"
+  submitted: "Đã nộp", pending_review: "Chờ duyệt", approved: "Đã duyệt", in_progress: "Đang làm", needs_retry: "Cần làm lại", retry: "Cần làm lại", completed: "Đã hoàn thành"
 };
 
 export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualScore, savingManualScore = false, onDeleteAudio, onRescore, rescoring = false }: { detail: ContentReviewAssessmentDetailView; onClose(): void; onSaveManualScore?: (input: ManualScoreInput) => void; savingManualScore?: boolean; onDeleteAudio?: (evidence: AudioEvidence) => void | Promise<void>; onRescore?: () => void; rescoring?: boolean }) {

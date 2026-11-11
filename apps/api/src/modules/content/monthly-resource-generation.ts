@@ -1,8 +1,8 @@
-import { allowedMonthlySupportLevels, describeRequiredSupportRelations, isMonthlyCoreLevelAllowed, isMonthlySupportLevelAllowed, maxMonthlyWordFamilyLevel, buildMonthlyCalendar, monthlyCorePartOfSpeech, monthlyDayKind, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, monthlyIpaExampleMatchesTarget, optionalStructuralSupportRelationsFor, requiredSupportRelationsFor, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
+import { allowedMonthlySupportLevels, describeRequiredSupportRelations, isMonthlyCoreLevelAllowed, isMonthlySupportLevelAllowed, maxMonthlyWordFamilyLevel, buildMonthlyCalendar, monthlyCorePartOfSpeech, monthlyDayKind, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, monthlyIpaExampleMatchesTarget, monthlyPronunciationPairSide, optionalStructuralSupportRelationsFor, type MonthlyPronunciationCatalogItem, requiredSupportRelationsFor, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
 import type { CefrLevel } from "@e4s/contracts";
 import { monthlyResourcePlanOutputSchema, type MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.js";
-import { buildMonthlyCoreCefrGuidance, buildMonthlyOtherLevelCoreExclusionText, getMonthlyCoreLevelIssue, getMonthlyPronunciationExampleQualityIssue } from "./monthly-resource-quality-gates.js";
+import { buildMonthlyCoreCefrGuidance, buildMonthlyOtherLevelCoreExclusionText, buildMonthlyPronunciationExampleRules, getMonthlyCoreLevelIssue, getMonthlyPronunciationCatalogExampleIssue, getMonthlyPronunciationExampleQualityIssue } from "./monthly-resource-quality-gates.js";
 
 /**
  * VH-R33: umbrella/synonym/antonym (and every other support) may come from the
@@ -103,11 +103,13 @@ export function parseMonthlyResourceAiOutput(output: unknown): MonthlyResourcePl
 }
 
 const CURRENT_MONTHLY_RESOURCE_BASE_SCHEMA_VERSION = "monthly-resource-category-v17-core-family-screen-current-pronunciation-system";
+/** v18: pronunciation targets are the roadmap catalog items chosen with 12-month memory (11/11); older pronunciation checkpoints are regenerated. */
+const CURRENT_MONTHLY_PRONUNCIATION_SCHEMA_VERSION = "monthly-resource-pronunciation-v18-roadmap-catalog";
 export const CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS = {
   coreTerms: "monthly-resource-category-v19-core-relation-preflight",
   expandedTerms: "monthly-resource-category-v32-preflight-support-graph-and-partial-checkpoints",
   grammarTopics: "monthly-resource-grammar-v2-six-daily-objectives",
-  pronunciationTargets: CURRENT_MONTHLY_RESOURCE_BASE_SCHEMA_VERSION
+  pronunciationTargets: CURRENT_MONTHLY_PRONUNCIATION_SCHEMA_VERSION
 } as const;
 
 export function isCurrentMonthlyResourceCheckpointCategory(category: string, lineage: unknown): boolean {
@@ -445,7 +447,14 @@ export function selectMonthlyPronunciationCandidates(input: {
   targetLabel?: string;
   /** The month's core words with their IPA, so a homograph with a different stress (present) is rejected. */
   coreTerms?: ReadonlyArray<{ word: string; ipa: string }>;
+  /** Roadmap catalog item: examples are checked by item type (phoneme, pair, phenomenon) instead of `targetIpa`. */
+  catalogItem?: MonthlyPronunciationCatalogItem;
+  /** Pair items: examples already accepted for this target, so both sides stay represented. */
+  acceptedForTarget?: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"];
+  /** Total examples the target needs (pair balance); defaults to `needed`. */
+  totalForTarget?: number;
 }): { selected: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"]; rejected: string[] } {
+  if (input.catalogItem) return selectMonthlyCatalogPronunciationCandidates({ ...input, catalogItem: input.catalogItem });
   const selected: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"] = [];
   const rejected: string[] = [];
   const chosen = new Set<string>();
@@ -470,6 +479,116 @@ export function selectMonthlyPronunciationCandidates(input: {
     if (selected.length === input.needed) break;
   }
   return { selected, rejected };
+}
+
+/** Single-word examples of phonemes, pairs and word-stress items keep the three-syllable limit; phrase phenomena do not. */
+function catalogItemSyllableLimit(item: MonthlyPronunciationCatalogItem, word: string): number | undefined {
+  if (item.type !== "phenomenon") return 3;
+  return item.wordStress && isSingleHeadword(word) ? 3 : undefined;
+}
+
+function selectMonthlyCatalogPronunciationCandidates(input: {
+  candidates: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"];
+  forbiddenWords: ReadonlySet<string>;
+  needed: number;
+  coreTerms?: ReadonlyArray<{ word: string; ipa: string }>;
+  catalogItem: MonthlyPronunciationCatalogItem;
+  acceptedForTarget?: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"];
+  totalForTarget?: number;
+}): { selected: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"]; rejected: string[] } {
+  const item = input.catalogItem;
+  const selected: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"] = [];
+  const rejected: string[] = [];
+  const chosen = new Set<string>();
+  // Pair review: at least three examples of each side, so one side may fill at most total - 3.
+  const total = input.totalForTarget ?? input.needed;
+  const sideLimit = item.type === "pair" ? Math.max(1, total - 3) : Infinity;
+  const sideCounts = new Map<number, number>();
+  for (const accepted of input.acceptedForTarget ?? []) {
+    const side = item.type === "pair" ? monthlyPronunciationPairSide(item, accepted)?.side : undefined;
+    if (side !== undefined) sideCounts.set(side, (sideCounts.get(side) ?? 0) + 1);
+  }
+  for (const candidate of input.candidates) {
+    const word = normalizeMonthlyResourceWord(candidate.word);
+    const limit = catalogItemSyllableLimit(item, candidate.word);
+    const syllables = countApproximateSyllables(candidate.word);
+    let reason = limit !== undefined && syllables > limit
+      ? `has ${syllables} syllables`
+      : input.forbiddenWords.has(word) || chosen.has(word)
+        ? "duplicates a pronunciation example already used"
+        : getMonthlyPronunciationCatalogExampleIssue(item, candidate, input.coreTerms) ?? "";
+    let side: number | undefined;
+    if (!reason && item.type === "pair") {
+      side = monthlyPronunciationPairSide(item, candidate)?.side;
+      if (side !== undefined && (sideCounts.get(side) ?? 0) >= sideLimit) reason = `this side of the pair already has ${sideLimit} examples; give examples of the other side`;
+    }
+    if (reason) {
+      rejected.push(`${candidate.word} -> ${word} (${reason})`);
+      continue;
+    }
+    if (side !== undefined) sideCounts.set(side, (sideCounts.get(side) ?? 0) + 1);
+    chosen.add(word);
+    selected.push(candidate);
+    if (selected.length === input.needed) break;
+  }
+  return { selected, rejected };
+}
+
+export const MONTHLY_PRONUNCIATION_EXPLANATION_MAX_WORDS = 50;
+export const MONTHLY_PRONUNCIATION_EXPLANATION_MAX_CHARS = 300;
+const MONTHLY_PRONUNCIATION_LABEL_MAX_CHARS = 100;
+
+/** Label/explanation gate (roadmap: explanation at most 50 words; Vietnamese at A1–A2, simple English at B1–C1). */
+export function getMonthlyPronunciationTextIssues(cefr: CefrLevel, target: { label: string; explanation: string }): string[] {
+  const issues: string[] = [];
+  const explanation = target.explanation.trim();
+  const words = explanation.split(/\s+/u).filter(Boolean).length;
+  if (explanation.length > MONTHLY_PRONUNCIATION_EXPLANATION_MAX_CHARS || words > MONTHLY_PRONUNCIATION_EXPLANATION_MAX_WORDS) {
+    issues.push(`explanation is ${explanation.length} characters / ${words} words; shorten it to at most ${MONTHLY_PRONUNCIATION_EXPLANATION_MAX_WORDS} words and ${MONTHLY_PRONUNCIATION_EXPLANATION_MAX_CHARS} characters`);
+  }
+  if (target.label.trim().length > MONTHLY_PRONUNCIATION_LABEL_MAX_CHARS) issues.push(`label is ${target.label.trim().length} characters; keep it under ${MONTHLY_PRONUNCIATION_LABEL_MAX_CHARS}`);
+  const english = monthlyDailyObjectivesMustBeEnglish(cefr);
+  if (english && (isVietnameseMonthlyText(explanation) || isVietnameseMonthlyText(target.label))) issues.push(`label and explanation must be in simple English for ${cefr}, not Vietnamese`);
+  if (!english && !isVietnameseMonthlyText(explanation)) issues.push(`explanation must be in Vietnamese for ${cefr}`);
+  return issues;
+}
+
+/**
+ * Phase 4 prompt for ONE roadmap item chosen by the application. The item is
+ * fixed; the AI writes its label, explanation and example candidates.
+ */
+export function buildMonthlyCatalogPronunciationPrompt(input: {
+  cefr: CefrLevel;
+  slot: string;
+  item: MonthlyPronunciationCatalogItem;
+  monthItems: readonly MonthlyPronunciationCatalogItem[];
+  catalog: readonly MonthlyPronunciationCatalogItem[];
+  taughtIds: readonly string[];
+  neededExamples: number;
+  usedWords: readonly string[];
+  acceptedWords: readonly string[];
+  coreWords: readonly string[];
+  vocabulary: string;
+  exampleRejections?: readonly string[];
+  textIssues?: readonly string[];
+  schemaIssue?: string;
+}): string {
+  const vi = !monthlyDailyObjectivesMustBeEnglish(input.cefr);
+  const { item } = input;
+  const label = vi ? item.labelVi : item.labelEn;
+  const kind = item.type === "phoneme" ? "a single phoneme of the British English 44-sound inventory"
+    : item.type === "pair" ? "a confusable-pair review"
+      : "a pronunciation phenomenon (not an isolated phoneme)";
+  const taught = input.catalog.filter((entry) => input.taughtIds.includes(entry.id)).map((entry) => `${entry.notation} ${entry.labelEn}`);
+  const catalogLine = input.catalog.map((entry) => `${entry.order}. ${entry.notation} ${entry.labelEn}`).join("; ");
+  const textLanguage = vi ? "Vietnamese" : "simple English (no Vietnamese words)";
+  const exampleRules = item.type === "phenomenon" ? "" : ` ${buildMonthlyPronunciationExampleRules()}`;
+  const repair = [
+    input.exampleRejections?.length ? `EXAMPLE REPAIR: keep the same item; the application rejected these examples: ${input.exampleRejections.join("; ")}. Return new, different examples that follow the example form exactly; never repeat a rejected example.` : "",
+    input.textIssues?.length ? `TEXT REPAIR: ${input.textIssues.join("; ")}.` : "",
+    input.schemaIssue ?? ""
+  ].filter(Boolean).join(" ");
+  return `PHASE 4 — ONE ROADMAP PRONUNCIATION ITEM ONLY. This phase prompt overrides any general pronunciation guidance (choosing targets, a three-syllable limit for every example, Vietnamese labels at every level). The application has ALREADY CHOSEN the item for roadmap slot ${input.slot} from the product roadmap of level ${input.cefr}; do not choose, change or rename the item. Item: id ${item.id}; notation ${item.notation}; type ${kind}; roadmap group ${item.group}; meaning "${item.labelEn}" (Vietnamese: "${item.labelVi}"). This month's four items in order: ${input.monthItems.map((entry) => `${entry.notation} ${entry.labelEn}`).join(" → ")}. Level catalog in roadmap order (context only): ${catalogLine}. Already taught to this level in the previous 12 months (never teach them again here): ${taught.join("; ") || "none"}. Return exactly one pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. Set ipa to exactly "${item.notation}". Write label in ${textLanguage}, at most 80 characters, naming this item (for example "${label}"). Write explanation in ${textLanguage}: at most ${MONTHLY_PRONUNCIATION_EXPLANATION_MAX_WORDS} words and at most ${MONTHLY_PRONUNCIATION_EXPLANATION_MAX_CHARS} characters (the application rejects longer text), giving the mouth shape or the rule and one common mistake of Vietnamese learners. Return at least ${Math.max(18, input.neededExamples * 2)} ordered candidate examples so the application can select ${input.neededExamples}; learners meet them three at a time (recognise, distinguish, use in a sentence). EXAMPLE FORM for this item (the application checks every example and rejects any that break it): ${item.exampleGuidance} Each example's ipa is its real standard British pronunciation in slashes. Prefer this month's core words when they genuinely show the item (core words: ${input.coreWords.join(", ") || "none"}); otherwise use familiar ${input.cefr}-level workplace words. Monthly vocabulary pool (use a word only when it genuinely shows the item): ${input.vocabulary}. Never reuse examples of earlier items of this month: ${input.usedWords.join("; ") || "none"}. Already accepted for this item (do not repeat): ${input.acceptedWords.join("; ") || "none"}.${exampleRules} Use neutral workplace content; never invent cultural, historical or identity-based framing.${repair ? ` ${repair}` : ""}`;
 }
 
 export function doesMonthlyPronunciationExampleMatch(targetIpa: string, exampleIpa: string, word?: string): boolean {
@@ -921,7 +1040,9 @@ export function buildMonthlyResourcesFromAiPlan(
   cefr: CefrLevel,
   theme: SharedMonthBrief,
   criteria: MonthlyResourceCriteria,
-  plan: MonthlyResourcePlanTaskOutput
+  plan: MonthlyResourcePlanTaskOutput,
+  /** Roadmap catalog item of each pronunciation target, stored on the sound for the 12-month memory. */
+  pronunciationCatalogIds: readonly (string | undefined)[] = []
 ): MonthlyResourcePoolContract {
   const calendar = buildMonthlyCalendar(month);
   const newLessonDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar) === "new" ? [index + 1] : []);
@@ -939,7 +1060,7 @@ export function buildMonthlyResourcesFromAiPlan(
 
   const coreIdMap = new Map(plan.coreTerms.map((term, index) => [term.id, `${cefr.toLowerCase()}-core-${index + 1}`]));
   const coreTerms = [...plan.coreTerms]
-    .map(({ id, word, meaning, type, ipa }, index) => ({ id: coreIdMap.get(id) ?? `${cefr.toLowerCase()}-core-${index + 1}`, word, meaning, type, ipa, source: "core_registry" as const, component: "core" as const }));
+    .map(({ id, word, meaning, type, ipa, cefr: coreCefr }, index) => ({ id: coreIdMap.get(id) ?? `${cefr.toLowerCase()}-core-${index + 1}`, word, meaning, type, ipa, source: "core_registry" as const, component: "core" as const, ...(coreCefr ? { cefr: coreCefr } : {}) }));
   const supportTerms = [...plan.expandedTerms]
     .map((term, index) => ({
       id: `${cefr.toLowerCase()}-expanded-${index + 1}`,
@@ -968,7 +1089,8 @@ export function buildMonthlyResourcesFromAiPlan(
     id: `${cefr.toLowerCase()}-sound-${targetIndex + 1}`,
     ipa: target.ipa,
     label: target.label,
-    examples: target.words.map((word, index) => ({ id: `${cefr.toLowerCase()}-sound-${targetIndex + 1}-word-${index + 1}`, word: word.word, ipa: word.ipa }))
+    examples: target.words.map((word, index) => ({ id: `${cefr.toLowerCase()}-sound-${targetIndex + 1}-word-${index + 1}`, word: word.word, ipa: word.ipa })),
+    ...(pronunciationCatalogIds[targetIndex] ? { catalogId: pronunciationCatalogIds[targetIndex]! } : {})
   }));
   return { month, cefr, theme, coreTerms, supportTerms, grammarTopics, sounds, version: theme.version };
 }

@@ -435,7 +435,8 @@ export function monthlyPronunciationPhenomenonExampleIssue(item: MonthlyPronunci
     }
     case "syllable_elision": {
       if (!isSingleWord(word)) return `"${word}" must be one word`;
-      const written = (letters.replace(/e$/u, "").match(/[aeiouy]+/gu) ?? []).length;
+      // Written syllables: vowel groups, a silent final e dropped, a final consonant + "le" counted (ta-ble).
+      const written = (letters.replace(/e$/u, "").match(/[aeiouy]+/gu) ?? []).length + (/[^aeiouy]le$/u.test(letters) ? 1 : 0);
       const spoken = syllablesOf(ipa);
       return spoken < written ? undefined : `${ipa} keeps all ${written} written syllables; show the reduced pronunciation`;
     }

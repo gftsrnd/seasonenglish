@@ -33,10 +33,26 @@ describe("monthlyResourceApprovalIssues (WP9 approval re-check)", () => {
     expect(monthlyResourceApprovalIssues(cluster)).toEqual([expect.stringContaining('"extend" IPA /ɪkˈstend/')]);
     const vowel = contract("A1", ["Nhận diện âm trong từ quen thuộc"]);
     vowel.sounds[0] = { id: "s1", ipa: "/æ/", label: "short a", examples: [{ id: "s1-1", word: "plan", ipa: "/plæn/" }, { id: "s1-2", word: "that", ipa: "/ðæt/" }, { id: "s1-3", word: "have", ipa: "/hæv/" }] };
-    expect(monthlyResourceApprovalIssues(vowel)).toHaveLength(2);
+    // Strong forms that /ðæt/ and have /hæv/ are genuine /æ/ examples (A2 v5 false rejection, 11/11).
+    expect(monthlyResourceApprovalIssues(vowel)).toEqual([]);
+    const weak = contract("A1", []);
+    weak.sounds[0] = { id: "s1", ipa: "/ə/", label: "schwa", examples: [{ id: "s1-1", word: "to", ipa: "/tə/" }, { id: "s1-2", word: "can", ipa: "/kən/" }, { id: "s1-3", word: "about", ipa: "/əˈbaʊt/" }] };
+    expect(monthlyResourceApprovalIssues(weak)).toHaveLength(2);
     const diphthong = contract("A1", []);
     diphthong.sounds[0] = { id: "s1", ipa: "/ɪ/", label: "short i", examples: [{ id: "s1-1", word: "sign", ipa: "/saɪn/" }] };
     expect(monthlyResourceApprovalIssues(diphthong)).toHaveLength(1);
+  });
+
+  it("checks roadmap phenomenon targets by form, not by phoneme tokens", () => {
+    const stress = contract("B1", []);
+    stress.sounds[0] = { id: "s1", ipa: "/ˈσσ/", label: "Two-syllable nouns", catalogId: "b1-stress-noun-adj", examples: [{ id: "s1-1", word: "office", ipa: "/ˈɒfɪs/" }, { id: "s1-2", word: "supplier", ipa: "/səˈplaɪə/" }] };
+    expect(monthlyResourceApprovalIssues(stress)).toEqual([expect.stringContaining('"supplier"')]);
+    const linking = contract("B2", []);
+    linking.sounds[0] = { id: "s1", ipa: "/C‿V/", label: "Linking", examples: [{ id: "s1-1", word: "check it out", ipa: "/ˈtʃek‿ɪt‿ˈaʊt/" }, { id: "s1-2", word: "send the file", ipa: "/ˈsend ðə ˈfaɪl/" }] };
+    expect(monthlyResourceApprovalIssues(linking)).toEqual([expect.stringContaining('"send the file"')]);
+    const pair = contract("A2", []);
+    pair.sounds[0] = { id: "s1", ipa: "/ɪ/–/iː/", label: "Cặp /ɪ/ – /iː/", examples: [{ id: "s1-1", word: "ship", ipa: "/ʃɪp/" }, { id: "s1-2", word: "sheep", ipa: "/ʃiːp/" }, { id: "s1-3", word: "bad", ipa: "/bæd/" }] };
+    expect(monthlyResourceApprovalIssues(pair)).toEqual([expect.stringContaining('"bad"')]);
   });
 
   it("rejects Vietnamese dailyObjectives from B1", () => {

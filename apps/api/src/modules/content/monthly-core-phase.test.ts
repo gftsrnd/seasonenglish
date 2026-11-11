@@ -369,7 +369,7 @@ describe("runMonthlyCorePhase (month-wide)", () => {
     expect(result.stats.rounds).toBe(2);
   });
 
-  it("rejects a core labelled above the month level, strips the label, and keeps later rounds on theme", async () => {
+  it("rejects a core labelled above the month level, keeps the accepted core's CEFR label, and keeps later rounds on theme", async () => {
     const runner = fakeRunner(({ round, callIndex, count }) => Array.from({ length: count }, (_value, position) => {
       const entry = candidateWithEdges(syntheticCore(`${letters(round)}${letters(callIndex)}${letters(position)}`), `ai-${position}`);
       // Round 0: every candidate is labelled B2 (above A1) except one labelled A1.
@@ -378,7 +378,8 @@ describe("runMonthlyCorePhase (month-wide)", () => {
     }));
     const result = await runMonthlyCorePhase(phaseInput(runner, 3, { maxRounds: 4 }));
     expect(result.coreTerms[0]!.word).toBe("quaaax");
-    expect(result.coreTerms.every((term) => !("cefr" in term))).toBe(true);
+    // The AI's own label is persisted for later level audits (11/11).
+    expect(result.coreTerms[0]!.cefr).toBe("A1");
     expect(result.coreTerms.map((term) => term.word)).not.toContain("quaabx");
     const later = runner.generationCalls.filter((call) => call.prompt.includes("RETRY FOR CORE BATCH"));
     expect(later.length).toBeGreaterThan(0);

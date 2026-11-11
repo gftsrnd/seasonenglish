@@ -470,6 +470,19 @@ describe("ManagerRouteController", () => {
     expect(screen.queryByText("Điểm đầu ra · Pass Course")).not.toBeInTheDocument();
   });
 
+  it("counts only graded placements as waiting for a level decision, matching the operator queue", async () => {
+    const base = monthlyOverview.learners[0]!;
+    const unplaced = (learnerId: string, learnerName: string, state: ManagerMonthlyOverviewView["learners"][number]["state"]) => ({ ...base, learnerId, learnerName, cefr: null, state });
+    vi.spyOn(apiClient, "getManagerMonthlyOverview").mockResolvedValue({ ...monthlyOverview, learners: [
+      unplaced("p-1", "Hồ Anh Tuấn", "placement_pending"), unplaced("p-2", "Dương Mỹ Linh", "placement_pending"),
+      unplaced("p-3", "Tạ Bảo Trâm", "placement_pending"), unplaced("p-4", "Bùi Gia Hân", "placement_submitted")
+    ] });
+    renderManager(<MemoryRouter initialEntries={["/mgr/report"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    expect(await screen.findByText("3 học viên đang chờ duyệt mức.")).toBeInTheDocument();
+    expect(screen.getByText("1 học viên đã nộp bài đầu vào, đang chờ chấm (chưa vào hàng chờ duyệt).")).toBeInTheDocument();
+    expect(screen.queryByText("4 học viên đang chờ duyệt mức.")).not.toBeInTheDocument();
+  });
+
   it("uses the app confirm modal for delete approval and restore", async () => {
     vi.spyOn(apiClient, "getManagerMonthlyOverview").mockResolvedValue(monthlyOverview);
     vi.spyOn(apiClient, "getManagerDeleteRequests").mockResolvedValue({ requests: [{ id: "delete-1", learnerId: "learner-1", learnerName: "Học viên Demo", reason: "Xin xoá", status: "pending", requestedBy: "operator-1", requestedAt: "2026-10-14T09:00:00.000Z" }] });

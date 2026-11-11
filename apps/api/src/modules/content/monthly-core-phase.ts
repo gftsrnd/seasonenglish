@@ -263,12 +263,10 @@ export async function runMonthlyCorePhase(input: {
         if (isMonthlyCoreLevelReason(reason)) levelRejections.push({ word: entry.core.word, reason });
       }
       return result.selected.length === 1;
-    }).map((entry) => {
-      // The core's own level label only serves the screen above; drop it so
-      // downstream inputs (gap-fill coreTermBatch) and stored cores keep their shape.
-      const { cefr: _coreLevel, ...core } = entry.core;
-      return { ...entry, core };
     });
+    // The core's own CEFR label is kept on the stored core (checkpoint and draft)
+    // so levels can be audited later; the API strips it from AI task inputs
+    // (coreTermBatch is a strict schema).
 
     // 2. Audit + gap-fill per candidate, concurrently. Preparation stops being
     // launched once enough cores are selected (the consumer below sets stop).

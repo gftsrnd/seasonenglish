@@ -792,8 +792,10 @@ describe("monthly AI resource generation", () => {
     expect(doesMonthlyPronunciationExampleMatch("/ˈXx/", "/ˈklaɪənt/")).toBe(false);
     expect(doesMonthlyPronunciationExampleMatch("/st/", "/ɪkˈstend/", "extend")).toBe(false);
     expect(doesMonthlyPronunciationExampleMatch("/nd/", "/ɪkˈstend/", "extend")).toBe(true);
-    expect(doesMonthlyPronunciationExampleMatch("/æ/", "/ðæt/", "that")).toBe(false);
-    expect(doesMonthlyPronunciationExampleMatch("/æ/", "/hæv/", "have")).toBe(false);
+    // Strong forms are genuine /æ/ examples (A2 approval false rejection, 11/11); weak forms are not.
+    expect(doesMonthlyPronunciationExampleMatch("/æ/", "/ðæt/", "that")).toBe(true);
+    expect(doesMonthlyPronunciationExampleMatch("/æ/", "/hæv/", "have")).toBe(true);
+    expect(doesMonthlyPronunciationExampleMatch("/ə/", "/tə/", "to")).toBe(false);
     expect(doesMonthlyPronunciationExampleMatch("/æ/", "/plæn/", "plan")).toBe(true);
   });
 
@@ -817,6 +819,19 @@ describe("monthly AI resource generation", () => {
     expect(prompts).toHaveLength(2);
     expect(prompts[1]).toContain("coreTerms must be empty (received 1)");
     expect(prompts[1]).toContain("grammarTopics must contain exactly 2 items (received 1)");
+  });
+
+  it("keeps the AI's core CEFR label and the pronunciation catalog item through pool and approval plan", () => {
+    const plan = planFor();
+    plan.coreTerms[0]!.cefr = "A1";
+    const pool = buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, plan, ["phoneme-m", undefined, "phoneme-l", "phoneme-h"]);
+    expect(pool.coreTerms[0]!.cefr).toBe("A1");
+    expect(pool.coreTerms[1]!).not.toHaveProperty("cefr");
+    expect(pool.sounds.map((sound) => sound.catalogId)).toEqual(["phoneme-m", undefined, "phoneme-l", "phoneme-h"]);
+    const contract = planMonthlyResourcePool(pool);
+    expect(validateMonthlyCurriculum(contract)).toEqual([]);
+    expect(contract.coreTerms[0]!.cefr).toBe("A1");
+    expect(contract.sounds[0]!.catalogId).toBe("phoneme-m");
   });
 
   it("builds a two-grammar, four-pronunciation monthly contract from a valid AI plan", () => {

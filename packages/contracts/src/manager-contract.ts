@@ -14,7 +14,7 @@ export interface ManagerMonthlyLearnerView {
   readonly learnerName: string;
   readonly email: string | null;
   readonly cefr: CefrLevel | null;
-  readonly state: "active" | "locked" | "unplaced" | "placement_in_progress" | "placement_pending" | "placement_retry" | "waiting_content" | "waiting_next_month" | "missed_exam" | "graduated";
+  readonly state: "active" | "locked" | "unplaced" | "placement_in_progress" | "placement_submitted" | "placement_pending" | "placement_retry" | "waiting_content" | "waiting_next_month" | "missed_exam" | "graduated";
   readonly lastActivityAt: string | null;
   readonly attendedDays: number;
   readonly elapsedDays: number;

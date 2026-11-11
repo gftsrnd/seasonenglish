@@ -105,19 +105,20 @@ export function getGameAvailability(key: GameKey, words: readonly GameWord[]): G
 }
 
 export function getGameRoundSummary(descriptor: Pick<GameDescriptor, "key" | "goal" | "scoring">, words: readonly GameWord[]) {
-  // Server descriptors carry generic copy with the largest round size; the
-  // actual round depends on the word set, so counts are derived here.
+  // Server descriptors hard-code the largest round size ("10 từ", "8 từ",
+  // "10 lượt"); the real round depends on the word set (HUD "Từ 1/8"), so the
+  // counts in the copy are replaced with the values the game will actually use.
   if (descriptor.key === "typing") {
     const rounds = gameRoundWordCount("typing", words);
     return {
-      goal: `Gõ đúng ${rounds} từ thật nhanh, giữ chuỗi combo càng dài càng nhiều điểm.`,
-      scoring: `10 điểm × combo cho mỗi từ đúng; ${rounds} từ, tối đa ${typingMaximum(rounds)} điểm.`
+      goal: descriptor.goal.replace(/\d+ từ/, `${rounds} từ`),
+      scoring: descriptor.scoring.replace(/tối đa \d+ từ/, `${rounds} từ, tối đa ${typingMaximum(rounds)} điểm`)
     };
   }
-  if (descriptor.key === "scramble") return { goal: `Xếp đúng càng nhiều từ càng tốt (${gameRoundWordCount("scramble", words)} từ).`, scoring: descriptor.scoring };
+  if (descriptor.key === "scramble") return { goal: descriptor.goal.replace(/\(\d+ từ\)/, `(${gameRoundWordCount("scramble", words)} từ)`), scoring: descriptor.scoring };
   if (descriptor.key === "eggs") {
     const rounds = gameRoundWordCount("eggs", words);
-    return { goal: `Hứng đúng vật phẩm khớp với gợi ý, ${rounds} lượt.`, scoring: `+1 điểm mỗi vật phẩm hứng đúng, tối đa ${rounds}.` };
+    return { goal: descriptor.goal.replace(/\d+ lượt/, `${rounds} lượt`), scoring: descriptor.scoring.replace(/tối đa \d+/, `tối đa ${rounds}`) };
   }
   if (descriptor.key !== "mario") return { goal: descriptor.goal, scoring: descriptor.scoring };
   const plan = seasonRioRoundPlan(words);

@@ -1134,6 +1134,27 @@ describe("OperatorRouteController", () => {
     expect(screen.getByText("Close the meeting (kế hoạch)")).toBeInTheDocument();
   });
 
+  it("labels the status of finished monthly and pass-course rows in the results table", async () => {
+    const user = userEvent.setup();
+    const assessment = (id: string, learnerName: string, kind: "final" | "pass_course", status: string) => ({ id, learnerName, kind, title: kind, status, submittedAt: "2026-11-06T08:00:00.000Z", totalScore: 80 });
+    const review = {
+      tabs: [{ key: "assessments", label: "Bài test", count: 4 }],
+      coachSamples: [], submissions: [], microLessons: [], appeals: [], lessonAttempts: [],
+      assessments: [assessment("m-1", "Lan", "final", "completed"), assessment("m-2", "Hoa", "final", "approved"), assessment("p-1", "Minh", "pass_course", "completed"), assessment("p-2", "Nam", "pass_course", "needs_retry")]
+    };
+    const client = { getContentReview: vi.fn().mockResolvedValue(review), getAssessmentFormPreviews: vi.fn().mockResolvedValue({ forms: [] }) };
+    render(<ToastProvider><MemoryRouter initialEntries={["/op/tests"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
+
+    await user.click(screen.getByRole("tab", { name: "Bài thi tháng" }));
+    let table = await screen.findByRole("table", { name: "Lượt làm bài thi" });
+    expect(within(within(table).getByRole("row", { name: /Lan/ })).getByText("· Đã hoàn thành")).toBeInTheDocument();
+    expect(within(within(table).getByRole("row", { name: /Hoa/ })).getByText("· Đã duyệt")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Đề đầu ra" }));
+    table = await screen.findByRole("table", { name: "Lượt làm bài thi" });
+    expect(within(within(table).getByRole("row", { name: /Minh/ })).getByText("· Đã hoàn thành")).toBeInTheDocument();
+    expect(within(within(table).getByRole("row", { name: /Nam/ })).getByText("· Cần làm lại")).toBeInTheDocument();
+  });
+
   it("shows monthly assessment rows and uses a neutral fallback before scoring", async () => {
     const user = userEvent.setup();
     const review: ContentReviewView = {

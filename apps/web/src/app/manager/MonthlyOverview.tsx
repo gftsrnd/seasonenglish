@@ -12,6 +12,7 @@ const learnerStates: Record<ManagerMonthlyLearnerView["state"], string> = {
   locked: "Đã khóa",
   unplaced: "Chưa làm bài đầu vào",
   placement_in_progress: "Đang làm bài đầu vào",
+  placement_submitted: "Đã nộp bài đầu vào · chờ chấm",
   placement_pending: "Chờ duyệt mức",
   placement_retry: "Cần làm lại bài đầu vào",
   waiting_content: "Chờ nội dung",
@@ -237,6 +238,7 @@ function buildMonthlyReport(view: ManagerMonthlyOverviewView) {
   const current = view.month === view.currentMonth;
   addLearnerAction(current ? "Nhắc học" : "Rà soát điểm danh", "có nguy cơ vượt giới hạn vắng.", active.filter((learner) => learner.atRisk));
   addLearnerAction(current ? "Khuyến khích bắt đầu" : "Rà soát trường hợp chưa học", "chưa điểm danh trong tháng.", active.filter((learner) => !learner.atRisk && learner.elapsedDays > 0 && learner.attendedDays === 0));
+  addLearnerAction("Theo dõi chấm bài đầu vào", "đã nộp bài đầu vào, đang chờ chấm (chưa vào hàng chờ duyệt).", learners.filter((learner) => learner.state === "placement_submitted"));
   addLearnerAction("Theo dõi duyệt trình độ", "đang chờ duyệt mức.", learners.filter((learner) => learner.state === "placement_pending"));
   addLearnerAction("Theo dõi chấm bài thi tháng", "đã nộp bài và đang chờ kết quả.", learners.filter((learner) => learner.exam.status === "submitted" || learner.exam.status === "pending_review"));
   if (!survey.submissions) actions.push({ title: "Thu phản hồi hài lòng", detail: "Chưa có phiếu khảo sát trong bộ lọc này." });
