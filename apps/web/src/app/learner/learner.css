@@ -2115,3 +2115,18 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
   .test-page .speaking-evidence-actions :is(button, .btn, label) { min-height: 44px; }
   .test-page .assessment-audio-controls button { min-height: 44px; }
 }
+
+/* Small or short phone screens: the sticky exam bar took ~170px (a third of a 320x568 screen). Keep one row:
+   section + timer (always visible) + the main action at 44px; the violation counter and autosave note leave the
+   bar, the progress strip stays thin under it. Tablets and desktop keep the full bar. */
+@media (max-width: 400px), (max-height: 700px) and (max-width: 1023px) {
+  .test-page .assessment-runtime-header { padding: 8px 10px !important; }
+  .test-page .assessment-runtime-header > .row.between { flex-wrap: nowrap; align-items: center; gap: 6px; }
+  .test-page .assessment-runtime-header > .row.between > .row:first-child { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; gap: 4px; }
+  .test-page .assessment-runtime-header > .row.between > .row:first-child > .badge:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .test-page .assessment-runtime-header > .row.between > .row:first-child > .badge.primary { flex: none; }
+  .test-page .assessment-runtime-header > .row.between > .row:last-child { flex: none; gap: 0; }
+  .test-page .assessment-runtime-header > .row.between > .row:last-child > :not(button) { display: none; }
+  .test-page .assessment-runtime-header > .row.between > .row:last-child > button { min-height: 44px; padding-inline: 10px; white-space: nowrap; }
+  .test-page .assessment-runtime-header > .progress { margin-top: 6px; }
+}
