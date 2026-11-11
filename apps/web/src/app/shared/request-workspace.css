@@ -259,3 +259,9 @@
   .manager-tracking-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   :is(.manager-tracking-tabs, .manager-operation-compact) > a { min-width: 0; padding-inline: 3px; }
 }
+
+/* Card layout: a zebra fill on the table cells left pale boxes behind each line of a request; the row carries
+   the background instead. */
+@container (max-width: 640px) {
+  .request-table .request-record > td { background: transparent !important; }
+}

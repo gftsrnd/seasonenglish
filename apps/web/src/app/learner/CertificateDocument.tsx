@@ -15,10 +15,13 @@ interface CertificateDocumentProps {
   children: ReactNode;
   signature?: ReactNode;
   preview?: boolean;
+  /** Short facts for the phone summary card (date, level, badges…), shown instead of the full certificate there. */
+  summary?: ReadonlyArray<{ label: string; value: ReactNode }>;
 }
 
-export function CertificateDocument({ organizationName, certificateNumber, learnerName, title, declaration, children, signature, preview }: CertificateDocumentProps) {
-  return <section className="cert-doc" aria-label={title}>
+export function CertificateDocument({ organizationName, certificateNumber, learnerName, title, declaration, children, signature, preview, summary }: CertificateDocumentProps) {
+  // Phones show a readable summary card; the full certificate stays in the page for printing and for wider screens.
+  return <><div className="cert-stage"><section className="cert-doc" aria-label={title}>
     <header className="cert-head">
       <div className="row cert-brand">
         <img className="cert-logo" src="/gft-logo.png" alt={organizationName} />
@@ -36,7 +39,17 @@ export function CertificateDocument({ organizationName, certificateNumber, learn
     </div>
     {signature}
     <div className="cert-foot xs muted">Chứng nhận tự động từ dữ liệu Season English, có giá trị nội bộ. {preview ? "BẢN XEM TRƯỚC" : ""}</div>
-  </section>;
+  </section></div>
+  <section className="card cert-summary no-print" aria-label={`Tóm tắt ${title}`}>
+    <div className="eyebrow">{title}</div>
+    <div className="cert-summary-name">{learnerName}</div>
+    <p className="small cert-summary-line">{declaration}</p>
+    <dl className="cert-summary-facts">
+      {(summary ?? []).map(fact => <div key={fact.label}><dt className="xs muted">{fact.label}</dt><dd>{fact.value}</dd></div>)}
+      <div><dt className="xs muted">Số chứng nhận</dt><dd className="cert-summary-number">{certificateNumber}</dd></div>
+    </dl>
+    <p className="xs muted">Màn hình nhỏ chỉ hiện tóm tắt. Dùng nút In / lưu PDF để tải bản chứng nhận đầy đủ.</p>
+  </section></>;
 }
 
 type BadgeCertificateView = Pick<RewardView, "organizationName" | "certificateNumber" | "learnerName" | "requiredBadgeCount" |
@@ -48,6 +61,7 @@ export function BadgeCertificate({ view, preview }: { view: BadgeCertificateView
   const date = completedAt.toLocaleDateString("vi-VN");
   return <CertificateDocument organizationName={view.organizationName} certificateNumber={view.certificateNumber} learnerName={view.learnerName}
     title="Certificate of Completion" preview={preview}
+    summary={[{ label: "Ngày cấp", value: date }, { label: "Huy hiệu", value: `${earnedCount}/${view.requiredBadgeCount}` }, { label: "Cấp", value: view.season.name }]}
     declaration={<>đã hoàn thành bộ {view.requiredBadgeCount} huy hiệu Season English{view.cefrLabel && <> ở trình độ <b>{view.cefrLabel}</b></>}.</>}
     signature={<div className="cert-sign">
       <div><div className="line" /><div className="small">Vận hành</div><div className="xs muted">{view.operatorName}</div></div>

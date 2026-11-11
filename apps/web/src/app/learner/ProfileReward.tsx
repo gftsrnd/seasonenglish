@@ -82,19 +82,25 @@ export function LearnerProfile({ view, actions, courseCompleted = false }: { vie
 
 function ProfileDetails({ view, navigate }: { view: ProfileView; navigate: LearnerCallbacks["navigate"] }) {
   const { basics, preferences } = profileRows(view);
+  // A short summary first (who, job, level, purpose, schedule); everything else stays behind "Xem đủ hồ sơ" so the
+  // card does not become a long list of label/value rows on a phone.
+  const all = [...basics, ...preferences];
+  const summaryLabels = ["Họ và tên", "Vị trí công việc", "Tự đánh giá", "Mục tiêu", "Lịch học"];
+  const summary = summaryLabels.flatMap(label => all.filter(([key]) => key === label));
+  const rest = all.filter(([key]) => !summaryLabels.includes(key));
   return <div className="profile-identity-details" id="profile-identity-details">
-    <ProfileDetailsList rows={basics} />
-    {preferences.length > 0 && <details className="profile-preferences">
-      <summary>Thông tin học tập</summary>
-      <ProfileDetailsList rows={preferences} />
+    <ProfileDetailsList rows={summary} compact />
+    {rest.length > 0 && <details className="profile-preferences">
+      <summary>Xem đủ hồ sơ</summary>
+      <ProfileDetailsList rows={rest} />
     </details>}
     <AppLink className="btn btn-sm profile-edit-link" href="/onboard" navigate={navigate}>Cập nhật hồ sơ</AppLink>
   </div>;
 }
 
-function ProfileDetailsList({ rows }: { rows: Array<[string, string]> }) {
-  return <dl className="profile-details">
-    {rows.map(([label, value]) => <div className="profile-detail-row" key={label}>
+function ProfileDetailsList({ rows, compact = false }: { rows: Array<[string, string]>; compact?: boolean }) {
+  return <dl className={`profile-details${compact ? " profile-details--summary" : ""}`}>
+    {rows.map(([label, value]) => <div className={`profile-detail-row${value.length > 28 ? " is-long" : ""}`} key={label}>
       <dt className="small muted profile-detail-label">{label}</dt>
       <dd className="small profile-detail-value">{value}</dd>
     </div>)}

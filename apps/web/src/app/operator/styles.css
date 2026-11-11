@@ -4572,3 +4572,7 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
   .operator-level-editor-dialog .operator-level-form-dialog-actions { justify-content: flex-start; }
   .operator-level-editor-dialog .operator-level-form-dialog-actions .btn-sm { min-height: 44px; padding-inline: 14px; }
 }
+
+/* Pending placement rows: the row summary was 26px tall on iPad and desktop; make the whole header a 44px target. */
+.app-operator .operator-pending-review > summary { min-height: 44px; }
+.app-operator .operator-pending-review-body details > summary { min-height: 36px; padding-block: 8px; }

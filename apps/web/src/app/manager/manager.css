@@ -849,11 +849,11 @@
 }
 
 .manager-accounts-table__table th:nth-child(1) { width: 14%; }
-.manager-accounts-table__table th:nth-child(2) { width: 19%; }
+.manager-accounts-table__table th:nth-child(2) { width: 24%; }
 .manager-accounts-table__table th:nth-child(3) { width: 15%; }
-.manager-accounts-table__table th:nth-child(4) { width: 13%; }
+.manager-accounts-table__table th:nth-child(4) { width: 11%; }
 .manager-accounts-table__table th:nth-child(5) { width: 14%; }
-.manager-accounts-table__table th:nth-child(6) { width: 25%; }
+.manager-accounts-table__table th:nth-child(6) { width: 22%; }
 
 .manager-accounts-table__table thead th {
   position: sticky;
@@ -868,7 +868,7 @@
   vertical-align: middle;
 }
 
-.manager-accounts-table__table :is(td:first-child, td:nth-child(2)) { overflow-wrap: anywhere; }
+.manager-accounts-table__table :is(td:first-child, td:nth-child(2)) { overflow-wrap: break-word; }
 .manager-accounts-table__table td:nth-child(3) select {
   width: 100%;
   padding-inline: 6px;
@@ -1839,3 +1839,28 @@
    "4 ngày" broke mid-word. Keep the short columns on one line and let the email wrap instead. */
 table[aria-label="Lịch sử nhắc học"] :is(th,td):is(:nth-child(1),:nth-child(4),:nth-child(5)){white-space:nowrap}
 table[aria-label="Lịch sử nhắc học"] td:nth-child(3){overflow-wrap:anywhere}
+
+/* Progress cards on the narrowest phones: the name was squeezed between the level chip and "Hồ sơ" and split
+   mid-word ("Nguyễ|n"). Names wrap between words only, and below 300px the name takes its own full line. */
+.manager-progress-name { overflow-wrap: break-word !important; }
+@container manager-progress (max-width: 300px) {
+  .manager-progress-table .manager-progress-record {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "level . profile" "name name name" "status status status" "rhythm rhythm lessons" "details details details";
+  }
+}
+
+/* Users table (wide layout): fixed percentage columns split emails mid-word ("…e4s.lo|cal"), wrapped
+   "Đặt lại PIN" and pushed the status pill into the PIN column. Columns now size to their content, the email,
+   status and action labels stay on one line, and the table scrolls sideways inside its own box only if the
+   card is narrower than the content. */
+.settings-action-table .manager-accounts-table__table { table-layout: auto; width: max-content; min-width: 100%; }
+.manager-accounts-table__table thead th { width: auto !important; }
+.manager-accounts-table__table td:nth-child(2) { white-space: nowrap; font-size: .86rem; }
+.manager-accounts-table__table td:first-child { min-width: 6rem; max-width: 7.5rem; overflow-wrap: break-word; }
+.settings-action-table .manager-accounts-table__table :is(th, td) { padding-inline: 6px; }
+.manager-accounts-table__table td:nth-child(3) select { max-width: 9rem; }
+.manager-accounts-table__table .manager-account-actions { gap: 6px; }
+.manager-accounts-table__table td:nth-child(4) .badge,
+.manager-accounts-table__table .manager-account-actions > .btn-sm { white-space: nowrap; }
+.settings-action-table.manager-accounts-table { overflow-x: auto; }

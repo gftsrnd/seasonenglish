@@ -372,3 +372,105 @@ Cả 3 lần đều qua phần từ cốt lõi, từ mở rộng và ngữ pháp
 | C1 | draft | v5 | bản cũ, có checkpoint mới chưa xong |
 
 Không duyệt, không sinh ảnh, không xuất bản, không sinh bài.
+
+## 8. Lộ trình phát âm trong bộ sinh tài nguyên tháng và sinh lại 2026-11 (11/11, 15:12–15:58 UTC)
+
+**Quyết định của người dùng:** theo `docs/pronunciation-roadmap.md`, bỏ qua số tháng. Mỗi tháng lấy 4 mục kế tiếp theo **thứ tự lộ trình** (hàng trên xuống, P1→P4 trong hàng), bỏ các mục level đó đã dạy trong 12 tháng trước. Hết catalog thì bắt đầu lại vòng mới từ đầu. A1–A2 có hàng "Ôn" (4 cặp dễ nhầm) là hàng cuối. Không chọn ngẫu nhiên, không có lựa chọn "dễ hơn".
+
+### Code
+
+- **Catalog** `packages/domain/src/monthly/pronunciation-catalog.ts`:
+  - A1–A2: 44 âm vị theo thứ tự lộ trình + 4 cặp (`/ɪ/–/iː/`, `/e/–/æ/`, `/s/–/ʃ/`, `/θ/–/t/ & /ð/–/d/`) = 48 mục.
+  - B1, B2, C1: mỗi level 24 hiện tượng.
+  - Mỗi mục có: `id`, thứ tự, loại (`phoneme` | `pair` | `phenomenon`), ký hiệu mục tiêu (ví dụ `/-s=s/`, `/C‿V/`, `/↘ Wh-/`), nhãn Việt/Anh, luật hình thức của ví dụ và hướng dẫn cho AI.
+- **Chọn mục:** `selectMonthlyPronunciationItems` (tất định).
+  - Đọc 12 tháng trước của cùng level qua `listPronunciationHistory` (repository mới). Lấy framework mới nhất của mỗi tháng, không `retired`, nháp hoặc đã duyệt.
+  - Nhận diện mục đã dạy qua `catalogId`, ký hiệu, hoặc alias cũ (B1 `/st/`, `/nd/`…).
+  - Đi tiếp sau mục đã dạy cuối cùng và bỏ mục đã dạy trong cửa sổ. Hết catalog thì quay lại đầu.
+  - Sound lưu thêm `catalogId`.
+- **Pha phát âm** (`monthly-routes.ts`): giữ nguyên cách sinh (mỗi mục một lệnh gọi, tối đa 3 lần sửa).
+  - Mục đã được chọn sẵn; `ipa` luôn là ký hiệu của catalog. AI chỉ viết nhãn, giải thích và ví dụ.
+  - Prompt gửi kèm catalog, danh sách đã dạy và 4 mục của tháng. Prompt nói rõ giới hạn giải thích (≤ 50 từ, ≤ 300 ký tự) và ngôn ngữ (Việt cho A1–A2, Anh đơn giản cho B1–C1). Gate kiểm tra lại cả hai điều này.
+  - Lỗi schema/Zod (ví dụ giải thích > 360 ký tự) nay đi vào vòng sửa, không còn trả 422 ngay.
+  - Checkpoint phát âm có schema mới `monthly-resource-pronunciation-v18-roadmap-catalog`, nên checkpoint phát âm cũ tự bị bỏ qua. Mục đã lưu trong checkpoint chỉ được dùng lại nếu đúng mục của slot và vẫn qua mọi gate.
+- **Gate theo loại mục:**
+  - Âm vị và cặp: giữ kiểm tra theo token âm vị.
+    - Dạng yếu chỉ bị loại khi đích là /ə/ hoặc IPA là dạng yếu. Vì vậy `that /ðæt/` và `have /hæv/` nay qua cho /æ/.
+    - Đích có dấu nhấn (`/ˈɪ/`) được so với nguyên âm của âm tiết mang trọng âm, nên finance, missile, district qua, còn meeting, document bị loại.
+    - Cặp: mỗi bên ít nhất 3 ví dụ.
+  - Hiện tượng: kiểm tra hình thức.
+    - Đuôi -s/-ed theo âm cuối.
+    - Cụm phụ âm đầu/cuối.
+    - Trọng âm: số âm tiết và vị trí ˈ; giới hạn ≤ 3 âm tiết chỉ áp cho mục trọng âm từ.
+    - Cụm từ, câu ngắn: 2–12 từ, IPA phải phiên đủ các từ và không chứa chính tả tiếng Anh.
+    - Dấu hiệu bắt buộc theo mục: ‿, dạng yếu có /ə/, âm bị nuốt trong ngoặc, mũi tên ↘/↗, dấu ngắt |, CHỮ HOA cho từ được nhấn.
+  - Gate dùng chung cho sinh, sửa tay và duyệt: `monthlyPronunciationExampleIssue` trong `monthly-resource-approval-checks.ts`.
+  - `isValidMonthlyPronunciationIpaTarget`, `isPronunciationTargetAllowedForLevel` và luật số âm tiết trong `validateMonthlyResourcePlanShape` chấp nhận ký hiệu catalog theo level.
+- **CEFR từ cốt lõi:**
+  - `monthly-core-phase.ts` không còn bỏ nhãn `cefr`. `phaseInput` bỏ nhãn này khỏi `coreTermBatch` gửi AI, vì schema strict.
+  - `buildMonthlyResourcesFromAiPlan`, `planMonthlyResourcePool`, kiểu `CoreTerm` (domain) và `MonthFrameworkView` (contracts) giữ `cefr` tùy chọn. Duyệt không bị ảnh hưởng.
+  - Sửa tay giữ nhãn khi từ không đổi.
+- **Test:**
+  - `packages/domain/test/monthly-pronunciation-catalog.test.ts`: catalog; chọn mục có nhớ, gồm bỏ mục đã dạy, đúng thứ tự, quay lại khoảng trống, hết catalog thì vòng mới, A1–A2 phủ 48 mục trong 12 tháng; gate theo loại với mẫu lỗi thật của mục 7 và của lần sinh B2 đầu.
+  - `apps/api/src/modules/content/monthly-pronunciation-roadmap.test.ts`.
+  - Test IPA, test duyệt và test lưu CEFR/`catalogId`.
+  - Kết quả:
+    - `vitest src/modules/content`: 710/710 test qua. Ba file `dist/…weekly*` lỗi nạp `vi.mock`, có từ trước.
+    - Domain: 390/390.
+    - DB: `monthly-resource-approval-checks` 6/6. `monthly-illustration-projection` 2 lỗi, nằm ở repository learning, không liên quan.
+    - `tsc --noEmit` sạch cho api, domain, database, contracts và ai. Đã build lại dist.
+- **Deploy:** `build api worker` rồi `up -d --no-deps`, không chạy migrate. Đã grep thấy code mới trong container. Deploy lại 2 lần sau khi sửa prompt và gate (xem B2).
+- **Backup:** `.artifacts/regen-backup-2026-11-11/before-pron-regen.dump`, sha256 `60854067…50d1dd68`. Đã ghi vào `ROLLBACK.md`.
+
+### Kết quả sinh lại
+
+Mọi lần sinh đều qua `POST …/resources/generate`, body UTF-8 gửi bằng Node. Không sửa tay, không duyệt, không sinh ảnh.
+
+DB không có tháng nào trước 2026-11, nên cửa sổ nhớ trống. Mọi level lấy 4 mục đầu catalog, không trùng tháng trước. Script đọc lại chạy trong container, kiểm tra:
+- Gate cấp độ từ cốt lõi.
+- Gate phát âm theo loại.
+- Mục khớp `selectMonthlyPronunciationItems`.
+- `planMonthlyResourcePool` + `validateMonthlyCurriculum` + `validateMonthlyGrammarObjectives` + `monthlyResourceApprovalIssues` (chạy thử duyệt, không duyệt thật).
+
+| Level | Version | Số lần sinh | P1–P4 | Nhãn CEFR | Kiểm tra |
+|---|---|---|---|---|---|
+| A1 | draft v15 → **v16** | 1 (504 sau 300 s là timeout giả; poll thấy `completed`) | /m/, /n/, /l/, /h/ | 48/48 (A1 48) | 0 lỗi |
+| A2 | draft v5 → **v6** | 1 | /m/, /n/, /l/, /h/ | 48/48 (A2 41, A1 7) | 0 lỗi |
+| B1 | draft v4 → **v5** | 1 (dùng tiếp checkpoint từ vựng/ngữ pháp) | -s = /s/, -s = /z/, -s/-es = /ɪz/, 's rút gọn | 4/48 (B1 3, A2 1) | 0 lỗi |
+| B2 | draft v6 → **v7** | 2 (lần 1 hỏng ở P3) | dạng yếu: mạo từ, giới từ, trợ động từ, từ nối | 48/48 (B2 45, B1 3) | 0 lỗi |
+| C1 | draft v5 → **v6** | 1 (dùng tiếp checkpoint) | trọng âm từ: dịch theo hậu tố, từ ghép vs tính từ + danh từ, danh từ ghép nhiều phần, cụm động từ danh từ vs động từ | 6/48 (C1 6) | 0 lỗi |
+
+**Ví dụ từ cốt lõi kèm nhãn:**
+- A1: client (A1), document (A1), schedule (A1), noon (A1).
+- A2: deadline (A2), solution (A2), team (A1), decision (A2).
+- B1: invoice (B1), minor (B1), inform (A2), spreadsheet (B1).
+- B2: dispute (B2), mitigate (B2), summary (B1), stakeholder (B2).
+- C1: obstruction (C1), impediment (C1), liaison (C1), meticulous (C1).
+
+**Ví dụ phát âm:**
+- A1 /h/: happy, hear, home, head.
+- B1 /-s=z/: calls /kɔːlz/, plans, files.
+- B2 trợ động từ: "we can start soon /wi kən stɑːt suːn/", "it was late /ɪt wəz leɪt/".
+- C1 cụm động từ: "setup (noun) /ˈsetʌp/", "set up (verb) /ˌset ˈʌp/".
+
+### Ghi chú và việc còn tồn
+
+1. **B2 lần 1** hỏng ở P3 (trợ động từ). AI trả từ đơn (can, have, was…) thay vì cụm từ, nên gate từ chối cả 3 lần sửa.
+   - Đã thêm vào prompt câu "đặt cả cụm vào trường word".
+   - Đã thêm gate IPA cụm từ: phải phiên đủ từ, không có chính tả. Gate này bắt được "a form for the team /ˈfɔːm ðə ˈteam/" của P2 trong checkpoint, và P2 được sinh lại.
+   - Lần 2 đạt.
+   - **Lỗi do prompt của tôi:** câu mẫu trong prompt lần 2 bị AI chép lại. B2 v7 còn 2 ví dụ sai ngữ pháp: "we to start soon" (P2) và "we and start soon" (P4).
+   - Đã sửa prompt trước khi sinh C1, B1, A2, A1, nhưng B2 đã hết 2 lần sinh nên chưa sinh lại. Cần một lần sinh nữa nếu người dùng cho phép.
+2. **Nhãn CEFR của B1 và C1:**
+   - B1 và C1 dùng tiếp từ cốt lõi trong checkpoint cũ, lưu trước khi sửa code nên không có nhãn. Chỉ các từ được bổ sung trong lần này có nhãn (B1 4, C1 6).
+   - Muốn đủ nhãn thì phải sinh lại phần từ cốt lõi.
+3. **A1 và A2 cùng nhận /m/, /n/, /l/, /h/.** Mỗi level có bộ nhớ riêng, và đây là 4 mục đầu lộ trình.
+4. **Lỗi nhỏ gate không bắt được:**
+   - A1 `manager /ˈmæn.ɪ.dʒɚ/` dùng ký hiệu Mỹ ɚ.
+   - C1 có từ lạc chủ đề `magician`.
+   - B2 `an update /ən ʌpˈdeɪt/`: danh từ update nhấn âm đầu.
+5. **Giải thích không được lưu.** `explanation` của mục phát âm không nằm trong pool nháp: contract `sounds` không có trường này, có từ trước.
+
+**Trạng thái cuối:**
+- A1 v16, A2 v6, B1 v5, B2 v7, C1 v6 đều là **draft**.
+- Không duyệt, không sinh ảnh, không xuất bản, không sinh bài.

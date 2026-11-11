@@ -31,6 +31,7 @@ export function CourseCompletion({ onPrint }: { onPrint: () => void }) {
     {record ? <>
       <CertificateDocument organizationName={record.organizationName} certificateNumber={record.certificateNumber} learnerName={record.displayName}
         title="Chứng nhận hoàn thành E4S" declaration={<>đã đạt bài thi đầu ra của Season English ở trình độ <b>C1</b>.</>}
+        summary={[{ label: "Ngày cấp", value: date }, { label: "Trình độ", value: "C1" }]}
         signature={record.issuerName ? <div className="cert-sign"><div><div className="line" /><div className="small">Người cấp</div><b>{record.issuerName}</b></div></div> : null}>
         <div className="cert-facts course-completion-facts">
           <div><span className="xs muted">Ngày cấp</span><b>{date}</b></div>

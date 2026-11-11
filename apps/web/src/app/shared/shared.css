@@ -1370,3 +1370,7 @@ body:has(#root > main :is(textarea, select, input:not([type="checkbox"], [type="
 #root :is(.card, .dialog) .table-wrap { overflow-x: auto; }
 #root :is(.card, .dialog) .table-wrap > table :is(th, td) { overflow-wrap: break-word; word-break: normal; hyphens: none; }
 #root :is(.card, .dialog) .table-wrap > table th { white-space: nowrap; }
+
+/* Season progress card (learner profile and the manager's reward preview): the "Cách tính điểm và lên cấp"
+   disclosure was a 21px tap target. */
+.profile-season-card details > summary { display: flex; align-items: center; min-height: 44px; }

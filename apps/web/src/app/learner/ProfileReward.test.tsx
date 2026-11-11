@@ -155,7 +155,7 @@ describe("app profile avatar dialog affordances", () => {
   });
 
   it("keeps personal information collapsed until the learner asks to view it", async () => {
-    const profile = { ...view.learner.profile, email: "demo@e4s.local", department: "QA", position: "Tester" };
+    const profile = { ...view.learner.profile, email: "demo@e4s.local", department: "QA", position: "Tester", selfLevel: "B1" as const };
     render(<LearnerProfile view={{ ...view, learner: { ...view.learner, profile } }} actions={actions} />);
     expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Xem hồ sơ" })).toHaveAttribute("aria-expanded", "false");
@@ -163,8 +163,10 @@ describe("app profile avatar dialog affordances", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Xem hồ sơ" }));
     expect(screen.getByRole("button", { name: "Đóng thông tin" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Học viên Demo", { selector: ".profile-detail-value" })).toBeInTheDocument();
-    expect(Array.from(document.querySelectorAll("#profile-identity-details > dl dt"), (term) => term.textContent)).toEqual(["Họ và tên", "Email", "Phòng ban / team", "Vị trí công việc"]);
-    const preferences = screen.getByText("Thông tin học tập");
+    // A short summary first; the rest of the profile sits behind "Xem đủ hồ sơ".
+    expect(Array.from(document.querySelectorAll("#profile-identity-details > dl dt"), (term) => term.textContent).slice(0, 3)).toEqual(["Họ và tên", "Vị trí công việc", "Tự đánh giá"]);
+    expect(screen.getByText("demo@e4s.local")).not.toBeVisible();
+    const preferences = screen.getByText("Xem đủ hồ sơ");
     expect(screen.getByText("Informal · Thân thiện")).not.toBeVisible();
     expect(screen.getByRole("link", { name: "Cập nhật hồ sơ" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Cập nhật hồ sơ" })).toHaveAttribute("href", "/onboard");
@@ -173,7 +175,8 @@ describe("app profile avatar dialog affordances", () => {
     const details = preferences.closest("details")!;
     expect(details.querySelectorAll("dl")).toHaveLength(1);
     expect(within(details).getByText("Phong cách Season")).toBeVisible();
-    expect(Array.from(details.querySelectorAll("dt"), (term) => term.textContent).slice(0, 5)).toEqual(["Giải thích bằng", "Phong cách Season", "Thời lượng mỗi buổi", "Thiết bị hay dùng", "Lịch học"]);
+    expect(Array.from(details.querySelectorAll("dt"), (term) => term.textContent).slice(0, 2)).toEqual(["Email", "Phòng ban / team"]);
+    expect(within(details).getByText("demo@e4s.local")).toBeVisible();
   });
 
   it("previews the original fixed avatar colors by their saved choices", async () => {

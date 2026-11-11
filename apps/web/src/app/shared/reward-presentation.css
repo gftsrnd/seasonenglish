@@ -43,3 +43,37 @@
 @media print {
   .rw .badge-certificate-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+/* Certificates are shown as a framed preview: the document keeps its A4-landscape design at a readable size,
+   centred on a quiet panel with page margins, instead of running edge to edge over the patterned page. */
+.cert-stage {
+  display: grid;
+  place-items: start center;
+  padding: clamp(16px, 3vw, 32px);
+  border-radius: 16px;
+  background: var(--surface-2, #f4f2ec);
+}
+.cert-stage > .cert-doc { width: min(100%, 860px); margin: 0; }
+.cert-summary { display: none; }
+
+/* Phones (and any width where the scaled certificate text would be tiny): a short summary card replaces the
+   full render; "In / lưu PDF" still prints the full certificate. */
+@media (max-width: 600px) {
+  .cert-stage { display: none; }
+  .cert-summary { display: grid; gap: 10px; padding: 18px; }
+  .cert-summary > .eyebrow { margin: 0; }
+  .cert-summary-name { font-size: 1.35rem; font-weight: 700; line-height: 1.25; overflow-wrap: break-word; }
+  .cert-summary-line { margin: 0; }
+  .cert-summary-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+  .cert-summary-facts > div { display: grid; gap: 2px; padding: 10px; border-radius: 10px; background: var(--surface-3); }
+  .cert-summary-facts dt, .cert-summary-facts dd { margin: 0; }
+  .cert-summary-facts dd { font-weight: 600; overflow-wrap: anywhere; }
+  .cert-summary-facts > div:last-child { grid-column: 1 / -1; }
+  .reward-actions { flex-wrap: wrap; }
+  .reward-actions > :is(.btn, button, a) { flex: 1 1 100%; min-height: 44px; justify-content: center; }
+}
+
+@media print {
+  .cert-stage { display: block !important; padding: 0; background: none; }
+  .cert-summary { display: none !important; }
+}

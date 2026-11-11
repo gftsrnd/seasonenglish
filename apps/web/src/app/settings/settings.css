@@ -848,3 +848,13 @@
   }
   .settings-page[data-compact] .settings-theme-mark { width: 14px; flex-basis: 14px; }
 }
+
+/* Operator users list as cards (phones/tablets): the table's zebra fill stayed on each cell and left pale boxes
+   behind single words; staff roles were squeezed into the first third ("Người vận / hành"); emails split
+   mid-word. Keep one row background, give a staff role the full line, and only break an email when it truly
+   cannot fit. */
+@container operator-accounts (max-width: 760px) {
+  .settings-operator-accounts__table tbody tr > td { background: transparent !important; }
+  .settings-operator-accounts__table tr:not([data-account-role="learner"]) .settings-account-role { grid-column: 1 / -1; }
+  .settings-operator-accounts__table .settings-account-email { overflow-wrap: break-word; }
+}

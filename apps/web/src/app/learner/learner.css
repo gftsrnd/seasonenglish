@@ -2091,3 +2091,27 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
 .monthly-complaint-form > label{display:grid;gap:6px}
 .monthly-complaint-form > .request-evidence-upload{margin:0}
 .monthly-complaint-form > button{justify-self:start;min-height:44px}
+
+/* Tablet/desktop: the feedback switches (30px) and the "Giới hạn chat" disclosure (16px) were too small to tap
+   on an iPad; give them a comfortable height without changing their look. */
+@media (min-width: 721px) {
+  .coach-page .coach-feedback-toggle { min-height: 40px; }
+  .coach-page .coach-limit-details > summary { display: inline-flex; align-items: center; min-height: 40px; }
+}
+
+/* Profile details: values wrap between words only, so emails no longer split mid-word. */
+.profile-page .profile-detail-value { overflow-wrap: break-word; }
+.profile-page .profile-preferences > summary { display: flex; align-items: center; min-height: 44px; }
+
+/* Exams on phones: the speaking data table lost its third column at 320 (scrolled out of a card with no visible
+   cue), and the record/upload buttons were 32px. Tighten the table headers so all columns fit, and give the
+   recording controls a full 44px target. */
+@media (max-width: 380px) {
+  .test-page .assessment-speaking-table { font-size: .86rem; }
+  .test-page .assessment-speaking-table th { font-size: .68rem; letter-spacing: 0; }
+  .test-page .assessment-speaking-table :is(th, td) { padding: 7px 4px; }
+}
+@media (max-width: 720px) {
+  .test-page .speaking-evidence-actions :is(button, .btn, label) { min-height: 44px; }
+  .test-page .assessment-audio-controls button { min-height: 44px; }
+}
