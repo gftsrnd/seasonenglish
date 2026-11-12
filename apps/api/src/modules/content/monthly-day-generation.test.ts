@@ -21,6 +21,10 @@ describe("monthly day generation", () => {
 
     expect(result.status).toBe("failed");
     expect(calls).toEqual([components, ["speaking"], ["speaking"]]);
+    // N3: the final failing candidate is returned for the Operator's diagnosis, never as the lesson.
+    expect(result.lesson).toBeNull();
+    expect(result.candidate?.parts.map((candidatePart) => candidatePart.code)).toEqual(expect.arrayContaining(["objective", "grammar", "listening"]));
+    expect(result.candidate?.parts.some((candidatePart) => candidatePart.code === "speaking")).toBe(false);
 
     let retry = 0;
     const repairedCalls: string[][] = [];

@@ -463,6 +463,8 @@ export interface MonthlyDayGenerationInput {
 export interface MonthlyDayGenerationResult {
   status: "ready" | "failed";
   lesson: MonthlyLessonCandidate | null;
+  /** On failure: the final failing candidate, kept for the Operator's diagnosis (never approvable). */
+  candidate?: MonthlyLessonCandidate | null;
   report: MonthlyQualityReport;
   scopeHash: string;
   attempts: number;
@@ -532,7 +534,7 @@ export async function generateMonthlyDay(input: {
     }
     requestedComponents = componentsToRepair(report, daySpec.kind === "review");
   }
-  return { status: "failed", lesson: null, report, scopeHash, attempts: maxAttempts };
+  return { status: "failed", lesson: null, candidate: parts.length ? { title, parts } : null, report, scopeHash, attempts: maxAttempts };
 }
 
 type LessonPartRecord = MonthlyLessonCandidate["parts"][number];

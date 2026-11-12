@@ -114,6 +114,21 @@ interface MonthLessonRow {
   quality_report: { severe: MonthlyQualityFindingView[]; light: MonthlyQualityFindingView[]; contractVersion: number };
   quality_acknowledgement: OperatorAcknowledgementView | null;
   content?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> };
+  generation_error?: unknown;
+}
+
+interface StoredGenerationFailure {
+  kind: "ai_generation_failed";
+  failedAt: string;
+  attempts: number;
+  report: { severe: MonthlyQualityFindingView[]; light: MonthlyQualityFindingView[] };
+  candidate: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> } | null;
+}
+
+/** generation_error also holds a manual save's severe report; only an AI failure payload is shown as a failed generation. */
+function isGenerationFailure(value: unknown): value is StoredGenerationFailure {
+  return Boolean(value && typeof value === "object" && (value as { kind?: unknown }).kind === "ai_generation_failed"
+    && Array.isArray((value as StoredGenerationFailure).report?.severe) && Array.isArray((value as StoredGenerationFailure).report?.light));
 }
 
 interface SystemDateWindowRow {
@@ -699,6 +714,64 @@ export class MonthlyContentRepository {
     );
   }
 
+  /**
+   * Cheap preconditions for AI generation of one monthly day, checked before
+   * any model call (December 2026 N1: an approved day used to be generated in
+   * full and only rejected at save time with a 500). Throws a 4xx httpError.
+   */
+  async assertMonthlyDayGenerationAllowed(actorId: string, frameworkId: string, dayNumber: number): Promise<void> {
+    const actor = await this.requireContentOperator(actorId);
+    const result = await this.database.query<{ framework_status: string; lesson_status: string | null; writable: boolean }>(
+      `select mf.status as framework_status, ml.status as lesson_status,
+              (pm.month = to_char(organization_system_date(pm.organization_id), 'YYYY-MM')
+               or pm.month = to_char((organization_system_date(pm.organization_id) + interval '1 month')::date, 'YYYY-MM')) as writable
+       from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+       left join month_lessons ml on ml.framework_id = mf.id and ml.lesson_number = $3
+       where mf.id = $1 and pm.organization_id = $2`,
+      [frameworkId, actor.organization_id, dayNumber]
+    );
+    const row = result.rows[0];
+    if (!row || row.framework_status === "retired") throw httpError(404, "MONTHLY_FRAMEWORK_NOT_FOUND", "Không tìm thấy khung tháng.");
+    if (row.framework_status !== "approved") throw httpError(409, "MONTHLY_RESOURCES_NOT_LOCKED", "Tài nguyên tháng chưa được duyệt. Hãy duyệt tài nguyên trước khi sinh bài.");
+    if (!row.writable) throw httpError(409, "MONTHLY_CONTENT_READ_ONLY", "Tháng này chỉ còn xem, không sinh lại bài được.");
+    if (!row.lesson_status) throw httpError(409, "MONTHLY_DAY_NOT_MATERIALIZED", "Ngày này không có trong lịch bài của tháng.");
+    if (row.lesson_status === "approved") {
+      throw httpError(409, "MONTHLY_DAY_ALREADY_APPROVED", "Bài này đã được duyệt nên đang khoá. Hãy bấm \"Yêu cầu mở lại\" để Quản lý mở lại bài trước khi sinh lại.");
+    }
+  }
+
+  /**
+   * Keeps the final failing AI candidate of a day for diagnosis (December 2026
+   * N3). It is stored only in month_lessons.generation_error: the day's draft,
+   * status and quality report are untouched, so a failed candidate never
+   * replaces a good draft and can never be approved. The next saved draft
+   * clears it.
+   */
+  async saveMonthlyDayGenerationFailure(
+    actorId: string,
+    frameworkId: string,
+    dayNumber: number,
+    failure: { candidate: MonthlyLessonDraftInput | null; report: MonthlyQualityReportInput; attempts: number }
+  ): Promise<void> {
+    const actor = await this.requireContentOperator(actorId);
+    const payload = {
+      kind: "ai_generation_failed",
+      failedAt: new Date().toISOString(),
+      attempts: failure.attempts,
+      report: { severe: failure.report.severe, light: failure.report.light, contractVersion: failure.report.contractVersion },
+      candidate: failure.candidate ? { title: failure.candidate.title, parts: failure.candidate.parts } : null
+    };
+    const updated = await this.database.query<{ id: string }>(
+      `update month_lessons ml set generation_error = $4::jsonb, updated_at = now()
+       from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+       where ml.framework_id = mf.id and mf.id = $1 and ml.lesson_number = $2 and pm.organization_id = $3 and ml.status <> 'approved'
+       returning ml.id`,
+      [frameworkId, dayNumber, actor.organization_id, JSON.stringify(payload)]
+    );
+    const id = updated.rows[0]?.id;
+    if (id) await this.audit(actor, "monthly.day_generation_failed", id, { frameworkId, dayNumber, attempts: failure.attempts, severe: failure.report.severe.length, light: failure.report.light.length });
+  }
+
   async saveMonthlyDayDraft(
     actorId: string,
     frameworkId: string,
@@ -727,7 +800,7 @@ export class MonthlyContentRepository {
     );
     const monthLesson = cell.rows[0];
     if (!monthLesson) throw new Error("Monthly DaySpec was not materialized");
-    if (monthLesson.status === "approved") throw new Error("Approved monthly day is immutable; request a Manager reopen first");
+    if (monthLesson.status === "approved") throw httpError(409, "MONTHLY_DAY_ALREADY_APPROVED", "Bài này đã được duyệt nên đang khoá. Hãy bấm \"Yêu cầu mở lại\" để Quản lý mở lại bài trước khi sửa.");
 
     const set = await this.database.query<{ id: string }>(
       `insert into lesson_sets (id, program_week_id, month_framework_id, cefr)
@@ -1370,7 +1443,7 @@ export class MonthlyContentRepository {
 
   private async lessonsForFramework(framework: FrameworkRow, _programMonthId?: string): Promise<MonthFrameworkView["lessons"]> {
     const result = await this.database.query<MonthLessonRow>(
-      `select ml.lesson_number, ml.lesson_date::text, ml.status, ml.scope_hash, ml.quality_report, ml.quality_acknowledgement,
+      `select ml.lesson_number, ml.lesson_date::text, ml.status, ml.scope_hash, ml.quality_report, ml.quality_acknowledgement, ml.generation_error,
               (select lv.content from lesson_versions lv where lv.lesson_id = ml.lesson_id order by lv.version desc limit 1) as content,
               (select count(*) from month_lesson_corrections mlc where mlc.month_lesson_id = ml.id)::text as correction_count
        from month_lessons ml where ml.framework_id = $1 order by ml.lesson_number`,
@@ -1386,7 +1459,12 @@ export class MonthlyContentRepository {
       locked: lesson.status === "approved",
       correctionCount: Number(lesson.correction_count),
       ...(lesson.content ? { content: lesson.content } : {}),
-      quality: { ...lesson.quality_report, ...(lesson.quality_acknowledgement ? { acknowledged: lesson.quality_acknowledgement } : {}) }
+      quality: { ...lesson.quality_report, ...(lesson.quality_acknowledgement ? { acknowledged: lesson.quality_acknowledgement } : {}) },
+      ...(lesson.status !== "approved" && isGenerationFailure(lesson.generation_error) ? { generationFailure: {
+        failedAt: lesson.generation_error.failedAt, attempts: lesson.generation_error.attempts,
+        report: { severe: lesson.generation_error.report.severe, light: lesson.generation_error.report.light },
+        candidate: lesson.generation_error.candidate
+      } } : {})
     }));
   }
 

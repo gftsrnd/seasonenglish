@@ -148,6 +148,9 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       repositories.monthlyContent.getOverview(actorId, month.month),
       repositories.aiRuns.activeTaskPrompt(actorId, "monthly_topic_suggestion")
     ]);
+    // A suggestion that can never be saved would only spend tokens.
+    if (!overview.monthWindow.writable) return reply.code(409).send({ code: "MONTHLY_CONTENT_READ_ONLY" });
+    if (overview.frameworks.some((framework) => framework.status === "approved")) return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_IMMUTABLE" });
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
       const generated = await runner.runTask("monthly_topic_suggestion", {
@@ -1009,6 +1012,8 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
   app.post("/api/v1/content/month-frameworks/:id/reviews/:dayNumber/generate", { preHandler: contentOperator }, async (request, reply) => {
     const { id, dayNumber } = dayParams.parse(request.params);
     const actorId = request.e4sSession!.user.id;
+    // Lock, window and resource checks come before any model call (December 2026 N1).
+    await repositories.monthlyContent.assertMonthlyDayGenerationAllowed(actorId, id, dayNumber);
     const runner = await runnerFor(actorId);
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     let contract;
@@ -1037,7 +1042,9 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       throw error;
     }
     if (result.status !== "ready" || !result.lesson) {
-      return reply.code(422).send({ code: "MONTHLY_GENERATION_QUALITY_FAILED", report: result.report, attempts: result.attempts });
+      // Keep the final failing candidate beside (never over) the current draft so the Operator can see why (N3).
+      await repositories.monthlyContent.saveMonthlyDayGenerationFailure(actorId, id, dayNumber, { candidate: result.candidate ?? null, report: result.report, attempts: result.attempts });
+      return reply.code(422).send({ code: "MONTHLY_GENERATION_QUALITY_FAILED", report: result.report, attempts: result.attempts, candidate: result.candidate ?? null });
     }
     await repositories.monthlyContent.saveMonthlyDayDraft(actorId, id, dayNumber, result.lesson, result.report);
     return result;
@@ -1045,6 +1052,8 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
   app.post("/api/v1/content/month-frameworks/:id/days/:dayNumber/generate", { preHandler: contentOperator }, async (request, reply) => {
     const { id, dayNumber } = dayParams.parse(request.params);
     const actorId = request.e4sSession!.user.id;
+    // Lock, window and resource checks come before any model call (December 2026 N1).
+    await repositories.monthlyContent.assertMonthlyDayGenerationAllowed(actorId, id, dayNumber);
     const runner = await runnerFor(actorId);
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     let contract;
@@ -1070,7 +1079,9 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       throw error;
     }
     if (result.status !== "ready" || !result.lesson) {
-      return reply.code(422).send({ code: "MONTHLY_GENERATION_QUALITY_FAILED", report: result.report, attempts: result.attempts });
+      // Keep the final failing candidate beside (never over) the current draft so the Operator can see why (N3).
+      await repositories.monthlyContent.saveMonthlyDayGenerationFailure(actorId, id, dayNumber, { candidate: result.candidate ?? null, report: result.report, attempts: result.attempts });
+      return reply.code(422).send({ code: "MONTHLY_GENERATION_QUALITY_FAILED", report: result.report, attempts: result.attempts, candidate: result.candidate ?? null });
     }
     await repositories.monthlyContent.saveMonthlyDayDraft(actorId, id, dayNumber, result.lesson, result.report);
     return result;

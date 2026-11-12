@@ -21,6 +21,8 @@ export function monthlyGenerationMessage(reason: unknown): string {
   if (error.code === "AI_OUTPUT_TRUNCATED") return `Nội dung AI trả về bị ngắt giữa chừng${where}. Chưa lưu bản nháp; hãy thử sinh lại.`;
   if (error.code === "AI_TIMEOUT") return "AI phản hồi quá lâu. Chưa lưu bản nháp; hãy thử lại sau.";
   if (error.code === "AI_PROVIDER_RATE_LIMIT") return "Dịch vụ AI đang giới hạn lượt gọi. Chưa lưu bản nháp; hãy chờ rồi thử lại.";
+  if (error.code === "MONTHLY_GENERATION_QUALITY_FAILED") return `Bài sinh chưa đạt yêu cầu${where}. Bản nháp hiện có vẫn được giữ; bấm "Lỗi" ở ô ngày để xem lý do và bản sinh lỗi.`;
+  if (error.code === "MONTHLY_DAY_ALREADY_APPROVED") return "Bài này đã được duyệt nên đang khoá. Hãy bấm \"Yêu cầu mở lại\" để Quản lý mở lại bài trước khi sinh lại.";
   if (error.code === "NETWORK_UNAVAILABLE") return "Mất kết nối khi sinh bài. Hãy kiểm tra mạng trước khi thử lại.";
   return sections.length ? `Bài sinh chưa đạt yêu cầu${where}. Chưa lưu bản nháp; hãy thử lại.` : "Không sinh được bài học. Hãy thử lại.";
 }

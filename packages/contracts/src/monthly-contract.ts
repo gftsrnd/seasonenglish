@@ -67,6 +67,20 @@ export interface MonthLessonCellView {
     light: MonthlyQualityFindingView[];
     acknowledged?: OperatorAcknowledgementView;
   };
+  /**
+   * Last AI generation that failed the quality gate after every repair round
+   * (December 2026 N3). Shown to the Operator for diagnosis only: it is never
+   * the day's draft, never replaces one, and can never be approved.
+   */
+  generationFailure?: MonthLessonGenerationFailureView;
+}
+
+export interface MonthLessonGenerationFailureView {
+  failedAt: string;
+  attempts: number;
+  report: { severe: MonthlyQualityFindingView[]; light: MonthlyQualityFindingView[] };
+  /** The final failing candidate as the model produced it (after deterministic plan fields). */
+  candidate: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> } | null;
 }
 
 export interface MonthFrameworkView {

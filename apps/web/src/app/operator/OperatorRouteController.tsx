@@ -329,13 +329,14 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     const isDraft = lesson.status !== "approved";
     return <><MonthlyLessonPreview date={lesson.lessonDate} cefr={framework.cefr} lesson={lesson} focusedPart={focusedPart} {...(framework.resources ? { resources: framework.resources } : {})} busy={busy} onClose={() => navigate(paths.months)}
       {...(isDraft && !readOnly ? {
-        onApprove: async () => {
+        // A day with only a failed AI candidate (no saved draft) has nothing to approve.
+        ...(lesson.content?.parts?.length ? { onApprove: async () => {
           const title = lesson.kind === "review" ? "Duyệt bài ôn" : "Duyệt bài học";
           if (!await modal.confirm({ title, message: "Bài sẽ được khóa chỉnh sửa sau khi duyệt.", confirmLabel: "Duyệt bài" })) return;
           let approved = false;
           await run(async () => { await client.approveContentMonthDay(framework.id, lesson.lessonNumber); approved = true; }, `Đã duyệt ${monthDayLabel(lesson.lessonNumber)}.`);
           if (approved) navigate(paths.months);
-        },
+        } } : {}),
         onEdit: () => openDayEditor(framework.id, lesson.lessonNumber),
         // VH-R44: no per-day regenerate; generate once, then edit by hand. Hidden until the rule changes.
         ...(SHOW_MONTHLY_DAY_REGENERATE && framework.status === "approved" ? { onRegenerate: async () => {
@@ -460,12 +461,13 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         return result;
       },
       onGenerateDay: async (id, dayNumber) => {
-        const result = await run(() => client.generateContentMonthDay(id, dayNumber), undefined, true);
+        // A quality failure stores the failing candidate for the day view: reload so "Lỗi" appears.
+        const result = await run(() => client.generateContentMonthDay(id, dayNumber), undefined, true).catch(async (reason: unknown) => { await load(); throw reason; });
         if (!result) throw new Error("AI không sinh được bài ngày đạt chuẩn.");
         return result;
       },
       onGenerateReview: async (id, dayNumber) => {
-        const result = await run(() => client.generateContentMonthReview(id, dayNumber), undefined, true);
+        const result = await run(() => client.generateContentMonthReview(id, dayNumber), undefined, true).catch(async (reason: unknown) => { await load(); throw reason; });
         if (!result) throw new Error("AI không sinh được bài ôn đạt chuẩn.");
         return result;
       },

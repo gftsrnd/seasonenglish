@@ -5,6 +5,8 @@ it("distinguishes rejected structure from a failed quality check without exposin
   expect(message).toContain("chưa đúng cấu trúc ở phần Ngữ pháp");
   expect(message).not.toMatch(/sensitive|lesson.parts|AI_OUTPUT/);
   expect(monthlyGenerationMessage({code:"MONTHLY_GENERATION_QUALITY_FAILED",details:{report:{severe:[{component:"pronunciation"},{component:"pronunciation"}]}}})).toContain("chưa đạt yêu cầu ở phần Phát âm");
+  expect(monthlyGenerationMessage({code:"MONTHLY_GENERATION_QUALITY_FAILED",details:{report:{severe:[{component:"grammar"}]}}})).toContain("Bản nháp hiện có vẫn được giữ");
+  expect(monthlyGenerationMessage({code:"MONTHLY_DAY_ALREADY_APPROVED"})).toContain("Yêu cầu mở lại");
 });
 it("shows actionable timeout and provider limit notices", () => {
   expect(monthlyGenerationMessage({code:"AI_TIMEOUT"})).toContain("phản hồi quá lâu");
