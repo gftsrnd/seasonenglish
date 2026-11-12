@@ -5003,7 +5003,9 @@ function learnerLifecycleState(value: unknown): LearnerLifecycleState {
 
 function publicLearnerProfile(value: unknown): Partial<LearnerProfileData> {
   const profile = profileObject(value);
-  const { _operator: _ignoredOperator, _lifecycle: _ignoredLifecycle, ...publicProfile } = profile;
+  // `persona` is a retired profile field (old Season style choice); stored
+  // profiles may still carry it, but it is ignored and never exposed.
+  const { _operator: _ignoredOperator, _lifecycle: _ignoredLifecycle, persona: _retiredPersona, ...publicProfile } = profile;
   return publicProfile as Partial<LearnerProfileData>;
 }
 
@@ -8131,10 +8133,22 @@ class CoachRepository {
     const openingQuestion = typeof scenario.openingQuestion === "string" && scenario.openingQuestion.trim()
       ? scenario.openingQuestion
       : coachOpeningQuestion(firstName, activeTopic, priorQuestions);
+    // Season's tone comes only from the Informal/Formal toggle on the Season
+    // screen, which writes it onto the practice session. A new session keeps
+    // the learner's last toggle choice from any earlier practice session (also
+    // across months); with no earlier session it starts Informal. The retired
+    // profile-form style value is never read.
+    const rememberedPersona = typeof scenario.persona === "string" ? scenario.persona : (await this.pool.query<{ persona: string | null }>(
+      `select scenario->>'persona' as persona from coach_sessions
+       where learner_id = $1 and coalesce(scenario->>'kind', 'practice') = 'practice'
+         and scenario ? 'persona' and ($2::uuid is null or id <> $2::uuid)
+       order by coalesce(completed_at, started_at) desc, started_at desc limit 1`,
+      [learnerId, sessionId]
+    )).rows[0]?.persona ?? previousScenario.persona;
     scenario = {
       ...scenario,
       title: activeTopic,
-      persona: (scenario.persona ?? previousScenario.persona) === "formal" ? "formal" : "informal",
+      persona: rememberedPersona === "formal" ? "formal" : "informal",
       month: row.system_month,
       openingQuestion
     };

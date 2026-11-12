@@ -195,7 +195,6 @@ function profileRows(view: ProfileView) {
     ["Tình huống", p.situations ?? ""],
     ["Cách học thích", labels(p.learningStyles, LEARNING_STYLES)],
     ["Giải thích bằng", explanation],
-    ["Phong cách Season", p.persona === "formal" ? "Formal · Trang trọng" : "Informal · Thân thiện"],
     ["Thời lượng mỗi buổi", p.durationMinutes ? p.durationMinutes === 20 ? "20+ phút" : `${p.durationMinutes} phút` : ""],
     ["Thiết bị hay dùng", p.device ? label(p.device, DEVICES) : ""],
     ["Lịch học", p.durationMinutes ? "5 ngày/tuần (T2–T6)" : ""],

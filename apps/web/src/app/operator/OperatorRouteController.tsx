@@ -749,7 +749,6 @@ function OperatorProfileEvidence({ detail }: { detail: AssessmentReviewLearnerVi
     ["Tình huống", profile.situations ?? ""],
     ["Cách học thích", operatorProfileLabels("learningStyles", profile.learningStyles)],
     ["Giải thích bằng", level ? (level === "A1" || level === "A2" ? `Tiếng Việt (tự động theo mức ${level})` : `Tiếng Anh (tự động theo mức ${level})`) : "Tự động theo trình độ"],
-    ["Phong cách Season", profile.persona === "formal" ? "Formal · Trang trọng" : "Informal · Thân thiện"],
     ["Lịch học", [profile.durationMinutes ? `${profile.durationMinutes} phút/buổi` : "", "5 ngày/tuần (T2–T6)", operatorProfileLabel("device", profile.device)].filter(Boolean).join(" · ")],
     ["Tự đánh giá", operatorProfileLabel("selfLevel", profile.selfLevel)],
     ["Chứng chỉ", (profile.certificates ?? []).map(formatOperatorCertificate).filter(Boolean).join(", ")],

@@ -118,7 +118,6 @@ const secondaryLearner = {
     situations: "",
     learningStyles: [],
     explanationLanguage: "auto",
-    persona: "informal",
     durationMinutes: 10,
     device: "both",
     selfLevel: "unknown",

@@ -148,7 +148,11 @@ describe("app onboard affordances", () => {
     expect(screen.queryByText("Xếp CEFR để bài học vừa sức.")).not.toBeInTheDocument();
     expect(screen.getByText((_, element) => element?.tagName === "P" && element.textContent === "Các mục có dấu * bắt buộc là bắt buộc; các mục còn lại có thể bỏ trống.")).toBeInTheDocument();
     expect(screen.getByText("Hồ sơ")).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Phong cách của Season" }).querySelector(".persona-choice-grid")).toBeInTheDocument();
+    // The Season style choice was removed from the profile form.
+    expect(screen.queryByRole("group", { name: "Phong cách của Season" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Informal · Thân thiện")).not.toBeInTheDocument();
+    expect(screen.queryByText("Formal · Trang trọng")).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Mỗi buổi học bao lâu là vừa" })).toBeInTheDocument();
   });
 
   it("places validation feedback beside the invalid field instead of only at the top", async () => {

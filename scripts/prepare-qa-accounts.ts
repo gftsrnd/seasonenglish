@@ -152,7 +152,6 @@ export function qaProfile(account: QaAccount): Record<string, unknown> {
     situations: "Họp daily với nhóm quốc tế",
     learningStyles: ["speaking", "examples"],
     explanationLanguage: "auto",
-    persona: "informal",
     durationMinutes: 10,
     device: "both",
     selfLevel: account.cefr ?? "A1",

@@ -105,6 +105,34 @@ describe("learner profile, home, lesson and progress API", () => {
     expect(reloaded.json()).toMatchObject({ version: 3, profile: { avatar } });
   });
 
+  it("still loads a stored profile that carries the retired Season style key and ignores it", async () => {
+    await pool.query(
+      `update learner_profiles set profile = jsonb_set(profile, '{persona}', '"formal"'::jsonb, true) where user_id = $1`,
+      [DEMO_IDS.learner]
+    );
+    const current = await app.inject({ method: "GET", url: "/api/v1/learner/profile", headers: { cookie } });
+    expect(current.statusCode, current.body).toBe(200);
+    expect(current.json().completed).toBe(true);
+    expect(current.json().profile).not.toHaveProperty("persona");
+    const home = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
+    expect(home.statusCode, home.body).toBe(200);
+    expect(home.json().onboardingRequired).toBe(false);
+
+    // The profile is complete without the field; an old client that still
+    // sends it is accepted and the key is dropped.
+    const saved = await app.inject({
+      method: "PUT",
+      url: "/api/v1/learner/profile",
+      headers: { cookie },
+      payload: { ...current.json().profile, persona: "formal", version: current.json().version }
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json().completed).toBe(true);
+    expect(saved.json().profile).not.toHaveProperty("persona");
+    const stored = await pool.query<{ persona: string | null }>("select profile->>'persona' as persona from learner_profiles where user_id = $1", [DEMO_IDS.learner]);
+    expect(stored.rows[0]?.persona).toBeNull();
+  });
+
   it("persists a changed profile email in the canonical user record and reloads it", async () => {
     const current = await app.inject({ method: "GET", url: "/api/v1/learner/profile", headers: { cookie } });
     const email = "minh.anh.profile-updated@e4s.local";
@@ -195,7 +223,6 @@ describe("learner profile, home, lesson and progress API", () => {
         habits: [],
         learningStyles: [],
         explanationLanguage: "auto",
-        persona: "informal",
         durationMinutes: 10,
         device: "both",
         selfLevel: "unknown",

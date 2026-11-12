@@ -471,7 +471,6 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
       situations: "Họp daily với nhóm quốc tế",
       learningStyles: ["speaking", "examples"],
       explanationLanguage: "auto",
-      persona: "informal",
       durationMinutes: 10,
       device: "both",
       selfLevel: "A2",

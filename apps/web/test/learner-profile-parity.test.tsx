@@ -30,7 +30,6 @@ const view: ProfileView = {
       situations: "Họp daily với team Singapore",
       learningStyles: ["reading", "writing"],
       explanationLanguage: "auto",
-      persona: "informal",
       durationMinutes: 10,
       device: "phone",
       selfLevel: "B1",
@@ -99,7 +98,8 @@ describe("learner profile app parity", () => {
     expect(within(profile).getByText("Họp và trình bày, Đọc tài liệu, spec kỹ thuật")).toBeInTheDocument();
     expect(within(profile).getByText("Vài lần mỗi tuần")).toBeInTheDocument();
     expect(within(profile).getByText("Tiếng Anh (tự động theo mức B1)")).toBeInTheDocument();
-    expect(within(profile).getByText("Informal · Thân thiện")).toBeInTheDocument();
+    expect(within(profile).queryByText("Informal · Thân thiện")).not.toBeInTheDocument();
+    expect(within(profile).queryByText("Phong cách Season")).not.toBeInTheDocument();
     expect(within(profile).queryByText("meeting, docs")).not.toBeInTheDocument();
 
     const season = screen.getByRole("region", { name: "Mùa học" });

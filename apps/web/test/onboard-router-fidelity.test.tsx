@@ -47,7 +47,8 @@ describe("onboarding and learner router fidelity", () => {
     expect(screen.queryByText(/bước 3 · vận hành duyệt mức · sau đó/i)).not.toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /nói chuyện với khách hàng/i })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /chưa có thói quen nào/i })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /informal · thân thiện/i })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /informal · thân thiện/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Phong cách của Season" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /lưu nháp/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /lưu và làm test đầu vào/i })).not.toBeDisabled();
   });
@@ -71,7 +72,7 @@ describe("onboarding and learner router fidelity", () => {
   it("keeps draft and back actions available in edit mode", () => {
     render(<LearnerOnboard view={{ mode: "edit", profile: {
       fullName: "Lan", email: "lan@example.com", goals: ["email"], environmentUse: "weekly", familyUse: "never",
-      habits: ["movies"], learningStyles: ["reading"], explanationLanguage: "auto", persona: "formal", durationMinutes: 10,
+      habits: ["movies"], learningStyles: ["reading"], explanationLanguage: "auto", durationMinutes: 10,
       device: "both", selfLevel: "A2", certificates: [{ type: "TOEIC", result: "650", year: "2023" }]
     } }} actions={actions()} />);
 

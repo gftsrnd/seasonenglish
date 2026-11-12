@@ -141,7 +141,6 @@ function LearnerProfileDialog({ view, onClose, onRename }: { view: ManagerLearne
     ["Tình huống", profile.situations ?? ""],
     ["Cách học thích", managerProfileLabels("learningStyles", profile.learningStyles)],
     ["Giải thích bằng", level ? (level === "A1" || level === "A2" ? `Tiếng Việt (tự động theo mức ${level})` : `Tiếng Anh (tự động theo mức ${level})`) : "Tự động theo trình độ"],
-    ["Phong cách Season", profile.persona === "formal" ? "Formal · Trang trọng" : "Informal · Thân thiện"],
     ["Lịch học", [profile.durationMinutes ? `${profile.durationMinutes} phút/buổi` : "", "5 ngày/tuần (T2–T6)", managerProfileLabel("device", profile.device)].filter(Boolean).join(" · ")],
     ["Tự đánh giá", managerProfileLabel("selfLevel", profile.selfLevel)],
     ["Chứng chỉ", (profile.certificates ?? []).map(formatManagerCertificate).filter(Boolean).join(", ")],

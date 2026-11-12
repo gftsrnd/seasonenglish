@@ -13,7 +13,7 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); });
 const actions = { navigate: vi.fn(), saveAvatar: vi.fn() } as unknown as LearnerCallbacks;
 
 const view = {
-  learner: { displayName: "Học viên Demo", cefr: "B1", profile: { fullName: "Học viên Demo", goals: [], habits: [], learningStyles: [], explanationLanguage: "auto", persona: "informal", durationMinutes: 10, device: "both", selfLevel: "unknown", certificates: [], avatar: { acc: "sun", color: "olive", bg: 2 } } },
+  learner: { displayName: "Học viên Demo", cefr: "B1", profile: { fullName: "Học viên Demo", goals: [], habits: [], learningStyles: [], explanationLanguage: "auto", durationMinutes: 10, device: "both", selfLevel: "unknown", certificates: [], avatar: { acc: "sun", color: "olive", bg: 2 } } },
   points: 0,
   badges: [],
   weeks: [],
@@ -167,14 +167,14 @@ describe("app profile avatar dialog affordances", () => {
     expect(Array.from(document.querySelectorAll("#profile-identity-details > dl dt"), (term) => term.textContent).slice(0, 3)).toEqual(["Họ và tên", "Vị trí công việc", "Tự đánh giá"]);
     expect(screen.getByText("demo@e4s.local")).not.toBeVisible();
     const preferences = screen.getByText("Xem đủ hồ sơ");
-    expect(screen.getByText("Informal · Thân thiện")).not.toBeVisible();
+    expect(screen.getByText("Thời lượng mỗi buổi")).not.toBeVisible();
     expect(screen.getByRole("link", { name: "Cập nhật hồ sơ" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Cập nhật hồ sơ" })).toHaveAttribute("href", "/onboard");
     await userEvent.click(preferences);
-    expect(screen.getByText("Informal · Thân thiện")).toBeVisible();
+    expect(screen.getByText("Thời lượng mỗi buổi")).toBeVisible();
     const details = preferences.closest("details")!;
     expect(details.querySelectorAll("dl")).toHaveLength(1);
-    expect(within(details).getByText("Phong cách Season")).toBeVisible();
+    expect(within(details).queryByText("Phong cách Season")).not.toBeInTheDocument();
     expect(Array.from(details.querySelectorAll("dt"), (term) => term.textContent).slice(0, 2)).toEqual(["Email", "Phòng ban / team"]);
     expect(within(details).getByText("demo@e4s.local")).toBeVisible();
   });

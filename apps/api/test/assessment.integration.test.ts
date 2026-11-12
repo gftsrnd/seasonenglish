@@ -11,7 +11,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL
 const freshLearnerId = "00000000-0000-4000-8000-000000000109";
 const completeProfile = {
   goals: ["email"], environmentUse: "weekly", familyUse: "never", habits: ["music"],
-  learningStyles: ["listening"], persona: "formal", durationMinutes: 10, device: "both", selfLevel: "A1"
+  learningStyles: ["listening"], durationMinutes: 10, device: "both", selfLevel: "A1"
 };
 const levelFormTitle = "Đề thi lên mức B1 — kiểm tra tích hợp";
 

@@ -254,6 +254,53 @@ describe("AI Coach API", () => {
     expect(cleared.json().messages[0].text).not.toContain("short introduction");
   });
 
+  it("starts Season Informal, ignores the retired profile style and remembers the toggle across sessions", async () => {
+    // A value saved by the old profile-form field is not a toggle choice.
+    await pool.query(
+      `update learner_profiles set profile = jsonb_set(profile, '{persona}', '"formal"'::jsonb, true) where user_id = $1`,
+      [DEMO_IDS.learner]
+    );
+    const first = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
+    expect(first.statusCode, first.body).toBe(200);
+    expect(first.json().persona).toBe("informal");
+
+    const formal = await app.inject({ method: "PUT", url: "/api/v1/coach/persona", headers: { cookie: learnerCookie }, payload: { persona: "formal" } });
+    expect(formal.json().persona).toBe("formal");
+    const cleared = await app.inject({ method: "DELETE", url: "/api/v1/coach/session", headers: { cookie: learnerCookie } });
+    expect(cleared.statusCode, cleared.body).toBe(200);
+    expect(cleared.json().sessionId).not.toBe(formal.json().sessionId);
+    expect(cleared.json().persona).toBe("formal");
+
+    // A new month retires the session; the next one keeps the last toggle choice.
+    await pool.query(
+      "update organization_settings set configuration = $2::jsonb where organization_id = $1",
+      [DEMO_IDS.organization, JSON.stringify({ simulatedSystemDate: "2026-12-01", coachDailyLimit: 30 })]
+    );
+    const nextMonth = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
+    expect(nextMonth.statusCode, nextMonth.body).toBe(200);
+    expect(nextMonth.json().sessionId).not.toBe(cleared.json().sessionId);
+    expect(nextMonth.json().persona).toBe("formal");
+
+    runTask.mockResolvedValueOnce({
+      output: formalAiOutput,
+      metadata: {
+        traceId: "trace-coach-remembered-formal", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+        attempts: 1, latencyMs: 12, inputHash: "d".repeat(64), schemaValid: true as const,
+        usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 }
+      }
+    });
+    const sent = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000031", message: "Could you review the agenda before our meeting?" }
+    });
+    expect(sent.statusCode, sent.body).toBe(200);
+    expect(runTask).toHaveBeenLastCalledWith("coach_dialogue", expect.objectContaining({ persona: "formal" }), expect.objectContaining({ systemPrompt: expect.stringContaining("FORMAL") }));
+
+    await app.inject({ method: "PUT", url: "/api/v1/coach/persona", headers: { cookie: learnerCookie }, payload: { persona: "informal" } });
+    const back = await app.inject({ method: "DELETE", url: "/api/v1/coach/session", headers: { cookie: learnerCookie } });
+    expect(back.json().persona).toBe("informal");
+  });
+
   it("stores one validated AI turn and makes the request idempotent", async () => {
     const payload = { requestId: "10000000-0000-4000-8000-000000000001", message: "I work at product with our design team." };
     const before = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });

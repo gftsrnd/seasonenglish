@@ -46,7 +46,6 @@ export function isLearnerProfileComplete(profile: Partial<LearnerProfileData>): 
       && profile.familyUse
       && profile.habits?.length
       && profile.learningStyles?.length
-      && profile.persona
       && profile.durationMinutes
       && profile.device
       && profile.selfLevel

@@ -66,7 +66,7 @@ const learnerSteps: Record<string, readonly GuideStep[]> = {
   "/onboard": [
     [".profile-edit-sections", "Các mục hồ sơ", "Chuyển giữa **Cá nhân**, **Tiếng Anh**, **Cách học** và **Trình độ** để điền từng phần."],
     ['.profile-form > section.card:not([id]):not([hidden])', "Thông tin và mục tiêu", "**Họ tên** và **Email** là bắt buộc. Thêm phòng ban, tên Base và các việc bạn dùng tiếng Anh để Season đưa ví dụ sát hơn."],
-    ["#profile-edit-learning", "Phong cách học", "Chọn **cách học** hiệu quả, **giọng trò chuyện** của Season, thời lượng và thiết bị thường dùng."],
+    ["#profile-edit-learning", "Phong cách học", "Chọn **cách học** hiệu quả, thời lượng và thiết bị thường dùng."],
     ["#profile-edit-level", "Trình độ tự đánh giá", "Chọn trình độ bạn tự thấy. Có thể thêm **chứng chỉ** và điều muốn Season giúp."],
     [".onboard-actions", "Lưu hồ sơ", "Bấm **Lưu nháp** để điền tiếp sau. Điền đủ các mục có **dấu sao** rồi bấm nút lưu chính; hồ sơ mới sẽ chuyển sang **test đầu vào**."],
   ],

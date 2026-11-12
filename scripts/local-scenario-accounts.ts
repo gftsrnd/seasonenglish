@@ -155,7 +155,6 @@ function profileFor(account: LocalScenarioAccount) {
     situations: `Kiểm thử ${account.key}`,
     learningStyles: ["examples", "speaking"],
     explanationLanguage: "auto",
-    persona: "professional",
     durationMinutes: 10,
     device: "desktop",
     selfLevel: account.cefr ?? "A2",

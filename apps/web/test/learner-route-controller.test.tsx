@@ -97,7 +97,7 @@ describe("learner route integration controller", () => {
     const profile: LearnerProfileView = {
       profile: {
         fullName: "Lan", email: "lan@example.com", goals: [], environmentUse: "weekly", familyUse: "sometimes",
-        habits: [], learningStyles: [], explanationLanguage: "auto", persona: "informal", durationMinutes: 10,
+        habits: [], learningStyles: [], explanationLanguage: "auto", durationMinutes: 10,
         device: "both", selfLevel: "A2", certificates: []
       },
       completed: true, version: 7, updatedAt: "2026-10-14T00:00:00.000Z"
@@ -184,7 +184,6 @@ const incompleteProfile: LearnerProfileView = {
     habits: [],
     learningStyles: [],
     explanationLanguage: "auto",
-    persona: "informal",
     durationMinutes: 10,
     device: "both",
     selfLevel: "unknown",

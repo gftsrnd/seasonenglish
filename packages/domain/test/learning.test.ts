@@ -31,7 +31,6 @@ describe("learner flow rules", () => {
       familyUse: "none",
       habits: ["podcast"],
       learningStyles: ["speaking"],
-      persona: "informal",
       durationMinutes: 10,
       device: "both",
       selfLevel: "A2"

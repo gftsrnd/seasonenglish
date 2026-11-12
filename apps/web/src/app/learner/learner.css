@@ -1389,13 +1389,6 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .profile-compact-edit .profile-edit-usage label.opt { padding: 7px; gap: 6px; }
 .profile-compact-edit .onboard-actions button:first-child { display: none; }
 .app-learner-page .field-error{margin:6px 0 0;color:var(--danger);font-size:.8rem;line-height:1.35}
-.app-learner-page .persona-choice-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch!important}
-.app-learner-page .persona-choice-grid .opt{height:100%;margin:0;min-width:0}
-.app-learner-page .persona-choice-grid .opt{align-items:flex-start}
-.app-learner-page .persona-choice-content{display:grid;gap:6px;min-width:0;font-size:.88rem;line-height:1.45}
-.app-learner-page .persona-choice-content>strong{font-size:1rem;line-height:1.25}
-.app-learner-page .persona-choice-content>span{display:block}
-.app-learner-page .persona-choice-content b{font-weight:700}
 .app-learner-page .learning-style-grid{display:grid!important;grid-template-columns:repeat(12,minmax(0,1fr));align-items:stretch!important}
 .app-learner-page .learning-style-grid .opt{height:100%;margin:0;min-width:0}
 .app-learner-page .learning-style-grid .opt:nth-child(-n+3){grid-column:span 4}
@@ -1413,7 +1406,6 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .app-learner-page .onboarding-steps>.st.cur{box-shadow:0 4px 14px rgba(95,67,36,.06),inset 0 0 0 2px var(--primary)}
 .app-learner-page .onboarding-steps>.st.todo{opacity:1}
 @media(max-width:720px){
-  .app-learner-page .persona-choice-grid{grid-template-columns:1fr}
   .app-learner-page .learning-style-grid{grid-template-columns:1fr}
   .app-learner-page .learning-style-grid .opt:nth-child(-n+3),.app-learner-page .learning-style-grid .opt:nth-child(n+4){grid-column:span 1}
 }
@@ -1450,9 +1442,6 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .app-learner-page .profile-form [aria-label="Về tiếng Anh"]>div:nth-of-type(2):has(>.row)>.row{column-gap:12px;row-gap:12px}
 .app-learner-page .profile-form> .row:last-child{margin-top:6px!important;gap:12px!important;padding-top:6px}
 @media(max-width:720px){.app-learner-page .profile-form>section{padding:18px}.app-learner-page .profile-form-back{margin-bottom:18px}.app-learner-page .profile-form-back + header{margin-bottom:18px!important}}
-.app-learner-page .persona-choice-content>.persona-choice-summary { display: none; }
-.profile-compact-edit .persona-choice-content>.persona-choice-summary { display: block; }
-.profile-compact-edit .persona-choice-content>.persona-choice-detail { display: none; }
 .profile-compact-edit .profile-form>section { gap: 12px; }
 .profile-compact-edit .profile-form>section>.grid { row-gap: 10px; }
 .profile-compact-edit .profile-form>section label:not(.opt)>:is(input,textarea) { margin-top: 4px; }
