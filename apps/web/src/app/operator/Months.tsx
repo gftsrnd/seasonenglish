@@ -730,7 +730,8 @@ function VocabularyPanel({ items, variant, registerCores = [] }: { items: Array<
       const standalone = isStandaloneWord(item.word);
       return <li key={item.id} className={standalone ? "standalone" : "phrase"}><i>{index + 1}</i><b>{item.word}</b><small>{variant === "core" ? "Headword" : standalone ? "Từ đơn" : "Cụm bổ trợ"}</small><span>{item.meaning}</span>{item.ipa && <em>{item.ipa}</em>}</li>;
     })}</ol>
-    {variant === "expanded" && registerTerms.length > 0 && <ol className="monthly-resource-collection expanded register" aria-label="Khẩu ngữ và văn phong">{registerTerms.map((term, index) => <li key={`${term.coreId}-${term.kind}-${term.word}`} className={isStandaloneWord(term.word) ? "standalone" : "phrase"}><i>{visible.length + index + 1}</i><b>{term.word}</b><small>{term.kind === "slang" ? "Khẩu ngữ" : "Văn phong"} · {term.coreWord}</small><span>{term.definition}</span></li>)}</ol>}
+    {variant === "expanded" && registerTerms.length > 0 && <section className="monthly-vocabulary-guidance register" aria-label="Quy tắc khẩu ngữ và văn phong"><b>{registerTerms.length} khẩu ngữ / văn phong</b><span>Cách nói khác của từ cốt lõi, không tính là từ mới và không có bản dịch.</span></section>}
+    {variant === "expanded" && registerTerms.length > 0 && <ul className="monthly-resource-collection expanded register" aria-label="Khẩu ngữ và văn phong">{registerTerms.map((term) => <li key={`${term.coreId}-${term.kind}-${term.word}`} className={isStandaloneWord(term.word) ? "standalone" : "phrase"}><i aria-hidden="true">↳</i><b>{term.word}</b><small>{term.kind === "slang" ? "Khẩu ngữ" : "Văn phong"} · {term.coreWord}</small><span>{term.definition}</span></li>)}</ul>}
   </>;
 }
 
