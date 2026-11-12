@@ -363,6 +363,34 @@ describe("app coach and weekly practice speech input", () => {
     expect(suggestion).toHaveTextContent("You can say:");
   });
 
+  it("shows an answer idea instead of a sentence to copy, also when Season asks the same question again", () => {
+    render(<LearnerCoach view={{ ...coach, messages: [{
+      id: "coach-idea", speaker: "coach", text: "No worries, here's a small idea to help you. How are the slides?", createdAt: "2026-10-22T00:00:00.000Z",
+      feedback: {
+        relevant: true, relevanceNote: "", notScored: true,
+        evaluation: { status: "insufficient", result: "missing_information", countsTowardGoal: false, noteVi: "Không sao! Season gợi ý một ý tưởng và hỏi lại câu hỏi. Lượt này không tính và không bị trừ điểm." },
+        seasonReply: "No worries, here's a small idea to help you. How are the slides? 😊", seasonReplyTranslation: "Không sao, đây là một gợi ý nhỏ cho bạn.",
+        nextQuestion: "How are the slides?", nextQuestionTranslation: "Các slide thế nào rồi?",
+        rubric: {
+          meaning: { score: 0, evidence: "Season hỏi lại câu hỏi; lượt này không chấm điểm.", improvement: "" },
+          vocabulary: { score: 0, evidence: "Season hỏi lại câu hỏi; lượt này không chấm điểm.", improvement: "" },
+          grammar: { score: 0, evidence: "Season hỏi lại câu hỏi; lượt này không chấm điểm.", improvement: "" }
+        },
+        corrections: [], correctedText: "",
+        suggestedAnswer: { text: "Bạn có thể nói về việc mấy cái slide trông chưa ổn.", translation: "", kind: "idea" }
+      }
+    }] }} actions={actions()} />);
+
+    const reply = document.querySelector<HTMLElement>(".coach-season-reply")!;
+    const idea = within(reply).getByLabelText("Gợi ý ý tưởng trả lời");
+    expect(idea).toHaveTextContent("Gợi ý ý tưởng: Bạn có thể nói về việc mấy cái slide trông chưa ổn.");
+    expect(idea).not.toHaveTextContent("You can say:");
+    expect(idea.querySelector("q")).toBeNull();
+    // Not scored: the note is shown, the 0/5 score row is not.
+    expect(screen.queryByLabelText("Ba điểm đánh giá")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Lượt này không tính và không bị trừ điểm/u).length).toBeGreaterThan(0);
+  });
+
   it("keeps Season's opening line at the start after conversation messages arrive", () => {
     render(<LearnerCoach view={{ ...coach, messages: [
       { id: "learner-1", speaker: "learner", text: "I am ready.", createdAt: "now" },

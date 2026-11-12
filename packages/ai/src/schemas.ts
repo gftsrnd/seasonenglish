@@ -24,7 +24,13 @@ export const coachInputSchema = z.object({
 export const coachRoleplayTurnOutputSchema = z.object({
   seasonReply: z.string().trim().min(1).max(800),
   learnerQuestion: z.string().trim().min(1).max(500),
-  suggestedLearnerReply: z.string().trim().min(1).max(500),
+  // The hint under Season's turn is an IDEA for the learner's answer (Vietnamese
+  // at A1–A2, an English idea description at B1+), never a sentence to copy.
+  // The API gate repairs a missing or sample-answer idea, so it stays optional.
+  answerIdea: z.string().trim().max(500).optional(),
+  answerIdeaTranslation: z.string().trim().max(500).optional(),
+  /** Legacy (pre-idea) field: an English sample answer. Read only for old/mocked turns. */
+  suggestedLearnerReply: z.string().trim().min(1).max(500).optional(),
   // The roleplay call translates its own three English strings. They are used
   // only when the displayed turn still matches that model text, and remain
   // optional so legacy/mocked turns without translations keep parsing.
@@ -36,14 +42,14 @@ export const coachRoleplayTurnOutputSchema = z.object({
 export const coachRoleplayTurnOutputJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["seasonReply", "learnerQuestion", "suggestedLearnerReply", "seasonReplyTranslation", "learnerQuestionTranslation", "suggestedLearnerReplyTranslation"],
+  required: ["seasonReply", "learnerQuestion", "answerIdea", "seasonReplyTranslation", "learnerQuestionTranslation", "answerIdeaTranslation"],
   properties: {
     seasonReply: { type: "string", maxLength: 800 },
     learnerQuestion: { type: "string", maxLength: 500 },
-    suggestedLearnerReply: { type: "string", maxLength: 500 },
+    answerIdea: { type: "string", maxLength: 500 },
     seasonReplyTranslation: { type: "string", maxLength: 1_000 },
     learnerQuestionTranslation: { type: "string", maxLength: 700 },
-    suggestedLearnerReplyTranslation: { type: "string", maxLength: 500 }
+    answerIdeaTranslation: { type: "string", maxLength: 500 }
   }
 } satisfies Record<string, unknown>;
 
@@ -72,9 +78,11 @@ export const coachOutputSchema = z.object({
     reason: z.string().trim().min(1).max(500)
   })).max(3),
   correctedText: z.string().trim().max(2_000),
+  // An answer IDEA, not a sample answer. A Vietnamese (A1–A2) idea has no
+  // translation, so the translation may be empty.
   suggestedAnswer: z.object({
     text: z.string().trim().min(1).max(500),
-    translation: z.string().trim().min(1).max(500)
+    translation: z.string().trim().max(500)
   }),
   usedWords: z.array(z.string().trim().min(1).max(100)).max(15)
 }).superRefine((output, context) => {

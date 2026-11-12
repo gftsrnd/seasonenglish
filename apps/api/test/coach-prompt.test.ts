@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coachInsufficientFollowUp, coachPersonaPrompt, coachPracticeTurnPolicy } from "../src/modules/coach/routes.js";
+import { coachFallbackFollowUp, coachPersonaPrompt, coachPracticeTurnPolicy, coachReaskFollowUp } from "../src/modules/coach/routes.js";
 import { prototypePromptDefaults } from "../../../packages/database/src/prototype-prompts.js";
 
 describe("Coach prompt safeguards", () => {
@@ -15,7 +15,11 @@ describe("Coach prompt safeguards", () => {
     expect(prompt).not.toContain("replyTranslation");
     expect(prompt).not.toContain("suggestions[].translation");
     expect(prompt).toContain("natural Vietnamese translation");
-    expect(prompt).toContain("suggestedAnswer must directly answer the final in-character question/request");
+    expect(prompt).toContain("suggestedAnswer gives an idea for answering the final in-character question/request");
+    expect(prompt).toContain("ANSWER IDEA");
+    expect(prompt).toContain("never be a sentence the learner can copy");
+    expect(prompt).toContain("SAME QUESTION UNTIL ANSWERED");
+    expect(prompt).not.toContain("use one concise learner-level example");
     expect(prompt).toContain("INSUFFICIENT means no meaningful attempt and requires meaning score 0");
     expect(prompt).toContain("ROLEPLAY FIRST");
     expect(prompt).toContain("Never write teacher, examiner, or coaching narration");
@@ -24,8 +28,8 @@ describe("Coach prompt safeguards", () => {
     expect(prompt).not.toContain("explanation must include a natural Vietnamese translation");
   });
 
-  it("keeps insufficient-turn replies in character and avoids asking for an already stated role", () => {
-    const reply = coachInsufficientFollowUp(
+  it("keeps fallback replies in character and avoids asking for an already stated role", () => {
+    const reply = coachFallbackFollowUp(
       "I am a project manager.",
       "What is your role?",
       "Handling Client Feedback Meetings",
@@ -40,18 +44,24 @@ describe("Coach prompt safeguards", () => {
     expect(reply.seasonReplyTranslation).toContain("Cảm ơn");
   });
 
-  it("asks about an actual detail from a short learner reply and honors earlier questions", () => {
-    const reply = coachInsufficientFollowUp(
-      "I sent the report",
-      "What did you send to the client?",
-      "Handling Client Feedback Meetings",
-      "formal",
-      ["What did you send to the client?", "What is the next step for “report”?"]
-    );
+  it("never builds a fallback question from a word picked out of the learner reply", () => {
+    for (const message of ["what do you mean?", "i don't know", "I sent the report"]) {
+      const reply = coachFallbackFollowUp(message, "What did you send to the client?", "Handling Client Feedback Meetings", "formal",
+        ["What did you send to the client?"]);
+      expect(reply.seasonReply).not.toMatch(/I hear you mention|next step for “(?:mean|know|report)”/u);
+      expect(reply.nextQuestion).not.toBe("What did you send to the client?");
+    }
+  });
 
-    expect(reply.nextQuestion).toBe("How does “report” affect the plan?");
-    expect(reply.seasonReply).toContain("“report”");
-    expect(reply.nextQuestion).not.toBe("What did you send to the client?");
+  it("re-asks the same open question for a gated reply instead of inventing a new one", () => {
+    const reply = coachReaskFollowUp({
+      kind: "insufficient", currentQuestion: "What did you send to the client?",
+      currentQuestionTranslation: "Bạn đã gửi gì cho khách hàng?", persona: "formal", cefr: "A1"
+    });
+    expect(reply.nextQuestion).toBe("What did you send to the client?");
+    expect(reply.seasonReply).toBe("I would like to hear a little more detail. What did you send to the client?");
+    expect(reply.seasonReplyTranslation).toContain("Bạn đã gửi gì cho khách hàng?");
+    expect(reply.suggestedAnswer).toBeUndefined();
   });
 
   it("keeps translations in dedicated fields in the canonical coach prompt", () => {
@@ -94,7 +104,7 @@ describe("Coach prompt safeguards", () => {
       ["What did the client say?", "Could you tell me when we can expect the final report?"],
       { currentQuestion: "Could you tell me when we can expect the final report?" });
     expect(policy).toContain('Exact questions already asked in this topic: ["What did the client say?"]');
-    expect(policy).toContain("Asking currentQuestion again (in the same or different words) is allowed only when the learner did not answer it");
+    expect(policy).toContain("When the learner did not answer currentQuestion, ask currentQuestion again");
   });
 
   it("round 2: a Formal prompt treats learner slang as a register deduction, not off_topic", () => {

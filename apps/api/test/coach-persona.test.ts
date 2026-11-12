@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { coachOutputSchema, type CoachTaskOutput } from "@e4s/ai";
 import {
-  coachInsufficientFollowUp, coachPracticeTurnGateReason, coachQuestionForPersona, isAcknowledgementOnly, isInsufficientCoachInput,
+  coachFallbackFollowUp, coachReaskFollowUp, coachPracticeTurnGateReason, coachQuestionForPersona, isAcknowledgementOnly, isInsufficientCoachInput,
   normalizeCoachVocabularyUnlocks, runCoachWithPersonaRepair, validateCoachPersonaOutput,
   containsVietnameseLearnerText, countCoachWords, isBlockingRoleplayViolation, logRoleplayDiagnostics,
-  repeatCurrentQuestionForOffTopic, coachCurrentQuestion, coachQuestionKey, finalizeCoachEvaluation, informalRegisterMarkers,
+  repeatCurrentQuestionForInvalidTurn, coachCurrentQuestion, coachQuestionKey, finalizeCoachEvaluation, informalRegisterMarkers,
   COACH_FEEDBACK_MAX_OUTPUT_TOKENS
 } from "../src/modules/coach/routes.js";
 
@@ -231,8 +231,9 @@ describe("Season persona output policy", () => {
     // The feedback call translated its own reply, not the accepted turn.
     expect(result.output.seasonReplyTranslation).toBe("");
     expect(result.output.nextQuestionTranslation).toBe("");
-    // The example text matches the accepted turn, so its translation stays.
-    expect(result.output.suggestedAnswer.translation).toBe("Tôi quản lý một nhóm nhỏ.");
+    // The English sample answer is never shown: the hint is an answer idea.
+    expect(result.output.suggestedAnswer).toMatchObject({ kind: "idea", translation: "" });
+    expect(result.output.suggestedAnswer.text).not.toMatch(/I manage/u);
   });
 
   it("returns a genuine correction and its Vietnamese translation for a graded incorrect answer", async () => {
@@ -276,7 +277,7 @@ describe("Season persona output policy", () => {
     expect(result.output.rubric.grammar.score).toBe(2);
     expect(result.output.corrections[0]).toMatchObject({ corrected: "The client sees the key numbers first.", translation: "Khách hàng sẽ xem các số liệu chính trước." });
     expect(result.output.seasonReplyTranslation).toContain("Tôi hiểu các số liệu rồi.");
-    expect(result.output.suggestedAnswer.translation).toBe("Khách hàng sẽ xem các số liệu chính trước.");
+    expect(result.output.suggestedAnswer.kind).toBe("idea");
   });
 
   it("keeps first-turn feedback independent from an informal persona's accepted reply", async () => {
@@ -307,7 +308,11 @@ describe("Season persona output policy", () => {
   it("keeps missing-word attempts out of scored turns while preserving an in-character Vietnamese prompt", () => {
     const message = "ok";
     expect(coachPracticeTurnGateReason(message, "A2", [])).toMatch(/chưa đủ/iu);
-    const followUp = coachInsufficientFollowUp(message, "What will the client see first?", "Handling Client Feedback Meetings", "formal", []);
+    const followUp = coachReaskFollowUp({
+      kind: "insufficient", currentQuestion: "What will the client see first?",
+      currentQuestionTranslation: "Khách hàng sẽ thấy gì trước?", persona: "formal", cefr: "A2"
+    });
+    expect(followUp.nextQuestion).toBe("What will the client see first?");
     expect(followUp.seasonReply).toContain(followUp.nextQuestion);
     expect(followUp.seasonReplyTranslation).toBeTruthy();
     expect(followUp.nextQuestionTranslation).toBeTruthy();
@@ -486,12 +491,14 @@ describe("Season persona output policy", () => {
         priorQuestions: ["How is the project going?", "What did the client say about the design?"]
       };
       const result = await runCoachWithPersonaRepair({ runTask }, baseInput(learnerMessage, "formal"), "System prompt", "formal", context);
-      const expected = coachInsufficientFollowUp(learnerMessage, context.currentQuestion, context.topic, "formal", context.priorQuestions);
+      const expected = coachFallbackFollowUp(learnerMessage, context.currentQuestion, context.topic, "formal", context.priorQuestions);
 
       expect(result.output.seasonReply).toBe(expected.seasonReply);
       expect(result.output.seasonReplyTranslation).toBe(expected.seasonReplyTranslation);
       expect(result.output.nextQuestionTranslation).toBe(expected.nextQuestionTranslation);
-      expect(result.output.suggestedAnswer.translation).toMatch(/Tôi sẽ chia sẻ/u);
+      // The hint is a Vietnamese answer idea (no level given -> A1-A2 rule), not an English sample.
+      expect(result.output.suggestedAnswer).toMatchObject({ kind: "idea", translation: "" });
+      expect(result.output.suggestedAnswer.text).toMatch(/^Bạn có thể/u);
       expect(result.output.evaluation.countsTowardGoal).toBe(true);
       const feedbackPrompt = String(runTask.mock.calls[1]?.[2]?.systemPrompt);
       expect(feedbackPrompt).toContain("seasonReply copied verbatim from ACCEPTED TURN.seasonReply");
@@ -505,21 +512,22 @@ describe("Season persona output policy", () => {
       expect(coachPracticeTurnGateReason(message, "A2", [])).toMatch(/tiếng Việt/u);
       expect(containsVietnameseLearnerText("My manager Lê reviews the design plan with José today.")).toBe(false);
       expect(coachPracticeTurnGateReason("My manager Lê reviews the design plan with José today.", "A2", [])).toBeUndefined();
-      const followUp = coachInsufficientFollowUp(message, "When is the design ready?", "Project update", "formal", []);
+      const followUp = coachReaskFollowUp({ kind: "vietnamese", currentQuestion: "When is the design ready?", persona: "formal" });
       expect(followUp.seasonReply).not.toMatch(/nhé|anh|gửi/u);
+      expect(followUp.nextQuestion).toBe("When is the design ready?");
       expect(countCoachWords("I would ask the client which part of the plan needs work.")).toBe(12);
     });
 
-    it("(f) does not append the current question when an off-topic reply already ends with a question", () => {
+    it("(f) keeps an off-topic reply that already re-asks the current question, and re-asks it otherwise", () => {
       const offTopic: CoachTaskOutput = {
         ...output("Let us return to the design. Could you tell me when the new design will be ready? 😊", "Could you tell me when the new design will be ready?"),
         evaluation: { status: "off_topic", result: "off_topic", countsTowardGoal: false, noteVi: "Lạc đề." }
       };
-      const repeated = repeatCurrentQuestionForOffTopic(offTopic, "Good morning, Lan. When will the new design be ready?");
+      const repeated = repeatCurrentQuestionForInvalidTurn(offTopic, { currentQuestion: "Good morning, Lan. When will the new design be ready?", persona: "informal" });
       expect(repeated.seasonReply).toBe(offTopic.seasonReply);
       expect(repeated.nextQuestion).toBe("Could you tell me when the new design will be ready?");
-      const noQuestion = repeatCurrentQuestionForOffTopic({ ...offTopic, seasonReply: "Let us return to the design." }, "When will it be ready?");
-      expect(noQuestion.seasonReply).toBe("Let us return to the design. When will it be ready?");
+      const noQuestion = repeatCurrentQuestionForInvalidTurn({ ...offTopic, seasonReply: "Let us return to the design." }, { currentQuestion: "When will it be ready?", persona: "formal" });
+      expect(noQuestion.seasonReply).toBe("I am not sure that answers my question yet. When will it be ready?");
       expect(noQuestion.nextQuestion).toBe("When will it be ready?");
     });
 
@@ -609,22 +617,20 @@ describe("Season persona output policy", () => {
     });
 
     it("1: the fallback question never leaks a stray quote into the next turn (conv-A1 turn 2 -> 3)", () => {
-      const followUp = coachInsufficientFollowUp("The client wants a new colour for the button.", "Could you tell me when we can expect the final report?",
+      const followUp = coachFallbackFollowUp("The client wants a new colour for the button.", "Could you tell me when we can expect the final report?",
         "Handling Client Feedback Meetings", "formal", []);
-      expect(followUp.seasonReply).toBe("I hear you mention “button”. What is the next step for “button”?");
+      expect(followUp.seasonReply).not.toMatch(/“button”|I hear you mention/u);
       const offTopic: CoachTaskOutput = {
         ...output(followUp.seasonReply, followUp.nextQuestion),
         evaluation: { status: "off_topic", result: "off_topic", countsTowardGoal: false, noteVi: "Lạc đề." },
         rubric: { ...output("a", "b").rubric, meaning: { score: 0, evidence: "Lạc đề.", improvement: "" } }
       };
-      const stored = repeatCurrentQuestionForOffTopic(offTopic, "Could you tell me when we can expect the final report?");
-      expect(stored.nextQuestion).toBe("What is the next step for “button”?");
+      // The turn does not count, so the stored anchor is the open question again.
+      const stored = repeatCurrentQuestionForInvalidTurn(offTopic, { currentQuestion: "Could you tell me when we can expect the final report?", persona: "formal" });
+      expect(stored.nextQuestion).toBe("Could you tell me when we can expect the final report?");
       // Turns already stored with the broken anchor are cleaned when read back.
       expect(coachCurrentQuestion([{ speaker: "coach", text: "x", feedback: { nextQuestion: "” What is the next step for “button”?" } }], "fallback"))
         .toBe("What is the next step for “button”?");
-      // A time word is not a useful focus ("the next step for “day”").
-      expect(coachInsufficientFollowUp("My team checks the file every day.", "What will you do after lunch?", "Topic", "formal", []).nextQuestion)
-        .toBe("What is the next step for “file”?");
     });
 
     it("1: an in-character question about a third party is a valid anchor (coach-A1 offtopic-informal)", async () => {
@@ -746,11 +752,13 @@ describe("Season persona output policy", () => {
       expect(result.output.seasonReply).toBe(turn.seasonReply);
       expect(result.output.seasonReplyTranslation).toBe(turn.seasonReplyTranslation);
       expect(result.output.nextQuestionTranslation).toBe(turn.learnerQuestionTranslation);
-      expect(result.output.suggestedAnswer.translation).toBe(turn.suggestedLearnerReplyTranslation);
+      // The legacy English sample answer is replaced by an answer idea.
+      expect(result.output.suggestedAnswer.kind).toBe("idea");
+      expect(result.output.suggestedAnswer.text).not.toBe(turn.suggestedLearnerReply);
       const feedbackPrompt = String(runTask.mock.calls[1]?.[2]?.systemPrompt);
       expect(feedbackPrompt).toContain("COPY FIRST, THEN TRANSLATE");
       expect(feedbackPrompt).not.toContain("learnerQuestionTranslation");
-      expect(String(runTask.mock.calls[0]?.[2]?.systemPrompt)).toContain("seasonReplyTranslation, learnerQuestionTranslation, and suggestedLearnerReplyTranslation");
+      expect(String(runTask.mock.calls[0]?.[2]?.systemPrompt)).toContain("seasonReplyTranslation and learnerQuestionTranslation are natural Vietnamese translations");
     });
 
     it("4: keeps the roleplay translation after a style-only repair but drops it when sentences were removed", async () => {

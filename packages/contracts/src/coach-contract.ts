@@ -52,7 +52,14 @@ export interface CoachFeedbackView {
   rubric: { meaning: CoachRubricCriterionView; vocabulary: CoachRubricCriterionView; grammar: CoachRubricCriterionView };
   corrections: CoachCorrectionView[];
   correctedText: string;
-  suggestedAnswer: { text: string; translation: string };
+  /**
+   * The hint under Season's turn. `kind: "idea"` (current turns) is an idea for
+   * the answer: Vietnamese at A1–A2, an English idea description at B1+. Old
+   * turns without `kind` hold an English sample answer and render as before.
+   */
+  suggestedAnswer: { text: string; translation: string; kind?: "idea" };
+  /** A clarification request or "I don't know": Season re-asked the question; the turn has no score. */
+  notScored?: boolean;
 }
 
 export interface CoachMessageView {

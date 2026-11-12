@@ -138,8 +138,12 @@ function CoachFeedback({ feedback, feedbackExpanded, explanationExpanded, onFeed
     missing_information: "Thiếu ý",
     off_topic: "Sai mục tiêu"
   } as const;
-  const feedbackUnavailable = feedback.feedbackStatus === "unavailable";
+  // A clarification request or "I don't know" is not scored: show the note only.
+  const feedbackUnavailable = feedback.feedbackStatus === "unavailable" || feedback.notScored === true;
   const retryCurrentQuestion = !feedbackUnavailable && feedback.evaluation.status !== "valid";
+  // Current turns carry an answer IDEA (shown even when the question is asked
+  // again); old turns hold an English sample answer and render as before.
+  const answerIdea = feedback.suggestedAnswer.kind === "idea";
   const suggestedAnswer = feedback.suggestedAnswer.text.trim();
   const suggestedTranslation = feedback.suggestedAnswer.translation.trim();
   const seasonReplyTranslation = feedback.seasonReplyTranslation.trim();
@@ -152,7 +156,7 @@ function CoachFeedback({ feedback, feedbackExpanded, explanationExpanded, onFeed
   return <section className="coach-feedback coach-feedback-flat" role="region" aria-label="Phản hồi của Season">
     <div className="coach-feedback-section coach-season-reply" aria-label="Phản hồi của Season">
       <p className="coach-season-spoken"><SeasonReplyText reply={feedback.seasonReply} question={feedback.nextQuestion} /></p>
-      {!retryCurrentQuestion && suggestedAnswer ? <div className="coach-next-question" aria-label="Câu trả lời gợi ý"><p><span>You can say:</span> <q>{suggestedAnswer}</q></p></div> : null}
+      {answerIdea && suggestedAnswer ? <div className="coach-next-question" aria-label="Gợi ý ý tưởng trả lời"><p><span>Gợi ý ý tưởng:</span> {suggestedAnswer}</p></div> : !answerIdea && !retryCurrentQuestion && suggestedAnswer ? <div className="coach-next-question" aria-label="Câu trả lời gợi ý"><p><span>You can say:</span> <q>{suggestedAnswer}</q></p></div> : null}
     </div>
     <div className="coach-feedback-disclosures">
       <details className="coach-feedback-disclosure" aria-label="Nhận xét câu trả lời của bạn" open={feedbackExpanded} onToggle={(event) => { if (event.currentTarget.open !== feedbackExpanded) onFeedbackExpandedChange(event.currentTarget.open); }}>
@@ -172,8 +176,8 @@ function CoachFeedback({ feedback, feedbackExpanded, explanationExpanded, onFeed
         <summary>Xem giải thích và gợi ý</summary>
         <div className="coach-feedback-details">
           {hasCoachTranslation(seasonReplyTranslation) ? <div className="coach-feedback-translation-block"><h4>Nghĩa câu Season trả lời</h4><p className="coach-feedback-translation">{seasonReplyTranslation}</p></div> : null}
-          {!retryCurrentQuestion && hasCoachTranslation(suggestedTranslation) ? <div className="coach-feedback-translation-block" aria-label="Bản dịch gợi ý trả lời"><h4>Bản dịch gợi ý trả lời</h4><p className="coach-feedback-translation">{suggestedTranslation}</p></div> : null}
-          {feedbackUnavailable ? <p className="coach-feedback-note" role="status">Chưa có điểm và gợi ý chi tiết cho lượt này.</p> : <div className="coach-feedback-criteria" aria-label="Giải thích điểm">{scores.map(({ label, criterion, points, max }) => <article className="coach-feedback-criterion-card" key={label}><div><b>{label}</b><strong>{coachScoreFormat.format(points)}/{coachScoreFormat.format(max)}</strong></div><p>{criterion.evidence}</p>{hasActionableImprovement(criterion.improvement) ? <p className="coach-feedback-improvement">Gợi ý: {criterion.improvement}</p> : null}</article>)}</div>}
+          {answerIdea && hasCoachTranslation(suggestedTranslation) ? <div className="coach-feedback-translation-block" aria-label="Nghĩa gợi ý ý tưởng"><h4>Nghĩa gợi ý ý tưởng</h4><p className="coach-feedback-translation">{suggestedTranslation}</p></div> : !answerIdea && !retryCurrentQuestion && hasCoachTranslation(suggestedTranslation) ? <div className="coach-feedback-translation-block" aria-label="Bản dịch gợi ý trả lời"><h4>Bản dịch gợi ý trả lời</h4><p className="coach-feedback-translation">{suggestedTranslation}</p></div> : null}
+          {feedbackUnavailable ? <p className="coach-feedback-note" role="status">{feedback.notScored ? "Lượt này không chấm điểm." : "Chưa có điểm và gợi ý chi tiết cho lượt này."}</p> : <div className="coach-feedback-criteria" aria-label="Giải thích điểm">{scores.map(({ label, criterion, points, max }) => <article className="coach-feedback-criterion-card" key={label}><div><b>{label}</b><strong>{coachScoreFormat.format(points)}/{coachScoreFormat.format(max)}</strong></div><p>{criterion.evidence}</p>{hasActionableImprovement(criterion.improvement) ? <p className="coach-feedback-improvement">Gợi ý: {criterion.improvement}</p> : null}</article>)}</div>}
         </div>
       </details>
     </div>

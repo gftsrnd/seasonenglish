@@ -608,8 +608,85 @@ describe("AI Coach API", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json().messages.at(-1).feedback).toMatchObject({
       nextQuestion: aiOutput.nextQuestion,
-      suggestedAnswer: { text: aiOutput.suggestedAnswer.text },
+      // The fixture's English sample answer is never shown; the A2 hint is a Vietnamese idea.
+      suggestedAnswer: { kind: "idea", translation: "" },
       evaluation: { status: "valid", countsTowardGoal: true }
     });
+    expect(response.json().messages.at(-1).feedback.suggestedAnswer.text).toMatch(/^Bạn có thể/u);
+  });
+
+  it("re-asks the same question for clarification, 'I don't know' and off-topic replies, and only advances on a valid answer", async () => {
+    const latestCoachFeedback = (body: any) => [...body.messages].reverse()
+      .find((message: { speaker: string; feedback?: unknown }) => message.speaker === "coach" && message.feedback)?.feedback;
+    const before = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
+    expect(before.statusCode, before.body).toBe(200);
+    const openQuestion = [...before.json().messages].reverse()
+      .find((message: { speaker: string }) => message.speaker === "coach")?.feedback?.nextQuestion
+      ?? [...before.json().messages].reverse().find((message: { speaker: string }) => message.speaker === "coach")?.text;
+    expect(openQuestion).toBeTruthy();
+    const send = (requestId: string, message: string) => app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie }, payload: { requestId, message }
+    });
+
+    // 1. Clarification: same question, simpler words, not counted, not scored, no AI call.
+    const clarification = await send("10000000-0000-4000-8000-000000000031", "what do you mean?");
+    expect(clarification.statusCode, clarification.body).toBe(200);
+    const clarified = latestCoachFeedback(clarification.json());
+    expect(clarified.seasonReply).not.toMatch(/I hear you mention|next step for/u);
+    expect(clarified.seasonReply).toContain(clarified.nextQuestion);
+    expect(clarified).toMatchObject({ notScored: true, evaluation: { countsTowardGoal: false }, suggestedAnswer: { kind: "idea" } });
+    const repeatedQuestion = clarified.nextQuestion;
+
+    // 2. "I don't know": idea hint in Vietnamese (A2) and the same question again.
+    const dontKnow = await send("10000000-0000-4000-8000-000000000032", "i don't know");
+    expect(dontKnow.statusCode, dontKnow.body).toBe(200);
+    const hinted = latestCoachFeedback(dontKnow.json());
+    expect(hinted).toMatchObject({ nextQuestion: repeatedQuestion, notScored: true, evaluation: { countsTowardGoal: false }, suggestedAnswer: { kind: "idea", translation: "" } });
+    expect(hinted.suggestedAnswer.text).toMatch(/^Bạn có thể/u);
+    expect(hinted.seasonReply).not.toMatch(/I hear you mention|“know”/u);
+    expect(roleplay).not.toHaveBeenCalled();
+    expect(runTask).not.toHaveBeenCalled();
+
+    // 3. AI says off-topic while its roleplay turn moved on: the open question is kept.
+    runTask.mockResolvedValueOnce({
+      output: { ...aiOutput, evaluation: { status: "off_topic", result: "off_topic", countsTowardGoal: false, noteVi: "Câu trả lời chưa liên quan." },
+        rubric: { ...aiOutput.rubric, meaning: { score: 0, evidence: "Lạc đề.", improvement: "" } }, corrections: [], correctedText: "", usedWords: [] } as any,
+      metadata: { traceId: "trace-off-topic-2", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+        attempts: 1, latencyMs: 12, inputHash: "e".repeat(64), schemaValid: true as const, usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
+    });
+    const offTopic = await send("10000000-0000-4000-8000-000000000033", "My favorite color is purple and I like painting.");
+    expect(offTopic.statusCode, offTopic.body).toBe(200);
+    const kept = latestCoachFeedback(offTopic.json());
+    expect(kept).toMatchObject({ nextQuestion: repeatedQuestion, evaluation: { status: "off_topic", countsTowardGoal: false }, suggestedAnswer: { kind: "idea" } });
+    expect(kept.seasonReply).toContain(repeatedQuestion);
+    expect(kept.seasonReply).not.toContain(aiOutput.nextQuestion);
+    expect(offTopic.json().monthly.turns).toBe(before.json().monthly.turns);
+    expect(offTopic.json().daily.used).toBe(before.json().daily.used);
+
+    // 4. A valid answer is graded against the repeated question and then advances.
+    const valid = await send("10000000-0000-4000-8000-000000000034", "I check the client report and send the summary to my manager.");
+    expect(valid.statusCode, valid.body).toBe(200);
+    expect((roleplay.mock.calls.at(-1)?.[1] as { currentQuestion: string }).currentQuestion).toBe(repeatedQuestion);
+    expect((runTask.mock.calls.at(-1)?.[1] as { currentQuestion: string }).currentQuestion).toBe(repeatedQuestion);
+    const advanced = latestCoachFeedback(valid.json());
+    expect(advanced).toMatchObject({ nextQuestion: aiOutput.nextQuestion, evaluation: { status: "valid", countsTowardGoal: true } });
+    expect(valid.json().monthly.turns).toBe(before.json().monthly.turns + 1);
+  });
+
+  it("re-asks the open question politely when the AI is unavailable", async () => {
+    const before = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
+    const openQuestion = [...before.json().messages].reverse()
+      .find((message: { speaker: string }) => message.speaker === "coach")?.feedback?.nextQuestion
+      ?? [...before.json().messages].reverse().find((message: { speaker: string }) => message.speaker === "coach")?.text;
+    aiRunnerFactory.mockResolvedValueOnce(undefined);
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000035", message: "I usually review the client report every Monday morning." }
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const feedback = response.json().messages.at(-1).feedback;
+    expect(feedback.nextQuestion).toBe(openQuestion);
+    expect(feedback.seasonReply).toMatch(/I'll reply properly as soon as I'm available again\./u);
+    expect(feedback.seasonReply).not.toMatch(/I hear you mention|next step for/u);
   });
 });

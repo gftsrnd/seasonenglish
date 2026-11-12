@@ -8644,7 +8644,7 @@ class CoachRepository {
         grammar: { score: number; evidence: string; improvement: string };
       };
       corrections: Array<{ original: string; corrected: string; translation: string; reason: string }>;
-      correctedText: string; suggestedAnswer: { text: string; translation: string }; usedWords: string[];
+      correctedText: string; suggestedAnswer: { text: string; translation: string; kind?: "idea" }; usedWords: string[];
     };
     metadata: {
       traceId: string; provider: string; model: string; inputHash: string;
@@ -8834,6 +8834,10 @@ class CoachRepository {
     nextQuestionTranslation: string;
     reasonVi?: string;
     aiFailureCode?: string;
+    /** Answer idea for the re-asked question (for example after "I don't know"). */
+    suggestedAnswer?: { text: string; translation: string };
+    /** Clarification / "I don't know": stored without a rubric penalty. */
+    notScored?: boolean;
   }): Promise<boolean> {
     const client = await this.pool.connect();
     try {
@@ -8868,12 +8872,20 @@ class CoachRepository {
             seasonReply: input.seasonReply, seasonReplyTranslation: input.seasonReplyTranslation,
             nextQuestion: input.nextQuestion,
             nextQuestionTranslation: input.nextQuestionTranslation,
-            ...(input.aiFailureCode ? {} : { rubric: {
+            ...(input.notScored ? { notScored: true } : {}),
+            ...(input.aiFailureCode ? {} : { rubric: input.notScored ? {
+              meaning: { score: 0, evidence: "Season hỏi lại câu hỏi; lượt này không chấm điểm.", improvement: "" },
+              vocabulary: { score: 0, evidence: "Season hỏi lại câu hỏi; lượt này không chấm điểm.", improvement: "" },
+              grammar: { score: 0, evidence: "Season hỏi lại câu hỏi; lượt này không chấm điểm.", improvement: "" }
+            } : {
               meaning: { score: 0, evidence: `“${input.message}” chưa đủ thông tin để trả lời câu hỏi.`, improvement: "Viết một câu có chủ ngữ và ý chính." },
               vocabulary: { score: 0, evidence: "Chưa đủ nội dung để đánh giá từ vựng.", improvement: "Dùng ít nhất một từ liên quan đến câu hỏi." },
               grammar: { score: 0, evidence: "Chưa đủ câu để đánh giá ngữ pháp.", improvement: "Viết một câu tiếng Anh hoàn chỉnh." }
             } }),
-            corrections: [], correctedText: "", suggestedAnswer: { text: "", translation: "" },
+            corrections: [], correctedText: "",
+            suggestedAnswer: input.suggestedAnswer?.text.trim()
+              ? { text: input.suggestedAnswer.text.trim(), translation: input.suggestedAnswer.translation.trim(), kind: "idea" }
+              : { text: "", translation: "" },
             usedWords: [], checked: false
           })]
       );
@@ -9245,8 +9257,10 @@ function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView
     correctedText: typeof value.correctedText === "string" ? value.correctedText : "",
     suggestedAnswer: {
       text: typeof suggestedAnswerSource?.text === "string" ? suggestedAnswerSource.text : "",
-      translation: typeof suggestedAnswerSource?.translation === "string" ? suggestedAnswerSource.translation : ""
-    }
+      translation: typeof suggestedAnswerSource?.translation === "string" ? suggestedAnswerSource.translation : "",
+      ...(suggestedAnswerSource?.kind === "idea" ? { kind: "idea" as const } : {})
+    },
+    ...(value.notScored === true ? { notScored: true } : {})
   };
 }
 
