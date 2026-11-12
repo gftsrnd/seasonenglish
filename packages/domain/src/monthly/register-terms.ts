@@ -95,7 +95,7 @@ const FORMAL_CUE = /\b(?:formal|business|official|legal|academic|reports?|workpl
 /** Proper names a general source note may use; any other capitalised word suggests a specific title. */
 const ALLOWED_SOURCE_NAMES = new Set(["shakespeare", "shakespeare's", "shakespearean", "king", "james", "bible", "biblical", "english", "old", "middle", "milton", "chaucer", "tennyson", "keats", "wordsworth", "byron", "spenser", "romantic", "victorian", "elizabethan", "medieval", "arthurian", "greek", "latin", "norse"]);
 /** A slang usage note says when NOT to use the word. */
-const NEGATIVE_CUE = /\b(?:not|never|avoid|don't|do not|instead of|rather than|unsuitable|inappropriate)\b/iu;
+const NEGATIVE_CUE = /\b(?:not|never|avoid|don't|do not|instead|rather than|unsuitable|inappropriate|prefer(?:red)?|only (?:in|with|for)|in formal (?:writing|reports?|emails?|documents?|settings?|meetings?|contexts?))\b/iu;
 
 function normalize(value: string): string {
   return value.trim().toLocaleLowerCase("en-US").replace(/’/gu, "'").replace(/\s+/gu, " ");

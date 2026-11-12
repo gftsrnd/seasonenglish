@@ -44,6 +44,9 @@ describe("monthly slang / poetic synonyms (L-042, 12/11 definition)", () => {
   it("slang needs a genuine distinct word, IPA and a usage note that says when NOT to use it", () => {
     expect(monthlyRegisterTermIssue({ word: "dollar" }, { ...buck, usage: "Use it with friends and colleagues." }, { cefr: "B1" })).toMatch(/when NOT to use/u);
     expect(monthlyRegisterTermIssue({ word: "dollar" }, { ...buck, ipa: "" }, { cefr: "B1" })).toMatch(/British IPA/u);
+    // Trial run 2 (12/11): "in formal writing use X" / "casual only" also say when not to use it.
+    expect(monthlyRegisterTermIssue({ word: "dollar" }, { ...buck, usage: "Common when chatting with friends. In formal writing, use dollar." }, { cefr: "B1" })).toBeUndefined();
+    expect(monthlyRegisterTermIssue({ word: "dollar" }, { ...buck, usage: "Casual chat only with friends or close colleagues." }, { cefr: "B1" })).toBeUndefined();
     expect(monthlyRegisterTermIssue({ word: "dollar" }, { ...buck, usage: "Dùng khi nói chuyện thân mật, không dùng trong email." }, { cefr: "B1" })).toMatch(/no Vietnamese/u);
     // Not a synonym but the same word dressed up, or a word already on the card (report -> update is an existing support).
     expect(monthlyRegisterTermIssue({ word: "contribute" }, { ...buck, word: "contribute to", definition: "give your part to a task" }, { cefr: "B1" })).toMatch(/form of the core word/u);
