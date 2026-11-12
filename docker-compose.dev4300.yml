@@ -1,0 +1,26 @@
+# Separate dev copy of E4S on http://127.0.0.1:4300 (its own database and storage).
+# Use: docker compose -p e4s-dev -f docker-compose.yml -f docker-compose.dev4300.yml <command>
+# The public site (e4s.gfts.vn → 4175, project e4s-local) is not touched by this project.
+services:
+  postgres:
+    ports: !override
+      - "127.0.0.1:5434:5432"
+
+  minio:
+    ports: !reset []
+
+  migrate:
+    command: ["pnpm", "exec", "tsx", "scripts/prepare-deployment.ts"]
+    environment:
+      E4S_SEED_SCENARIOS: "false"
+
+  api:
+    ports: !override
+      - "127.0.0.1:4301:3001"
+
+  web:
+    build:
+      args:
+        VITE_E4S_STAFF_DIRECT_ENTRY: "1"
+    ports: !override
+      - "127.0.0.1:4300:80"
