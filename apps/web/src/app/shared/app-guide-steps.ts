@@ -8,7 +8,13 @@ export type GuideStep = readonly [selector: string, title: string, text: string,
 
 const learnerSteps: Record<string, readonly GuideStep[]> = {
   "/home": [
-    [".onboarding-steps", "Các bước bắt đầu", "Làm lần lượt: **Hoàn thiện hồ sơ** để E4S chọn ví dụ hợp với bạn, rồi **Làm bài đầu vào** để Vận hành xếp trình độ."],
+    // Trang chủ trước khi có trình độ: thẻ 3 bước (bước đang làm theo trạng thái) và thẻ hỗ trợ.
+    [".onboarding-steps", "Ba bước bắt đầu", "Làm lần lượt **Hồ sơ cá nhân**, **Test đầu vào**, rồi chờ **Vận hành duyệt mức**. Nhãn mỗi bước cho biết bước nào **đã xong** và bạn **đang ở** đâu."],
+    ['.onboarding-steps .st.done:has(a[href="/onboard"])', "Hồ sơ đã lưu", "Hồ sơ đã xong. Bấm **Xem / sửa hồ sơ** nếu cần đổi công việc, mục tiêu hay cách học."],
+    ['.onboarding-steps .st.cur:has(a[href="/onboard"])', "Điền hồ sơ", "Bấm **Điền hồ sơ**, khoảng **2 phút**, để bài học sát công việc của bạn. Đã lưu nháp thì bấm **Tiếp tục phần đã lưu**."],
+    ['.onboarding-steps .st.cur:has(a[href="/test/placement"])', "Làm test đầu vào", "Bài có **4 phần** Nghe, Đọc, Viết, Nói, tối đa **75 phút**. Chuẩn bị **tai nghe** và **micro**, rồi bấm **Bắt đầu test**; không cần ôn trước."],
+    [".onboarding-steps .st.cur:not(:has(a))", "Chờ duyệt mức", "Bài test đã gửi, **Vận hành** đang xem điểm để xếp mức. Bạn không cần làm gì thêm; bài học **tự mở** khi có mức."],
+    [".learner-support-entry", "Hỗ trợ học tập", "Gặp vấn đề với tài khoản, hồ sơ hay bài test thì mở thẻ này để gửi **khiếu nại** và xem **phản hồi** đã nhận."],
     ['[data-home-block="primary"]:has(a[href^="/lesson/"])', "Bài học hôm nay", "Bấm bài được đề xuất để học hoặc học tiếp. **Bài học bù** hay **bài ôn** cần làm trước cũng hiện ở đây."],
     ['[data-home-block="primary"]:has(a[href^="/support"]):not(:has(a[href^="/lesson/"]))', "Bài học đang khóa", "Bạn đã bỏ lỡ bài thi tháng trước. Bấm **Gửi đơn xin mở** và nêu lý do để Quản lý xem xét."],
     ['.home-page[data-monthly-preparation="true"] [data-home-block="primary"]:not(:has(a[href^="/lesson/"], a[href^="/support"]))', "Lộ trình đang chuẩn bị", "Vận hành đang chuẩn bị và duyệt bộ bài tháng cho trình độ của bạn. Trong lúc chờ, bạn vẫn luyện được với Season."],
@@ -45,9 +51,9 @@ const learnerSteps: Record<string, readonly GuideStep[]> = {
     ["#gm-board:has(.game-result.is-complete)", "Kết quả lượt chơi", "Xem điểm của lượt vừa chơi. Bấm **Chơi lại** để bắt đầu lượt mới với cùng bộ từ."],
   ],
   "/lesson/*": [
-    [".lesson-part:not(:has(.lesson-answer))", "Phần học", "Mỗi thẻ là một phần học: **từ vựng**, **ngữ pháp** hoặc **phát âm**. Đọc hết và bấm biểu tượng loa để nghe mẫu."],
-    // A1–A2 grammar example cards with a translate icon (Vietnamese popup).
-    [".lesson-part--grammar:has(.lesson-example-wrap)", "Câu ví dụ ngữ pháp", "Chạm vào câu ví dụ để **nghe**. Chạm **biểu tượng dịch** trên thẻ để xem **nghĩa tiếng Việt**."],
+    [":not(:has(> .lesson-part .lesson-example-wrap)) > .lesson-part:not(:has(.lesson-answer))", "Phần học", "Mỗi thẻ là một phần học: **từ vựng**, **ngữ pháp** hoặc **phát âm**. Đọc hết và bấm biểu tượng loa để nghe mẫu."],
+    // A1–A2: the same step sits on the grammar card, whose examples carry a translate icon (Vietnamese popup).
+    [".lesson-part--grammar:has(.lesson-example-wrap)", "Phần học", "Mỗi thẻ là **từ vựng**, **ngữ pháp** hoặc **phát âm**; bấm loa để nghe mẫu. Chạm câu ví dụ để **nghe**, chạm **biểu tượng dịch** để xem **nghĩa tiếng Việt**."],
     [".lesson-part:has(.lesson-answer)", "Phần luyện tập", "Trả lời rồi bấm **Nộp bài** (bài tiếng Anh: **Submit**) để lưu phần đó. Thấy câu sai đề, bấm **Báo lỗi câu này** (**Report an issue**) để Vận hành xem lại."],
     [".lesson-appeal-form", "Báo lỗi phần bài", "Ghi rõ câu hoặc nội dung bạn cho là sai, đính kèm ảnh nếu có, rồi gửi để **Vận hành** xem lại.", true],
     [".lesson-study-cta", "Xong phần Học", "Học hết các phần phía trên rồi bấm nút ở thẻ này để mở **Luyện tập**."],
@@ -72,6 +78,8 @@ const learnerSteps: Record<string, readonly GuideStep[]> = {
     [".profile-assessment-section", "Kết quả đánh giá", "Điểm **đầu vào** và các bài đánh giá theo từng kỹ năng nghe, đọc, viết, nói."],
   ],
   "/support": [
+    // Thẻ Tất cả chỉ có bảng lịch sử: thêm hàng mục để người học biết gửi khiếu nại, kháng nghị ở đâu.
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])) .request-tabs', "Các mục hỗ trợ", "Mở **Khiếu nại** để báo lỗi điểm danh, bài học hay tài khoản, **Kháng nghị** để xin chấm lại bài thi, **Khảo sát tháng** để góp ý."],
     ['[aria-labelledby="learner-complaint-title"]', "Khiếu nại mới", "Chọn **loại khiếu nại**, ghi ngày hoặc màn hình xảy ra, nêu **lý do** và đính kèm ảnh nếu có, rồi bấm **Gửi cho Quản lý**.", true],
     [".learner-support-action:has(.assessment-appeal-status)", "Bài có thể kháng nghị", "Bấm **Gửi kháng nghị** ở bài còn hạn, nêu lý do từ **10 ký tự**, chọn trình độ đề xuất nếu được hỏi, rồi gửi cho Vận hành."],
     [".card:has(> .monthly-survey-form), .monthly-survey-form", "Khảo sát tháng", "Trả lời các câu có **dấu sao** rồi bấm **Gửi phản hồi**. Có nhiều tháng đang mở thì chọn tháng ở đầu thẻ."],

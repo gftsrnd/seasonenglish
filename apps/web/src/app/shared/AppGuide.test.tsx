@@ -178,19 +178,25 @@ describe("AppGuide", () => {
     expect(walkSteps()).toEqual(["Phần học", "Xong phần Học", "Hoàn thành bài"]);
   });
 
-  it("points A1–A2 learners at the grammar example card with its translation popup", () => {
+  it("folds the A1–A2 translate icon into the lesson part step on the grammar card", () => {
     render(<><AppGuide role="learner" pathname="/lesson/1" compact={false} />
       <ol><li className="card lesson-part lesson-part--vocabulary">Từ vựng</li>
         <li className="card lesson-part lesson-part--grammar"><span className="lesson-example-wrap"><button>I have sent it.</button><button aria-label="Xem nghĩa tiếng Việt" /><span role="tooltip" hidden>Tôi đã gửi.</span></span></li></ol>
       <section className="card lesson-study-cta"><button>Học xong</button></section>
     </>);
-    expect(walkSteps()).toEqual(["Phần học", "Câu ví dụ ngữ pháp", "Xong phần Học"]);
+    fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
+    expect(within(screen.getByRole("dialog")).getByText(/biểu tượng dịch/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Đóng hướng dẫn" }));
+    expect(walkSteps()).toEqual(["Phần học", "Xong phần Học"]);
   });
 
-  it("skips the grammar example step when examples have no translation (B1+, older lessons)", () => {
+  it("keeps the plain lesson part step when examples have no translation (B1+, older lessons)", () => {
     render(<><AppGuide role="learner" pathname="/lesson/1" compact={false} />
       <ol><li className="card lesson-part lesson-part--grammar"><button>I have sent it.</button></li></ol>
     </>);
+    fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
+    expect(within(screen.getByRole("dialog")).queryByText(/biểu tượng dịch/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Đóng hướng dẫn" }));
     expect(walkSteps()).toEqual(["Phần học"]);
   });
 
@@ -434,6 +440,37 @@ describe("AppGuide", () => {
       </div>
     </>);
     expect(walkSteps()).toEqual(["Lộ trình đang chuẩn bị", "Luyện trong lúc chờ", "Hồ sơ và đầu vào"]);
+  });
+
+  it("guides a new learner's home through the setup card, the current step and support", async () => {
+    const content = (stage: 1 | 2 | 3) => <><AppGuide role="learner" pathname="/home" compact />
+      <div className="app-learner-page">
+        <section className="card setup onboarding-steps"><h2>3 bước để bắt đầu học</h2>
+          <div className={`st ${stage === 1 ? "cur" : "done"}`}><h3>Hồ sơ cá nhân</h3><a href="/onboard">{stage === 1 ? "Điền hồ sơ" : "Xem / sửa hồ sơ"}</a></div>
+          <div className={`st ${stage === 2 ? "cur" : stage > 2 ? "done" : "todo"}`}><h3>Test đầu vào</h3>{stage === 2 && <a href="/test/placement">Bắt đầu test</a>}</div>
+          <div className={`st ${stage === 3 ? "cur" : "todo"}`}><h3>Vận hành duyệt mức</h3></div>
+        </section>
+        <a className="card learner-support-entry" href="/support?from=home">Hỗ trợ học tập</a>
+      </div>
+    </>;
+    const { rerender } = render(content(1));
+    expect(walkSteps()).toEqual(["Ba bước bắt đầu", "Điền hồ sơ", "Hỗ trợ học tập"]);
+    rerender(content(2));
+    await act(async () => { await new Promise(requestAnimationFrame); });
+    expect(walkSteps()).toEqual(["Ba bước bắt đầu", "Hồ sơ đã lưu", "Làm test đầu vào", "Hỗ trợ học tập"]);
+    rerender(content(3));
+    await act(async () => { await new Promise(requestAnimationFrame); });
+    expect(walkSteps()).toEqual(["Ba bước bắt đầu", "Hồ sơ đã lưu", "Chờ duyệt mức", "Hỗ trợ học tập"]);
+  });
+
+  it("explains the support sections on the All tab before the history", () => {
+    render(<><AppGuide role="learner" pathname="/support" compact />
+      <main className="learner-support-page">
+        <nav className="request-tabs"><a href="/support" aria-current="page">Tất cả</a><a href="?type=complaints">Khiếu nại</a></nav>
+        <section className="request-card">Lịch sử hỗ trợ</section>
+      </main>
+    </>);
+    expect(walkSteps()).toEqual(["Các mục hỗ trợ", "Lịch sử hỗ trợ"]);
   });
 
   it("guides the Season card areas and omits the composer while it is unavailable", async () => {
