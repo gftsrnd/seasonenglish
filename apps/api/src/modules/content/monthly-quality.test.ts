@@ -158,7 +158,7 @@ function contract(): MonthlyCurriculumContract {
 
 function lesson(overrides: { parts?: Array<{ code: string; content: Record<string, unknown> }> } = {}) {
   return { title: "A usable title", parts: overrides.parts ?? requiredCodes.map((code) => {
-    if (code === "objective") return part(code, { text: "Identify three budget words." });
+    if (code === "objective") return part(code, { text: "Identify three budget words.", items: ["Nhận biết ba từ về ngân sách trong email công việc.", "Dùng cấu trúc mới để nói về chi phí dự án."] });
     if (code === "instruction") return part(code, { steps: ["Đọc ví dụ.", "Trả lời câu hỏi."] });
     if (code === "vocabulary") return part(code, { items: [
       { word: "core-one", synonyms: [], antonyms: [], collocations: ["core-one plan", "a core-one", "core-one cost"], collocationTranslations: ["kế hoạch core-one", "một core-one", "chi phí core-one"] },
@@ -234,6 +234,7 @@ describe("monthly lesson quality – AI quality plan 11/11 (WP1, WP3, WP7, WP8)"
   };
   const englishB1 = (candidate: ReturnType<typeof lesson>) => ({ ...candidate, parts: candidate.parts.map((item) => {
     if (item.code === "instruction") return part("instruction", { steps: ["Read the example.", "Answer the question."] });
+    if (item.code === "objective") return part("objective", { ...item.content, items: ["Identify three budget words in a work email.", "Use the new structure to describe a project cost."] });
     // B1+ cards carry no collocation translations (generation drops them).
     if (item.code === "vocabulary") return part("vocabulary", { ...item.content, items: (item.content.items as Array<Record<string, unknown>>).map(({ collocationTranslations: _lines, ...card }) => card) });
     if (item.code === "grammar") return part("grammar", { ...item.content, items: (item.content.items as Array<Record<string, unknown>>).map((question) => ({ ...question, prompt: "Choose the correct form: They ____ the plan.", explanation: "A plural subject takes the base form." })) });
@@ -423,5 +424,41 @@ describe("Friday review gate (AI quality round 2, 11/11)", () => {
     expect(message("word_use", "MONTHLY_REVIEW_COUNT")).toContain("word_use.items must contain exactly 2 items; it has 1 (1 missing)");
     expect(message("word_class", "MONTHLY_REVIEW_COUNT")).toContain("word_class.items must contain exactly 2 Word form items; it has 1 (1 missing)");
     expect(message("speaking", "MONTHLY_REVIEW_MINIMAL_PAIRS")).toContain("it has 0 minimal pair(s), 0 read-aloud, 0 free response");
+  });
+});
+
+describe("monthly lesson objective (12/11: core words shown as objectives)", () => {
+  const withObjective = (content: Record<string, unknown>) => {
+    const candidate = lesson();
+    return { ...candidate, parts: candidate.parts.map((item) => item.code === "objective" ? part("objective", content) : item) };
+  };
+  const objectiveFinding = (content: Record<string, unknown>) => evaluateMonthlyLessonQuality(contract(), 1, withObjective(content)).severe.find((item) => item.code === "MONTHLY_OBJECTIVE_CAN_DO");
+
+  it("passes 2-3 can-do statements", () => {
+    expect(objectiveFinding({ text: "Nói về chi phí dự án.", items: ["Nhận biết ba từ về ngân sách trong email.", "Dùng cấu trúc mới để nói về chi phí dự án."] })).toBeUndefined();
+  });
+
+  it("rejects the day's core words stored as objective items (real 4300 lesson a50bf937: partner / discuss / agree) and sends objective to repair", () => {
+    const found = objectiveFinding({ text: "Nói về chi phí dự án.", items: ["core-one", "core-two", "core-three"] });
+    expect(found?.component).toBe("objective");
+    expect(found?.message).toContain("is a word or heading, not a can-do statement");
+    expect(found?.message).toContain("2-3 short Vietnamese can-do statements");
+  });
+
+  it("rejects missing items, vocabulary cards, too many items and an internal step label", () => {
+    expect(objectiveFinding({ text: "Nói về chi phí dự án." })?.message).toContain("must hold 2-3 can-do statements; it has 0");
+    expect(objectiveFinding({ text: "Nói về chi phí.", items: [{ word: "client", meaning: "khách hàng" }, { word: "report", meaning: "báo cáo" }] })?.message).toContain("vocabulary cards");
+    const twelve = Array.from({ length: 12 }, (_, index) => `Ôn lại từ số ${index + 1} trong bài.`);
+    expect(objectiveFinding({ text: "Ôn tập tuần.", items: twelve })?.message).toContain("it has 12");
+    expect(objectiveFinding({ text: "Step B1 (Identify): Notice past simple in a meeting summary.", items: ["Nhận biết ba từ về ngân sách trong email.", "Dùng cấu trúc mới để nói về chi phí dự án."] })?.message).toContain("internal step label");
+  });
+
+  it("applies the level language: Vietnamese at A1-A2, English from B1", () => {
+    expect(objectiveFinding({ text: "Nói về chi phí.", items: ["Identify three budget words in an email.", "Use the new structure to describe a cost."] })?.message).toContain("must be written in Vietnamese for A1");
+    const b1 = contract(); b1.cefr = "B1";
+    const english = withObjective({ text: "Describe a project cost.", items: ["Identify three budget words in an email.", "Use the new structure to describe a cost."] });
+    expect(evaluateMonthlyLessonQuality(b1, 1, english).severe.map((item) => item.code)).not.toContain("MONTHLY_OBJECTIVE_CAN_DO");
+    const words = withObjective({ text: "Describe a project cost.", items: ["Partner", "Discuss", "Agree"] });
+    expect(evaluateMonthlyLessonQuality(b1, 1, words).severe.find((item) => item.code === "MONTHLY_OBJECTIVE_CAN_DO")?.message).toContain("2-3 short English can-do statements");
   });
 });

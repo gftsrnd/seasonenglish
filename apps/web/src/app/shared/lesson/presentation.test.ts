@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { conciseGrammarExample, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "./presentation.js";
+import { conciseGrammarExample, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead, learnerObjectiveStatements } from "./presentation.js";
 
 describe("lesson presentation", () => {
   it("presents grammar examples without silently truncating or rewriting them", () => {
@@ -28,5 +28,19 @@ describe("lesson presentation", () => {
     expect(learnerFacingObjectiveBody("Sau bài học, bạn có thể xác nhận thời gian giao hàng.")).toBe("Xác nhận thời gian giao hàng.");
     expect(learnerObjectiveLead("B1")).toBe("By the end of this lesson, you will be able to:");
     expect(learnerFacingObjectiveBody("By the end of this lesson, you will be able to explain a delivery delay.")).toBe("Explain a delivery delay.");
+  });
+
+  it("never lists bare core words as objectives (4300 lesson a50bf937: partner / discuss / agree)", () => {
+    expect(learnerObjectiveStatements(["partner", "discuss", "agree"])).toEqual([]);
+    expect(learnerObjectiveStatements([{ word: "client", meaning: "khách hàng" }, "Partner"])).toEqual([]);
+    expect(learnerObjectiveStatements(["Explain a delivery delay to a client.", "agree", { type: "content", text: "SWBAT summarize the project status." }]))
+      .toEqual(["Explain a delivery delay to a client.", "SWBAT summarize the project status."]);
+    expect(learnerObjectiveStatements([{ type: "language", text: "Use could to make a polite offer." }], (item) => item.type !== "language")).toEqual([]);
+    expect(learnerObjectiveStatements("partner")).toEqual([]);
+  });
+
+  it("drops internal roadmap step labels from the fallback objective text", () => {
+    expect(learnerFacingObjective("Step B1 (Identify): Notice past simple sequences in a real meeting summary.", "B1"))
+      .toBe("By the end of this lesson, you will be able to notice past simple sequences in a real meeting summary.");
   });
 });

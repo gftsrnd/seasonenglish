@@ -15,7 +15,7 @@ import { ErrorText, Notice, PageTitle, AppLink, learnerLessonLabel, learnerLesso
 import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } from "../shared/lesson/VocabularyCard.js";
 import { vocabularyPresentationBlocks } from "../shared/lesson/vocabulary-groups.js";
 import { GrammarExampleButton } from "../shared/lesson/GrammarExampleButton.js";
-import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "../shared/lesson/presentation.js";
+import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead, learnerObjectiveStatements } from "../shared/lesson/presentation.js";
 import { lessonInstructionSteps } from "../shared/lesson/instructions.js";
 import { PronunciationMouthPanel, PronunciationMouthToggle } from "./PronunciationMouthForm.js";
 import { WeeklyReview } from "./WeeklyReview.js";
@@ -803,9 +803,8 @@ export function SharedLessonPartContent({
   const vocabularyBlocks = part.code !== "vocabulary" ? [] : collapsibleVocabulary ? words.map((item) => ({ kind: "item" as const, item })) : vocabularyPresentationBlocks(words, content.groups);
   const objectiveItems = part.code === "objective"
     // Monthly AI lessons store objective items as plain strings; weekly lessons use { text, type }.
-    ? (content.items ?? []).flatMap((item: unknown) => typeof item === "string"
-      ? (item.trim() ? [item] : [])
-      : item && typeof item === "object" && "text" in item && typeof item.text === "string" && (grammarAvailable || !("type" in item) || (item as { type?: unknown }).type !== "language") ? [item.text] : [])
+    // Bare core words ("partner", "discuss") are not objectives: they are dropped and the objective text shows instead.
+    ? learnerObjectiveStatements(content.items, (item) => grammarAvailable || item.type !== "language")
     : [];
   const steps = Array.isArray(content.steps)
     ? content.steps.filter((step): step is string => typeof step === "string" && Boolean(step.trim()))

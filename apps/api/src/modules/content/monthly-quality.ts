@@ -5,6 +5,7 @@ import { monthlyGrammarRoadmapDayIssues } from "./monthly-grammar-roadmap.js";
 import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
 import { monthlyAnswerKeyFindings } from "./monthly-answer-checks.js";
 import { monthlyWordFormScopeFindings } from "./monthly-word-form-scope.js";
+import { monthlyObjectiveFixHint, monthlyObjectiveIssues } from "./monthly-objective-quality.js";
 
 const REQUIRED_COMPONENTS = [
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",
@@ -79,6 +80,9 @@ export function evaluateMonthlyLessonQuality(
   const scheduledTermIds = day.kind === "new" ? day.coreTermIds : day.reviewTermIds;
   const scheduledWords = new Set(scheduledTermIds.map((id) => normalize(coreById.get(id)?.word ?? "")));
   const actualWords = new Set(vocabulary.map((item) => normalize(asString(item.word))));
+  // 12/11: objective.items are the learner's can-do bullets, never the day's core words.
+  const objectiveIssues = monthlyObjectiveIssues(contract.cefr, parts.get("objective")?.content, [...actualWords, ...scheduledWords]);
+  if (objectiveIssues.length) severe.push(finding("MONTHLY_OBJECTIVE_CAN_DO", `${monthlyObjectiveFixHint(contract.cefr)}. Fix: ${objectiveIssues.slice(0, 4).join("; ")}`, dayNumber, "objective"));
 
   if (day.kind === "new") {
     for (const termId of day.coreTermIds) {

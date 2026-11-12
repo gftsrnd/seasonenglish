@@ -31,7 +31,7 @@ import type {
 import { Check, Mic, Square, Volume2 } from "lucide-react";
 import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } from "../shared/lesson/VocabularyCard.js";
 import { vocabularyPresentationBlocks } from "../shared/lesson/vocabulary-groups.js";
-import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "../shared/lesson/presentation.js";
+import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead, learnerObjectiveStatements } from "../shared/lesson/presentation.js";
 import { lessonInstructionSteps } from "../shared/lesson/instructions.js";
 import { learnerLessonLanguageForCefr, lessonCopyForCefr, type LearnerLessonLanguage } from "../shared/lesson/language.js";
 import { lessonPartsForTab, lessonPracticeCodes, sharedLessonGrammarAvailable } from "../shared/lesson/structure.js";
@@ -491,7 +491,8 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
   const language = learnerLessonLanguageForCefr(cefr);
   const copy = lessonCopyForCefr(cefr);
   if (code === "objective") {
-    const objectives = (asArray(content.items) ?? []).map(asRecord).flatMap(item => typeof item?.text === "string" && item.text.trim() ? [item.text.trim()] : []);
+    // Same list the learner sees: can-do statements only, never bare core words.
+    const objectives = learnerObjectiveStatements(content.items);
     return objectives.length
       ? <><p className="lesson-objective-lead">{learnerObjectiveLead(cefr)}</p><ul className="lesson-objective-list" aria-label={copy.objectiveAria}>{objectives.map((objective, index) => <li key={`${objective}-${index}`}>{learnerFacingObjectiveBody(objective)}</li>)}</ul></>
       : <p className="lesson-objective-text">{learnerFacingObjective(conciseLessonObjective(text("text")), cefr)}</p>;
@@ -553,12 +554,10 @@ type OperatorAudioSource = { text?: string; src?: string };
 function operatorPartNarration(code: string, content: Record<string, unknown>, cefr: string): string {
   const values: string[] = [];
   const add = (value: unknown) => { if (typeof value === "string" && value.trim()) values.push(value.trim()); };
-  if (code === "objective" && Array.isArray(content.items)) {
+  const objectiveStatements = code === "objective" ? learnerObjectiveStatements(content.items) : [];
+  if (objectiveStatements.length) {
     add(learnerObjectiveLead(cefr));
-    content.items.forEach(item => {
-      const objective = asRecord(item);
-      if (typeof objective?.text === "string") add(learnerFacingObjectiveBody(objective.text));
-    });
+    objectiveStatements.forEach(objective => add(learnerFacingObjectiveBody(objective)));
   } else {
     add(content.text);
   }

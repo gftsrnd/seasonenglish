@@ -180,7 +180,9 @@ function translated<T>(value: T): T {
 }
 
 function untranslatedPart(code: string, vi = true) {
-  if (code === "objective") return { code, content: { text: "Identify three budget words." } };
+  if (code === "objective") return { code, content: { text: "Identify three budget words.", items: vi
+    ? ["Nhận biết ba từ về ngân sách trong email công việc.", "Dùng cấu trúc The cost is để nói về chi phí."]
+    : ["Identify three budget words in a work email.", "Use The cost is to describe a project cost."] } };
   if (code === "instruction") return { code, content: { steps: vi ? ["Đọc ví dụ.", "Trả lời câu hỏi."] : ["Read the example.", "Answer the question."] } };
   if (code === "vocabulary") return { code, content: { items: [
     { word: "budget", synonyms: ["plan"], antonyms: [], collocations: ["a small budget", "budget plan", "set a budget"], collocationTranslations: ["ngân sách nhỏ", "kế hoạch ngân sách", "đặt ngân sách"] }, { word: "cost", synonyms: ["expense"], antonyms: [], collocations: ["high cost", "cost of travel", "cut the cost"], collocationTranslations: ["chi phí cao", "chi phí đi lại", "cắt giảm chi phí"] }, { word: "forecast", synonyms: ["estimate"], antonyms: [], collocations: ["sales forecast", "a weather forecast", "forecast growth"], collocationTranslations: ["dự báo doanh số", "dự báo thời tiết", "dự báo tăng trưởng"] }

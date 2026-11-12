@@ -17,10 +17,42 @@ export function learnerFacingObjectiveBody(value: string): string {
     .replace(/^SWBAT\s+/i, "")
     .replace(/^(?:Sau bài học,\s*(?:bạn|học viên)\s*có thể\s*)+/iu, "")
     .replace(/^(?:By the end of this lesson,\s*you will be able to\s*)+/i, "")
+    // Internal roadmap step labels ("Step B1 (Identify): …") are not learner copy.
+    .replace(/^Step\s+[A-Z]?\d+[A-Za-z]?\s*(?:\([^)]*\))?\s*:\s*/u, "")
     .trim();
   if (!body) return "—";
   return body.charAt(0).toLocaleUpperCase("en-US") + body.slice(1);
 }
+/**
+ * A can-do objective is a phrase such as "Explain a delivery delay to a client".
+ * Some stored monthly lessons put the day's core words in objective.items
+ * (["partner", "discuss", "agree"]); those are not objectives and must never
+ * be listed under "By the end of this lesson, you will be able to:".
+ */
+export function isLearnerObjectiveStatement(value: string): boolean {
+  const body = learnerFacingObjectiveBody(value);
+  if (body === "—") return false;
+  const words = body.match(/[\p{L}\p{N}][\p{L}\p{N}'’/+-]*/gu) ?? [];
+  return words.length >= 3;
+}
+
+/**
+ * Objective item texts worth listing (plain strings from monthly lessons, or
+ * { text } records from weekly lessons). `keep` can drop records by type.
+ * Bare words, headings and vocabulary cards ({ word }) are left out, so a
+ * lesson whose items hold only those falls back to the objective text.
+ */
+export function learnerObjectiveStatements(items: unknown, keep: (item: Record<string, unknown>) => boolean = () => true): string[] {
+  if (!Array.isArray(items)) return [];
+  return items.flatMap((item) => {
+    const text = typeof item === "string" ? item
+      : item && typeof item === "object" && !Array.isArray(item) && typeof (item as Record<string, unknown>).text === "string" && keep(item as Record<string, unknown>)
+        ? (item as Record<string, unknown>).text as string : "";
+    const trimmed = text.trim();
+    return trimmed && isLearnerObjectiveStatement(trimmed) ? [trimmed] : [];
+  });
+}
+
 export function learnerObjectiveLead(cefr: string): string {
   return learnerLessonLanguageForCefr(cefr) === "vi"
     ? "Sau bài học, bạn có thể:"

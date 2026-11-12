@@ -422,6 +422,20 @@ describe("lesson detail warnings", () => {
     expect(screen.queryByLabelText("Nghe audio phần Ngữ pháp")).not.toBeInTheDocument();
   });
 
+  it("never lists stored core words as objectives and falls back to the objective sentence (4300 lesson a50bf937)", () => {
+    const source = lessonSet([{ ...baseWord("feedback"), meaning: "phản hồi" }]);
+    source.cefr = "B1";
+    const objective = source.lessons[0]!.parts.find(part => part.code === "objective")!;
+    objective.content = { text: "Step B1 (Identify): Notice past simple sequences and past continuous background in a real meeting summary.", items: ["partner", "discuss", "agree"] };
+
+    const view = adaptLessonSet(source, { aiConnected: true });
+    render(<>{view.lessons[0]!.content}</>);
+
+    expect(screen.queryByRole("list", { name: "Lesson objectives" })).not.toBeInTheDocument();
+    expect(screen.getByText("By the end of this lesson, you will be able to notice past simple sequences and past continuous background in a real meeting summary.")).toBeInTheDocument();
+    expect(screen.queryByText("Partner")).not.toBeInTheDocument();
+  });
+
   it("renders B1+ learner-facing headings and generated instruction fallbacks in English", () => {
     const source = lessonSet([{ ...baseWord("feedback"), meaning: "phản hồi", synonyms: [{ word: "comment" }] }]);
     source.cefr = "B1";
