@@ -4605,6 +4605,7 @@ class ContentRepository {
            and learner.id = a.learner_id and actor.id = $1 and actor.organization_id = learner.organization_id`,
         [actorId, id, status, resolution]
       );
+      if (assessment.rowCount && status === "accepted") await new AssessmentRepository(this.pool).applyAcceptedAppealLevel(client, actorId, id, resolution);
       await client.query("commit");
       return Boolean(assessment.rowCount);
     } catch (error) {
@@ -5876,18 +5877,27 @@ class AssessmentRepository {
     status: "accepted" | "rejected";
     resolution: string;
   }): Promise<{ id: string; status: "accepted" | "rejected"; resolution: string; resolvedAt: Date } | null> {
-    const result = await this.pool.query<{ id: string; status: "accepted" | "rejected"; resolution: string; resolved_at: Date }>(
-      `update appeals appeal
-       set status = $3, resolution = $4, resolved_by = $2, resolved_at = now()
-       from assessment_attempts attempt
-       join users learner on learner.id = attempt.learner_id
-       join users reviewer on reviewer.id = $2 and reviewer.organization_id = learner.organization_id and reviewer.role = 'operator'
-       where appeal.id = $1 and appeal.attempt_id = attempt.id and appeal.status = 'pending'
-       returning appeal.id, appeal.status, appeal.resolution, appeal.resolved_at`,
-      [input.appealId, input.reviewerId, input.status, input.resolution]
-    );
-    const row = result.rows[0];
-    return row ? { id: row.id, status: row.status, resolution: row.resolution, resolvedAt: row.resolved_at } : null;
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const result = await client.query<{ id: string; status: "accepted" | "rejected"; resolution: string; resolved_at: Date }>(
+        `update appeals appeal
+         set status = $3, resolution = $4, resolved_by = $2, resolved_at = now()
+         from assessment_attempts attempt
+         join users learner on learner.id = attempt.learner_id
+         join users reviewer on reviewer.id = $2 and reviewer.organization_id = learner.organization_id and reviewer.role = 'operator'
+         where appeal.id = $1 and appeal.attempt_id = attempt.id and appeal.status = 'pending'
+         returning appeal.id, appeal.status, appeal.resolution, appeal.resolved_at`,
+        [input.appealId, input.reviewerId, input.status, input.resolution]
+      );
+      const row = result.rows[0];
+      if (row?.status === "accepted") await this.applyAcceptedAppealLevel(client, input.reviewerId, row.id, input.resolution);
+      await client.query("commit");
+      return row ? { id: row.id, status: row.status, resolution: row.resolution, resolvedAt: row.resolved_at } : null;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
   }
 
   async recordAudioPlay(input: {
@@ -6843,10 +6853,11 @@ class AssessmentRepository {
     };
   }
 
-  async changeLearnerLevel(actorId: string, learnerId: string, input: AssessmentLevelChangeInput): Promise<AssessmentLevelChangeView | null> {
-    const client = await this.pool.connect();
+  /** `outer` runs the change inside the caller's transaction (e.g. an accepted level appeal). */
+  async changeLearnerLevel(actorId: string, learnerId: string, input: AssessmentLevelChangeInput, outer?: PoolClient): Promise<AssessmentLevelChangeView | null> {
+    const client = outer ?? await this.pool.connect();
     try {
-      await client.query("begin");
+      if (!outer) await client.query("begin");
       const identity = await client.query<{ organization_id: string; display_name: string }>(
         `select learner.organization_id, learner.display_name
          from users actor join users learner on learner.organization_id = actor.organization_id
@@ -6855,7 +6866,7 @@ class AssessmentRepository {
         [actorId, learnerId]
       );
       const person = identity.rows[0];
-      if (!person) { await client.query("rollback"); return null; }
+      if (!person) { if (!outer) await client.query("rollback"); return null; }
       const enrollmentResult = await client.query<{ id: string; program_id: string; cefr: CefrLevel | null; cefr_approved: boolean }>(
         `select e.id, e.program_id, e.cefr, e.cefr_approved
          from enrollments e join programs p on p.id = e.program_id and p.status = 'active'
@@ -6930,7 +6941,7 @@ class AssessmentRepository {
          values ($1, $2, $3, 'assessment.learner.level_changed', 'user', $4, $5::jsonb, $6)`,
         [randomUUID(), person.organization_id, actorId, learnerId, JSON.stringify({ ...input, previousLevel: currentLevel, effectiveAt }), randomUUID()]
       );
-      await client.query("commit");
+      if (!outer) await client.query("commit");
       return {
         ...input,
         learnerId,
@@ -6940,9 +6951,32 @@ class AssessmentRepository {
         changedAt: now.toISOString()
       };
     } catch (error) {
-      await client.query("rollback");
+      if (!outer) await client.query("rollback");
       throw error;
-    } finally { client.release(); }
+    } finally { if (!outer) (client as PoolClient).release(); }
+  }
+
+  /**
+   * An accepted placement / level appeal moves the learner to the level they proposed, as a new joiner from the
+   * approval date (the enrollment trigger restarts `cefr_started_on`, so the 75% month rule applies).
+   * Product rule: biên bản 30/10 mục 11 & 6.
+   */
+  async applyAcceptedAppealLevel(client: PoolClient, actorId: string, appealId: string, resolution: string): Promise<void> {
+    const appeal = await client.query<{ learner_id: string; proposed_level: CefrLevel | null; kind: string; current: CefrLevel | null }>(
+      `select a.learner_id, a.proposed_level, d.kind,
+              (select e.cefr from enrollments e where e.learner_id = a.learner_id order by e.enrolled_at desc limit 1) as current
+       from appeals a join assessment_attempts aa on aa.id = a.attempt_id
+       join assessment_versions v on v.id = aa.assessment_version_id join assessment_definitions d on d.id = v.definition_id
+       where a.id = $1 and a.status = 'accepted'`,
+      [appealId]
+    );
+    const row = appeal.rows[0];
+    // Only tests that set a level (placement, level-up); the monthly final and Pass Course appeals change scores.
+    if (!row?.proposed_level || !["placement", "level_up"].includes(row.kind) || row.proposed_level === row.current) return;
+    await this.changeLearnerLevel(actorId, row.learner_id, {
+      mode: "direct", targetLevel: row.proposed_level,
+      reason: `Kháng nghị bài kiểm tra được duyệt: ${resolution}`.slice(0, 2_000), evidence: `appeal:${appealId}`
+    }, client);
   }
 
   async updateLearnerMonthlyGoal(actorId: string, learnerId: string, monthlyGoal: string): Promise<AssessmentMonthlyGoalView | null> {
