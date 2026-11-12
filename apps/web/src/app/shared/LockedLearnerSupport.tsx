@@ -17,7 +17,8 @@ export function LockedLearnerSupport({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     let active = true;
     void learnerApiClient.getLearnerComplaints().then(({ complaints }) => {
-      if (active) setComplaint(complaints.find(item => item.kind === "account_unlock"));
+      // This screen only shows while the account is locked, so an approved request belongs to an earlier lock.
+      if (active) setComplaint(complaints.find(item => item.kind === "account_unlock" && (item.status === "pending" || item.status === "rejected")));
     }).catch(() => {}).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
@@ -57,9 +58,7 @@ export function LockedLearnerSupport({ onLogout }: { onLogout: () => void }) {
     ? <>Tài khoản của bạn đang <b>tạm dừng</b> nên chưa vào học được. Bấm <b>Liên hệ Quản lý</b> để xin mở khóa.</>
     : pending
       ? <>Tài khoản của bạn đang <b>tạm dừng</b>. Bạn đã gửi yêu cầu mở khóa{sent ? <> ngày <b>{sent}</b></> : null}, Quản lý {due ? <>sẽ trả lời trước <b>{due}</b></> : <>đang xem xét</>}. Được duyệt thì bạn đăng nhập lại để học tiếp.</>
-      : complaint.status === "rejected"
-        ? <>Yêu cầu mở khóa đã <b>bị từ chối</b>{complaint.resolution ? <>: {complaint.resolution}</> : null}. Bạn có thể <b>gửi lại</b> kèm lý do rõ hơn.</>
-        : <>Quản lý đã <b>mở khóa</b> tài khoản{complaint.resolution ? <>: {complaint.resolution}</> : null}. Hãy <b>đăng xuất</b> rồi đăng nhập lại để học tiếp.</>;
+      : <>Yêu cầu mở khóa đã <b>bị từ chối</b>{complaint.resolution ? <>: {complaint.resolution}</> : null}. Bạn có thể <b>gửi lại</b> kèm lý do rõ hơn.</>;
   return <>
     <p role="status" className="locked-account-summary">{summary}</p>
     {complaint?.hasEvidence ? <RequestEvidenceDetails kind="complaint" item={{ ...complaint, scope: undefined }} /> : null}

@@ -114,6 +114,21 @@ describe("App session shell", () => {
     expect(learnerClient.submitLearnerComplaint).toHaveBeenCalledWith("account_unlock", "Nhờ xem lại việc khóa tài khoản.");
     expect(await screen.findByText(/Bạn đã gửi yêu cầu mở khóa, Quản lý đang xem xét/)).toBeInTheDocument();
   });
+
+  it("treats a re-lock as a fresh lock even if an earlier unlock request was approved", async () => {
+    client.currentSession.mockResolvedValue({ ...learnerSession, accountStatus: "disabled" });
+    learnerClient.getLearnerComplaints.mockResolvedValue({ complaints: [{
+      id: "old-unlock", kind: "account_unlock", reason: "Xin mở lại lần trước.", status: "approved", resolution: "Đã mở lần 1",
+      submittedAt: "2026-11-01T08:00:00Z", dueAt: null, resolvedAt: "2026-11-01T09:00:00Z", hasEvidence: true
+    }] });
+    render(<App />);
+    const contact = await screen.findByRole("button", { name: "Liên hệ Quản lý" });
+    await waitFor(() => expect(contact).toBeEnabled());
+    expect(screen.getByRole("status")).toHaveTextContent("Bấm Liên hệ Quản lý để xin mở khóa.");
+    expect(screen.queryByText(/đã mở khóa/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Đã mở lần 1/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Xem ảnh minh chứng")).not.toBeInTheDocument();
+  });
   it("shows a certificate without exam grades for a completed learner account", async () => {
     client.currentSession.mockResolvedValue({ ...learnerSession, courseCompleted: true });
     window.history.replaceState({}, "", "/reward/course");

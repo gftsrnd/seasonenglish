@@ -507,6 +507,8 @@ export interface LearnerComplaintView extends RequestEvidenceView {
   readonly submittedAt: string;
   readonly dueAt: string | null;
   readonly resolvedAt: string | null;
+  /** Learning month (YYYY-MM) the request belongs to, for month-scoped kinds such as exam_eligibility. */
+  readonly month?: string | null;
 }
 
 export type ManagerSettingsInput = Omit<ManagerSettingsView, "organizationName" | "pilotCycle" | "simulatedSystemDate" | "coachDailyLimitStartsMonth"> & {

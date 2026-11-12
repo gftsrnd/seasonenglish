@@ -88,6 +88,20 @@ describe("audited monthly learning lifecycle", () => {
     expect(reopened.statusCode, reopened.body).toBe(200);
     expect(await learnerConsecutiveLearningAbsences(pool, placed.id)).toBe(0);
     expect((await monthlyExamEligibility(pool, placed.id)).absenceDays).toBe(5);
+
+    // A second lock starts a fresh cycle: the approval that ended the first lock no longer counts.
+    const relocked = await app.inject({ method: "PATCH", url: `/api/v1/manager/accounts/${placed.id}/status`, headers: { cookie: managerCookie }, payload: { status: "disabled" } });
+    expect(relocked.statusCode, relocked.body).toBe(200);
+    const lockedCookie = await login(placed.email);
+    const stale = await app.inject({ url: "/api/v1/learner/complaints", headers: { cookie: lockedCookie } });
+    expect(stale.statusCode, stale.body).toBe(200);
+    expect(stale.json().complaints).toEqual([]);
+    const second = await app.inject({ method: "POST", url: "/api/v1/learner/complaints", headers: { cookie: lockedCookie }, payload: { kind: "account_unlock", reason: "Xin mở lại tài khoản lần hai." } });
+    expect(second.statusCode, second.body).toBe(201);
+    const rejected = await app.inject({ method: "POST", url: `/api/v1/manager/complaints/${second.json().complaint.id}/decision`, headers: { cookie: managerCookie }, payload: { decision: "rejected", resolution: "Chưa đủ lý do." } });
+    expect(rejected.statusCode, rejected.body).toBe(200);
+    const current = await app.inject({ url: "/api/v1/learner/complaints", headers: { cookie: lockedCookie } });
+    expect(current.json().complaints).toEqual([expect.objectContaining({ id: second.json().complaint.id, status: "rejected", resolution: "Chưa đủ lý do." })]);
   });
 
   it("prorates newcomers and excludes those deferred to the next month", async () => {

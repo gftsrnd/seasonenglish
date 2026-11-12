@@ -63,10 +63,19 @@ export function registerHolidayComplaintRoutes(app: FastifyInstance, pool: Pool)
     if (!locked) {
       await autoApproveExpiredEligibilityComplaints(pool, { learnerId: session.user.id });
     }
+    // While locked, only unlock requests from the current lock count: a request decided before
+    // the latest lock (e.g. the approval that ended a previous lock) is a finished cycle.
     const result = await pool.query(
-      `select id, kind, reason, status, resolution, submitted_at as "submittedAt", due_at as "dueAt", resolved_at as "resolvedAt",
-              request_scope as scope, screenshot is not null as "hasEvidence"
-         from learner_complaints where learner_id = $1 and (not $2::boolean or kind = 'account_unlock')
+      `with lock_started as (
+         select max(created_at) as at from audit_events
+          where $2::boolean and entity_type = 'user' and entity_id = $1
+            and (action = 'learner.inactivity_locked' or (action = 'account.status.changed' and payload->>'to' = 'disabled'))
+       )
+       select id, kind, reason, status, resolution, submitted_at as "submittedAt", due_at as "dueAt", resolved_at as "resolvedAt",
+              request_scope as scope, screenshot is not null as "hasEvidence", nullif(left(related_data->>'month', 7), '') as month
+         from learner_complaints cross join lock_started
+        where learner_id = $1 and (not $2::boolean or (kind = 'account_unlock'
+          and (status = 'pending' or lock_started.at is null or coalesce(resolved_at, submitted_at) >= lock_started.at)))
          order by submitted_at desc`,
       [session.user.id, locked]
     );
