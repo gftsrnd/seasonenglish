@@ -123,6 +123,11 @@
 /* Reopen request: always a red square, same height as the plan button next to it. */
 .monthly-plan-row{align-items:center}
 .monthly-resource-actions .monthly-plan-row .monthly-reopen-request-button{min-height:34px;box-shadow:none}
+/* Icon-only reopen request (label in tooltip/aria-label); the plan button may wrap so the resource card never overflows under the calendar. */
+.monthly-resource-actions .monthly-plan-row .monthly-reopen-request-button{width:36px;min-width:36px;height:36px;min-height:36px;padding:0}
+.monthly-plan-row .monthly-plan-open-button{white-space:normal;overflow-wrap:anywhere}
+/* Grid items default to min-width:auto, so a wide resource card grew past its column and slid under the calendar. */
+.monthly-workspace>section{min-width:0}.monthly-resources{overflow-wrap:anywhere}
 /* Collapsed core rows in the manual editor: word, part of speech, meaning and a clear expand cue. */
 .monthly-resource-editor-core>summary{list-style:none}
 .monthly-resource-editor-core>summary::-webkit-details-marker{display:none}

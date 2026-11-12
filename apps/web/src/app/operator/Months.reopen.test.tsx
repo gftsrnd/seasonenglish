@@ -63,12 +63,12 @@ describe("Operator request to reopen approved monthly resources", () => {
     expect(button).toHaveAttribute("title", "Đang chờ Quản lý duyệt");
   });
 
-  it("shows the request as a labelled secondary \"Báo Quản lý\" button on the plan row, not a red stop-like square", () => {
+  it("shows the request as an icon-only secondary button with the \"Báo Quản lý\" tooltip, not a red stop-like square", () => {
     const allocated: MonthFrameworkView = { ...baseFramework, resources: { ...baseFramework.resources!, roadmap: { allocated: true, grammarSteps: [], sounds: [], days: [] } } };
     const panel = renderMonths(allocated, { onRequestResourcesReopen: vi.fn() });
     const plan = panel.getByRole("button", { name: "Phân bổ tài nguyên & bài tập" });
     const request = panel.getByRole("button", { name: REOPEN });
-    expect(request).toHaveTextContent("Báo Quản lý");
+    expect(request).toHaveTextContent("");
     expect(request).toHaveAccessibleName("Báo Quản lý: yêu cầu mở lại tài nguyên");
     expect(request).toHaveAttribute("title", "Báo Quản lý để mở lại tài nguyên đã chốt");
     expect(request).toHaveClass("btn", "monthly-reopen-request-button");

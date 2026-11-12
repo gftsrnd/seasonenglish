@@ -448,7 +448,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
           {!framework && canEdit && briefLocked && actions.onLoadManualResources && <button type="button" className="btn monthly-resource-edit-button" disabled={busy || openingManualResources} onClick={() => void openManualResources()}>Soạn tay tài nguyên</button>}
           {(framework?.resources?.roadmap?.allocated || framework?.status === "approved") && <div className="monthly-plan-row">
             {framework?.resources?.roadmap?.allocated && <button type="button" className="btn monthly-plan-open-button" onClick={() => setResourcePanel("plan")}>Phân bổ tài nguyên &amp; bài tập</button>}
-            {framework?.status === "approved" && <button type="button" className="btn monthly-reopen-request-button" aria-label="Báo Quản lý: yêu cầu mở lại tài nguyên" title={resourcesReopenPending ? "Đang chờ Quản lý duyệt" : "Báo Quản lý để mở lại tài nguyên đã chốt"} disabled={busy || !canEdit || resourcesReopenPending} onClick={() => setRequestingResourcesReopen(true)}><MessageSquareWarning aria-hidden="true" /><span>Báo Quản lý</span></button>}
+            {framework?.status === "approved" && <button type="button" className="btn monthly-reopen-request-button" aria-label="Báo Quản lý: yêu cầu mở lại tài nguyên" title={resourcesReopenPending ? "Đang chờ Quản lý duyệt" : "Báo Quản lý để mở lại tài nguyên đã chốt"} disabled={busy || !canEdit || resourcesReopenPending} onClick={() => setRequestingResourcesReopen(true)}><MessageSquareWarning aria-hidden="true" /></button>}
           </div>}
           {resourcesReopenPending && <span className="monthly-reopen-status pending" role="status">Đang chờ Quản lý duyệt</span>}
         </div>
