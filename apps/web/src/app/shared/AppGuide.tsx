@@ -63,7 +63,10 @@ function guideScroller(target: HTMLElement): Element {
   for (let node = target.parentElement; node && node !== document.body; node = node.parentElement) {
     const overflow = getComputedStyle(node).overflowY;
     // Bounded list boxes inside a card also scroll; only a page-sized container (main, a dialog body) moves the card.
-    const pageSized = node.matches("#root > main, [role=dialog], .dialog") || node.clientHeight > window.innerHeight * 0.75;
+    // A popup's own scrolling body (e.g. the manual lesson editor) also moves the card, even when it is
+    // shorter than the window; otherwise the guide scrolled the page behind and spotlighted the wrong place.
+    const pageSized = node.matches("#root > main, [role=dialog], .dialog") || node.clientHeight > window.innerHeight * 0.75
+      || (node.clientHeight > 200 && Boolean(node.closest("[role=dialog], .dialog")));
     if (pageSized && (overflow === "auto" || overflow === "scroll") && node.scrollHeight > node.clientHeight + 1) return node;
   }
   return document.scrollingElement ?? document.documentElement;
