@@ -1066,24 +1066,23 @@ function VocabularyCard({
         label: detail.word,
         ariaLabel: `${language === "en" ? "Listen" : "Nghe"} ${lexicalKindLabel(detail.kind, language)}: ${detail.word}`,
         tone: "register" as const,
-        onClick: () => speak(detail.word),
-        ...(detail.definition?.trim() ? { meaning: detail.definition.trim(), meaningLang: "en" as const } : {})
+        onClick: () => speak(detail.word)
       } : ({
         label: `${lexicalKindLabel(detail.kind, language)} · ${detail.word}`,
-        ariaLabel: `${language === "en" ? "View" : "Xem"} ${lexicalKindLabel(detail.kind, language)}: ${detail.word}`,
+        ariaLabel: `${language === "en" ? "Listen" : "Nghe"} ${lexicalKindLabel(detail.kind, language)}: ${detail.word}`,
         tone: detail.kind === "synonym" ? "synonym" as const : detail.kind === "antonym" ? "antonym" as const : detail.kind === "slang" ? "mid" as const : "low" as const,
-        onClick: () => openModal({ kind: "lexical", item, detail })
+        onClick: () => speak(detail.word)
       }))
     : [];
   const relations: VocabularyRelationChip[] = [
     ...(!hideUmbrella && item.umbrella && umbrellaWord ? [{ label: `${language === "en" ? copy.vocabulary.umbrellaWord.toUpperCase() : "TỪ BAO TRÙM"} ${umbrellaWord}`, ariaLabel: `${copy.vocabulary.umbrellaWord}: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: item.umbrella.siblings?.length ?? 0, onClick: () => openModal({ kind: "umbrella", item }) }] : []),
     ...(item.synonyms?.length ? item.synonyms.filter((value): value is NonNullable<typeof value> & { word: string } => typeof value?.word === "string").map(value => {
       const detail = lexicalDetails.find((candidate) => candidate.kind === "synonym" && candidate.word.trim().toLocaleLowerCase() === value.word.trim().toLocaleLowerCase());
-      return { label: `= ${value.word}`, ariaLabel: isB1Plus && detail ? `${language === "en" ? "View synonym" : "Xem từ đồng nghĩa"}: ${value.word}` : `${language === "en" ? "Listen to synonym" : "Nghe từ đồng nghĩa"}: ${value.word}`, tone: "synonym" as const, onClick: isB1Plus && detail ? () => openModal({ kind: "lexical", item, detail }) : () => playVocabularyWord(speak, value.word, value.audioUrl), ...relationMeaning(value, isB1Plus) };
-    }) : synonymDetail && firstSynonym ? [{ label: `= ${firstSynonym}`, ariaLabel: isB1Plus ? `${language === "en" ? "View synonym" : "Xem từ đồng nghĩa"}: ${firstSynonym}` : firstSynonym, tone: "synonym" as const, onClick: isB1Plus ? () => openModal({ kind: "lexical", item, detail: synonymDetail }) : undefined }] : []),
+      return { label: `= ${value.word}`, ariaLabel: `${language === "en" ? "Listen to synonym" : "Nghe từ đồng nghĩa"}: ${value.word}`, tone: "synonym" as const, onClick: () => playVocabularyWord(speak, value.word, value.audioUrl), ...relationMeaning(value, isB1Plus) };
+    }) : synonymDetail && firstSynonym ? [{ label: `= ${firstSynonym}`, ariaLabel: `${language === "en" ? "Listen to synonym" : "Nghe từ đồng nghĩa"}: ${firstSynonym}`, tone: "synonym" as const, onClick: () => speak(firstSynonym) }] : []),
     ...(item.antonyms?.length ? item.antonyms.filter((value): value is NonNullable<typeof value> & { word: string } => typeof value?.word === "string").map(value => {
       const detail = lexicalDetails.find((candidate) => candidate.kind === "antonym" && candidate.word.trim().toLocaleLowerCase() === value.word.trim().toLocaleLowerCase());
-      return { label: `≠ ${value.word}`, ariaLabel: isB1Plus && detail ? `${language === "en" ? "View antonym" : "Xem từ trái nghĩa"}: ${value.word}` : `${language === "en" ? "Listen to antonym" : "Nghe từ trái nghĩa"}: ${value.word}`, tone: "antonym" as const, onClick: isB1Plus && detail ? () => openModal({ kind: "lexical", item, detail }) : () => playVocabularyWord(speak, value.word, value.audioUrl), ...relationMeaning(value, isB1Plus) };
+      return { label: `≠ ${value.word}`, ariaLabel: `${language === "en" ? "Listen to antonym" : "Nghe từ trái nghĩa"}: ${value.word}`, tone: "antonym" as const, onClick: () => playVocabularyWord(speak, value.word, value.audioUrl), ...relationMeaning(value, isB1Plus) };
     }) : []),
     ...(item.family?.length ? [{ label: `${language === "en" ? copy.vocabulary.wordFamily : "Họ từ"} (${item.family.length})`, ariaLabel: `${language === "en" ? copy.vocabulary.wordFamily : "Word family"} (${item.family.length})`, icon: "family" as const, tone: "family" as const, onClick: () => openModal({ kind: "family", item }) }] : []),
     ...extendedRelations
@@ -1093,12 +1092,13 @@ function VocabularyCard({
 
 /**
  * Meaning popup of a synonym/antonym chip (12/11): A1–A2 the Vietnamese
- * meaning (`note`), B1–C1 only the English `definition` — never a Vietnamese
- * note from B1. Old content without one keeps the plain chip.
+ * meaning (`note`); B1–C1 have no popup at all — the chip only plays the word.
  */
 function relationMeaning(value: { note?: string | undefined; definition?: string | undefined }, englishOnly: boolean): Pick<VocabularyRelationChip, "meaning" | "meaningLang"> {
-  const meaning = (englishOnly ? value.definition : value.note)?.trim();
-  return meaning ? { meaning, meaningLang: englishOnly ? "en" : "vi" } : {};
+  // B1–C1: no popup at all (12/11) — the chip only plays the word.
+  if (englishOnly) return {};
+  const meaning = value.note?.trim();
+  return meaning ? { meaning, meaningLang: "vi" } : {};
 }
 
 export function SharedVocabularyModal({
