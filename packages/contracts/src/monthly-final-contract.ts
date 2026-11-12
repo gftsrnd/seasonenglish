@@ -86,6 +86,13 @@ export interface MonthlyFinalExamMeta {
   audio: { status: "SCRIPT_ONLY" | "REVIEWED"; reviewedAt: string | null; reviewedBy: string | null };
   /** GEN codes whose human-judgement review the Operator confirmed. */
   manualConfirmations: MonthlyFinalGenCode[];
+  /**
+   * Who confirmed each code and when (December 2026: a script ticked every
+   * manual confirmation through the bulk update API without a reviewer opening
+   * the items). The UI ticks one code at a time; this log keeps the API
+   * accountable. Absent on drafts saved before the log existed.
+   */
+  manualConfirmationLog?: Array<{ code: MonthlyFinalGenCode; confirmedBy: string; confirmedAt: string }>;
   checks: MonthlyFinalCheckView[];
   generatedAt: string;
 }

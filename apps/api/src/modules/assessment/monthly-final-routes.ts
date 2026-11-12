@@ -16,7 +16,8 @@ import { MONTHLY_FINAL_MANUAL_RULES } from "./monthly-final-checks.js";
 import { safeGenerationDiagnosticIssues } from "../content/generation-errors.js";
 import {generateMonthlyFinalProductive} from "./monthly-final-productive-generation.js";
 import {generateMonthlyFinalListening} from "./monthly-final-listening-generation.js";
-import {generateMonthlyFinalReading} from "./monthly-final-reading-generation.js";
+import {generateMonthlyFinalReading, repairMonthlyFinalReadingItems} from "./monthly-final-reading-generation.js";
+import { verifyMonthlyFinalAnswers } from "./monthly-final-answer-verification.js";
 import { withBlueprintListeningAudio, type ListeningAudioService } from "./listening-audio.js";
 
 const frameworkParam = z.object({ frameworkId: z.uuid() });
@@ -141,12 +142,44 @@ export function registerMonthlyFinalRoutes(
       });
       return reply.code(422).send({code:"MONTHLY_FINAL_GENERATION_QUALITY_FAILED",report:{checks:failures}});
     }
+    // December 2026: independent answer check, one call per form (b8e3c20 approach). Disputed Reading
+    // items get one targeted repair and one re-check of those items only; anything left is a quality failure.
+    let verifiedBlueprint = blueprint;
+    let disputes = await verifyMonthlyFinalAnswers(runner, context.contract.cefr, blueprint);
+    const readingDisputes = disputes.filter((finding) => finding.section === "reading");
+    if (readingDisputes.length) {
+      const termOf = new Map(blueprint.monthlyExam!.mapping.filter((row) => row.skill === "reading").map((row) => [row.taskKey, row.termId] as const));
+      try {
+        const repairedReading = await repairMonthlyFinalReadingItems(runner, input, receptive.output.reading, readingDisputes.flatMap((finding) => termOf.has(finding.taskKey) ? [{ termId: termOf.get(finding.taskKey)!, message: finding.hint }] : []));
+        const repairedOutput = { ...receptive.output, reading: repairedReading };
+        const candidate = assembleMonthlyFinalFromAi(context.contract, context.framework, repairedOutput, productive.output as MonthlyFinalProductiveOutput);
+        if (!candidate.monthlyExam!.checks.some((check) => check.status === "fail")) {
+          const rechecked = await verifyMonthlyFinalAnswers(runner, context.contract.cefr, candidate, new Set(readingDisputes.map((finding) => finding.taskKey)));
+          verifiedBlueprint = candidate;
+          receptive = { ...receptive, output: repairedOutput };
+          disputes = [...disputes.filter((finding) => finding.section !== "reading"), ...rechecked];
+        }
+      } catch (error) {
+        request.log.warn({ error }, "Monthly final reading repair after the answer check failed");
+      }
+    }
+    if (disputes.length) {
+      const checks = (["GEN05", "GEN12"] as const).flatMap((code) => {
+        const found = disputes.filter((finding) => finding.code === code);
+        return found.length ? [{ code, title: code === "GEN05" ? "Câu khách quan có một đáp án đúng duy nhất" : "Không ép nhồi từ thiếu tự nhiên", mode: "manual" as const, status: "fail" as const, detail: found.map((finding) => finding.message).join(" · ") }] : [];
+      });
+      await repositories.aiRuns.recordFailed({
+        userId: actorId, requestId: `monthly-final:${context.framework.id}:${Date.now()}`, taskId: task.taskId, promptVersionId: task.promptVersionId,
+        errorCode: "MONTHLY_FINAL_GENERATION_QUALITY_FAILED", diagnostic: { checks, disputes, receptive: receptive.output, productive: productive.output }, metadata: receptive.metadata
+      });
+      return reply.code(422).send({ code: "MONTHLY_FINAL_GENERATION_QUALITY_FAILED", report: { checks } });
+    }
     await repositories.aiRuns.recordSucceeded({
       userId: actorId, requestId: `monthly-final:${context.framework.id}:${Date.now()}`, taskId: task.taskId, promptVersionId: task.promptVersionId,
       output: { receptive: receptive.output, productive: productive.output }, metadata: receptive.metadata
     });
     // Both listening messages get Edge TTS audio now; audio.status stays SCRIPT_ONLY until the Operator has listened (GEN20).
-    const withAudio = await withBlueprintListeningAudio(blueprint, listeningAudio, actorId);
+    const withAudio = await withBlueprintListeningAudio(verifiedBlueprint, listeningAudio, actorId);
     if (withAudio.failed) request.log.warn({ failed: withAudio.failed }, "Monthly final listening audio synthesis failed");
     try {
       await saveNewDraft(pool, context, withEvaluation(withAudio.blueprint, context.contract), true);
@@ -312,14 +345,18 @@ export function applyMonthlyFinalUpdate(stored: StoredAssessmentDefinition, inpu
   const audio: MonthlyFinalExamMeta["audio"] = reviewed
     ? (exam.audio.status === "REVIEWED" ? exam.audio : { status: "REVIEWED", reviewedAt: now.toISOString(), reviewedBy: actorId })
     : { status: "SCRIPT_ONLY", reviewedAt: null, reviewedBy: null };
-  const manualConfirmations = (review.manualConfirmations ?? exam.manualConfirmations)
-    .filter((code): code is MonthlyFinalGenCode => MONTHLY_FINAL_MANUAL_RULES.includes(code as MonthlyFinalGenCode));
+  const manualConfirmations = [...new Set((review.manualConfirmations ?? exam.manualConfirmations)
+    .filter((code): code is MonthlyFinalGenCode => MONTHLY_FINAL_MANUAL_RULES.includes(code as MonthlyFinalGenCode)))];
+  // Record who ticked each confirmation and when; an unticked code leaves the log.
+  const previousLog = exam.manualConfirmationLog ?? [];
+  const manualConfirmationLog = manualConfirmations.map((code) => previousLog.find((entry) => entry.code === code)
+    ?? (exam.manualConfirmations.includes(code) ? { code, confirmedBy: "unknown", confirmedAt: exam.generatedAt } : { code, confirmedBy: actorId, confirmedAt: now.toISOString() }));
 
   return {
     ...stored,
     title: input.title,
     sections,
-    monthlyExam: { ...exam, grammar, grader: { ...exam.grader, listening: listeningEvidence, items }, audio, manualConfirmations: [...new Set(manualConfirmations)] }
+    monthlyExam: { ...exam, grammar, grader: { ...exam.grader, listening: listeningEvidence, items }, audio, manualConfirmations, manualConfirmationLog }
   };
 }
 

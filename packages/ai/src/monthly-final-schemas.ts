@@ -396,6 +396,8 @@ export function validateMonthlyFinalReadingOutput(output: MonthlyFinalReadingOut
   const issues=exactTermSet("reading", output.reading.questions.map((question) => question.termId), input.targets.reading.map((term) => term.id));
   const bounds = profileBounds(input, "readingItem");
   const grammarExamples = input.grammar.flatMap(topic => topic.taughtSteps.flatMap(step => step.examples));
+  const typeByWord = new Map([...input.targets.listening, ...input.targets.reading, ...input.targets.writing, ...input.targets.speaking].map((term) => [term.word.toLocaleLowerCase("en-US"), term.type] as const));
+  const classOf = (word: string) => typeByWord.get(word);
   issues.push(...choiceLengthIssues("reading.questions", output.reading.questions));
   for(const [index,question] of output.reading.questions.entries()) {
     const wordCount = monthlyFinalWordCount(question.prompt);
@@ -414,6 +416,8 @@ export function validateMonthlyFinalReadingOutput(output: MonthlyFinalReadingOut
       else issues.push({path:`reading.questions.${index}.termId`,message:`"${target!.word}" must appear verbatim in the context sentence before the question, not only in the question or options. Rewrite the context so it contains "${target!.word}", then ask one short question about it ending in "?".`});
     }
     issues.push(...choiceIssues(`reading.questions.${index}`,question));
+    const guessable = monthlyFinalWordClassGuessable(question.prompt, question.options, question.correctIndex, classOf);
+    if (guessable) issues.push({path:`reading.questions.${index}.options`,message:`The gap item for ${question.termId} is answerable from word class alone: "${question.options[question.correctIndex]}" is the only ${guessable} among the options. Keep the blank and the key, and use two distractors of the same word class (${guessable}) that are wrong in meaning.`});
     if (grammarExamples.some(example => normalizeEvidence(example).length >= 6 &&
       [question.prompt, ...question.options].some(text => includesEvidence(text, example)))) {
       issues.push({path: `reading.questions.${index}`, message: "Write a fresh context for this term. Do not reuse a taught grammar example in the prompt or options."});
@@ -452,6 +456,10 @@ export function validateMonthlyFinalProductiveOutput(output: MonthlyFinalProduct
   if(maxWords && monthlyFinalWordCount(output.speakingA.text)>maxWords) issues.push({path:"speakingA.text",message:`Keep the complete read-aloud passage within ${maxWords} words for ${input.cefr}, including all eight assigned pronunciation words.`});
   if(monthlyFinalIsWordList(output.speakingA.text,output.speakingA.positions.map(position=>position.word)))issues.push({path:"speakingA.text",message:"Use natural sentences, not the assessed words copied as a list in any order."});
   if(input.cefr==="A1"&&!monthlyFinalWritingOpening(output.writing.task))issues.push({path:"writing.task",message:'A1 requires an explicitly marked quoted opening-sentence hint in the learner task, e.g. Bắt đầu bằng câu gợi ý: "...". It must be a complete short English opening sentence, not the entire answer.'});
+  for(const [key,section] of [["writing",output.writing],["speakingB",output.speakingB]] as const) {
+    // December 2026 A1 final: "Bắt đầu bằng câu gợi ý" in the task and a different "Gợi ý mở đầu" in the requirements.
+    if (monthlyFinalOpeningHintCount([section.task, section.facts, ...section.requirements].join("\n")) > 1) issues.push({path:`${key}.task`,message:"Give exactly one opening-sentence hint: keep the marked quoted opening in the task and remove every other opening suggestion from the task, facts and requirements."});
+  }
   for(const [key,section,targets] of [["writing",output.writing,input.targets.writing],["speakingB",output.speakingB,input.targets.speaking]] as const) {
     for(const [evidenceKey,quote] of Object.entries(section.evidence)) if(!includesEvidence(section.sample,quote)) issues.push({path:`${key}.evidence.${evidenceKey}`,message:"Return only an exact sentence or excerpt from the actual sample answer. Do not add commentary, labels, alternative sentences or instructions to insert it later."});
     const missing=targets.filter(term=>!monthlyFinalContainsTerm(section.sample,term.word)).map(term=>term.word);
@@ -487,6 +495,33 @@ export function monthlyFinalWordCount(text:string):number {return (text.match(/\
 export function monthlyFinalWritingOpening(task:string):string {
   return task.match(/(?:bắt đầu[^:\n"“'‘]{0,100}bằng câu(?: gợi ý)?|câu mở đầu gợi ý|(?:start|begin)[^:\n"“'‘]{0,60}with(?: the suggested (?:opening|sentence))?)\s*:?\s*["“'‘]([^\n]{1,400}?[.!?])\s*["”'’]/iu)?.[1]?.trim()??"";
 }
+/**
+ * December 2026 (A1 final R01 lead/video/form, R02 video/cancel/begin): a gap
+ * item whose key is the only option of its word class is answered from
+ * grammar alone. Returns the key's class when no distractor shares it, or
+ * undefined (also when a single-word option's class is unknown).
+ */
+export function monthlyFinalWordClassGuessable(prompt: string, options: readonly string[], correctIndex: number, classOf: (word: string) => string | undefined): string | undefined {
+  if (!/_{2,}/u.test(prompt) || options.length < 2 || options.some((option) => /\s/u.test(option.trim()))) return undefined;
+  const classes = options.map((option) => monthlyFinalWordClasses(classOf(option.trim().toLocaleLowerCase("en-US"))));
+  if (classes.some((set) => !set.size)) return undefined;
+  const key = classes[correctIndex];
+  if (!key) return undefined;
+  const shared = classes.some((set, index) => index !== correctIndex && [...set].some((value) => key.has(value)));
+  return shared ? undefined : [...key].join("/");
+}
+
+/** "noun", "verb (phrasal)", "adjective/adverb" -> the part-of-speech classes. */
+export function monthlyFinalWordClasses(type: string | undefined): Set<string> {
+  const known = ["noun", "verb", "adjective", "adverb", "preposition", "pronoun", "determiner", "conjunction"];
+  return new Set((type ?? "").toLocaleLowerCase("en-US").split(/[^a-z]+/u).map((part) => part === "adj" ? "adjective" : part === "adv" ? "adverb" : part).filter((part) => known.includes(part)));
+}
+
+/** Opening-sentence hints in a learner task ("Bắt đầu bằng câu gợi ý", "Gợi ý mở đầu", "Start with"); more than one is contradictory. */
+export function monthlyFinalOpeningHintCount(text: string): number {
+  return (text.match(/bắt đầu[^:\n]{0,40}bằng câu|gợi ý mở đầu|câu mở đầu|mở đầu bằng|(?:start|begin)[^:\n]{0,30}with|suggested opening/giu) ?? []).length;
+}
+
 export function monthlyFinalIsWordList(text:string,words:string[]):boolean {
   const tokens=(value:string)=>(value.toLocaleLowerCase("en-US").match(/\p{L}+(?:[-'’]\p{L}+)*/gu)??[]).sort().join(" ");
   return tokens(text)===tokens(words.join(" "));

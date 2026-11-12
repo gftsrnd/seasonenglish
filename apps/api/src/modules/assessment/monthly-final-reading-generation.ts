@@ -11,6 +11,7 @@ export function monthlyFinalReadingSystemPrompt(taskPrompt: string, terms: reado
     `Generate only Reading, one question for each of these ${terms.length} terms: ${terms.map(term => term.id).join(", ")}.`,
     "Use fresh, short context sentences within levelProfile.readingItem.maxWords. Do not copy any taught grammar example.",
     "Test the supplied meaning. All three options should use the same grammatical shape and different meanings, with exactly one correct interpretation. Do not use conjugations or plurals of the same word as distractors.",
+    "In a gap item all three options are the same word class as the key (three verbs, three nouns or three adjectives), so the learner must understand the meaning; a key that is the only verb among nouns is answered from grammar alone and is rejected. Exactly one option may fit: if a second option also makes a correct, natural sentence (\"Please ____ your results in the report\": write / explain), replace that distractor.",
     "Vary the item types across the set, roughly one third each: (1) gap items: one context sentence with a single blank written as ____ where the target word is the correct option; (2) action items: the context sentence contains the target word and a short question asks what someone should do next or why; (3) meaning-in-context or main-idea items: the context sentence contains the target word and a short question asks what it means here or what the message is mainly about. Use 'Which word is closest in meaning to ...' for at most one item in six.",
     "Every prompt follows exactly one of these templates (TARGET = the item's target word; -s/-ed/-ing endings are allowed):",
     "  gap: \"<context sentence with ____ in place of TARGET>\" and TARGET is the correct option. Example for 'invoice': \"Please send the ____ to the finance team today.\" with options invoice / meeting / laptop.",
@@ -29,6 +30,8 @@ const READING_REPAIR_PROMPT = [
   "Repair the supplied Reading draft. Preserve the term IDs, correct meanings and answer positions. Change only the items named in the findings and keep every other item exactly as it is.",
   "Option length: for every listed term, shorten the correct phrase or give a plausible wrong phrase comparable detail. All three choices must fit the same grammatical slot or use parallel meaning phrases. Never add empty padding or make two choices correct.",
   "Missing question: keep the context sentence and add one short question ending in '?', or replace the target word with a single ____ blank whose correct option is the target word.",
+  "Word class: in a gap item replace the two distractors with words of the key's word class that are wrong in meaning; keep the blank and the key.",
+  "Second correct option or disputed key (independent checker): keep the term and its correct meaning; rewrite the context sentence so only the key fits, or replace the distractor that also fits.",
   "Target word only in the question or options: rewrite the context sentence so it contains the exact target word (-s/-ed/-ing endings are allowed), then ask one short question ending in '?' about its meaning or what someone should do.",
   "Compare character lengths. At least half of the correct choices must be tied with or shorter than another choice. Return the complete Reading result."
 ].join("\n");
@@ -37,7 +40,8 @@ const READING_REPAIR_PROMPT = [
 function repairableReadingIssues(issues: readonly Issue[] | undefined): Issue[] {
   return (issues ?? []).filter(issue =>
     (issue.path === "reading.questions" && issue.message.includes("uniquely longest"))
-    || /^reading\.questions\.\d+\.(?:prompt|termId)$/u.test(issue.path));
+    || /^reading\.questions\.\d+\.(?:prompt|termId)$/u.test(issue.path)
+    || (/^reading\.questions\.\d+\.options$/u.test(issue.path) && issue.message.includes("word class")));
 }
 
 /**
@@ -87,4 +91,25 @@ export async function generateMonthlyFinalReading(runner: AiTaskRunner, input: M
     ]);
     return { questions: [...first.questions, ...second.questions] };
   }
+}
+
+/**
+ * One targeted repair of an accepted Reading draft for the items an
+ * independent answer check disputed (December 2026: R04 write / explain). The
+ * output still goes through the reading validator of the task.
+ */
+export async function repairMonthlyFinalReadingItems(runner: AiTaskRunner, input: MonthlyFinalGenerationInput, reading: Reading, findings: readonly { termId: string; message: string }[]): Promise<Reading> {
+  const indexOf = new Map(reading.questions.map((question, index) => [question.termId, index]));
+  const lines = findings.flatMap((finding) => indexOf.has(finding.termId) ? [`reading.questions.${indexOf.get(finding.termId)} (${finding.termId}): ${finding.message}`] : []);
+  if (!lines.length) return reading;
+  const repaired = await runner.runTask("monthly_final_reading_generation", input, {
+    systemPrompt: READING_REPAIR_PROMPT,
+    messages: [
+      { role: "user", content: JSON.stringify(input) },
+      { role: "assistant", content: JSON.stringify({ questions: reading.questions }) },
+      { role: "user", content: lines.join("\n") }
+    ],
+    maxOutputTokens: 8000, maxAttempts: 2
+  });
+  return (repaired.output as Pick<MonthlyFinalReceptiveOutput, "reading">).reading;
 }

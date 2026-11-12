@@ -2,7 +2,7 @@ import type { MonthlyFinalCheckStatus, MonthlyFinalCheckView, MonthlyFinalExamMe
 import type { MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { monthlyFinalLockedGrammarSteps } from "./monthly-final-builder.js";
 import { publicAssessmentDefinition, type StoredAssessmentDefinition, type StoredAssessmentTask } from "@e4s/database";
-import {monthlyFinalContainsTerm as containsTerm,monthlyFinalWordCount as wordCount,monthlyFinalIsWordList,monthlyFinalWritingOpening,monthlyFinalReadingItemIssues} from "@e4s/ai";
+import {monthlyFinalContainsTerm as containsTerm,monthlyFinalWordCount as wordCount,monthlyFinalIsWordList,monthlyFinalWritingOpening,monthlyFinalReadingItemIssues,monthlyFinalWordClassGuessable,monthlyFinalOpeningHintCount} from "@e4s/ai";
 import {
   MONTHLY_FINAL_LEVEL_PROFILES, MONTHLY_FINAL_OPTION_COUNT, MONTHLY_FINAL_SECTION_MINUTES, MONTHLY_FINAL_SECTION_SCORE,
   MONTHLY_FINAL_SPEAKING_A_SCORE, MONTHLY_FINAL_SPEAKING_B_SCORE, MONTHLY_FINAL_TOTAL_MINUTES, MONTHLY_FINAL_TOTAL_SCORE,
@@ -67,7 +67,7 @@ export function evaluateMonthlyFinal(blueprint: StoredAssessmentDefinition, cont
   };
   const precheck: Partial<Record<MonthlyFinalGenCode, string[]>> = {
     GEN04: gen04Precheck(context), GEN05: gen05Precheck(context), GEN06: gen15(context).status === "fail" ? ["Thiếu trích đoạn bằng chứng trong script (xem GEN15)"] : [],
-    GEN07: gen07Precheck(context), GEN10: gen10Precheck(context), GEN21: gen21Precheck(context)
+    GEN07: gen07Precheck(context), GEN10: gen10Precheck(context), GEN12: gen12Precheck(context), GEN21: gen21Precheck(context)
   };
   const checks: MonthlyFinalCheckView[] = (Object.keys(TITLES) as MonthlyFinalGenCode[]).map((code) => {
     if (!MONTHLY_FINAL_MANUAL_RULES.includes(code)) {
@@ -258,6 +258,41 @@ function gen07Precheck(context: Context): string[] {
     if (!found) continue;
     const correct = found.task.options?.find((option) => option.value === found.task.correctAnswer)?.label ?? "";
     for (const problem of monthlyFinalReadingItemProblems(found.task.prompt, correct, row.word)) problems.push(`${row.position}: ${problem}`);
+    // December 2026 (A1 R01 lead / video / form): the key is the only option of its word class.
+    const options = (found.task.options ?? []).map((option) => option.label);
+    const guessable = monthlyFinalWordClassGuessable(found.task.prompt, options, Math.max(0, options.indexOf(correct)), (word) => wordClassOf(context.contract, word));
+    if (guessable) problems.push(`${row.position}: đoán được nhờ từ loại ("${correct}" là ${guessable} duy nhất trong các lựa chọn)`);
+  }
+  return problems;
+}
+
+/** Word class of a taught word (core first, then support terms); undefined for other words. */
+function wordClassOf(contract: MonthlyCurriculumContract, word: string): string | undefined {
+  const key = word.trim().toLocaleLowerCase("en-US");
+  return contract.coreTerms.find((term) => term.word.toLocaleLowerCase("en-US") === key)?.type
+    ?? contract.supportTerms.find((term) => term.word.toLocaleLowerCase("en-US") === key)?.type;
+}
+
+/**
+ * GEN12 pre-check (December 2026 A1 final): the Writing / Speaking B prompt
+ * gives at most one opening hint, and its required words ("Dùng đủ N từ
+ * sau: ...") are exactly N of the month's taught core words. Whether the
+ * situation gives each word a natural use stays a human (and AI-check) call.
+ */
+function gen12Precheck(context: Context): string[] {
+  const problems: string[] = [];
+  const core = new Set(context.contract.coreTerms.map((term) => term.word.toLocaleLowerCase("en-US")));
+  for (const key of ["W", "SB"]) {
+    const prompt = context.taskByKey.get(key)?.task.prompt ?? "";
+    if (!prompt.trim()) continue;
+    if (monthlyFinalOpeningHintCount(prompt) > 1) problems.push(`${key}: có nhiều hơn một câu mở đầu gợi ý`);
+    const line = prompt.split("\n").map((item) => item.trim()).find((item) => PRODUCTIVE_WORDS_LABEL.test(item));
+    if (!line) continue;
+    const expected = Number(line.match(/\d+/u)?.[0] ?? 0);
+    const words = line.replace(PRODUCTIVE_WORDS_LABEL, "").split(/[,;]/u).map((item) => item.trim().replace(/[.]+$/u, "")).filter(Boolean);
+    if (expected && words.length !== expected) problems.push(`${key}: ghi dùng đủ ${expected} từ nhưng liệt kê ${words.length} từ`);
+    const outside = words.filter((word) => !core.has(word.toLocaleLowerCase("en-US")));
+    if (outside.length) problems.push(`${key}: từ bắt buộc không thuộc danh sách từ chính đã học: ${outside.join(", ")}`);
   }
   return problems;
 }
