@@ -1,5 +1,5 @@
 import type { MonthlyCurriculumContract, MonthlyDaySpec } from "@e4s/domain";
-import { monthlyExerciseTranslationIssues, answerIsUniqueLongestOption, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPronunciationExampleText, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
+import { monthlyExerciseTranslationIssues, monthlyRelationMeaningIssue, answerIsUniqueLongestOption, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPronunciationExampleText, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
 import type { LessonPart } from "@e4s/contracts";
 import { monthlyGrammarRoadmapDayIssues } from "./monthly-grammar-roadmap.js";
 import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
@@ -101,6 +101,10 @@ export function evaluateMonthlyLessonQuality(
     const phrases = (Array.isArray(item.collocations) ? item.collocations : Array.isArray(item.examples) ? item.examples : []).filter((phrase) => typeof phrase === "string" && phrase.trim());
     if (phrases.length < 3) severe.push(finding("MONTHLY_VOCABULARY_PHRASES_MISSING", `${word} needs 3 common phrases (collocations) containing the word; it has ${phrases.length}`, dayNumber, "vocabulary"));
     if (hasNoLexicalRelation(item)) light.push({ severity: "light", code: "MONTHLY_SYNONYM_OR_ANTONYM_MISSING", message: `${word} is missing a synonym or antonym`, dayNumber, component: "vocabulary" });
+    // 12/11: every synonym/antonym chip shows its meaning (A1–A2 Vietnamese note, B1–C1 English definition).
+    // Planned entries take theirs from the approved plan (gated when the pool is built); the rest must carry one.
+    const missing = relationEntriesWithoutMeaning(contract, coreByWord.get(normalize(word))!.id, item);
+    if (missing.length) severe.push(finding("MONTHLY_RELATION_MEANING_MISSING", `${word}: every synonym/antonym not in the plan needs ${["A1", "A2"].includes(contract.cefr) ? "a short Vietnamese meaning in note" : "a short simple-English definition (2-14 words, no Vietnamese, not using the word itself) in definition"}; fix or remove: ${missing.join(", ")}`, dayNumber, "vocabulary"));
   }
 
   const grammarIds = day.kind === "review" ? day.reviewGrammarStepIds ?? [] : day.grammarStepIds ?? [day.grammarStepId];
@@ -356,6 +360,22 @@ function hasNoLexicalRelation(item: Record<string, unknown>): boolean {
   return arrayLength(item.synonyms) === 0 && arrayLength(item.antonyms) === 0;
 }
 
+/** Synonym/antonym entries on a core card that are not planned for that core and lack the level's meaning. */
+function relationEntriesWithoutMeaning(contract: MonthlyCurriculumContract, coreId: string, item: Record<string, unknown>): string[] {
+  const missing: string[] = [];
+  for (const relation of ["synonym", "antonym"] as const) {
+    const planned = new Set(contract.supportTerms.filter((term) => term.relatedCoreTermId === coreId && term.relation === relation).map((term) => normalize(term.word)));
+    const list = Array.isArray(item[`${relation}s`]) ? item[`${relation}s`] as unknown[] : [];
+    for (const raw of list) {
+      const entry = typeof raw === "string" ? { word: raw } : isRecord(raw) ? raw : null;
+      const entryWord = asString(entry?.word).trim();
+      if (!entry || !entryWord || planned.has(normalize(entryWord))) continue;
+      const issue = monthlyRelationMeaningIssue(contract.cefr, { word: entryWord, relation, meaning: asString(entry.note), definition: asString(entry.definition) });
+      if (issue) missing.push(`${relation} "${entryWord}"`);
+    }
+  }
+  return missing;
+}
 function arrayLength(value: unknown): number { return Array.isArray(value) ? value.length : 0; }
 function asString(value: unknown): string { return typeof value === "string" ? value : ""; }
 function normalize(value: string): string { return value.trim().toLocaleLowerCase("en-US"); }

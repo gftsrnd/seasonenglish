@@ -162,8 +162,9 @@ function lesson(overrides: { parts?: Array<{ code: string; content: Record<strin
     if (code === "instruction") return part(code, { steps: ["Đọc ví dụ.", "Trả lời câu hỏi."] });
     if (code === "vocabulary") return part(code, { items: [
       { word: "core-one", synonyms: [], antonyms: [], collocations: ["core-one plan", "a core-one", "core-one cost"] },
-      { word: "core-two", synonyms: ["second"], antonyms: [], collocations: ["core-two plan", "a core-two", "core-two cost"] },
-      { word: "core-three", synonyms: ["third"], antonyms: [], collocations: ["core-three plan", "a core-three", "core-three cost"] }
+      // Unplanned synonyms carry both level meanings, so the fixture passes at A1 (note) and B1 (definition).
+      { word: "core-two", synonyms: [{ word: "second", note: "thứ hai", definition: "the one after the first" }], antonyms: [], collocations: ["core-two plan", "a core-two", "core-two cost"] },
+      { word: "core-three", synonyms: [{ word: "third", note: "thứ ba", definition: "the one after the second" }], antonyms: [], collocations: ["core-three plan", "a core-three", "core-three cost"] }
     ] });
     if (code === "grammar") return part(code, { formula: "Core formula" });
     if (code === "pronunciation") return part(code, { focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }] });

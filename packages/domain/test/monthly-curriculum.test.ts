@@ -94,6 +94,46 @@ function poolFor(): Parameters<typeof planMonthlyResourcePool>[0] {
 }
 
 describe("monthly curriculum contract", () => {
+  // 12/11 end to end: definitions written on the resource pool survive planning and reach the lesson cards.
+  it.each(["B1", "B2", "C1"] as const)("%s: pool definitions reach the approved contract and every synonym/antonym on the card", (cefr) => {
+    const pool = poolFor();
+    pool.cefr = cefr;
+    for (const term of pool.supportTerms) if (term.relation === "synonym" || term.relation === "antonym") term.definition = `a short meaning for ${term.relation} ${term.id}`;
+    const contract = planMonthlyResourcePool(pool);
+    const relations = contract.supportTerms.filter((term) => term.relation === "synonym" || term.relation === "antonym");
+    expect(relations.length).toBeGreaterThan(0);
+    expect(relations.every((term) => term.definition === `a short meaning for ${term.relation} ${term.id}`)).toBe(true);
+    const day = contract.daySpecs.find((candidate) => candidate.kind === "new")!;
+    const cores = contract.coreTerms.filter((core) => day.coreTermIds.includes(core.id));
+    const supports = contract.supportTerms.filter((term) => day.expandedTermIds.includes(term.id));
+    // Model output: plain strings for planned words, one extra antonym without and one with a definition.
+    const items = cores.map((core, index) => ({ word: core.word, synonyms: supports.filter((term) => term.relatedCoreTermId === core.id && term.relation === "synonym").map((term) => term.word), antonyms: index === 0 ? ["unplanned", { word: "extra", definition: "a word with the opposite sense" }] : [] }));
+    const [part] = withMonthlyExpandedTerms([{ code: "vocabulary", content: { items } }], cores, supports, cefr);
+    const cards = part!.content.items as unknown as Array<{ synonyms: Array<Record<string, unknown>>; antonyms: Array<Record<string, unknown>> }>;
+    for (const card of cards) for (const entry of [...card.synonyms, ...card.antonyms]) {
+      expect(typeof entry.definition === "string" && entry.definition.length > 0, JSON.stringify(entry)).toBe(true);
+      expect(entry.note).toBeUndefined();
+    }
+    expect(cards[0]!.antonyms.map((entry) => entry.word)).toEqual(["extra", ...supports.filter((term) => term.relatedCoreTermId === cores[0]!.id && term.relation === "antonym").map((term) => term.word)]);
+  });
+
+  it.each(["A1", "A2"] as const)("%s: every synonym/antonym on the card carries a Vietnamese note, unplanned ones only when the model gave one", (cefr) => {
+    const pool = poolFor();
+    pool.cefr = cefr;
+    const contract = planMonthlyResourcePool(pool);
+    const day = contract.daySpecs.find((candidate) => candidate.kind === "new")!;
+    const cores = contract.coreTerms.filter((core) => day.coreTermIds.includes(core.id));
+    const supports = contract.supportTerms.filter((term) => day.expandedTermIds.includes(term.id));
+    const items = cores.map((core) => ({ word: core.word, synonyms: ["extra"], antonyms: ["opposite", { word: "contrary", note: "trái ngược" }, { word: "other", meaning: "khác" }] }));
+    const [part] = withMonthlyExpandedTerms([{ code: "vocabulary", content: { items } }], cores, supports, cefr);
+    for (const card of part!.content.items as unknown as Array<{ synonyms: Array<Record<string, unknown>>; antonyms: Array<Record<string, unknown>> }>) {
+      for (const entry of [...card.synonyms, ...card.antonyms]) expect(typeof entry.note === "string" && entry.note.length > 0, JSON.stringify(entry)).toBe(true);
+      expect(card.synonyms.map((entry) => entry.word)).not.toContain("extra");
+      expect(card.antonyms.slice(0, 2)).toEqual([{ word: "contrary", note: "trái ngược" }, { word: "other", note: "khác" }]);
+      expect(card.antonyms.length).toBeGreaterThan(2);
+    }
+  });
+
   it.each(["A1", "A2", "B1", "B2", "C1"] as const)("carries frozen illustrations from the %s pool into daily and review vocabulary", (cefr) => {
     const pool = poolFor();
     pool.cefr = cefr;

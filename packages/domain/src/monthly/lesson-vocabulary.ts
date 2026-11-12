@@ -21,8 +21,18 @@ function asWordEntries(value: unknown): Array<Record<string, unknown>> {
     : entry && typeof entry === "object" && typeof (entry as Item).word === "string" ? [entry as Item] : []);
 }
 
-function mergeEntries(existing: unknown, planned: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
-  const result = asWordEntries(existing).map((entry) => ({ ...entry }));
+function mergeEntries(
+  existing: unknown,
+  planned: Array<Record<string, unknown>>,
+  /** Synonym/antonym lists with a level: an unplanned model entry is kept only with the level's meaning (see {@link modelRelationEntry}). */
+  unplanned?: (entry: Record<string, unknown>) => Record<string, unknown> | undefined
+): Array<Record<string, unknown>> {
+  const plannedKeys = new Set(planned.map((entry) => String(entry.word).toLocaleLowerCase()));
+  const result = asWordEntries(existing).flatMap((entry) => {
+    if (!unplanned || plannedKeys.has(String(entry.word).toLocaleLowerCase())) return [{ ...entry }];
+    const kept = unplanned(entry);
+    return kept ? [kept] : [];
+  });
   const byKey = new Map(result.map((entry) => [String(entry.word).toLocaleLowerCase(), entry]));
   for (const entry of planned) {
     const key = String(entry.word).toLocaleLowerCase();
@@ -47,6 +57,32 @@ function relationEntry(term: MonthlyVocabularySupport, cefr: string | undefined)
   if (englishOnly) return { word: term.word, ...(definition ? { definition } : {}) };
   return { word: term.word, ...(term.meaning ? { note: term.meaning } : {}) };
 }
+
+/**
+ * A synonym/antonym the lesson model added beyond the plan (12/11): the card
+ * shows a meaning next to every such chip, so the entry is kept only when the
+ * model gave the level's meaning — A1–A2 a Vietnamese `note` (or `meaning`),
+ * B1–C1 a short simple-English `definition` that passes
+ * {@link monthlyRelationMeaningIssue} (its Vietnamese note is dropped). An entry
+ * without one is removed rather than shown without a meaning.
+ */
+export function monthlyModelRelationEntry(entry: Record<string, unknown>, relation: "synonym" | "antonym", cefr: string): Record<string, unknown> | undefined {
+  const word = typeof entry.word === "string" ? entry.word.trim() : "";
+  if (!word) return undefined;
+  const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
+  if (cefr === "A1" || cefr === "A2") {
+    const note = text(entry.note) || text(entry.meaning);
+    if (monthlyRelationMeaningIssue(cefr, { word, relation, meaning: note })) return undefined;
+    const { meaning: _meaning, ...rest } = entry;
+    return { ...rest, word, note };
+  }
+  const definition = text(entry.definition);
+  if (monthlyRelationMeaningIssue(cefr, { word, relation, definition })) return undefined;
+  const { note: _note, meaning: _meaning, ...rest } = entry;
+  return { ...rest, word, definition };
+}
+
+const MONTHLY_CARD_LEVELS = new Set(["A1", "A2", "B1", "B2", "C1"]);
 
 /** Longest synonym/antonym definition (B1–C1), in words and characters. */
 export const MONTHLY_RELATION_DEFINITION_MAX_WORDS = 14;
@@ -111,8 +147,10 @@ function attachTerms(
     const word = String(item.word ?? "").trim().toLocaleLowerCase();
     const core = cores.find((candidate) => candidate.word.trim().toLocaleLowerCase() === word);
     const linked = (relation: string) => core ? supports.filter((term) => term.relatedCoreTermId === core.id && term.relation === relation) : [];
-    item.synonyms = mergeEntries(item.synonyms, linked("synonym").map((term) => relationEntry(term, cefr)));
-    item.antonyms = mergeEntries(item.antonyms, linked("antonym").map((term) => relationEntry(term, cefr)));
+    // With a month level, a synonym/antonym the model added beyond the plan stays only with its level meaning.
+    const unplanned = (relation: "synonym" | "antonym") => core && cefr && MONTHLY_CARD_LEVELS.has(cefr) ? (entry: Item) => monthlyModelRelationEntry(entry, relation, cefr) : undefined;
+    item.synonyms = mergeEntries(item.synonyms, linked("synonym").map((term) => relationEntry(term, cefr)), unplanned("synonym"));
+    item.antonyms = mergeEntries(item.antonyms, linked("antonym").map((term) => relationEntry(term, cefr)), unplanned("antonym"));
     item.family = mergeEntries(item.family, linked("word_family").map((term) => ({ word: term.word, ...(term.type ? { type: term.type } : {}), ...(term.meaning ? { meaning: term.meaning } : {}) })));
     const collocations = linked("collocation").map((term) => term.word);
     if (collocations.length) {

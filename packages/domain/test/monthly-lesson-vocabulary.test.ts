@@ -110,6 +110,19 @@ describe("synonym/antonym meanings by level (12/11)", () => {
     expect(item!.antonyms).toEqual([{ word: "hinder" }]);
   });
 
+  it("keeps a synonym/antonym the model added only with the level's meaning", () => {
+    const model = { word: "help", synonyms: ["aid", { word: "support", definition: "give help to someone" }], antonyms: [{ word: "block", note: "chặn" }, { word: "obstruct", definition: "cản trở" }] };
+    const [b2] = attachMonthlyExpandedTerms([model], cores, supports, "B2");
+    expect(b2!.synonyms).toEqual([{ word: "support", definition: "give help to someone" }, { word: "assist", definition: "help someone do something" }]);
+    // "block" has only a Vietnamese note, "obstruct" a Vietnamese definition: both removed at B2; the planned antonym stays.
+    expect(b2!.antonyms).toEqual([{ word: "hinder" }]);
+    const [a2] = attachMonthlyExpandedTerms([model], cores, supports, "A2");
+    expect(a2!.synonyms).toEqual([{ word: "assist", note: "hỗ trợ" }]);
+    expect(a2!.antonyms).toEqual([{ word: "block", note: "chặn" }, { word: "hinder", note: "cản trở" }]);
+    // Older callers without a level keep every entry as before.
+    expect((attachMonthlyExpandedTerms([model], cores, supports)[0]!.synonyms as unknown[]).length).toBe(3);
+  });
+
   it("gates the meaning form per level", () => {
     expect(monthlyRelationMeaningIssue("A1", { word: "assist", relation: "synonym", meaning: "hỗ trợ" })).toBeUndefined();
     expect(monthlyRelationMeaningIssue("A1", { word: "assist", relation: "synonym", meaning: " " })).toMatch(/Vietnamese meaning/u);
