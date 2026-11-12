@@ -8,6 +8,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
+import { withLessonListeningAudio, type ListeningAudioService } from "../assessment/listening-audio.js";
 import { generateMonthlyDayWithAi, generateMonthlyReviewWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
 import { buildMonthlyCatalogPronunciationPrompt, getMonthlyPronunciationTextIssues, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, getMonthlyGrammarPhaseIssues, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
 import { MonthlyCorePhaseShortfallError, runMonthlyCorePhase } from "./monthly-core-phase.js";
@@ -62,7 +63,7 @@ const retireFrameworkInput = z.object({ reason: z.string().trim().min(10).max(10
 const reopenDecisionInput = z.object({ reason: z.string().trim().min(5).max(1000) });
 
 /** Monthly routes deliberately live outside routes.ts: monthly contracts are not weeks. */
-export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>): void {
+export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>, listeningAudio?: ListeningAudioService): void {
   const repositories = createRepositories(pool);
   const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
   const resourceProgress = new MonthlyResourceProgressStore();
@@ -1046,6 +1047,8 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       await repositories.monthlyContent.saveMonthlyDayGenerationFailure(actorId, id, dayNumber, { candidate: result.candidate ?? null, report: result.report, attempts: result.attempts });
       return reply.code(422).send({ code: "MONTHLY_GENERATION_QUALITY_FAILED", report: result.report, attempts: result.attempts, candidate: result.candidate ?? null });
     }
+    // Listening audio (Edge TTS) right after generation; a failure is marked on the part and the lesson is still saved.
+    result.lesson = (await withLessonListeningAudio(result.lesson, listeningAudio, actorId)).lesson;
     await repositories.monthlyContent.saveMonthlyDayDraft(actorId, id, dayNumber, result.lesson, result.report);
     return result;
   });
@@ -1083,6 +1086,8 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       await repositories.monthlyContent.saveMonthlyDayGenerationFailure(actorId, id, dayNumber, { candidate: result.candidate ?? null, report: result.report, attempts: result.attempts });
       return reply.code(422).send({ code: "MONTHLY_GENERATION_QUALITY_FAILED", report: result.report, attempts: result.attempts, candidate: result.candidate ?? null });
     }
+    // Listening audio (Edge TTS) right after generation; a failure is marked on the part and the lesson is still saved.
+    result.lesson = (await withLessonListeningAudio(result.lesson, listeningAudio, actorId)).lesson;
     await repositories.monthlyContent.saveMonthlyDayDraft(actorId, id, dayNumber, result.lesson, result.report);
     return result;
   });

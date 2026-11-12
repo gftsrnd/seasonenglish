@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 export interface EdgeTtsRunner {
-  synthesize(input: { text: string; voice: string }): Promise<{ bytes: Uint8Array; mimeType: "audio/mpeg"; filename: string }>;
+  synthesize(input: { text: string; voice: string; /** Edge prosody rate such as "-8%". */ rate?: string }): Promise<{ bytes: Uint8Array; mimeType: "audio/mpeg"; filename: string }>;
 }
 
 type Execute = (input: { command: string; args: string[]; outputPath: string }) => Promise<Uint8Array>;
@@ -21,15 +21,16 @@ export function createLocalEdgeTtsRunner(options: { command?: string; execute?: 
   const command = options.command?.trim() || "edge-tts";
   const execute = options.execute ?? executeEdgeTts;
   return {
-    async synthesize({ text, voice }) {
+    async synthesize({ text, voice, rate }) {
       const script = text.trim();
       if (!script || script.length > 20_000) throw new Error("EDGE_TTS_TEXT_INVALID");
       const normalizedVoice = voice.trim();
       if (!normalizedVoice || normalizedVoice.length > 200) throw new Error("EDGE_TTS_VOICE_INVALID");
+      if (rate !== undefined && !/^[+-]\d{1,2}%$/u.test(rate)) throw new Error("EDGE_TTS_RATE_INVALID");
       const directory = await mkdtemp(join(tmpdir(), "e4s-edge-tts-"));
       const outputPath = join(directory, "assessment.mp3");
       try {
-        const bytes = await execute({ command, args: ["--voice", normalizedVoice, "--text", script, "--write-media", outputPath], outputPath });
+        const bytes = await execute({ command, args: ["--voice", normalizedVoice, ...(rate ? [`--rate=${rate}`] : []), "--text", script, "--write-media", outputPath], outputPath });
         if (!bytes.byteLength) throw new Error("EDGE_TTS_EMPTY_AUDIO");
         return { bytes, mimeType: "audio/mpeg" as const, filename: "assessment-edge-tts.mp3" };
       } finally {

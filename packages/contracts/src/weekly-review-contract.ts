@@ -26,6 +26,8 @@ export interface WeeklyReviewItemVariant {
   passage?: string;
   /** Spoken by the app (listen-and-choose items); never shown as text. */
   audioText?: string;
+  /** Stored Edge TTS audio of `audioText`, generated with the review; the app speaks `audioText` without it. */
+  audioUrl?: string;
   options?: string[];
   /**
    * Answer key. Omitted for free responses, which pass when the response is
@@ -76,6 +78,8 @@ export interface WeeklyReviewQuestionView {
   passage?: string;
   /** Spoken by the app (listen-and-choose items); never shown as text. */
   audioText?: string;
+  /** Stored Edge TTS audio of `audioText`, generated with the review; the app speaks `audioText` without it. */
+  audioUrl?: string;
   options?: string[];
   freeResponse: boolean;
   acceptsAudio: boolean;

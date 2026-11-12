@@ -84,8 +84,8 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
     storage: options.storage
   });
   registerLearningRoutes(app, options.pool, options.aiRunner, options.mediaService, options.aiRunnerFactory, productiveGrading);
-  registerAssessmentRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory, options.edgeTtsRunner);
-  registerContentRoutes(app, options.pool, options.aiRunner, options.storage, options.aiRunnerFactory, options.mediaService);
+  registerAssessmentRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory, options.edgeTtsRunner, options.storage);
+  registerContentRoutes(app, options.pool, options.aiRunner, options.storage, options.aiRunnerFactory, options.mediaService, options.edgeTtsRunner);
   registerManagerRoutes(app, options.pool, {
     maintenanceEnabled,
     ...(options.mediaService ? { mediaService: options.mediaService } : {}),

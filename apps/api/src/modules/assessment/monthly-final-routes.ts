@@ -17,6 +17,7 @@ import { safeGenerationDiagnosticIssues } from "../content/generation-errors.js"
 import {generateMonthlyFinalProductive} from "./monthly-final-productive-generation.js";
 import {generateMonthlyFinalListening} from "./monthly-final-listening-generation.js";
 import {generateMonthlyFinalReading} from "./monthly-final-reading-generation.js";
+import { withBlueprintListeningAudio, type ListeningAudioService } from "./listening-audio.js";
 
 const frameworkParam = z.object({ frameworkId: z.uuid() });
 const versionParam = z.object({ versionId: z.uuid() });
@@ -67,7 +68,8 @@ export function monthlyFinalWindowOpen(today: string, examDate: string): boolean
 }
 
 export function registerMonthlyFinalRoutes(
-  app: FastifyInstance, pool: Pool, guard: preHandlerHookHandler, runnerFor: (actorId: string) => Promise<AiTaskRunner | undefined>
+  app: FastifyInstance, pool: Pool, guard: preHandlerHookHandler, runnerFor: (actorId: string) => Promise<AiTaskRunner | undefined>,
+  listeningAudio?: ListeningAudioService
 ): void {
   const repositories = createRepositories(pool);
   const readers = createRoleGuard(pool, ["operator", "manager"]);
@@ -143,8 +145,11 @@ export function registerMonthlyFinalRoutes(
       userId: actorId, requestId: `monthly-final:${context.framework.id}:${Date.now()}`, taskId: task.taskId, promptVersionId: task.promptVersionId,
       output: { receptive: receptive.output, productive: productive.output }, metadata: receptive.metadata
     });
+    // Both listening messages get Edge TTS audio now; audio.status stays SCRIPT_ONLY until the Operator has listened (GEN20).
+    const withAudio = await withBlueprintListeningAudio(blueprint, listeningAudio, actorId);
+    if (withAudio.failed) request.log.warn({ failed: withAudio.failed }, "Monthly final listening audio synthesis failed");
     try {
-      await saveNewDraft(pool, context, blueprint, true);
+      await saveNewDraft(pool, context, withEvaluation(withAudio.blueprint, context.contract), true);
     } catch (error) {
       return reply.code(409).send({ code: errorCode(error, "MONTHLY_FINAL_CREATE_FAILED") });
     }

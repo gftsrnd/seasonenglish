@@ -234,6 +234,7 @@ function toVariant(raw: Record<string, unknown>, fallbackId: string, code: Weekl
     prompt,
     ...(passage && passage !== prompt ? { passage } : {}),
     ...(typeof raw.audioText === "string" && raw.audioText.trim() ? { audioText: raw.audioText.trim() } : {}),
+    ...(typeof raw.audioText === "string" && raw.audioText.trim() && typeof raw.audioUrl === "string" && raw.audioUrl.trim() ? { audioUrl: raw.audioUrl.trim() } : {}),
     ...(options?.length ? { options } : {}),
     ...(answer === undefined ? {} : { answer }),
     ...(typeof raw.explanation === "string" && raw.explanation.trim() ? { explanation: raw.explanation } : {}),

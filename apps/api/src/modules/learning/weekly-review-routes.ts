@@ -53,6 +53,7 @@ export function buildWeeklyReviewSessionView(
       prompt: variant.prompt,
       ...(variant.passage ? { passage: variant.passage } : {}),
       ...(variant.audioText ? { audioText: variant.audioText } : {}),
+      ...(variant.audioText && variant.audioUrl ? { audioUrl: variant.audioUrl } : {}),
       ...(variant.options?.length ? { options: variant.options } : {}),
       freeResponse: variant.answer === undefined,
       acceptsAudio: Boolean(variant.acceptsAudio)

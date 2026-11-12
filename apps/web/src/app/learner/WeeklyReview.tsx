@@ -117,7 +117,7 @@ export function WeeklyReview({ title, cefr, actions }: { title: string; cefr: Ce
     </Notice></section> : null}
     {question ? <section className="card stack" aria-label={section?.title ?? question.sectionCode}>
       <div className="eyebrow">{section?.title}{question.retry ? <span className="badge" style={{ marginLeft: 8 }}><RotateCcw size={12} aria-hidden="true" /> {english ? "Try again" : "Làm lại"}</span> : null}</div>
-      {question.audioText ? <button type="button" className="btn weekly-review-listen" onClick={() => actions.speak(question.audioText!)}><Volume2 size={18} aria-hidden="true" /> {english ? "Listen" : "Nghe"}</button> : null}
+      {question.audioText ? <button type="button" className="btn weekly-review-listen" onClick={() => playReviewAudio(question.audioText!, question.audioUrl, actions.speak)}><Volume2 size={18} aria-hidden="true" /> {english ? "Listen" : "Nghe"}</button> : null}
       {question.passage ? <blockquote className="small weekly-review-passage">{question.passage} <button type="button" className="btn-sm btn-ghost" aria-label={english ? "Listen to the text" : "Nghe đoạn này"} onClick={() => actions.speak(question.passage!)}><Volume2 size={14} aria-hidden="true" /></button></blockquote> : null}
       <p><strong>{question.prompt}</strong></p>
       {question.options?.length
@@ -136,4 +136,11 @@ export function WeeklyReview({ title, cefr, actions }: { title: string; cefr: Ce
     </section> : null}
     {error ? <ErrorText message={error} /> : null}
   </div>;
+}
+
+/** Stored Edge TTS audio first; the browser voice only when there is none or it fails to play. */
+function playReviewAudio(text: string, audioUrl: string | undefined, speak: LearnerCallbacks["speak"]) {
+  const src = audioUrl?.trim();
+  if (!src) { speak(text); return; }
+  speak(text, "en-US", { audioSrc: src, onStatus: (status) => { if (status === "error") speak(text); } });
 }

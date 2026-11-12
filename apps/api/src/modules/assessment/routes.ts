@@ -40,6 +40,9 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { requestEvidenceFields } from "../manager/request-evidence.js";
 import type { EdgeTtsRunner } from "./edge-tts.js";
+import type { ObjectStorage } from "@e4s/storage";
+import { synthesizeListeningScript } from "./dialogue-tts.js";
+import { listeningAudioServiceFor, withBlueprintListeningAudio } from "./listening-audio.js";
 import { registerMonthlyFinalRoutes } from "./monthly-final-routes.js";
 import { createRoleGuard } from "../identity/policy.js";
 import { monthlyExamEligibility } from "../learning/routes.js";
@@ -178,8 +181,9 @@ const DEFAULT_LEVEL_FORM_PROMPT = `Create a complete 75-minute, 100-point Workpl
 const LEVEL_FORM_QUESTION_GUIDANCE = "Each question prompt must contain only the question text. Omit part labels such as Part 1: and question numbering.";
 const LEVEL_FORM_READING_REPAIR_PROMPT = `Generate exactly one new multiple-choice reading-comprehension question for the supplied passage. It must be appropriate for the target CEFR level, have four concise options, an unambiguous correctIndex, and must not duplicate any existing prompt. ${LEVEL_FORM_QUESTION_GUIDANCE} Return only the structured tool input.`;
 
-export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>, edgeTtsRunner?: EdgeTtsRunner): void {
+export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>, edgeTtsRunner?: EdgeTtsRunner, storage?: ObjectStorage): void {
   const repositories = createRepositories(pool);
+  const listeningAudio = listeningAudioServiceFor(pool, edgeTtsRunner, storage);
   const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
   const sessionConflict = { code: "ASSESSMENT_ACTIVE_ON_OTHER_DEVICE", message: "Bài đang được làm trên thiết bị khác." };
@@ -199,14 +203,15 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     if (!body.success) return reply.code(400).send({ code: "EDGE_TTS_INPUT_INVALID" });
     if (!edgeTtsRunner) return reply.code(503).send({ code: "EDGE_TTS_UNAVAILABLE" });
     try {
-      const audio = await edgeTtsRunner.synthesize(body.data);
+      // Dialogue-aware: speaker labels are never spoken and each speaker keeps one voice.
+      const audio = await synthesizeListeningScript(edgeTtsRunner, { script: body.data.text, voice: body.data.voice });
       return { filename: audio.filename, mimeType: audio.mimeType, base64: Buffer.from(audio.bytes).toString("base64") };
     } catch (error) {
       return reply.code(503).send({ code: assessmentErrorCode(error, "EDGE_TTS_FAILED") });
     }
   });
 
-  registerMonthlyFinalRoutes(app, pool, monthlyFinalOperators, runnerFor);
+  registerMonthlyFinalRoutes(app, pool, monthlyFinalOperators, runnerFor, listeningAudio);
 
   /**
    * One read-model for the Operator's assessment viewer.  This reads stored
@@ -587,7 +592,10 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
         metadata: listening.metadata
       });
       if (!assembled.quality.passed) throw new LevelFormQualityError(assembled.quality.severe);
-      const form = await repositories.assessments.createLevelFormDraft(actorId, params.data.targetLevel, assembled.blueprint);
+      // Listening audio right after generation; a TTS failure keeps the form (marked on the group) for the manual buttons.
+      const withAudio = await withBlueprintListeningAudio(assembled.blueprint, listeningAudio, actorId);
+      if (withAudio.failed) request.log.warn({ failed: withAudio.failed }, "Level form listening audio synthesis failed");
+      const form = await repositories.assessments.createLevelFormDraft(actorId, params.data.targetLevel, withAudio.blueprint);
       return reply.code(201).send({ ...form, publishedAt: null });
     } catch (error) {
       if (error instanceof LevelFormQualityError) {
