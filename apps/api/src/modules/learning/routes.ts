@@ -12,9 +12,9 @@ import type {
   MonthlyExamEligibilityView
 } from "@e4s/contracts";
 import { buildPronunciationAssets, microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
-import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerConsecutiveLearningAbsences, learnerMonthlyAccess, learnerMonthlyAttendanceDates, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
+import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerConsecutiveLearningAbsences, learnerMonthlyAccess, learnerMonthlyAttendanceDates, learnerMonthlyLessonDates, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
 import { gradeLessonAnswer, SENSITIVE_NAME_MESSAGE_VI, sensitiveTextIssue, validateGeneratedFeedback } from "@e4s/domain/content";
-import { evaluateMonthlyExamEligibility, learnerMonthlySeasonTarget, MONTHLY_EXAM_ENTRY_CUTOFF, monthlyExamEntryState } from "@e4s/domain/progression";
+import { evaluateMonthlyExamEligibility, learnerMonthlySeasonTarget, monthlyAttendanceCountedDates, MONTHLY_EXAM_ENTRY_CUTOFF, monthlyExamEntryState } from "@e4s/domain/progression";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
 import { exerciseTranslationRevealed, readExerciseTranslation, withoutExerciseTranslations } from "@e4s/domain/monthly";
 import type { FastifyInstance } from "fastify";
@@ -187,6 +187,8 @@ export function registerLearningRoutes(
       repositories.assessments.findMonthlyFinalAttempt(learnerId)
     ]);
     if (!progress) return reply.code(404).send({ code: "LEARNER_NOT_FOUND" });
+    // Home follows the organisation (Manager test) date everywhere, also when the month is not published yet.
+    const organizationDate = monthlyContext?.systemDate ?? monthlyAccess?.systemDate ?? monthlyEligibility.systemDate;
     const lifecycle = progress.learner.cefr
       ? await repositories.learning.learnerLifecycle(learnerId, progress.points, progress.levelReadiness.eligible)
       : null;
@@ -303,7 +305,7 @@ export function registerLearningRoutes(
         completedLessons,
         totalLessons: dailyLessons.length,
         studyDays: monthlyContext ? progress.studyDays : 0,
-        streakDays: monthlyContext ? calculateCurrentStreak(progress.activity.map((item) => item.occurredAt)) : 0,
+        streakDays: monthlyContext ? calculateCurrentStreak(progress.activity.map((item) => item.occurredAt), organizationDate) : 0,
         points,
         completedReviews,
         totalReviews,
@@ -312,7 +314,7 @@ export function registerLearningRoutes(
       ...(inactiveDays >= 3 ? { inactivityReminder: { inactiveDays } } : {}),
       schedule: monthlyContext
         ? buildMonthlySchedule(summaries, monthlyContext.systemDate, Number(progress.learner.profile.durationMinutes ?? 10), monthlyAccess?.state === "active" ? monthlyAccess.startDate : undefined)
-        : buildSchedule(Number(progress.learner.profile.durationMinutes ?? 10), []),
+        : buildSchedule(Number(progress.learner.profile.durationMinutes ?? 10), [], organizationDate),
       coach: { turnsToday: monthlyContext ? progress.stats.coachTurnsToday ?? 0 : 0, turnsThisWeek: monthlyContext ? progress.stats.coachTurns : 0, targetTurns: coachTarget, href: "/coach" },
       practice: {
         status: "locked",
@@ -991,9 +993,9 @@ export function learnerLessonDisplayTitle(lesson: LearnerLessonRecord): string {
   return englishExample ? englishExample.replace(/[.!?]+$/, "").slice(0, 60) : title;
 }
 
-function calculateCurrentStreak(occurredAt: string[]): number {
+export function calculateCurrentStreak(occurredAt: string[], systemDate?: string): number {
   const dates = new Set(occurredAt.map((value) => value.slice(0, 10)));
-  const cursor = startOfUtcDay(new Date());
+  const cursor = systemDate && /^\d{4}-\d{2}-\d{2}$/.test(systemDate) ? new Date(`${systemDate}T00:00:00Z`) : startOfUtcDay(new Date());
   let streak = 0;
   skipWeekendBackwards(cursor);
   while (dates.has(cursor.toISOString().slice(0, 10))) {
@@ -1049,8 +1051,9 @@ function buildMonthlySchedule(lessons: LearnerHomeView["lessons"], systemDate: s
   };
 }
 
-function buildSchedule(lessonMinutes: number, occurredAt: string[]): LearnerHomeView["schedule"] {
-  const today = new Date();
+/** Week strip without a published month; `systemDate` is the organisation (test) date, the real date only as a fallback. */
+export function buildSchedule(lessonMinutes: number, occurredAt: string[], systemDate?: string): LearnerHomeView["schedule"] {
+  const today = systemDate && /^\d{4}-\d{2}-\d{2}$/.test(systemDate) ? new Date(`${systemDate}T00:00:00Z`) : new Date();
   const utcDay = today.getUTCDay();
   const monday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   monday.setUTCDate(monday.getUTCDate() - ((utcDay + 6) % 7));
@@ -1155,7 +1158,9 @@ export async function monthlyExamEligibility(pool: Pool, learnerId: string, opti
   const systemDate = row.system_date;
   const examDate = row.exam_date ?? access!.examDate;
   const cohortEligible = access?.state === "active";
-  const effectiveDates = cohortEligible ? access.effectiveDates : [];
+  // December 2026: a past weekday without an approved lesson of the level is never an absence.
+  const lessonDates = cohortEligible && access.cefr ? (await learnerMonthlyLessonDates(pool, learnerId, [row.month], access.cefr)).get(row.month) ?? new Set<string>() : new Set<string>();
+  const effectiveDates = cohortEligible ? monthlyAttendanceCountedDates(access.effectiveDates, lessonDates, systemDate) : [];
   const elapsedDates = effectiveDates.filter(date => date < systemDate);
   const recorded = cohortEligible && access.cefr
     ? (await learnerMonthlyAttendanceDates(pool, learnerId, [row.month], { cefr: access.cefr })).get(row.month) ?? [] : [];

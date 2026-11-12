@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
+import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
 import { pickGameWordExample } from "@e4s/domain/engagement";
@@ -2358,7 +2358,9 @@ class LearningRepository {
          select m.*, count(ml.id) filter (where ml.status = 'approved')::int as scheduled_lessons,
                 count(ml.id) filter (where ml.status = 'approved' and pr.status = 'completed')::int as completed_lessons,
                 coalesce(($2::jsonb->>m.month)::int, 0) as attended_days,
-                (select count(*)::int from generate_series(greatest((m.month || '-01')::date, m.level_start_date), m.exam_date - 1, interval '1 day') d where extract(isodow from d) <= 5) as effective_days,
+                (select count(*)::int from generate_series(greatest((m.month || '-01')::date, m.level_start_date), m.exam_date - 1, interval '1 day') d where extract(isodow from d) <= 5
+                   -- Only days with an approved lesson count; later days of the running month still count as planned.
+                   and (d::date >= (select identity.system_date from identity) or exists (select 1 from month_lessons available where available.framework_id = m.framework_id and available.status = 'approved' and available.lesson_date = d::date))) as effective_days,
                 (select count(*)::int from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
                   where cs.learner_id = $1 and ct.speaker = 'learner'
                     and ct.created_at >= $3::timestamptz
@@ -2817,6 +2819,28 @@ export async function learnerMonthlyAttendanceDates(pool: Pool | PoolClient, lea
       result.set(month, []);
     }
   }
+/**
+ * Dates per month on which an approved lesson of the learner's level was
+ * available (approved month lesson in an approved, published framework). Only
+ * these past days can be absences (December 2026: 22 absences with 7 lessons).
+ */
+export async function learnerMonthlyLessonDates(pool: Pool | PoolClient, learnerId: string, months: readonly string[], cefr: CefrLevel): Promise<Map<string, Set<string>>> {
+  const result = new Map<string, Set<string>>(months.map((month) => [month, new Set<string>()]));
+  if (!months.length) return result;
+  const { rows } = await pool.query<{ month: string; lesson_date: string }>(
+    `select pm.month, ml.lesson_date::text as lesson_date
+       from users u
+       join program_months pm on pm.organization_id = u.organization_id and pm.month = any($2::text[])
+       join month_frameworks mf on mf.program_month_id = pm.id and mf.cefr = $3
+         and mf.status = 'approved' and mf.published_at is not null
+       join month_lessons ml on ml.framework_id = mf.id and ml.status = 'approved'
+      where u.id = $1`,
+    [learnerId, months, cefr]
+  );
+  for (const row of rows) result.get(row.month)?.add(row.lesson_date);
+  return result;
+}
+
   return result;
 }
 
@@ -2915,17 +2939,28 @@ async function learnerMissedPreviousExam(db: Pool | PoolClient, learnerId: strin
   const prior = await learnerMonthlyAccess(db, learnerId, previousMonth);
   if (prior?.state !== "active") return false;
   if (exam.override) return true;
-  const attendance = (await learnerMonthlyAttendanceDates(db, learnerId, [previousMonth], { cefr })).get(previousMonth) ?? [];
-  const attended = attendance.filter(date => prior.effectiveDates.includes(date)).length;
-  return prior.effectiveDays - attended <= Math.floor(prior.effectiveDays * 0.3);
+  const [attendanceByMonth, lessonDates] = await Promise.all([
+    learnerMonthlyAttendanceDates(db, learnerId, [previousMonth], { cefr }),
+    learnerMonthlyLessonDates(db, learnerId, [previousMonth], cefr)
+  ]);
+  const attendance = attendanceByMonth.get(previousMonth) ?? [];
+  // Only days that had an approved lesson count (the month is over, so every day is past).
+  const counted = monthlyAttendanceCountedDates(prior.effectiveDates, lessonDates.get(previousMonth) ?? new Set(), prior.systemDate);
+  const attended = attendance.filter(date => counted.includes(date)).length;
+  return counted.length - attended <= Math.floor(counted.length * 0.3);
 }
 
 async function learnerLearningAbsences(db: Pool | PoolClient, learnerId: string, access: LearnerMonthlyAccess): Promise<number> {
   if (access.state !== "active" || !access.cefr || access.graduated) return 0;
   const previous = await learnerMonthlyAccess(db, learnerId, previousLearningMonth(access.month));
   const windows = previous?.state === "active" ? [previous, access] : [access];
-  const attendance = await learnerMonthlyAttendanceDates(db, learnerId, windows.map(item => item.month), { cefr: access.cefr });
-  return consecutiveLearningAbsences(windows.flatMap(item => item.effectiveDates), [...attendance.values()].flat(), access.systemDate, access.resetOn ?? undefined);
+  const [attendance, lessonDates] = await Promise.all([
+    learnerMonthlyAttendanceDates(db, learnerId, windows.map(item => item.month), { cefr: access.cefr }),
+    learnerMonthlyLessonDates(db, learnerId, windows.map(item => item.month), access.cefr)
+  ]);
+  // A past weekday without an approved lesson is never an absence.
+  const counted = windows.flatMap(item => monthlyAttendanceCountedDates(item.effectiveDates, lessonDates.get(item.month) ?? new Set(), access.systemDate));
+  return consecutiveLearningAbsences(counted, [...attendance.values()].flat(), access.systemDate, access.resetOn ?? undefined);
 }
 
 export async function learnerConsecutiveLearningAbsences(db: Pool | PoolClient, learnerId: string) {
@@ -11873,7 +11908,9 @@ class ManagerRepository {
           : access?.state === "active" || access?.state === "waiting_next_month" || access?.state === "missed_exam" ? access.state
           : "waiting_content";
         const hasAttendance = state === "active" || state === "graduated" || (state === "locked" && (access?.state === "active" || historicalWindow?.canStudy));
-        const effective = hasAttendance ? learningWindow?.effectiveDates ?? [] : [];
+        // Past weekdays without an approved lesson of this level are not absences (December 2026).
+        const lessonDates = cefr && hasAttendance ? (await learnerMonthlyLessonDates(this.pool, row.id, [month], cefr)).get(month) ?? new Set<string>() : new Set<string>();
+        const effective = hasAttendance ? monthlyAttendanceCountedDates(learningWindow?.effectiveDates ?? [], lessonDates, systemDate) : [];
         const elapsed = effective.filter(date => date < systemDate);
         const [attendance, readiness] = await Promise.all([
           cefr && hasAttendance

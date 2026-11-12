@@ -4,6 +4,8 @@ import type { Pool } from "pg";
 import type { LearnerLessonRecord } from "@e4s/database";
 import {
   buildMicroLessonSystemPrompt,
+  buildSchedule,
+  calculateCurrentStreak,
   calculateInactiveDays,
   finishedAttemptTranslation,
   learnerLessonDisplayTitle,
@@ -18,6 +20,23 @@ describe("calculateInactiveDays", () => {
     vi.setSystemTime(new Date("2026-10-14T12:00:00.000Z"));
     try {
       expect(calculateInactiveDays(["2026-10-07T09:00:00.000Z"], "2026-10-13")).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("learner Home follows the organisation (Manager test) date (December 2026, A2 without a published month)", () => {
+  it("builds the week strip and streak from the organisation date, not the real date", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-12T03:00:00.000Z"));
+    try {
+      const schedule = buildSchedule(10, [], "2026-12-01");
+      expect(schedule.days.map((day) => day.date)).toEqual(["2026-11-30", "2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04"]);
+      expect(schedule.days.map((day) => day.status)).toEqual(["missed", "today", "upcoming", "upcoming", "upcoming"]);
+      expect(buildSchedule(10, []).days.find((day) => day.status === "today")?.date).toBe("2026-11-12");
+      expect(calculateCurrentStreak(["2026-11-30T02:00:00.000Z", "2026-12-01T02:00:00.000Z"], "2026-12-01")).toBe(2);
+      expect(calculateCurrentStreak(["2026-11-30T02:00:00.000Z", "2026-12-01T02:00:00.000Z"])).toBe(0);
     } finally {
       vi.useRealTimers();
     }

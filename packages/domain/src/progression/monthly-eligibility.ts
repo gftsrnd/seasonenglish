@@ -40,6 +40,19 @@ export function monthlyLearnerWindow(month: string, examDate: string, approvalDa
   };
 }
 
+/**
+ * Days that count for attendance (December 2026: the exam day showed 22
+ * absences when only 7 lessons existed). Product rule: one attendance per
+ * Mon–Fri day with at least one completed lesson, exam day excluded; a day can
+ * only be missed when an approved, published lesson was available on it.
+ * Past effective days without such a lesson are dropped; today and later days
+ * are kept (their lessons may still be approved under rolling publication).
+ */
+export function monthlyAttendanceCountedDates(effectiveDates: readonly string[], lessonDates: ReadonlySet<string> | readonly string[], systemDate: string): string[] {
+  const available = lessonDates instanceof Set ? lessonDates : new Set(lessonDates as readonly string[]);
+  return effectiveDates.filter((date) => date >= systemDate || available.has(date));
+}
+
 export function consecutiveLearningAbsences(
   effectiveDates: readonly string[], attendedDates: readonly string[], today: string, resetOn?: string
 ): number {

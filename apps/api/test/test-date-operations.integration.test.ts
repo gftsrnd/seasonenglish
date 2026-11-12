@@ -119,6 +119,23 @@ describe("Manager test date", () => {
     expect(await monthlyExamEligibility(pool, id)).toMatchObject({ systemDate: "2030-03-29", examDate: "2030-03-29", entryClosed: false });
   });
 
+  it("counts exam-day absences only on days that had an approved lesson (December 2026: 22 absences with 7 lessons)", async () => {
+    await setTestDate("2030-03-29");
+    const id = await learner("2030-03-04");
+    // March 2030 has 19 effective weekdays before the exam, but lessons exist only on the first 10.
+    const empty = await monthlyExamEligibility(pool, id);
+    expect(empty).toMatchObject({ effectiveDays: 10, elapsedEffectiveDays: 10, absenceDays: 10, maxAbsences: 3 });
+    for (const [index, date] of lessonDates.slice(0, 8).entries()) {
+      await pool.query(
+        `insert into progress_records (id, learner_id, lesson_id, status, started_at, completed_at)
+         values (gen_random_uuid(), $1, $2, 'completed', $3::timestamptz, $3::timestamptz)`, [id, lessonIds[index], `${date} 09:00+07`]
+      );
+    }
+    const attended = await monthlyExamEligibility(pool, id);
+    expect(attended).toMatchObject({ attendedDays: 8, absenceDays: 2, attendanceEligible: true });
+    expect(attended.reasons).not.toContain("MONTHLY_ATTENDANCE_LIMIT_EXCEEDED");
+  });
+
   it("returns to the real date and keeps background-music fields on save", async () => {
     await setTestDate("2030-03-12");
     await pool.query(

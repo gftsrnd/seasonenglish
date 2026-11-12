@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consecutiveLearningAbsences, evaluateMonthlyExamEligibility, evaluateMonthlyLevelUpReadiness, monthlyExamEntryState, learnerMonthlySeasonTarget, monthlyLearnerWindow, monthlySeasonTurnTarget } from "../src/progression/monthly-eligibility.js";
+import { consecutiveLearningAbsences, evaluateMonthlyExamEligibility, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, monthlyExamEntryState, learnerMonthlySeasonTarget, monthlyLearnerWindow, monthlySeasonTurnTarget } from "../src/progression/monthly-eligibility.js";
 
 it("allows starts through the 23:24 ICT minute and closes at 23:25", () => {
   expect(monthlyExamEntryState("2026-11-29", "2026-11-30", "23:59:59")).toBe("upcoming");
@@ -146,4 +146,24 @@ it("uses one Season target rule for Coach and monthly-exam eligibility", () => {
   const prorated = monthlyLearnerWindow("2026-11", "2026-11-30", "2026-11-09");
   expect(learnerMonthlySeasonTarget({ ...prorated, state: "active" })).toBe(prorated.seasonTarget);
   expect(learnerMonthlySeasonTarget(null)).toBe(100);
+});
+
+it("counts absences only on days that had an approved lesson (December 2026: 22 absences with 7 lessons)", () => {
+  const window = monthlyLearnerWindow("2026-12", "2026-12-31", "2026-12-01");
+  expect(window.effectiveDays).toBe(22);
+  // The December 4300 run generated only L1-L3, L4 (review), L5, L8 and L16.
+  const lessonDates = ["2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04", "2026-12-07", "2026-12-10", "2026-12-22"];
+  const examDay = monthlyAttendanceCountedDates(window.effectiveDates, new Set(lessonDates), "2026-12-31");
+  expect(examDay).toEqual(lessonDates);
+  const eligibility = evaluateMonthlyExamEligibility({
+    systemDate: "2026-12-31", examDate: "2026-12-31", effectiveDays: examDay.length, elapsedEffectiveDays: examDay.length,
+    attendedDays: 5, attendedElapsedDays: 5, scheduledLessons: 6, completedLessons: 5, seasonTurns: 0,
+    frameworkApproved: true, formPublished: true, windowOpen: true
+  });
+  expect(eligibility.absenceDays).toBe(2);
+  expect(eligibility.maxAbsences).toBe(2);
+  expect(eligibility.reasons).not.toContain("MONTHLY_ATTENDANCE_LIMIT_EXCEEDED");
+  // Mid-month: today and later days stay counted (their lessons may still be approved); past days without a lesson do not.
+  expect(monthlyAttendanceCountedDates(window.effectiveDates, lessonDates, "2026-12-09").slice(0, 7)).toEqual(["2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04", "2026-12-07", "2026-12-09", "2026-12-10"]);
+  expect(consecutiveLearningAbsences(examDay, ["2026-12-01"], "2026-12-31")).toBe(6);
 });
