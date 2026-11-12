@@ -698,8 +698,8 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
     const expectedSound = planned ? contract.sounds.find(sound => sound.id === planned.pronunciationPlan.targetIds[0]) : contract.sounds[pronunciationSoundIndex(roadmapOrdinal)];
     if (day.soundId !== expectedSound?.id || day.pronunciationSlot !== pronunciationSlotFor(roadmapOrdinal)) errors.push(`Lesson ${day.lessonNumber} does not follow the pronunciation roadmap`);
     if (planned && day.kind === "new") {
-      if (day.newLessonNumber !== newLessonOrdinal || JSON.stringify(day.grammarPlan) !== JSON.stringify(planned.grammarPlan)) errors.push(`Lesson ${day.lessonNumber} has an invalid daily grammar progression`);
-      if (JSON.stringify(day.pronunciationPlan) !== JSON.stringify(planned.pronunciationPlan)) errors.push(`Lesson ${day.lessonNumber} has an invalid daily pronunciation progression`);
+      if (day.newLessonNumber !== newLessonOrdinal || canonicalJson(day.grammarPlan) !== canonicalJson(planned.grammarPlan)) errors.push(`Lesson ${day.lessonNumber} has an invalid daily grammar progression`);
+      if (canonicalJson(day.pronunciationPlan) !== canonicalJson(planned.pronunciationPlan)) errors.push(`Lesson ${day.lessonNumber} has an invalid daily pronunciation progression`);
       const examples = planned.pronunciationPlan.targetIds.length === 1 ? planned.pronunciationPlan.exampleIds : expectedSound?.examples.slice(0, 3).map(example => example.id);
       if (JSON.stringify(day.pronunciationExampleIds) !== JSON.stringify(examples)) errors.push(`Lesson ${day.lessonNumber} repeats or skips its assigned pronunciation example set`);
     }
@@ -918,4 +918,11 @@ function stableStringify(value: unknown): string {
     return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(",")}}`;
   }
   return JSON.stringify(value);
+}
+
+/** JSON with object keys sorted: plans read back from Postgres jsonb come with keys reordered. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
+    ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)))
+    : item);
 }
