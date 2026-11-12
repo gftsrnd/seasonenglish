@@ -509,7 +509,9 @@ export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): Mont
     source: term.source,
     relatedCoreTermId: term.relatedCoreTermId,
     dayNumber: dayByCoreId.get(term.relatedCoreTermId)!,
-    ...(term.cefr ? { cefr: term.cefr } : {})
+    ...(term.cefr ? { cefr: term.cefr } : {}),
+    // B1–C1 synonym/antonym English definitions must survive planning, or lessons have nothing to attach.
+    ...(term.definition ? { definition: term.definition } : {})
   }));
   return buildMonthlyCurriculum({
     month: pool.month,
