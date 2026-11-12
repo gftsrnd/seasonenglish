@@ -1093,8 +1093,9 @@ function VocabularyCard({
       const detail = lexicalDetails.find((candidate) => candidate.kind === "antonym" && candidate.word.trim().toLocaleLowerCase() === value.word.trim().toLocaleLowerCase());
       return { label: `≠ ${value.word}`, ariaLabel: `${language === "en" ? "Listen to antonym" : "Nghe từ trái nghĩa"}: ${value.word}`, tone: "antonym" as const, onClick: () => playVocabularyWord(speak, value.word, value.audioUrl), ...relationMeaning(value, isB1Plus) };
     }) : []),
-    ...(item.family?.length ? [{ label: `${language === "en" ? copy.vocabulary.wordFamily : "Họ từ"} (${item.family.length})`, ariaLabel: `${language === "en" ? copy.vocabulary.wordFamily : "Word family"} (${item.family.length})`, icon: "family" as const, tone: "family" as const, onClick: () => openModal({ kind: "family", item }) }] : []),
-    ...extendedRelations
+    // Slang / formal sit with the other related words; Word family always closes the row.
+    ...extendedRelations,
+    ...(item.family?.length ? [{ label: `${language === "en" ? copy.vocabulary.wordFamily : "Họ từ"} (${item.family.length})`, ariaLabel: `${language === "en" ? copy.vocabulary.wordFamily : "Word family"} (${item.family.length})`, icon: "family" as const, tone: "family" as const, onClick: () => openModal({ kind: "family", item }) }] : [])
   ];
   return <SharedVocabularyCard item={item} loadImage={loadImage} speak={speak} relations={relations} language={language} />;
 }
