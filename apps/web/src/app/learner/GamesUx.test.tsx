@@ -309,6 +309,56 @@ describe("learner game visual and interaction regressions", () => {
     expect(container.querySelectorAll('[data-testid="typing-character"]:not(:empty)')).toHaveLength(0);
   });
 
+  it("drains the Typing race time bar continuously over the word's time limit and restarts it for the next word", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "performance", "Date"] });
+    try {
+      const onFinish = vi.fn();
+      // "role" → 4 000 ms limit; "menu" → 4 000 ms limit.
+      render(<TypingRaceGame words={[
+        { id: "role", english: "role", vietnamese: "vai trò", definition: "a job function", partOfSpeech: "noun" },
+        { id: "menu", english: "menu", vietnamese: "thực đơn", definition: "a list of food", partOfSpeech: "noun" }
+      ]} onFinish={onFinish} />);
+      const bar = () => screen.getByRole("progressbar", { name: "Thời gian còn lại" });
+      const fill = () => screen.getByTestId("typing-timer-fill");
+      const left = () => fill().style.getPropertyValue("--typing-time-left");
+      const firstFill = fill();
+
+      // The visual drain is one CSS animation lasting the whole time limit, not a per-frame width.
+      expect(fill().style.getPropertyValue("--typing-time-limit")).toBe("4000ms");
+      expect(fill()).not.toHaveClass("is-paused");
+      expect(left()).toBe("100%");
+      expect(bar()).toHaveAttribute("aria-valuenow", "4000");
+
+      // Intermediate values step down once per second (used for aria and reduced motion).
+      act(() => { vi.advanceTimersByTime(1_000); });
+      expect(left()).toBe("75%");
+      expect(bar()).toHaveAttribute("aria-valuenow", "3000");
+      act(() => { vi.advanceTimersByTime(1_000); });
+      expect(left()).toBe("50%");
+      act(() => { vi.advanceTimersByTime(1_000); });
+      expect(left()).toBe("25%");
+      expect(fill()).toBe(firstFill);
+
+      // At the limit the round times out, the bar freezes at 0 while the answer shows…
+      act(() => { vi.advanceTimersByTime(1_000); });
+      expect(left()).toBe("0%");
+      expect(fill()).toHaveClass("is-paused");
+      expect(screen.getByText(/Hết giờ/)).toBeInTheDocument();
+
+      // …then the next word starts with a fresh, full bar (new element → animation restarts).
+      act(() => { vi.advanceTimersByTime(1_200); });
+      expect(screen.getByRole("heading", { name: "Từ 2/2" })).toBeInTheDocument();
+      expect(fill()).not.toBe(firstFill);
+      expect(fill()).not.toHaveClass("is-paused");
+      expect(left()).toBe("100%");
+      act(() => { vi.advanceTimersByTime(2_000); });
+      expect(left()).toBe("50%");
+      expect(onFinish).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not score or advance Typing race until the learner explicitly submits", () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());

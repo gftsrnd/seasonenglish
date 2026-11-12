@@ -1161,7 +1161,20 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
   height: 100%;
   border-radius: inherit;
   background: var(--olive);
-  transition: width 80ms linear;
+  width: var(--typing-time-left, 100%);
+  /* One continuous animation per word (the element is keyed by word), so the
+     bar never depends on how often React re-renders. */
+  animation: typing-timer-drain var(--typing-time-limit, 4000ms) linear forwards;
+  transition: none;
+}
+
+.typing-timer i.is-paused {
+  animation-play-state: paused;
+}
+
+@keyframes typing-timer-drain {
+  from { width: 100%; }
+  to { width: 0%; }
 }
 
 .typing-word {
@@ -1400,6 +1413,11 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
   .rio-hero,
   .typing-timer i {
     transition: none;
+  }
+
+  /* Stepped once per second from the remaining-time sample instead. */
+  .typing-timer i {
+    animation: none;
   }
 
   .game-loading::before,
