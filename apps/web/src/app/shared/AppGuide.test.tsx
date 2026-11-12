@@ -473,6 +473,36 @@ describe("AppGuide", () => {
     expect(walkSteps()).toEqual(["Các mục hỗ trợ", "Lịch sử hỗ trợ"]);
   });
 
+  it("mentions appeals on the support steps only when the Appeals tab is shown", () => {
+    const content = (appeals: boolean) => <><AppGuide role="learner" pathname="/support" compact />
+      <main className="learner-support-page">
+        <nav className="request-tabs"><a href="/support" aria-current="page">Tất cả</a><a href="?type=complaints">Khiếu nại</a>{appeals ? <a href="?type=appeals">Kháng nghị</a> : null}</nav>
+        <section className="request-card">Lịch sử hỗ trợ</section>
+      </main>
+    </>;
+    const stepTexts = () => {
+      fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
+      const panel = within(screen.getByRole("dialog"));
+      const texts: string[] = [];
+      for (let index = 0; index < 12; index++) {
+        texts.push(screen.getByRole("dialog").textContent ?? "");
+        const done = panel.queryByRole("button", { name: "Đã hiểu" });
+        fireEvent.click(done ?? panel.getByRole("button", { name: "Tiếp theo" }));
+        if (done) break;
+      }
+      return texts;
+    };
+    const { unmount } = render(content(false));
+    const before = stepTexts();
+    expect(before).toHaveLength(2);
+    before.forEach(text => expect(text).not.toMatch(/kháng nghị/i));
+    unmount();
+    render(content(true));
+    const after = stepTexts();
+    expect(after).toHaveLength(2);
+    after.forEach(text => expect(text).toMatch(/kháng nghị/i));
+  });
+
   it("guides the Season card areas and omits the composer while it is unavailable", async () => {
     const content = (disabled: boolean) => <><AppGuide role="learner" pathname="/coach" compact />
       <div className="coach-page">

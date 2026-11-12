@@ -34,9 +34,9 @@ export function AppLink({ href, navigate, children, className, ariaLabel, title,
   return <a {...rest} href={href} className={className} aria-label={ariaLabel} title={title} aria-disabled={disabled || undefined} tabIndex={disabled ? -1 : undefined} style={targetStyle} onClick={follow} onKeyDown={handleKeyDown}>{children}</a>;
 }
 
-export function LearnerSupportCard({ from, navigate }: { from: "home" | "profile"; navigate: AppLinkProps["navigate"] }) {
+export function LearnerSupportCard({ from, navigate, appeals = true }: { from: "home" | "profile"; navigate: AppLinkProps["navigate"]; appeals?: boolean }) {
   return <AppLink className="card learner-support-entry" href={`/support?from=${from}`} navigate={navigate} ariaLabel="Hỗ trợ học tập" style={{ display: "flex" }}>
-    <div><h2>Hỗ trợ học tập</h2><p className="small muted">Gửi khiếu nại, kháng nghị, trả lời khảo sát và xem phản hồi.</p></div>
+    <div><h2>Hỗ trợ học tập</h2><p className="small muted">{appeals ? "Gửi khiếu nại, kháng nghị, trả lời khảo sát và xem phản hồi." : "Gửi khiếu nại, trả lời khảo sát và xem phản hồi."}</p></div>
     <ChevronRight size={20} aria-hidden="true" />
   </AppLink>;
 }

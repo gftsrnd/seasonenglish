@@ -79,14 +79,17 @@ const learnerSteps: Record<string, readonly GuideStep[]> = {
   ],
   "/support": [
     // Thẻ Tất cả chỉ có bảng lịch sử: thêm hàng mục để người học biết gửi khiếu nại, kháng nghị ở đâu.
-    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])) .request-tabs', "Các mục hỗ trợ", "Mở **Khiếu nại** để báo lỗi điểm danh, bài học hay tài khoản, **Kháng nghị** để xin chấm lại bài thi, **Khảo sát tháng** để góp ý."],
+    // Trước khi trình độ được duyệt, mục Kháng nghị bị ẩn nên bước không nhắc tới kháng nghị.
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):has(.request-tabs a[href*="type=appeals"]) .request-tabs', "Các mục hỗ trợ", "Mở **Khiếu nại** để báo lỗi điểm danh, bài học hay tài khoản, **Kháng nghị** để xin chấm lại bài thi, **Khảo sát tháng** để góp ý."],
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):not(:has(.request-tabs a[href*="type=appeals"])) .request-tabs', "Các mục hỗ trợ", "Mở **Khiếu nại** để báo lỗi điểm danh, bài học hay tài khoản, hoặc **Khảo sát tháng** để góp ý về khóa học."],
     ['[aria-labelledby="learner-complaint-title"]', "Khiếu nại mới", "Chọn **loại khiếu nại**, ghi ngày hoặc màn hình xảy ra, nêu **lý do** và đính kèm ảnh nếu có, rồi bấm **Gửi cho Quản lý**.", true],
     [".learner-support-action:has(.assessment-appeal-status)", "Bài có thể kháng nghị", "Bấm **Gửi kháng nghị** ở bài còn hạn, nêu lý do từ **10 ký tự**, chọn trình độ đề xuất nếu được hỏi, rồi gửi cho Vận hành."],
     [".card:has(> .monthly-survey-form), .monthly-survey-form", "Khảo sát tháng", "Trả lời các câu có **dấu sao** rồi bấm **Gửi phản hồi**. Có nhiều tháng đang mở thì chọn tháng ở đầu thẻ."],
     ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=complaints"]) .request-card', "Khiếu nại đã gửi", "Mỗi hàng có **trạng thái** và ngày gửi; bấm **Chi tiết** để đọc phản hồi. **Gửi khiếu nại** báo vấn đề về điểm danh, bài học hoặc tài khoản."],
     ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=appeals"]) .request-card', "Kháng nghị đã gửi", "Mỗi hàng có **trạng thái** và ngày gửi. Bấm **Chi tiết** để đọc phản hồi của Vận hành."],
     ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=feedback"]) .request-card', "Khảo sát đã gửi", "Các khảo sát bạn đã trả lời. Bấm **Chi tiết** để xem lại câu trả lời của tháng đó."],
-    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])) .request-card', "Lịch sử hỗ trợ", "Khiếu nại, kháng nghị và khảo sát đã gửi, kèm **trạng thái**. Bấm **Chi tiết** để đọc nội dung và phản hồi."],
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):has(.request-tabs a[href*="type=appeals"]) .request-card', "Lịch sử hỗ trợ", "Khiếu nại, kháng nghị và khảo sát đã gửi, kèm **trạng thái**. Bấm **Chi tiết** để đọc nội dung và phản hồi."],
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):not(:has(.request-tabs a[href*="type=appeals"])) .request-card', "Lịch sử hỗ trợ", "Khiếu nại và khảo sát đã gửi, kèm **trạng thái**. Bấm **Chi tiết** để đọc nội dung và phản hồi."],
   ],
 };
 

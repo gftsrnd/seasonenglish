@@ -26,6 +26,8 @@ const supportFilters = [
 ] as const;
 
 type SupportData = {
+  /** Appeals open only once the placement level is approved; unknown (load failed) keeps them closed. */
+  levelApproved?: boolean;
   complaints?: LearnerComplaintView[];
   appeals?: LearnerAcademicAppealView[];
   results?: AssessmentAppealTargetView[];
@@ -34,14 +36,18 @@ type SupportData = {
 export function LearnerRequestHistory() {
   const [params, setParams] = useSearchParams();
   const requested = params.get("type") ?? params.get("tab");
-  const filter = supportFilters.find(item => item.value === requested)?.value ?? "all";
+  const [data, setData] = useState<SupportData>();
+  const appealsOpen = data?.levelApproved === true;
+  const filters = supportFilters.filter(item => item.value !== "appeals" || appealsOpen);
+  const requestedFilter = supportFilters.find(item => item.value === requested)?.value ?? "all";
+  // Before the level is approved there is nothing to appeal: a typed ?type=appeals URL falls back to All.
+  const filter = requestedFilter === "appeals" && data?.levelApproved === false ? "all" : requestedFilter;
   const focusedId = params.get("id");
   const [expandedRequest, setExpandedRequest] = useState<{ filter: typeof filter; focusedId: string | null; id: string | null }>();
   const openRequestId = expandedRequest?.filter === filter && expandedRequest.focusedId === focusedId ? expandedRequest.id : focusedId;
   const lessonUnlock = params.get("kind") === "lesson_unlock";
   const composing = filter === "complaints" && (lessonUnlock || params.get("compose") === "complaint");
   const fromProfile = params.get("from") === "profile";
-  const [data, setData] = useState<SupportData>();
   const [revision, setRevision] = useState(0);
   const [notice, setNotice] = useState("");
   const surveys = useLearnerMonthlySurveys();
@@ -61,9 +67,11 @@ export function LearnerRequestHistory() {
     void Promise.allSettled([
       learnerApiClient.getLearnerComplaints(),
       learnerApiClient.getLearnerAppeals(),
-      learnerApiClient.getAppealableAssessments()
-    ]).then(([complaints, appeals, results]) => {
+      learnerApiClient.getAppealableAssessments(),
+      learnerApiClient.getProgress()
+    ]).then(([complaints, appeals, results, progress]) => {
       if (active) setData({
+        ...(progress.status === "fulfilled" ? { levelApproved: progress.value.learner.cefr != null } : {}),
         ...(complaints.status === "fulfilled" ? { complaints: complaints.value.complaints } : {}),
         ...(appeals.status === "fulfilled" ? { appeals: appeals.value.appeals } : {}),
         ...(results.status === "fulfilled" ? { results: results.value.results } : {})
@@ -73,11 +81,19 @@ export function LearnerRequestHistory() {
   }, [revision]);
 
   useEffect(() => {
+    if (requestedFilter !== "appeals" || data?.levelApproved !== false) return;
+    const next = new URLSearchParams(params);
+    next.delete("type");
+    next.delete("tab");
+    setParams(next, { replace: true });
+  }, [requestedFilter, data?.levelApproved]);
+
+  useEffect(() => {
     if (focusedId && data) document.getElementById(`support-request-${focusedId}`)?.scrollIntoView?.({ block: "nearest" });
   }, [focusedId, data, filter]);
 
   const showComplaints = filter === "all" || filter === "complaints";
-  const showAppeals = filter === "all" || filter === "appeals";
+  const showAppeals = appealsOpen && (filter === "all" || filter === "appeals");
   const showFeedback = filter === "all" || filter === "feedback";
   const history = [
     ...(showComplaints ? data?.complaints ?? [] : []).map(item => ({ ...item, date: item.submittedAt, kindLabel: "Khiếu nại",
@@ -120,16 +136,16 @@ export function LearnerRequestHistory() {
     };
   });
   const rows = [...history, ...feedbackRows].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
-  const requestError = data && ((showComplaints && !data.complaints) || (showAppeals && !data.appeals) || (filter === "appeals" && !data.results));
+  const requestError = data && ((showComplaints && !data.complaints) || (showAppeals && !data.appeals) || (filter === "appeals" && (!appealsOpen || !data.results)));
   const surveyError = showFeedback && surveys.loadError;
   const loading = (filter !== "feedback" && !data) || (showFeedback && !surveys.view && !surveys.loadError);
   const listLabel = "Lịch sử hỗ trợ";
 
   return <div className="app-learner-page learner-support-page request-workspace">
-    <PageTitle title="Hỗ trợ học tập" detail="Theo dõi khiếu nại, kháng nghị và góp ý của bạn."
+    <PageTitle title="Hỗ trợ học tập" detail={data?.levelApproved === false ? "Theo dõi khiếu nại và góp ý của bạn." : "Theo dõi khiếu nại, kháng nghị và góp ý của bạn."}
       aside={<Link className="btn" to={fromProfile ? "/profile" : "/home"}>{fromProfile ? "Về Tiến độ & hồ sơ" : "Về Trang chủ"}</Link>} />
     <nav className="request-tabs" aria-label="Các mục hỗ trợ học tập">
-      {supportFilters.map(item => {
+      {filters.map(item => {
         const search = new URLSearchParams();
         if (fromProfile) search.set("from", "profile");
         if (item.value !== "all") search.set("type", item.value);
@@ -142,7 +158,7 @@ export function LearnerRequestHistory() {
     {notice ? <p role="status">{notice}</p> : null}
     {composing && data?.complaints ? <ComplaintForm lessonUnlock={lessonUnlock} complaints={data.complaints}
       cancel={() => setComplaintFormOpen(false)} submitted={() => { setComplaintFormOpen(false); setNotice("Đã gửi khiếu nại cho Quản lý."); refresh(); }} /> : null}
-    {filter === "appeals" && data?.results?.length ? <section className="card learner-support-action">
+    {filter === "appeals" && appealsOpen && data?.results?.length ? <section className="card learner-support-action">
       <h2>Bài thi có thể kháng nghị</h2>
       <ul className="request-history-items">{data.results.map(result => <li key={result.attemptId}>
         <h3>{result.title}</h3>

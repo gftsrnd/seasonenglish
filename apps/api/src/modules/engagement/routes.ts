@@ -99,6 +99,9 @@ export function registerEngagementRoutes(
     const params = practiceAppealParams.safeParse(request.params);
     const body = practiceAppealInput.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_PRACTICE_APPEAL" });
+    if (!await repositories.assessments.hasApprovedLevel(request.e4sSession!.user.id)) {
+      return reply.code(409).send({ code: "APPEAL_LEVEL_NOT_APPROVED", message: "Kháng nghị mở sau khi trình độ của bạn được duyệt." });
+    }
     try {
       const view = await repositories.engagement.appealWeeklyPractice({
         learnerId: request.e4sSession!.user.id,

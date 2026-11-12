@@ -183,6 +183,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
   const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
   const sessionConflict = { code: "ASSESSMENT_ACTIVE_ON_OTHER_DEVICE", message: "Bài đang được làm trên thiết bị khác." };
+  const appealLevelNotApproved = { code: "APPEAL_LEVEL_NOT_APPROVED", message: "Kháng nghị mở sau khi trình độ của bạn được duyệt." };
   const canUseAttempt = (request: FastifyRequest, attempt: AssessmentAttemptRecord) =>
     attempt.status !== "in_progress" || repositories.assessments.claimAttemptSession(
       request.e4sSession!.user.id, attempt.id, request.e4sSessionId!
@@ -678,13 +679,16 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
 
   app.get("/api/v1/learner/appealable-assessments", { preHandler: learnerOnly }, async (request, reply) => {
     reply.header("Cache-Control", "private, no-store");
-    return { results: await repositories.assessments.listAppealableResults(request.e4sSession!.user.id) };
+    const learnerId = request.e4sSession!.user.id;
+    if (!await repositories.assessments.hasApprovedLevel(learnerId)) return { results: [] };
+    return { results: await repositories.assessments.listAppealableResults(learnerId) };
   });
 
   app.post("/api/v1/assessment-attempts/:attemptId/appeals", { preHandler: learnerOnly }, async (request, reply) => {
     const params = attemptParam.safeParse(request.params);
     const body = appealInput.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ code: "ASSESSMENT_APPEAL_INVALID" });
+    if (!await repositories.assessments.hasApprovedLevel(request.e4sSession!.user.id)) return reply.code(409).send(appealLevelNotApproved);
     const appeal = await repositories.assessments.createAppeal(
       request.e4sSession!.user.id, params.data.attemptId, body.data.reason, body.data
     );

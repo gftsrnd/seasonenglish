@@ -5284,11 +5284,22 @@ const learnerAssessmentAppealCandidates = `
     and (definition.kind in ('placement', 'level_up', 'pass_course')
       or (definition.kind = 'final' and definition.assessment_key like 'monthly-final-%'))
     and not exists (select 1 from appeals a where a.attempt_id = aa.id)
+    and exists (select 1 from enrollments approved where approved.learner_id = aa.learner_id
+      and approved.cefr_approved and approved.cefr is not null)
 `;
 const openAssessmentAppeal = "deadline >= now()";
 
 class AssessmentRepository {
   constructor(private readonly pool: Pool) {}
+
+  /** Appeals open only after the placement level is approved; before that there is nothing to appeal. */
+  async hasApprovedLevel(learnerId: string): Promise<boolean> {
+    const result = await this.pool.query<{ approved: boolean }>(
+      `select exists(select 1 from enrollments e where e.learner_id = $1 and e.cefr_approved and e.cefr is not null) as approved`,
+      [learnerId]
+    );
+    return Boolean(result.rows[0]?.approved);
+  }
 
   async levelUpStartContext(learnerId: string): Promise<{
     currentLevel: CefrLevel | null;

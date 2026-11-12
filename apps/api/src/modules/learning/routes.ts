@@ -329,6 +329,8 @@ export function registerLearningRoutes(
 
   app.get("/api/v1/learner/appeals", { preHandler: learnerOnly }, async (request, reply) => {
     reply.header("Cache-Control", "private, no-store");
+    // Appeals exist only after the placement level is approved.
+    if (!await repositories.assessments.hasApprovedLevel(request.e4sSession!.user.id)) return { appeals: [] };
     const result = await pool.query<Omit<LearnerAcademicAppealView, "createdAt"> & { createdAt: Date }>(`
       select p.id, 'lesson' as kind, l.title, p.reason, p.status, p.resolution, p.created_at as "createdAt",
              p.request_scope as scope, p.screenshot is not null as "hasEvidence", p.part_code as "partCode"
@@ -566,6 +568,9 @@ export function registerLearningRoutes(
     const body = lessonAppealInput.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_LESSON_APPEAL" });
     const learnerId = request.e4sSession!.user.id;
+    if (!await repositories.assessments.hasApprovedLevel(learnerId)) {
+      return reply.code(409).send({ code: "APPEAL_LEVEL_NOT_APPROVED", message: "Kháng nghị mở sau khi trình độ của bạn được duyệt." });
+    }
     const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
     if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
