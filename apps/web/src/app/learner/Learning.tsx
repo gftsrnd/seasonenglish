@@ -947,7 +947,16 @@ function GrammarFormula({ formula }: { formula: string }) {
 
 /** At most two short paragraphs (goal + rule, then one tip line); very long authored detail still folds away. */
 function GrammarExplanation({ paragraphs, language }: { paragraphs: string[]; language: LearnerLessonLanguage }) {
-  return <>{paragraphs.map((paragraph, index) => <GrammarParagraph key={`${index}-${paragraph}`} value={paragraph} language={language} />)}</>;
+  const [first = "", ...rest] = paragraphs.map((paragraph) => paragraph.trim()).filter(Boolean);
+  // A long first paragraph folds after its first sentence; the fold then holds every later paragraph too,
+  // so the "Cách dùng chi tiết" toggle is always last and never sits between two visible lines.
+  if (first.length > 240) {
+    const firstSentence = first.match(/^.*?[.!?](?:\s|$)/u)?.[0]?.trim() ?? "";
+    const preview = firstSentence.length <= 240 ? firstSentence : "";
+    const detail = [preview ? first.slice(preview.length).trim() : first, ...rest].filter(Boolean);
+    return <>{preview ? <p className="lesson-study-explanation">{preview}</p> : null}{detail.length ? <details className="lesson-grammar-detail"><summary>{language === "en" ? "More about this structure" : "Cách dùng chi tiết"}</summary>{detail.map((text, index) => <p className="lesson-study-explanation" key={`${index}-${text}`}>{text}</p>)}</details> : null}</>;
+  }
+  return <>{[first, ...rest].filter(Boolean).map((paragraph, index) => <GrammarParagraph key={`${index}-${paragraph}`} value={paragraph} language={language} />)}</>;
 }
 
 /** Keep existing authored detail available without making Study a wall of text. */

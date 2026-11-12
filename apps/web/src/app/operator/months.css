@@ -488,3 +488,7 @@ details.monthly-resource-editor-section>:not(summary)+:not(summary){margin-top:1
 /* Failed-generation button: icon only in the narrow day cell (the label overflowed next to AI). */
 .monthly-day-cell .monthly-day-actions>button.monthly-view-day{padding:0;width:28px;border-color:var(--danger);background:var(--danger-soft,#fdecea);color:var(--danger)}
 .monthly-day-cell .monthly-day-actions>button.monthly-view-day span{display:none}
+
+/* Slang / formal alternatives continue the expanded list in their own colour. */
+.monthly-resource-collection li.register{border-color:#cdbfe6;background:#f1ecfa}
+.monthly-resource-collection li.register small{color:#5b4691}

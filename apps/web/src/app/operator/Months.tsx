@@ -731,8 +731,7 @@ function VocabularyPanel({ items, variant, registerCores = [] }: { items: Array<
     <ol className={`monthly-resource-collection ${variant}`}>{visible.map((item, index) => {
       const standalone = isStandaloneWord(item.word);
       return <li key={item.id} className={standalone ? "standalone" : "phrase"}><i>{index + 1}</i><b>{item.word}</b><small>{variant === "core" ? "Headword" : standalone ? "Từ đơn" : "Cụm bổ trợ"}</small><span>{item.meaning}</span>{item.ipa && <em>{item.ipa}</em>}</li>;
-    })}</ol>
-    {variant === "expanded" && registerTerms.length > 0 && <ol className="monthly-resource-collection expanded register" aria-label="Khẩu ngữ và văn phong">{registerTerms.map((term, index) => <li key={`${term.coreId}-${term.kind}-${term.word}`} className={isStandaloneWord(term.word) ? "standalone" : "phrase"}><i>{visible.length + index + 1}</i><b>{term.word}</b><small>{term.kind === "slang" ? "Khẩu ngữ" : "Văn phong"} · {term.coreWord}</small><span>{term.definition}</span></li>)}</ol>}
+    })}{registerTerms.map((term, index) => <li key={`${term.coreId}-${term.kind}-${term.word}`} className="register"><i>{visible.length + index + 1}</i><b>{term.word}</b><small>{term.kind === "slang" ? "Khẩu ngữ" : "Văn phong"} · {term.coreWord}</small><span>{term.definition}</span></li>)}</ol>
   </>;
 }
 
