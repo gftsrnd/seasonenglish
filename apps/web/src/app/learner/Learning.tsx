@@ -330,29 +330,29 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
         // Older weekly lessons keep their explicit "View translation" step.
         const monthlyLesson = Boolean(lesson.kind);
         const translationVisible = Boolean(translations) && (exerciseFinished(partEvidence) || (!monthlyLesson && (partEvidence?.status === "translated" || Boolean(partEvidence?.translationViewed))));
+        const statusNotice = partStatusNotice(part, partEvidence, copy);
         const displayPart = part.code === "instruction"
           ? { ...part, content: { ...part.content, steps: lessonInstructionSteps(lesson.content.parts, tab, language) } }
           : part;
         return <li className={`card lesson-part lesson-part--${part.code}`} data-part={part.code} data-testid="app-lesson-part" key={part.code} style={{ boxSizing: "border-box", minWidth: 0, display: "grid", gap: 12, padding: 18 }}>
           <SharedLessonPartContent cefr={lesson.cefr} language={language} copy={copy} grammarAvailable={grammarAvailable} sectionNumber={visible.slice(0, index).filter((candidate) => practiceCodes.includes(candidate.code)).length + 1} part={displayPart} speak={actions.speak} openVocabularyModal={setVocabularyModal} resolveVocabularyImage={actions.resolveLessonVocabularyImage} onPronunciationListened={markPronunciationListened} />
           {practiceCodes.includes(part.code) ? <div className="stack lesson-answer" aria-busy={busyAction === part.code || undefined} style={{ gap: 12, minWidth: 0 }}>
-            {partHasVisibleOutcome(partEvidence) ? <Notice tone={partEvidence?.status === "appealed" || partEvidence?.status === "submitted" ? "info" : "warn"}>{partOutcomeLabel(partEvidence?.status, copy)}</Notice> : null}
-            {part.code === "speaking" && !speakingUnlocked ? <Notice tone="info">{copy.notices.speakingGate.replace("{count}", String(requiredPronunciationWords.length))}</Notice> : part.code === "speaking" ? <section className="stack lesson-speaking-answer" aria-label={copy.answerLabel}><strong>{copy.answerLabel}</strong><SpeakingEvidenceControls language={language} copy={copy} artifactKey={mediaArtifacts[part.code]} onUploaded={(artifactKey) => setMediaArtifacts((current) => ({ ...current, [part.code]: artifactKey }))} uploadAudio={actions.uploadAssessmentAudio} getAudioReadUrl={actions.getAssessmentAudioReadUrl} />{partEvidence?.answer?.trim() ? <section className="stack lesson-speaking-transcript" aria-label={language === "en" ? "Automatic Speaking transcript" : "Bản chép tự động phần Nói"}><strong>{language === "en" ? "Automatic transcript" : "Bản chép tự động"}</strong><output>{partEvidence.answer.trim()}</output></section> : null}</section> : <LessonAnswerControl language={language} copy={copy} part={part} value={answers[part.code] ?? ""} evidence={partEvidence} disabled={done || Boolean(busyAction)} onChange={(value) => setAnswers((current) => ({ ...current, [part.code]: value }))} />}
+            {part.code === "speaking" && !speakingUnlocked ? <Notice tone="info"><SpeakingGateNotice copy={copy} words={requiredPronunciationWords} heard={pronunciationListened} /></Notice> : part.code === "speaking" ? <section className="stack lesson-speaking-answer" aria-label={copy.answerLabel}><strong>{copy.answerLabel}</strong><SpeakingEvidenceControls language={language} copy={copy} submitted={done || partEvidence?.status === "submitted"} artifactKey={mediaArtifacts[part.code]} onUploaded={(artifactKey) => setMediaArtifacts((current) => ({ ...current, [part.code]: artifactKey }))} uploadAudio={actions.uploadAssessmentAudio} getAudioReadUrl={actions.getAssessmentAudioReadUrl} />{partEvidence?.answer?.trim() ? <section className="stack lesson-speaking-transcript" aria-label={language === "en" ? "Automatic Speaking transcript" : "Bản chép tự động phần Nói"}><strong>{language === "en" ? "Automatic transcript" : "Bản chép tự động"}</strong><output>{partEvidence.answer.trim()}</output></section> : null}</section> : <LessonAnswerControl language={language} copy={copy} part={part} value={answers[part.code] ?? ""} evidence={partEvidence} disabled={done || Boolean(busyAction)} onChange={(value) => setAnswers((current) => ({ ...current, [part.code]: value }))} />}
             {isSelfWritingPart(part) ? <small>{language === "en" ? "Write at least two words." : "Tự viết tối thiểu 2 từ."}</small> : null}
             {part.code !== "speaking" || speakingUnlocked ? <button className="btn-primary" type="button" aria-busy={busyAction === part.code || undefined} disabled={done || Boolean(busyAction) || !hasLessonAnswer(part, answers[part.code], mediaArtifacts[part.code])} style={{ alignSelf: "flex-start", minHeight: 44 }} onClick={() => void save(part)}>{busyAction === part.code ? copy.buttons.checking : done ? copy.buttons.completed : part.code === "speaking" ? (language === "en" ? "Check speaking" : "Kiểm tra nói") : copy.buttons.submit}</button> : null}
+            {statusNotice ? <Notice tone={statusNotice.tone}>{statusNotice.text}</Notice> : null}
             {!monthlyLesson && (partEvidence?.status === "wrong_exhausted" || partEvidence?.status === "wrong_retry") ? <button className="btn-sm btn-ghost" type="button" disabled={Boolean(busyAction) || partEvidence.translationViewed} onClick={() => void save(part, { answer: answers[part.code] ?? "", translated: true })}>{partEvidence.translationViewed ? copy.status.translated : (language === "en" ? "View translation" : "Xem bản dịch")}</button> : null}
             {actions.appealLessonPart && studyComplete && !partEvidence?.appealStatus && partEvidence?.status !== "appealed" ? <button className="btn-sm" type="button" aria-expanded={appealPart === part.code} disabled={Boolean(busyAction)} onClick={() => { setAppealPart(part.code); setAppealEvidence({}); }}>{language === "en" ? "Report an issue" : lesson.exerciseVersionId ? "Báo lỗi câu này" : "Báo lỗi phần này"}</button> : null}
             {partEvidence?.appealStatus || partEvidence?.status === "appealed" ? <AppLink className="btn btn-sm" href="/support?tab=appeals" navigate={actions.navigate}>{language === "en" ? "Learning support" : "Hỗ trợ học tập"}</AppLink> : null}
-            {appealPart === part.code ? <section key={part.code} className="stack lesson-appeal-form" aria-label={`${language === "en" ? "Appeal" : "Kháng nghị"} ${part.title}`}>
+            {appealPart === part.code ? <section key={part.code} className="stack lesson-appeal-form" aria-label={`${language === "en" ? "Appeal" : "Kháng nghị"} ${partDisplayTitle(part, language)}`}>
               <RequestEvidenceFields value={appealEvidence} onChange={setAppealEvidence} label={language === "en" ? "Question or detail to review" : "Câu hoặc nội dung cần xem lại"} disabled={Boolean(busyAction)} english={language === "en"} />
-              <label>{language === "en" ? `Appeal reason for ${part.title}` : `Lý do kháng nghị phần ${part.title}`}<textarea aria-label={language === "en" ? `Appeal reason for ${part.title}` : `Lý do kháng nghị phần ${part.title}`} value={appealReasons[part.code] ?? ""} onChange={(event) => setAppealReasons((current) => ({ ...current, [part.code]: event.target.value }))} /></label>
+              <label>{language === "en" ? `Appeal reason for ${partDisplayTitle(part, language)}` : `Lý do kháng nghị phần ${partDisplayTitle(part, language)}`}<textarea aria-label={language === "en" ? `Appeal reason for ${partDisplayTitle(part, language)}` : `Lý do kháng nghị phần ${partDisplayTitle(part, language)}`} value={appealReasons[part.code] ?? ""} onChange={(event) => setAppealReasons((current) => ({ ...current, [part.code]: event.target.value }))} /></label>
               <small>{language === "en" ? "Write at least five characters so the reviewer can understand what to check." : "Nhập ít nhất 5 ký tự để người duyệt hiểu điều cần xem lại."}</small>
               <div className="row"><button className="btn-sm btn-primary" type="button" disabled={Boolean(busyAction) || appealEvidence.blocked || (appealReasons[part.code]?.trim().length ?? 0) < 5} onClick={() => void appeal(part.code, appealReasons[part.code] ?? "")}>{copy.buttons.sendAppeal}</button><button className="btn-sm btn-ghost" type="button" disabled={Boolean(busyAction)} onClick={() => setAppealPart(null)}>{copy.buttons.cancel}</button></div>
             </section> : null}
-            {partEvidence?.feedback ? <Notice tone={partEvidence.status === "correct" ? "ok" : partEvidence.status === "appealed" || partEvidence.status === "submitted" ? "info" : "warn"}>{partEvidence.feedback}</Notice> : null}
             {partEvidence?.status === "wrong_retry" && safeLessonHint(part.content) ? <Notice tone="info">{copy.hintLabel}: {safeLessonHint(part.content)}</Notice> : null}
             {partEvidence?.status === "wrong_exhausted" && lessonCorrectAnswer(part.content) ? <Notice tone="info">{copy.answerRevealLabel}: {lessonCorrectAnswer(part.content)}</Notice> : null}
-            {translationVisible && translations ? <section className="lesson-exercise-translation" aria-label={`${copy.translationHeading} · ${part.title}`} data-testid="lesson-exercise-translation"><Notice tone="info"><strong>{copy.translationHeading}</strong><span className="lesson-exercise-translation-line">{copy.translationQuestionLabel}: <span lang="vi">{translations.question}</span></span><span className="lesson-exercise-translation-line">{copy.translationAnswerLabel}: <span lang="vi">{translations.answer}</span></span></Notice></section> : null}
+            {translationVisible && translations ? <section className="lesson-exercise-translation" aria-label={`${copy.translationHeading} · ${partDisplayTitle(part, language)}`} data-testid="lesson-exercise-translation"><Notice tone="info"><strong>{copy.translationHeading}</strong><span className="lesson-exercise-translation-line">{copy.translationQuestionLabel}: <span lang="vi">{translations.question}</span></span><span className="lesson-exercise-translation-line">{copy.translationAnswerLabel}: <span lang="vi">{translations.answer}</span></span></Notice></section> : null}
           </div> : null}
         </li>;
       })}</ol>
@@ -369,12 +369,37 @@ function lessonStudyIsComplete(lesson: LessonView["lesson"]): boolean {
   return studyPartCodes.length > 0 && studyPartCodes.every((code) => lesson.progress.completedPartCodes.includes(code));
 }
 
+const PART_LABELS: Record<LearnerLessonLanguage, Record<LessonPartCode, string>> = {
+  vi: { objective: "Mục tiêu", instruction: "Hướng dẫn", vocabulary: "Từ vựng", grammar: "Ngữ pháp", pronunciation: "Phát âm", listening: "Nghe", reading: "Đọc", writing: "Viết", word_class: "Từ loại", word_use: "Dùng từ", speaking: "Nói" },
+  en: { objective: "Objective", instruction: "Instructions", vocabulary: "Vocabulary", grammar: "Grammar", pronunciation: "Pronunciation", listening: "Listening", reading: "Reading", writing: "Writing", word_class: "Word class", word_use: "Word use", speaking: "Speaking" }
+};
+
 function partLabel(code: LessonPartCode, language: LearnerLessonLanguage = "vi"): string {
-  const labels: Record<LearnerLessonLanguage, Partial<Record<LessonPartCode, string>>> = {
-    vi: { listening: "Nghe", reading: "Đọc", writing: "Viết", word_class: "Từ loại", word_use: "Dùng từ", speaking: "Nói" },
-    en: { listening: "Listening", reading: "Reading", writing: "Writing", word_class: "Word class", word_use: "Word use", speaking: "Speaking" }
-  };
-  return labels[language][code] ?? code;
+  return PART_LABELS[language][code] ?? code;
+}
+
+/**
+ * The part's own title when the lesson stores one, otherwise the standard label for its code.
+ * Monthly AI lessons store parts without a title, so `part.title` alone renders "undefined".
+ */
+function partDisplayTitle(part: Pick<LessonPart, "code"> & { title?: unknown }, language: LearnerLessonLanguage = "vi"): string {
+  const stored = typeof part.title === "string" ? part.title.trim() : "";
+  return stored || partLabel(part.code, language);
+}
+
+/** Speaking gate: names each required pronunciation word, marks the ones not heard yet and shows heard/total. */
+function SpeakingGateNotice({ copy, words, heard }: { copy: LearnerLessonCopy; words: string[]; heard: ReadonlySet<string> }) {
+  const count = String(words.length);
+  const heardCount = words.filter((word) => heard.has(word)).length;
+  return <span className="lesson-speaking-gate" data-heard={heardCount} data-total={words.length}>
+    {copy.notices.speakingGateLead.replace("{count}", count)}{" "}
+    {words.map((word, index) => {
+      const done = heard.has(word);
+      return <span key={`${index}-${word}`} className="lesson-speaking-gate-word" data-heard={done || undefined}>{index > 0 ? ", " : ""}<strong>{word}</strong>{done ? <> ✓<span className="sr-only"> ({copy.notices.speakingGateHeard})</span></> : ` (${copy.notices.speakingGatePending})`}</span>;
+    })}{" "}
+    {copy.notices.speakingGateWhere}{" "}
+    {copy.notices.speakingGateProgress.replace("{heard}", String(heardCount)).replace("{count}", count)}
+  </span>;
 }
 
 export function LessonAnswerControl({ language, copy, part, value, disabled, hideLabel = false, evidence, onChange }: {
@@ -442,6 +467,24 @@ function partCountsTowardCompletion(progress: LessonView["lesson"]["progress"], 
 
 function partHasVisibleOutcome(evidence: PartEvidence | undefined): boolean {
   return Boolean(evidence?.status && ["wrong_retry", "wrong_exhausted", "appealed", "submitted"].includes(evidence.status));
+}
+
+/**
+ * One status line per part state: the outcome label and the stored feedback used to stack
+ * (e.g. "Đã gửi để kiểm tra" above a long server note). Submitted Speaking/Writing get a
+ * plain "waiting to be marked" line; an appeal shows its own label; otherwise the feedback wins.
+ */
+function partStatusNotice(part: LessonPart, evidence: PartEvidence | undefined, copy: LearnerLessonCopy): { tone: "ok" | "info" | "warn"; text: string } | null {
+  const status = evidence?.status;
+  if (status === "submitted") {
+    const text = part.code === "speaking" ? copy.status.submittedSpeaking : part.code === "writing" ? copy.status.submittedWriting : evidence?.feedback?.trim() || copy.status.submitted;
+    return { tone: "info", text };
+  }
+  if (status === "appealed") return { tone: "info", text: copy.status.appealed };
+  const tone = status === "correct" ? "ok" : "warn";
+  const feedback = evidence?.feedback?.trim();
+  if (feedback) return { tone, text: feedback };
+  return partHasVisibleOutcome(evidence) ? { tone, text: partOutcomeLabel(status, copy) } : null;
 }
 
 function hasLessonAnswer(part: LessonPart, answer: string | undefined, artifactKey: string | undefined): boolean {
@@ -546,6 +589,7 @@ function LessonAudioControl({ source, speak, copy, language, label = "Listening"
 function SpeakingEvidenceControls({
   language,
   copy,
+  submitted = false,
   artifactKey,
   onUploaded,
   uploadAudio,
@@ -553,6 +597,8 @@ function SpeakingEvidenceControls({
 }: {
   language: LearnerLessonLanguage;
   copy: LearnerLessonCopy;
+  /** Once submitted the part shows its own status line; the "uploaded, now submit" hint would contradict it. */
+  submitted?: boolean;
   artifactKey?: string | undefined;
   onUploaded: (artifactKey: string) => void;
   uploadAudio: (file: Blob, filename: string) => Promise<string | import("./contracts.js").LearnerAudioUpload>;
@@ -682,7 +728,7 @@ function SpeakingEvidenceControls({
     {readBusy ? <Notice>{copy.notices.savedAudioBusy}</Notice> : null}
     {readError ? <div className="stack"><Notice tone="warn">{readError}</Notice><button className="btn-sm btn-ghost" type="button" style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }} onClick={() => void loadPersistedAudio()}><RotateCcw size={16} aria-hidden="true" /> {copy.notices.retrySavedAudio}</button></div> : null}
     {error ? <div className="stack"><Notice tone="warn">{error}</Notice>{pendingFile ? <button className="btn-sm btn-ghost" type="button" style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }} onClick={() => void send(pendingFile)}><RotateCcw size={16} aria-hidden="true" /> {copy.notices.retryUpload}</button> : null}</div> : null}
-    {audioUrl ? <><Notice tone="ok">{copy.notices.uploadReady}</Notice><ExclusiveLessonAudio src={audioUrl} label={language === "en" ? "Listen to recording" : "Nghe lại file ghi âm"} style={{ maxWidth: "100%", width: "100%" }} /></> : artifactKey ? <Notice tone="ok">{copy.notices.uploadReady}</Notice> : null}
+    {audioUrl ? <>{submitted ? null : <Notice tone="ok">{copy.notices.uploadReady}</Notice>}<ExclusiveLessonAudio src={audioUrl} label={language === "en" ? "Listen to recording" : "Nghe lại file ghi âm"} style={{ maxWidth: "100%", width: "100%" }} /></> : artifactKey && !submitted ? <Notice tone="ok">{copy.notices.uploadReady}</Notice> : null}
   </section>;
 }
 
@@ -908,10 +954,10 @@ function pronunciationTarget(value: string): string {
 }
 
 function partHeading(part: LessonPart, language: LearnerLessonLanguage = "vi"): string {
-  const english: Partial<Record<LessonPartCode, string>> = {
-    listening: "Listening", reading: "Reading", writing: "Writing", word_class: "Word class", word_use: "Word use", speaking: "Speaking"
-  };
-  return language === "en" && english[part.code] ? english[part.code]! : language === "vi" && english[part.code] ? `${part.title} · ${english[part.code]}` : part.title;
+  const english = PART_LABELS.en[part.code];
+  if (language === "en") return english ?? partDisplayTitle(part, language);
+  const title = partDisplayTitle(part, language);
+  return english && title.toLocaleLowerCase() !== english.toLocaleLowerCase() ? `${title} · ${english}` : title;
 }
 
 function completeInstructionSteps(steps: string[]): string[] {

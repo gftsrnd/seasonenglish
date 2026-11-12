@@ -874,7 +874,7 @@ describe("learner lesson study content", () => {
     const { unmount } = render(<LearnerLesson view={{ lesson, lock: null }} actions={actions} />);
 
     await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
-    expect(screen.getByText(/nghe đủ 3 từ mẫu phát âm/i)).toBeInTheDocument();
+    expect(screen.getByText(/nghe lần lượt 3 từ mẫu phát âm/i)).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /2\. bài tập/i })).toBeDisabled();
 
     expect(screen.queryByRole("button", { name: "Nghe từ phát âm: I" })).not.toBeInTheDocument();
@@ -926,7 +926,7 @@ describe("learner lesson study content", () => {
 
     expect(screen.queryByRole("button", { name: "Nghe âm /aɪ/" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
-    expect(screen.getByText(/nghe đủ 3 từ mẫu phát âm/i)).toBeInTheDocument();
+    expect(screen.getByText(/nghe lần lượt 3 từ mẫu phát âm/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Kiểm tra nói" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /1\. học/i }));
@@ -938,7 +938,7 @@ describe("learner lesson study content", () => {
     statusCallbacks[1]?.("cancelled");
     statusCallbacks[2]?.("unsupported");
     await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
-    expect(screen.getByText(/nghe đủ 3 từ mẫu phát âm/i)).toBeInTheDocument();
+    expect(screen.getByText(/nghe lần lượt 3 từ mẫu phát âm/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /1\. học/i }));
     for (const word of ["I", "nice", "time"]) {
@@ -976,7 +976,7 @@ describe("learner lesson study content", () => {
     expect(screen.getByText("/k/")).toBeInTheDocument();
     expect(screen.getByText("/s/")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
-    expect(screen.getByText(/nghe đủ 6 từ mẫu phát âm/i)).toBeInTheDocument();
+    expect(screen.getByText(/nghe lần lượt 6 từ mẫu phát âm/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Kiểm tra nói" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /1\. học/i }));
     for (const word of ["cost", "can", "key", "see", "soon", "sales"]) await user.click(screen.getByRole("button", { name: `Nghe từ phát âm: ${word}` }));
@@ -1003,15 +1003,15 @@ describe("learner lesson study content", () => {
 
     const first = render(<LearnerLesson view={{ lesson, lock: null }} actions={actions} />);
     await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
-    expect(screen.queryByText(/nghe đủ 3 từ mẫu phát âm/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Đã gửi để kiểm tra")).toBeInTheDocument();
+    expect(screen.queryByText(/nghe lần lượt 3 từ mẫu phát âm/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Đã nộp bản ghi âm · đang chờ chấm.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Đã xong" })).toBeDisabled();
 
     first.unmount();
     render(<LearnerLesson view={{ lesson, lock: null }} actions={actions} />);
     await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
-    expect(screen.queryByText(/nghe đủ 3 từ mẫu phát âm/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Đã gửi để kiểm tra")).toBeInTheDocument();
+    expect(screen.queryByText(/nghe lần lượt 3 từ mẫu phát âm/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Đã nộp bản ghi âm · đang chờ chấm.")).toBeInTheDocument();
   });
 
   it("does not re-lock a submitted Speaking part even before its part code is completed", async () => {
@@ -1033,8 +1033,8 @@ describe("learner lesson study content", () => {
     render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
     await user.click(screen.getByRole("tab", { name: /2\. bài tập 0\/1/i }));
 
-    expect(screen.queryByText(/nghe đủ 3 từ mẫu phát âm/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Đã gửi để kiểm tra")).toBeInTheDocument();
+    expect(screen.queryByText(/nghe lần lượt 3 từ mẫu phát âm/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Đã nộp bản ghi âm · đang chờ chấm.")).toBeInTheDocument();
   });
 
   it("enables Kiểm tra nói after either an eligible upload or recording evidence is available", async () => {

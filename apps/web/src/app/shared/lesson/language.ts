@@ -58,6 +58,16 @@ export interface LearnerLessonCopy {
   };
   notices: {
     speakingGate: string;
+    /** Lead before the named words, e.g. "Nghe lần lượt 3 từ mẫu phát âm:". */
+    speakingGateLead: string;
+    /** Where the words are and what they unlock, after the word list. */
+    speakingGateWhere: string;
+    /** Listening progress, e.g. "Đã nghe 1/3." */
+    speakingGateProgress: string;
+    /** Mark beside a word not heard yet. */
+    speakingGatePending: string;
+    /** Mark beside a word already heard (screen readers). */
+    speakingGateHeard: string;
     uploadReady: string;
     uploadBusy: string;
     savedAudioBusy: string;
@@ -83,6 +93,10 @@ export interface LearnerLessonCopy {
   status: {
     wrongRetry: string;
     submitted: string;
+    /** Speaking recording submitted, waiting for a mark: the one status line after submit. */
+    submittedSpeaking: string;
+    /** Self-written sentence submitted, waiting for a mark. */
+    submittedWriting: string;
     wrongExhausted: string;
     translated: string;
     appealed: string;
@@ -175,6 +189,11 @@ export const learnerLessonCopy: Record<LearnerLessonLanguage, LearnerLessonCopy>
     },
     notices: {
       speakingGate: "Nghe đủ {count} từ mẫu phát âm ở bước Học để mở phần kiểm tra Nói.",
+      speakingGateLead: "Nghe lần lượt {count} từ mẫu phát âm:",
+      speakingGateWhere: "(phần Học → thẻ Phát âm) để mở phần Nói.",
+      speakingGateProgress: "Đã nghe {heard}/{count}.",
+      speakingGatePending: "chưa nghe",
+      speakingGateHeard: "đã nghe",
       uploadReady: "Đã tải file ghi âm lên. Bấm Kiểm tra Nói để nộp.",
       uploadBusy: "Đang tải file ghi âm…",
       savedAudioBusy: "Đang tải bản ghi âm đã lưu…",
@@ -189,7 +208,7 @@ export const learnerLessonCopy: Record<LearnerLessonLanguage, LearnerLessonCopy>
       sendAppeal: "Xác nhận gửi kháng nghị", cancel: "Huỷ"
     },
     status: {
-      wrongRetry: "Chưa đúng · còn lượt thử", submitted: "Đã gửi để kiểm tra", wrongExhausted: "Đã hết lượt thử",
+      wrongRetry: "Chưa đúng · còn lượt thử", submitted: "Đã gửi để kiểm tra", submittedSpeaking: "Đã nộp bản ghi âm · đang chờ chấm.", submittedWriting: "Đã nộp câu tự viết · đang chờ chấm.", wrongExhausted: "Đã hết lượt thử",
       translated: "Đã xem bản dịch", appealed: "Đã gửi kháng nghị", correct: "Đúng", unanswered: "Chưa trả lời"
     },
     vocabularyPartOfSpeech: (value, word) => {
@@ -248,6 +267,11 @@ export const learnerLessonCopy: Record<LearnerLessonLanguage, LearnerLessonCopy>
     },
     notices: {
       speakingGate: "Listen to all {count} model pronunciation words in Study to unlock Speaking.",
+      speakingGateLead: "Listen to each of the {count} model pronunciation words:",
+      speakingGateWhere: "(Study → Pronunciation card) to unlock Speaking.",
+      speakingGateProgress: "Heard {heard}/{count}.",
+      speakingGatePending: "not yet",
+      speakingGateHeard: "heard",
       uploadReady: "Your recording is uploaded. Select Check speaking to submit it.",
       uploadBusy: "Uploading the recording…",
       savedAudioBusy: "Loading the saved recording…",
@@ -262,7 +286,7 @@ export const learnerLessonCopy: Record<LearnerLessonLanguage, LearnerLessonCopy>
       sendAppeal: "Submit appeal", cancel: "Cancel"
     },
     status: {
-      wrongRetry: "Incorrect · try again", submitted: "Submitted for review", wrongExhausted: "No attempts left",
+      wrongRetry: "Incorrect · try again", submitted: "Submitted for review", submittedSpeaking: "Recording submitted · waiting to be marked.", submittedWriting: "Sentence submitted · waiting to be marked.", wrongExhausted: "No attempts left",
       translated: "Translation opened", appealed: "Appeal submitted", correct: "Correct", unanswered: "Not answered"
     },
     vocabularyPartOfSpeech: (value, word) => {
