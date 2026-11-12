@@ -92,6 +92,8 @@ export interface ApprovedLearner {
   placementScore?: number | null;
   monthlyGoal?: string | null;
   testId?: string | null;
+  /** Staff exception open: the learner may take the level-up test now. */
+  levelUpAllowed?: boolean;
 }
 
 export interface UnassessedLearner {
@@ -143,6 +145,7 @@ export interface OperatorDashboardActions {
   onDemote(id: string): void;
   onChangeLevel(id: string): void;
   onEditGoal(id: string): void;
+  onToggleLevelUpOverride?(id: string, allowed: boolean): void;
   onViewProfile(id: string): void;
   onAssignWeeklyPractice?(id: string): void;
   onTogglePendingProfile?: (id: string) => void;
@@ -153,7 +156,7 @@ export interface OperatorDashboardActions {
   onOpenLevelForms(): void;
 }
 
-export type DashboardActionKey = "resolveTopicReport" | "approvePlacement" | "viewTest" | "rescore" | "deleteLearner" | "decideLevelRequest" | "viewChallenge" | "demote" | "changeLevel" | "editGoal" | "viewProfile" | "assignWeeklyPractice" | "setLevelDirect";
+export type DashboardActionKey = "resolveTopicReport" | "approvePlacement" | "viewTest" | "rescore" | "deleteLearner" | "decideLevelRequest" | "viewChallenge" | "demote" | "changeLevel" | "editGoal" | "viewProfile" | "assignWeeklyPractice" | "setLevelDirect" | "levelUpOverride";
 
 export interface LevelFormSummary {
   id: string;

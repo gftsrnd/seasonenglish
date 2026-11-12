@@ -451,6 +451,21 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     }
   });
 
+  // Staff exception: open (or close) the level-up test for one learner now. Operator and Manager.
+  app.put("/api/v1/assessment-reviews/learners/:learnerId/level-up-override", { preHandler: assessmentReaders }, async (request, reply) => {
+    const params = learnerReviewParam.safeParse(request.params);
+    const body = z.object({ allowed: z.boolean(), reason: z.string().trim().max(1000).default("") })
+      .refine((input) => !input.allowed || input.reason.length > 0)
+      .safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_LEVEL_UP_OVERRIDE" });
+    try {
+      const view = await repositories.assessments.setLevelUpOverride(request.e4sSession!.user.id, params.data.learnerId, body.data);
+      return view ?? reply.code(404).send({ code: "ASSESSMENT_LEARNER_NOT_FOUND" });
+    } catch (error) {
+      return reply.code(409).send({ code: assessmentErrorCode(error, "LEVEL_UP_OVERRIDE_FAILED") });
+    }
+  });
+
   app.patch("/api/v1/assessment-reviews/learners/:learnerId/monthly-goal", { preHandler: assessmentOperators }, async (request, reply) => {
     const params = learnerReviewParam.safeParse(request.params);
     const body = monthlyGoalInput.safeParse(request.body);

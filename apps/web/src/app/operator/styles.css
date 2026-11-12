@@ -2072,6 +2072,7 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
 .operator-approved-record-detail { padding-bottom: 10px; }
 .operator-approved-record-detail p { margin: 4px 0 10px; }
 .operator-approved-record-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.operator-levelup-badge { display: inline-flex; white-space: nowrap; }
 .app-operator .operator-approved-record button { min-height: 44px; }
 
 .app-operator .operator-weekly-available {

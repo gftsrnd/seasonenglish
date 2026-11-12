@@ -23,6 +23,7 @@ import type {
   AssessmentLevelFormDetailView,
   AssessmentLevelFormUpdateInput,
   AssessmentLevelChangeInput,
+  AssessmentLevelUpOverrideView,
   AssessmentLevelChangeView,
   AssessmentMonthlyGoalView,
   AssessmentReviewAttemptDetailView,
@@ -527,6 +528,7 @@ export interface AssessmentApprovedLearnerRecord {
   currentLevel: CefrLevel;
   placementScore: number | null;
   monthlyGoal: string | null;
+  levelUpOverride: { targetLevel: CefrLevel; reason: string; grantedBy: string | null; grantedAt: string } | null;
 }
 
 export interface AssessmentUnassessedLearnerRecord {
@@ -2232,6 +2234,13 @@ class LearningRepository {
       thresholds
     });
     const monthlyPolicy = await this.monthlyLevelUpReadiness(learnerId, row.cefr);
+    // Staff exception ("Thi lên mức"): the learner may take the next-level test now.
+    const staffOverride = row.cefr && row.cefr !== "C1"
+      ? (await this.pool.query<{ target_cefr: CefrLevel }>(
+        `select o.target_cefr from level_up_overrides o
+         where o.learner_id = $1 and ${levelUpOverrideActiveSql("$2")} limit 1`, [learnerId, row.cefr]
+      )).rows[0] ?? null
+      : null;
     const badgeCounts = requiredBadgeCountsForNext(points, earnedBadgeKeys);
     const assessmentViews = buildAssessmentSnapshots(assessments.rows);
     return {
@@ -2298,7 +2307,8 @@ class LearningRepository {
             absenceRate: monthlyPolicy.absenceRate,
             reasons: monthlyPolicy.reasons
           }
-        } : {})
+        } : {}),
+        ...(staffOverride ? { eligible: true, targetLevel: staffOverride.target_cefr, staffOverride: true } : {})
       },
       stats: {
         completedLessons,
@@ -2765,6 +2775,22 @@ function lessonLockFor(row: {
 
 /** SQL predicate: the month lesson `ml` of framework `mf` is a Friday review. */
 export const MONTH_LESSON_IS_REVIEW_SQL = "(mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review')))";
+
+/**
+ * SQL predicate for a staff "level-up allowed" override `o` that is still in force: not ended,
+ * granted at the learner's current level `cefrSql`, and no level-up attempt started after the
+ * grant has been decided (approved or sent back for retry). A level change ends it implicitly.
+ */
+export function levelUpOverrideActiveSql(cefrSql: string, alias = "o"): string {
+  return `(${alias}.ended_at is null and ${alias}.from_cefr = ${cefrSql}
+    and not exists (
+      select 1 from assessment_attempts lo_aa
+      join assessment_versions lo_av on lo_av.id = lo_aa.assessment_version_id
+      join assessment_definitions lo_ad on lo_ad.id = lo_av.definition_id and lo_ad.kind = 'level_up'
+      join assessment_decisions lo_d on lo_d.attempt_id = lo_aa.id and lo_d.status in ('approved', 'retry')
+      where lo_aa.learner_id = ${alias}.learner_id and lo_aa.started_at >= ${alias}.granted_at
+    ))`;
+}
 
 /**
  * Attendance dates per month from persisted completions and holidays, using
@@ -7245,6 +7271,77 @@ class AssessmentRepository {
   }
 
   /**
+   * Staff exception: Operator/Manager of the learner's organisation lets the learner take the
+   * next-level test now. Re-granting supersedes the open grant; every change is audited.
+   */
+  async setLevelUpOverride(actorId: string, learnerId: string, input: { allowed: boolean; reason: string }): Promise<AssessmentLevelUpOverrideView | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const identity = await client.query<{ organization_id: string; cefr: CefrLevel | null }>(
+        `select learner.organization_id, enrollment.cefr
+         from users actor join users learner on learner.organization_id = actor.organization_id
+           and learner.id = $2 and learner.role = 'learner' and learner.status = 'active'
+         left join lateral (
+           select e.cefr from enrollments e join programs p on p.id = e.program_id and p.status = 'active'
+           where e.learner_id = learner.id and e.cefr_approved = true order by e.enrolled_at desc limit 1
+         ) enrollment on true
+         where actor.id = $1 and actor.role in ('operator', 'manager') and actor.status = 'active'
+         for update of learner`,
+        [actorId, learnerId]
+      );
+      const person = identity.rows[0];
+      if (!person) { await client.query("rollback"); return null; }
+      if (!person.cefr) throw new Error("LEVEL_UP_OVERRIDE_NOT_APPROVED");
+      const currentLevel = person.cefr;
+      const open = await client.query<{ id: string; target_cefr: CefrLevel }>(
+        `select o.id, o.target_cefr from level_up_overrides o
+         where o.learner_id = $1 and o.ended_at is null for update`,
+        [learnerId]
+      );
+      const previous = open.rows[0];
+      let override: AssessmentLevelUpOverrideView["override"] = null;
+      if (input.allowed) {
+        if (currentLevel === "C1") throw new Error("LEVEL_UP_OVERRIDE_TOP_LEVEL");
+        const targetLevel = nextCefr(currentLevel);
+        if (!targetLevel) throw new Error("LEVEL_UP_OVERRIDE_TOP_LEVEL");
+        if (previous) {
+          await client.query(
+            `update level_up_overrides set ended_at = now(), ended_by = $2, end_reason = 'superseded' where id = $1`,
+            [previous.id, actorId]
+          );
+        }
+        const granted = await client.query<{ granted_at: Date; granted_by_name: string | null }>(
+          `insert into level_up_overrides (id, organization_id, learner_id, from_cefr, target_cefr, reason, granted_by)
+           values ($1, $2, $3, $4, $5, $6, $7)
+           returning granted_at, (select display_name from users where id = $7) as granted_by_name`,
+          [randomUUID(), person.organization_id, learnerId, currentLevel, targetLevel, input.reason, actorId]
+        );
+        override = { targetLevel, reason: input.reason, grantedBy: granted.rows[0]?.granted_by_name ?? null, grantedAt: granted.rows[0]!.granted_at.toISOString() };
+      } else {
+        if (!previous) throw new Error("LEVEL_UP_OVERRIDE_NOT_FOUND");
+        await client.query(
+          `update level_up_overrides set ended_at = now(), ended_by = $2, end_reason = 'revoked', end_note = $3 where id = $1`,
+          [previous.id, actorId, input.reason]
+        );
+      }
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, $4, 'user', $5, $6::jsonb, $7)`,
+        [randomUUID(), person.organization_id, actorId,
+          input.allowed ? "assessment.learner.level_up_override_granted" : "assessment.learner.level_up_override_revoked",
+          learnerId, JSON.stringify({ currentLevel, targetLevel: override?.targetLevel ?? previous?.target_cefr ?? null, reason: input.reason }), randomUUID()]
+      );
+      await client.query("commit");
+      return { learnerId, currentLevel, override };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /**
    * An accepted placement / level appeal moves the learner to the level they proposed, as a new joiner from the
    * approval date (the enrollment trigger restarts `cefr_started_on`, so the 75% month rule applies).
    * Product rule: biên bản 30/10 mục 11 & 6.
@@ -7448,10 +7545,16 @@ class AssessmentRepository {
         current_level: CefrLevel;
         placement_score: string | null;
         monthly_goal: string | null;
+        override_target: CefrLevel | null;
+        override_reason: string | null;
+        override_granted_by: string | null;
+        override_granted_at: Date | null;
       }>(
         `select learner.id as learner_id, learner.display_name as learner_name,
                 e.cefr as current_level, placement.total_score as placement_score,
-                nullif(lp.profile->>'monthlyGoal', '') as monthly_goal
+                nullif(lp.profile->>'monthlyGoal', '') as monthly_goal,
+                override.target_cefr as override_target, override.reason as override_reason,
+                override.granted_by_name as override_granted_by, override.granted_at as override_granted_at
          from users learner
          join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
          join enrollments e on e.learner_id = learner.id and e.cefr_approved = true
@@ -7467,6 +7570,12 @@ class AssessmentRepository {
            order by aa.submitted_at desc nulls last
            limit 1
          ) placement on true
+         left join lateral (
+           select o.target_cefr, o.reason, o.granted_at, granter.display_name as granted_by_name
+           from level_up_overrides o left join users granter on granter.id = o.granted_by
+           where o.learner_id = learner.id and ${levelUpOverrideActiveSql("e.cefr")}
+           limit 1
+         ) override on true
          where learner.role = 'learner' and learner.status = 'active'
          order by learner.display_name`,
         [reviewerId]
@@ -7540,7 +7649,13 @@ class AssessmentRepository {
         learnerName: row.learner_name,
         currentLevel: row.current_level,
         placementScore: row.placement_score === null ? null : Number(row.placement_score),
-        monthlyGoal: row.monthly_goal
+        monthlyGoal: row.monthly_goal,
+        levelUpOverride: row.override_target && row.override_granted_at ? {
+          targetLevel: row.override_target,
+          reason: row.override_reason ?? "",
+          grantedBy: row.override_granted_by,
+          grantedAt: row.override_granted_at.toISOString()
+        } : null
       })),
       unassessedLearners: learnerBuckets.filter((learner) => learner.lifecycle === "not_started"),
       inProgressLearners: learnerBuckets.filter((learner) => learner.lifecycle === "in_progress"),

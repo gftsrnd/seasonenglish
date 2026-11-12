@@ -560,6 +560,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     ...(typeof client.getAssessmentReviewChallenge !== "function" ? { viewChallenge: unavailable("endpoint xem thử thách của học viên") } : {}),
     ...(typeof client.changeAssessmentReviewLearnerLevel !== "function" ? { changeLevel: unavailable("endpoint đổi level trực tiếp"), demote: unavailable("endpoint hạ mức"), setLevelDirect: unavailable("endpoint xếp mức trực tiếp") } : {}),
     ...(typeof client.updateAssessmentReviewMonthlyGoal !== "function" ? { editGoal: unavailable("endpoint sửa mục tiêu tháng") } : {}),
+    ...(typeof client.setAssessmentReviewLevelUpOverride !== "function" ? { levelUpOverride: unavailable("endpoint cho phép thi lên mức") } : {}),
     ...(typeof client.getAssessmentReviewLearner !== "function" ? { viewProfile: unavailable("endpoint đọc hồ sơ theo học viên") } : {}),
     ...(typeof client.requestAssessmentReviewLearnerDeletion !== "function" ? { deleteLearner: unavailable("endpoint xoá học viên") } : {}),
     ...(typeof client.rescoreAssessment !== "function"
@@ -619,6 +620,17 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     const evidence = await modal.prompt({ title: "Bằng chứng thay đổi mức", label: "Bằng chứng / ghi chú", confirmLabel: "Xác nhận" });
     if (evidence === null) return;
     refresh(client.changeAssessmentReviewLearnerLevel(learnerId, { mode, targetLevel, reason, evidence: evidence.trim() || "Người vận hành đã xem xét" }));
+  };
+  const toggleLevelUpOverride = async (learnerId: string, allowed: boolean) => {
+    if (readOnly || typeof client.setAssessmentReviewLevelUpOverride !== "function") return;
+    if (allowed) {
+      const reason = (await modal.prompt({ title: "Cho phép thi lên mức", message: "Học viên được vào bài thi lên mức tiếp theo ngay, không cần đủ tín hiệu sẵn sàng.", label: "Lý do", confirmLabel: "Cho phép" }))?.trim();
+      if (!reason) return;
+      refresh(client.setAssessmentReviewLevelUpOverride(learnerId, { allowed: true, reason }));
+      return;
+    }
+    if (!await modal.confirm({ title: "Huỷ cho phép thi lên mức?", message: "Học viên sẽ không vào được bài thi lên mức nữa.", confirmLabel: "Huỷ mở thi", tone: "danger", countdownSeconds: 0 })) return;
+    refresh(client.setAssessmentReviewLevelUpOverride(learnerId, { allowed: false, reason: "" }));
   };
   const editGoal = async (learnerId: string) => {
     if (readOnly) return;
@@ -686,7 +698,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     },
     onRejectLevelRequest: id => { if (readOnly || typeof client.decideAssessment !== "function") return; void modal.prompt({ title: "Từ chối yêu cầu lên mức", message: "Học viên sẽ nhìn thấy nội dung này.", label: "Lý do từ chối", confirmLabel: "Từ chối", tone: "danger" }).then(reason => { if (reason?.trim()) refresh(client.decideAssessment(id, { status: "needs_retry", reason: reason.trim() })); }); },
     onViewTest: showAttempt, onRescore: rescore, onDeleteLearner: id => requestDeletion(learnerIdFor(id)), onViewChallenge: showChallenge,
-    onDemote: id => changeLevel(id, "recommend_lower"), onChangeLevel: id => changeLevel(id, "direct"), onEditGoal: editGoal, onViewProfile: showProfile, onTogglePendingProfile: togglePendingProfile, onSetLevelDirect: id => changeLevel(id, "direct"),
+    onDemote: id => changeLevel(id, "recommend_lower"), onChangeLevel: id => changeLevel(id, "direct"), onEditGoal: editGoal, onToggleLevelUpOverride: (id, allowed) => { void toggleLevelUpOverride(id, allowed); }, onViewProfile: showProfile, onTogglePendingProfile: togglePendingProfile, onSetLevelDirect: id => changeLevel(id, "direct"),
     onOpenAppeals: () => readOnly ? navigate(paths.review, { state: { reviewTab: "appeals" } }) : navigate(`${paths.review}?tab=appeals`), onOpenSettings: () => navigate("/settings"), onOpenWeeks: () => navigate(paths.months), onOpenLevelForms: () => navigate(paths.levelForms)
   }} />
   {assessmentDialog && <OperatorReviewAssessmentDetail detail={assessmentDialog} onClose={() => setAssessmentDialog(undefined)} {...(typeof client.manualScoreAssessment === "function" && !readOnly && (assessmentDialog.status === "pending_review" || assessmentDialog.status === "submitted") ? { onSaveManualScore: saveManualScore } : {})} {...(typeof client.confirmAssessmentAudioDeletion === "function" && typeof client.deleteAssessmentAudio === "function" && !readOnly ? { onDeleteAudio: deleteAssessmentAudio } : {})} savingManualScore={manualScoreBusy} />}

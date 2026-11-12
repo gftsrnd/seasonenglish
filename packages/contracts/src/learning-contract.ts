@@ -437,6 +437,8 @@ export interface LevelReadinessView {
     absenceRate: number;
     reasons: string[];
   };
+  /** True when an Operator/Manager opened the level-up test for this learner as an exception. */
+  staffOverride?: boolean;
 }
 
 export interface SeasonLevelView {

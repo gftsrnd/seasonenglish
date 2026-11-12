@@ -216,6 +216,8 @@ export interface AssessmentApprovedLearnerView {
   currentLevel: CefrLevel;
   placementScore: number | null;
   monthlyGoal: string | null;
+  /** Open staff exception letting the learner take the level-up test now. */
+  levelUpOverride?: AssessmentLevelUpOverrideSummary | null;
 }
 
 export interface AssessmentUnassessedLearnerView {
@@ -553,6 +555,23 @@ export interface AssessmentLevelChangeView extends AssessmentLevelChangeInput {
   effectiveAt: string;
   changedBy: string;
   changedAt: string;
+}
+
+export interface AssessmentLevelUpOverrideSummary {
+  targetLevel: CefrLevel;
+  reason: string;
+  grantedBy: string | null;
+  grantedAt: string;
+}
+
+export interface AssessmentLevelUpOverrideInput {
+  reason: string;
+}
+
+export interface AssessmentLevelUpOverrideView {
+  learnerId: string;
+  currentLevel: CefrLevel;
+  override: AssessmentLevelUpOverrideSummary | null;
 }
 
 export interface AssessmentMonthlyGoalView {
