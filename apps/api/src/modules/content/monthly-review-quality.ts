@@ -1,4 +1,4 @@
-import { containsVietnameseLearnerText, isPlausibleMinimalPair, type MonthlyCurriculumContract, type MonthlyDaySpec } from "@e4s/domain";
+import { containsVietnameseLearnerText, monthlyPronunciationContrastIssue, monthlyPronunciationContrastRule, monthlyPronunciationExampleText, type MonthlyCurriculumContract, type MonthlyDaySpec, type MonthlyPronunciationContrastRule } from "@e4s/domain";
 import type { MonthlyQualityFinding } from "./monthly-quality.js";
 
 /**
@@ -108,31 +108,55 @@ export function evaluateMonthlyReviewSections(
   checkChoices("reading", readingItems, 4);
 
   const speaking = sectionItems("speaking");
-  const minimalPairs = speaking.filter((item) => strings(item.options).length === 2);
+  // Listen-and-choose items are recognised by their options (any count), so an
+  // item with 4 options is reported as such instead of as "0 minimal pairs".
+  const minimalPairs = speaking.filter((item) => strings(item.options).length > 0);
   const readAloud = speaking.filter((item) => !strings(item.options).length && text(item.passage) && !strings(item.requiredWords).length);
   const freeResponse = speaking.filter((item) => strings(item.requiredWords).length >= 2);
   const speakingDetail = `speaking.items must contain exactly 4 items in this order: 2 minimal pairs, 1 read-aloud, 1 free response; it has ${minimalPairs.length} minimal pair(s), ${readAloud.length} read-aloud, ${freeResponse.length} free response`;
-  if (minimalPairs.length < 2) add("severe", "speaking", "MONTHLY_REVIEW_MINIMAL_PAIRS", `Speaking needs 2 minimal-pair listening items (2 options); it has ${minimalPairs.length} (${2 - minimalPairs.length} missing). ${speakingDetail}`);
-  // WP8: pronunciation items must practise this week's taught example words.
-  const exampleWords = weekPronunciationExampleWords(contract, day);
+  if (minimalPairs.length < 2) add("severe", "speaking", "MONTHLY_REVIEW_MINIMAL_PAIRS", `Speaking needs 2 minimal-pair listening items, each { audioText, prompt, options: [exactly 2 strings], answer, explanation }; it has ${minimalPairs.length} (${2 - minimalPairs.length} missing). ${speakingDetail}`);
+  // WP8: pronunciation items must practise this week's taught example words;
+  // what the pair contrasts depends on the roadmap item (pronunciation-contrast).
+  const weekExamples = weekPronunciationExamples(contract, day);
+  const exampleWords = [...new Set(weekExamples.map((example) => example.text))];
   const ipaByWord = new Map<string, string>([
     ...contract.coreTerms.map((term) => [normalize(term.word), term.ipa] as const),
-    ...contract.sounds.flatMap((sound) => sound.examples.map((example) => [normalize(example.word), example.ipa] as const))
+    ...contract.sounds.flatMap((sound) => sound.examples.map((example) => [spoken(example.word), example.ipa] as const))
   ].filter(([word, ipa]) => Boolean(word) && typeof ipa === "string" && /\p{L}/u.test(ipa) && !/X/u.test(ipa)));
-  const weekWords = new Set([...exampleWords, ...coreWords.map(normalize)]);
-  for (const item of minimalPairs) {
-    if (!text(item.audioText) || !strings(item.options).some((option) => normalize(option) === normalize(text(item.answer)))) add("severe", "speaking", "MONTHLY_REVIEW_MINIMAL_PAIR_INVALID", "A minimal-pair item needs audioText and an answer that is one of its 2 options");
+  for (const [index, item] of minimalPairs.entries()) {
+    const label = `speaking item ${text(item.id) || index + 1}`;
+    const options = strings(item.options);
+    if (options.length !== 2) {
+      const example = options.map((option) => weekExamples.find((candidate) => candidate.text === spoken(option))).find(Boolean);
+      add("severe", "speaking", "MONTHLY_REVIEW_MINIMAL_PAIR_OPTIONS", `${label} has ${options.length} options (${options.join(", ")}); a minimal-pair item has exactly 2 options: ${example ? `the week example "${example.text}" and its partner (${example.rule.guidance})` : "one of this week's pronunciation examples and its partner"}. Remove the other options and rewrite the explanation for the 2 options`);
+      continue;
+    }
+    if (!text(item.audioText) || !options.some((option) => normalize(option) === normalize(text(item.answer)))) add("severe", "speaking", "MONTHLY_REVIEW_MINIMAL_PAIR_INVALID", `${label} needs audioText and an answer that is one of its 2 options`);
     if (!text(item.explanation)) add("severe", "speaking", "MONTHLY_REVIEW_EXPLANATION_MISSING", "Minimal-pair items need a short explanation");
-    if (exampleWords.length && !strings(item.options).some((option) => weekWords.has(normalize(option)))) add("severe", "speaking", "MONTHLY_REVIEW_MINIMAL_PAIR_SCOPE", `Minimal pair "${strings(item.options).join(" / ")}" must contain one of this week's pronunciation example words (${exampleWords.join(", ")}) paired with a real, common word that differs by one sound`);
-    // Round 2: the two words must differ by exactly one sound (IPA when both are known, else spelling heuristic).
-    const [first, second] = strings(item.options);
-    if (first && second && !isPlausibleMinimalPair(first, second, { first: ipaByWord.get(normalize(first)), second: ipaByWord.get(normalize(second)) })) {
-      add("severe", "speaking", "MONTHLY_REVIEW_MINIMAL_PAIR_NOT_MINIMAL", `"${first} / ${second}" is not a minimal pair: the two words must sound exactly the same except for the week's target sound, replaced by one neighbouring sound (e.g. ship / sheep, think / sink, fan / van). Keep the week example word and replace the partner word`);
+    const [first, second] = options as [string, string];
+    const taught = weekExamples.find((example) => example.text === spoken(first)) ?? weekExamples.find((example) => example.text === spoken(second));
+    if (!taught) {
+      if (exampleWords.length) {
+        const byGuidance = new Map<string, string[]>();
+        for (const example of weekExamples) byGuidance.set(example.rule.guidance, [...new Set([...(byGuidance.get(example.rule.guidance) ?? []), example.soundLabel])]);
+        const guidance = [...byGuidance].map(([rule, labels]) => `${labels.join(" and ")}: use ${rule}`).join("; ");
+        add("severe", "speaking", "MONTHLY_REVIEW_MINIMAL_PAIR_SCOPE", `Minimal pair "${options.join(" / ")}" must contain one of this week's pronunciation examples copied exactly (${exampleWords.map((word) => `"${word}"`).join(", ")}) with its partner. ${guidance}`);
+      }
+      continue;
+    }
+    // Round 2: A1–A2 pairs differ by exactly one sound (IPA when both are known,
+    // else spelling); B1+ phenomena use the contrast their roadmap item implies.
+    const partner = taught.text === spoken(first) ? second : first;
+    const issue = monthlyPronunciationContrastIssue(taught.rule, taught.text, partner, { first: ipaByWord.get(taught.text), second: ipaByWord.get(spoken(partner)) });
+    if (issue) {
+      add("severe", "speaking", "MONTHLY_REVIEW_MINIMAL_PAIR_NOT_MINIMAL", taught.rule.kind === "minimal_pair"
+        ? `"${first} / ${second}" is not a minimal pair: the two words must sound exactly the same except for the week's target sound, replaced by one neighbouring sound (e.g. ship / sheep, think / sink, fan / van). Keep the week example word and replace the partner word`
+        : `"${first} / ${second}" is not a valid contrast for ${taught.soundLabel}: ${issue}. Keep the week example "${taught.text}" and use as partner ${taught.rule.guidance}`);
     }
   }
   if (readAloud.length < 1) add("severe", "speaking", "MONTHLY_REVIEW_READ_ALOUD_MISSING", `Speaking needs 1 read-aloud sentence (passage, no options). ${speakingDetail}`);
   for (const item of readAloud) {
-    const used = exampleWords.filter((word) => containsWordForm(text(item.passage), word));
+    const used = exampleWords.filter((word) => containsWordForm(spokenPassage(text(item.passage)), word));
     if (exampleWords.length >= 2 && used.length < 2) add("severe", "speaking", "MONTHLY_REVIEW_READ_ALOUD_WORDS", `The read-aloud sentence must be one natural workplace sentence containing at least 2 of this week's pronunciation example words (${exampleWords.join(", ")}); it uses ${used.length ? used.join(", ") : "none"}`);
   }
   if (freeResponse.length < 1) add("severe", "speaking", "MONTHLY_REVIEW_FREE_RESPONSE_MISSING", `Speaking needs 1 free response with requiredWords (week words) and minRequiredWords 2. ${speakingDetail}`);
@@ -148,7 +172,7 @@ export function evaluateMonthlyReviewSections(
     for (const code of MONTHLY_REVIEW_SECTIONS) {
       const content = parts.get(code)?.content;
       if (!content) continue;
-      const vietnamese = vietnameseStrings(content, code === "listening");
+      const vietnamese = vietnameseStrings(code === "listening" ? withoutQuotedMeanings(content) : content, code === "listening");
       if (vietnamese.length) add("severe", code, "MONTHLY_REVIEW_INSTRUCTION_LANGUAGE", `${contract.cefr} review sections must be written in English (prompts, questions, explanations, passages; only listening options/answers, the word meanings, may be Vietnamese). Rewrite in English: ${vietnamese.slice(0, 3).map((value) => `"${value.length > 80 ? `${value.slice(0, 80)}…` : value}"`).join("; ")}`);
     }
   }
@@ -168,10 +192,56 @@ function vietnameseStrings(content: Content, meaningsAllowed: boolean): string[]
   return [...new Set(found)];
 }
 
-/** Words of the week's locked pronunciation examples (reviewPronunciationExampleIds), normalised and de-duplicated. */
+/**
+ * Listening explanations naturally quote the Vietnamese meaning ("Agree means
+ * đồng ý."): the meaning is the item's own option/answer, so remove those
+ * quoted meanings before the English-only check; other Vietnamese prose stays flagged.
+ */
+function withoutQuotedMeanings(content: Content): Content {
+  const strip = (item: unknown): unknown => {
+    if (!isRecord(item)) return item;
+    const meanings = [...strings(item.options), text(item.answer)].filter(Boolean).sort((a, b) => b.length - a.length);
+    let explanation = text(item.explanation);
+    for (const meaning of meanings) explanation = explanation.split(meaning).join(" ");
+    return { ...item, explanation, ...(Array.isArray(item.variants) ? { variants: item.variants.map(strip) } : {}) };
+  };
+  return Array.isArray(content.items) ? { ...content, items: content.items.map(strip) } : content;
+}
+
+export interface WeekPronunciationExample {
+  soundId: string;
+  soundLabel: string;
+  /** Spoken, normalised text of the example (no "(noun)" notes, lower case). */
+  text: string;
+  rule: MonthlyPronunciationContrastRule;
+}
+
+/** The week's locked pronunciation examples (reviewPronunciationExampleIds) with the contrast rule of their roadmap item. */
+export function weekPronunciationExamples(contract: MonthlyCurriculumContract, day: MonthlyDaySpec): WeekPronunciationExample[] {
+  const ids = new Set(day.reviewPronunciationExampleIds ?? []);
+  return contract.sounds.flatMap((sound) => {
+    const examples = sound.examples.filter((example) => ids.has(example.id));
+    if (!examples.length) return [];
+    const rule = monthlyPronunciationContrastRule(contract.cefr, sound);
+    const soundLabel = `${sound.label} ${sound.ipa}`.trim();
+    return examples.map((example) => ({ soundId: sound.id, soundLabel, text: spoken(example.word), rule })).filter((example) => Boolean(example.text));
+  });
+}
+
+/**
+ * Prompt text for the two listen-and-choose speaking items: per week sound, the
+ * examples to copy and what the partner option must be (A1–A2 minimal pairs,
+ * B1+ the contrast the roadmap item implies).
+ */
+export function monthlyReviewSpeakingContrastGuidance(contract: MonthlyCurriculumContract, day: MonthlyDaySpec): string {
+  const bySound = new Map<string, WeekPronunciationExample[]>();
+  for (const example of weekPronunciationExamples(contract, day)) bySound.set(example.soundId, [...(bySound.get(example.soundId) ?? []), example]);
+  return [...bySound.values()].map((examples) => `${examples[0]!.soundLabel}: one option is one of [${examples.map((example) => `"${example.text}"`).join(", ")}] copied exactly; the other option is ${examples[0]!.rule.guidance}`).join(". ");
+}
+
+/** Words of the week's locked pronunciation examples (reviewPronunciationExampleIds), spoken form, normalised and de-duplicated. */
 export function weekPronunciationExampleWords(contract: MonthlyCurriculumContract, day: MonthlyDaySpec): string[] {
-  const examples = new Map(contract.sounds.flatMap((sound) => sound.examples.map((example) => [example.id, example.word] as const)));
-  return [...new Set((day.reviewPronunciationExampleIds ?? []).map((id) => normalize(examples.get(id) ?? "")).filter(Boolean))];
+  return [...new Set(weekPronunciationExamples(contract, day).map((example) => example.text))];
 }
 
 /** Whole-word match that also accepts a simple inflection (list → lists, test → tested). */
@@ -184,3 +254,6 @@ function isRecord(value: unknown): value is Content { return Boolean(value) && t
 function text(value: unknown): string { return typeof value === "string" ? value.trim() : ""; }
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : []; }
 function normalize(value: string): string { return value.trim().toLocaleLowerCase("en-US").replace(/[.!?]+$/u, ""); }
+/** Spoken form of an example or option for comparison: no "(noun)" notes, straight apostrophes, normalised. */
+function spoken(value: string): string { return normalize(monthlyPronunciationExampleText(value)); }
+function spokenPassage(value: string): string { return value.replace(/[’‘]/gu, "'"); }

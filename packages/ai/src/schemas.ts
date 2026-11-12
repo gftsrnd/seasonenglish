@@ -728,7 +728,7 @@ export function parseMonthlyLessonParts(value: unknown, depth = 0): unknown {
   const end = Math.max(body.lastIndexOf("]"), body.lastIndexOf("}"));
   const candidates = [...new Set([end >= 0 ? body.slice(0, end + 1) : body, body])];
   for (const candidate of candidates) {
-    for (const attempt of [candidate, escapeControlCharactersInJsonStrings(candidate), repairModelJsonText(candidate)]) {
+    for (const attempt of [candidate, escapeControlCharactersInJsonStrings(candidate), repairModelJsonText(candidate), rebalanceJsonContainers(repairModelJsonText(candidate))]) {
       try {
         const parsed = JSON.parse(attempt) as unknown;
         if (typeof parsed === "string" && depth < 2) return parseMonthlyLessonParts(parsed, depth + 1);
@@ -744,6 +744,54 @@ export function parseMonthlyLessonParts(value: unknown, depth = 0): unknown {
   }
   const salvaged = salvageCompleteArrayElements(repairModelJsonText(body.startsWith("[") ? body : `[${body}`));
   return salvaged.length ? salvaged : value;
+}
+
+/**
+ * Round 3 (12/11): a review exercise call returned `parts` as a string in which
+ * one part object was never closed (`..."explanation":"…"}, {"code":"word_class"`),
+ * so every later part sat inside it. Outside strings, open objects that meet `{`
+ * where a key must follow are closed up to the enclosing array. Text with a
+ * closer of the wrong kind is returned unchanged.
+ */
+export function rebalanceJsonContainers(text: string): string {
+  const stack: string[] = [];
+  let result = "";
+  let inString = false;
+  let escaped = false;
+  let previous = "";
+  for (const character of text) {
+    if (inString) {
+      result += character;
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === "\"") { inString = false; previous = character; }
+      continue;
+    }
+    if (character === "\"") { inString = true; result += character; continue; }
+    if (character === "{" || character === "[") {
+      // After "," an object expects a key: an object here means the open objects were never closed.
+      if (character === "{" && previous === "," && stack.at(-1) === "{") {
+        result = result.replace(/,\s*$/u, "");
+        while (stack.at(-1) === "{" && stack.length > 1) { stack.pop(); result += "}"; }
+        result += ",";
+      }
+      stack.push(character);
+      result += character;
+      previous = character;
+      continue;
+    }
+    if (character === "}" || character === "]") {
+      // A closer of the other kind is not a missing brace: leave such text unrepaired.
+      if (stack.pop() !== (character === "}" ? "{" : "[")) return text;
+      result += character;
+      previous = character;
+      continue;
+    }
+    result += character;
+    if (!/\s/u.test(character)) previous = character;
+  }
+  while (stack.length) result += stack.pop() === "{" ? "}" : "]";
+  return result;
 }
 
 /** Escapes stray quotes and control characters inside strings and drops trailing commas. */
@@ -1702,7 +1750,8 @@ export const monthlyLessonDayOutputJsonSchema = {
                 items: { anyOf: [
                   { type: "string" },
                   { type: "object", additionalProperties: true, properties: {
-                    id: { type: "string" }, prompt: { type: "string" }, options: { type: "array", items: { type: "string" } },
+                    id: { type: "string" }, prompt: { type: "string" },
+                    options: { type: "array", items: { type: "string" }, description: "4 options in a choice item; EXACTLY 2 in a speaking minimal-pair item (the taught example and its partner)." },
                     answer: { type: "string" }, explanation: { type: "string" },
                     variants: {
                       type: "array", minItems: 1, maxItems: 1,

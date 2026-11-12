@@ -1,5 +1,5 @@
 import type { MonthlyCurriculumContract, MonthlyDaySpec } from "@e4s/domain";
-import { answerIsUniqueLongestOption, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
+import { answerIsUniqueLongestOption, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPronunciationExampleText, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
 import type { LessonPart } from "@e4s/contracts";
 import { monthlyGrammarRoadmapDayIssues } from "./monthly-grammar-roadmap.js";
 import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
@@ -227,7 +227,7 @@ export function monthlyLockedPlanExpectations(contract: MonthlyCurriculumContrac
     words,
     reviewTargets,
     targetPositions: required ? required.map((position) => ({ soundId: position.soundId, exampleId: position.exampleId })) : null,
-    targetPositionWords: required ? required.map((position) => sounds.find((sound) => sound.id === position.soundId)?.examples.find((example) => example.id === position.exampleId)?.word ?? "") : []
+    targetPositionWords: required ? required.map((position) => sounds.find((sound) => sound.id === position.soundId)?.examples.find((example) => example.id === position.exampleId)?.word ?? "").map((word) => monthlyPronunciationExampleText(word)) : []
   };
 }
 
@@ -366,5 +366,6 @@ function samePronunciationExamples(
 export function hasExactTargetOccurrences(passage: string, words: readonly string[]): boolean {
   const expected = new Map<string, number>();
   for (const raw of words) { const word = raw.trim().toLocaleLowerCase("en-US"); if (!word) return false; expected.set(word,(expected.get(word) ?? 0)+1); }
-  return [...expected].every(([word,count]) => { const escaped = word.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"); return [...passage.toLocaleLowerCase("en-US").matchAll(new RegExp("(?<![a-z])"+escaped+"(?![a-z])","g"))].length === count; });
+  const spoken = passage.replace(/[’‘]/gu, "'");
+  return [...expected].every(([word,count]) => { const escaped = word.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"); return [...spoken.toLocaleLowerCase("en-US").matchAll(new RegExp("(?<![a-z])"+escaped+"(?![a-z])","g"))].length === count; });
 }

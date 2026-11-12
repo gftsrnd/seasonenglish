@@ -3,11 +3,11 @@ import { MONTHLY_LESSON_PART_CONTENT_CONTRACT, type AiTaskRunner } from "@e4s/ai
 import { evaluateMonthlyLessonQuality, monthlyLockedPlanExpectations, normalizeFormula, type MonthlyLessonCandidate, type MonthlyLockedPlanExpectations, type MonthlyQualityReport, type MonthlyQualityFinding } from "./monthly-quality.js";
 import { rebalanceAnswerTextPositions, type AnswerTextChoice } from "../shared/answer-order.js";
 import { monthlyGrammarRoadmapDayContract } from "./monthly-grammar-roadmap.js";
-import { MONTHLY_REVIEW_COMPONENTS, monthlyReviewTargets } from "./monthly-review-quality.js";
+import { MONTHLY_REVIEW_COMPONENTS, monthlyReviewSpeakingContrastGuidance, monthlyReviewTargets } from "./monthly-review-quality.js";
 
 const REVIEW_STUDY_COMPONENTS = ["objective", "instruction", "vocabulary", "grammar", "pronunciation"] as const;
 
-export function monthlyDailyTeachingContract(day: MonthlyDaySpec, cefr: string, coreWords: readonly string[] = []): string {
+export function monthlyDailyTeachingContract(day: MonthlyDaySpec, cefr: string, coreWords: readonly string[] = [], targetPositionWords: readonly string[] = []): string {
   const vietnamese = cefr === "A1" || cefr === "A2";
   const language = vietnamese ? "Vietnamese" : "simple English";
   const words = coreWords.length ? ` (${coreWords.join(", ")})` : "";
@@ -21,7 +21,7 @@ export function monthlyDailyTeachingContract(day: MonthlyDaySpec, cefr: string, 
     `pronunciation: teach stage ${day.pronunciationPlan?.stage}, objective ${day.pronunciationPlan?.objective}. Return stage and objective matching the plan. This is a ${cefr} target: advanced stress/linking/intonation targets remain advanced features, not isolated beginner phoneme lessons.`,
     "pronunciation.focus copies the first locked target. pronunciation.words contains exactly the three examples listed by daySpec.pronunciationExampleIds (the compact standard-format summary). Never substitute another three words from the pool.",
     (day.pronunciationPlan?.targetIds.length ?? 0) > 1 ? "Also return pronunciation.reviewTargets: [{soundId,focus,words:[{word,ipa}]}], in dailyTeachingPlan.pronunciation.targetIds order, including exactly the assigned dailyTeachingPlan.pronunciation.exampleIds for each target. The UI and listening gates use this complete multi-target scope." : "",
-    day.pronunciationPlan?.requiredPositions ? "For the read-aloud/mock task also return pronunciation.passage and pronunciation.targetPositions: [{soundId,exampleId}], exactly the eight requiredPositions from the plan, two per target; the passage must actually contain those eight example words." : "",
+    day.pronunciationPlan?.requiredPositions ? `For the read-aloud/mock task also return pronunciation.passage and pronunciation.targetPositions: [{soundId,exampleId}], exactly the eight requiredPositions from the plan, two per target; the passage must actually contain those eight example words.${targetPositionWords.length ? ` Write them in the passage exactly as spoken, each exactly once as a whole word or phrase, without notes such as (noun)/(verb): ${targetPositionWords.map((word) => `"${word}"`).join(", ")}.` : ""}` : "",
     day.pronunciationPlan?.stage === "personalize" ? "Use recorded learner error evidence when supplied. With no error evidence, explicitly present this as a diagnostic over the taught targets; do not invent personal mistakes." : "",
     monthlyGrammarRoadmapDayContract(day, cefr),
     "The speaking task must apply the day's pronunciation stage and grammar objective, using at least two daily core words."
@@ -75,7 +75,7 @@ Part content field contract: ${MONTHLY_LESSON_PART_CONTENT_CONTRACT}
 
 Review pronunciation output contract: Keep pronunciation.focus equal to the first locked review sound IPA and pronunciation.words equal to that sound's first three allocated examples (or all allocated examples when fewer than three), so it remains compatible with the standard lesson format. Also include pronunciation.reviewTargets as an array in lockedScope.sounds order; each item must have { soundId, focus, words }, and words must contain every locked pronunciation example for that sound with its exact word and IPA. Include every allocated review sound and example exactly once. Do not use the review calendar day's ordinary sound/examples.
 
-${monthlyReviewExerciseContract(coreTerms.length, grammarSteps.length, contract.cefr, monthlyReviewWordFormCandidates(coreTerms, daySupportTerms))}
+${monthlyReviewExerciseContract(coreTerms.length, grammarSteps.length, contract.cefr, monthlyReviewWordFormCandidates(coreTerms, daySupportTerms), monthlyReviewSpeakingContrastGuidance(contract, daySpec))}
 
 ${monthlyLearnerLanguageContract(contract.cefr)}` : `${systemPrompt}
 
@@ -97,7 +97,7 @@ ${monthlyLearnerLanguageContract(contract.cefr)}`;
           ...(kind === "review" ? { reviewListeningChecklist: coreTerms.map(term => ({ audioText: term.word, meaning: term.meaning })) } : {})
         }, { systemPrompt: `${note ? `${basePrompt}
 
-${note}` : basePrompt}${contract.planSchemaVersion === 2 && kind === "new" ? `\n${monthlyDailyTeachingContract(daySpec, contract.cefr, coreTerms.map((term) => term.word))}` : ""}${repairFindings.length ? `\nREPAIR REQUIRED FOR REQUESTED COMPONENTS: ${repairFindings.map(finding => `${finding.component}: ${finding.message}`).join("; ")}. Correct every listed issue; do not repeat the same incomplete output. Preserve accepted components.` : ""}`, maxOutputTokens, temperature: 0.2, maxAttempts: 2 });
+${note}` : basePrompt}${contract.planSchemaVersion === 2 && kind === "new" ? `\n${monthlyDailyTeachingContract(daySpec, contract.cefr, coreTerms.map((term) => term.word), monthlyLockedPlanExpectations(contract, daySpec).targetPositionWords)}` : ""}${repairFindings.length ? `\nREPAIR REQUIRED FOR REQUESTED COMPONENTS: ${repairFindings.map(finding => `${finding.component}: ${finding.message}`).join("; ")}. Correct every listed issue; do not repeat the same incomplete output. Preserve accepted components.` : ""}`, maxOutputTokens, temperature: 0.2, maxAttempts: 2 });
         } catch (error) {
           if (error && typeof error === "object") Object.assign(error, { monthlyComponents: [...requested] });
           throw error;
@@ -166,7 +166,7 @@ export function monthlyReviewWordFormCandidates(
  * Friday review exercises (e4s_cau_truc_bai_on_cuoi_tuan, 03/11): six sections
  * of review-until-correct items. Counts scale with the week's core words.
  */
-export function monthlyReviewExerciseContract(coreCount: number, grammarStepCount: number, cefr: string, wordForm?: { suitable: readonly MonthlyWordFormCandidate[]; unsuitable: readonly string[] }): string {
+export function monthlyReviewExerciseContract(coreCount: number, grammarStepCount: number, cefr: string, wordForm?: { suitable: readonly MonthlyWordFormCandidate[]; unsuitable: readonly string[] }, speakingContrast = ""): string {
   const target = monthlyReviewTargets(coreCount, grammarStepCount);
   const vietnamese = cefr === "A1" || cefr === "A2";
   const explain = vietnamese ? "Vietnamese" : "simple English";
@@ -188,15 +188,22 @@ export function monthlyReviewExerciseContract(coreCount: number, grammarStepCoun
     `word_use.items: exactly ${target.wordUse} items mixing: choose the synonym/antonym, choose the word that belongs under an umbrella word, fill a week word into a workplace sentence (blank as ____). 4 English options.`,
     `word_class.items (Word form): exactly ${target.wordForm} items: a workplace sentence with one blank (____, never dashes) where the learner chooses the correct form of a week word (e.g. decide / decision / decisive / decisively, or the right tense: send / sends / sent / sending). Choose only week words that really have several forms: a verb or a word with a real word family; a noun without a family (e.g. feedback, deadline, colleague) is never used, and never gets -ing, -ed, -ly or -ship added.${candidates} 4 English options, each a real English word that is a form of the same word or its family; the sentence must accept only one of them. Never ask for the word class or part of speech, never use labels such as noun/verb/adjective/adverb as options, and never give the answer word unchanged in brackets.`,
     `grammar.items: exactly ${target.grammar} items, one per locked grammar step in order, each in that step's exercise type and using week words; add 1 more item reviewing the previous week's topic when there is one. 4 English options.`,
-    `reading: passage = one workplace message or email of ${target.readingWords.min}-${target.readingWords.max} words that uses at least ${target.readingWeekWords} week words and this week's grammar; items = exactly 3 comprehension questions with 4 English options.`,
-    `speaking.items: exactly 4 items in this order: (a) 2 minimal-pair items for this week's sounds: audioText = one word, options = the 2 words of the minimal pair: one of this week's pronunciation example words (lockedScope.pronunciationExamples) and a real, common, polite English word that sounds exactly the same except for the target sound, which is replaced by one neighbouring sound (same number of sounds, all other sounds identical and in the same order: ship / sheep, think / sink, fan / van, light / right; never pairs such as event / segment, bat / box or sheet / shift); never a vulgar or offensive word; answer = the spoken word, explanation; (b) 1 read-aloud item: prompt "${readAloudPrompt}", passage = one natural, grammatical, meaningful workplace sentence (at most 20 words, not a list of words) containing at least 2 of this week's pronunciation example words, no options, no answer; (c) 1 free-response item: prompt = a workplace situation asking for 1-2 sentences, requiredWords = 4-6 words copied exactly from this week's core words (never other words such as could, already, effective), minRequiredWords = 2, no options, no answer, never name a grammar formula.`,
+    `reading content = { passage, items }: passage = one workplace message or email of ${target.readingWords.min}-${target.readingWords.max} words that uses at least ${target.readingWeekWords} week words and this week's grammar; items = exactly 3 comprehension questions with 4 English options. Never return reading as a single question with prompt/options/answer at the top level.`,
+    `speaking.items: exactly 4 items in this order: (a) 2 minimal-pair (listen-and-choose) items: { id, prompt, audioText, options, answer, explanation }, where options is EXACTLY 2 strings (never 3 or 4: this is not a 4-option choice task), audioText = answer = the option the app speaks, and explanation says in at most 2 sentences what differs between the 2 options. ${speakingContrast ? `Build each pair from this week's pronunciation items: ${speakingContrast}.` : "options: one of this week's pronunciation example words (lockedScope.pronunciationExamples) and a real, common word that sounds exactly the same except for the target sound, which is replaced by one neighbouring sound (ship / sheep, think / sink, fan / van; never pairs such as event / segment, bat / box or sheet / shift)."} Never a vulgar or offensive word, never a pair unrelated to this week's examples; (b) 1 read-aloud item: prompt "${readAloudPrompt}", passage = one natural, grammatical, meaningful workplace sentence (at most 20 words, not a list of words) containing at least 2 of this week's pronunciation examples, each copied exactly as written (a phrase example stays one whole phrase; never write notes such as (noun)/(verb)), no options, no answer; (c) 1 free-response item: prompt = a workplace situation asking for 1-2 sentences, requiredWords = 4-6 words copied exactly from this week's core words (never other words such as could, already, effective), minRequiredWords = 2, no options, no answer, never name a grammar formula.`,
     "Every core word appears at least twice across the review (listening plus one other section).",
     "Learner-facing text never mentions internal planning terms (core term, expanded term, người học) and never pastes the theme's communication goal."
   ].filter(Boolean).join("\n");
 }
 
-/** Copies the reading passage onto each reading item (the review runtime shows it per question) and fills missing ids. */
-export function normalizeMonthlyReviewParts<T extends { code: string; content: Record<string, unknown> }>(parts: readonly T[]): T[] {
+/**
+ * Copies the reading passage onto each reading item (the review runtime shows it per question) and fills missing ids.
+ * Reading that came back in the daily single-question shape (passage plus a top-level
+ * prompt/options/answer, no items) keeps that question as items[0], and a passage
+ * written only on the items or under message/email/body is lifted to the section, so
+ * the gate reports the real gap (missing questions) instead of a missing passage.
+ */
+export function normalizeMonthlyReviewParts<T extends { code: string; content: Record<string, unknown> }>(rawParts: readonly T[]): T[] {
+  const parts = rawParts.map((part) => part.code === "reading" ? { ...part, content: normalizeReviewReading(part.content) } : part);
   return parts.map((part) => {
     const items = Array.isArray(part.content.items) ? part.content.items : null;
     if (!items || part.code === "vocabulary" || part.code === "objective") return part;
@@ -219,6 +226,22 @@ export function normalizeMonthlyReviewParts<T extends { code: string; content: R
     });
     return { ...part, content: { ...part.content, ...(part.code === "reading" && passage ? { passage } : {}), items: fixed } };
   });
+}
+
+function normalizeReviewReading(content: Record<string, unknown>): Record<string, unknown> {
+  const textOf = (value: unknown) => typeof value === "string" && value.trim() ? value : "";
+  const next = { ...content };
+  const items = Array.isArray(next.items) ? next.items.filter(isRecord) : [];
+  if (!textOf(next.passage) && !textOf(next.text)) {
+    const lifted = textOf(next.message) || textOf(next.email) || textOf(next.body) || items.map((item) => textOf(item.passage)).find(Boolean) || "";
+    if (lifted) next.passage = lifted;
+  }
+  if (!items.length && textOf(next.prompt) && Array.isArray(next.options) && textOf(next.answer)) {
+    next.items = [{ prompt: next.prompt, options: next.options, answer: next.answer, ...(textOf(next.explanation) ? { explanation: next.explanation } : {}), ...(Array.isArray(next.variants) ? { variants: next.variants } : {}) }];
+    delete next.options;
+    delete next.answer;
+  }
+  return next;
 }
 
 export interface MonthlyDayGenerationInput {
