@@ -968,6 +968,6 @@ const monthlyOverview: ManagerMonthlyOverviewView = {
     lastActivityAt: "2026-11-06T09:00:00.000Z", attendedDays: 4, elapsedDays: 5, absenceDays: 1,
     maxAbsences: 6, consecutiveAbsences: 0, lessons: { completed: 4, scheduled: 16 }, reviews: { completed: 1, scheduled: 4 },
     season: { turns: 20, target: 95 }, exam: { status: "approved", scores: { listening: 20, reading: 18, writing: 16, speaking: 15 }, total: 69 },
-    levelCriteria: [false, false, true, true], complaintCount: 1, attendanceEligible: true, onTrack: true, completedToDate: false, atRisk: false
+    levelCriteria: [false, false, true, true], complaintCount: 1, attendanceEligible: true, onTrack: true, completedToDate: false, lessonsToDate: { completed: 0, expected: 0 }, atRisk: false
   }]
 };

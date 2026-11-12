@@ -34,6 +34,8 @@ export interface ManagerMonthlyLearnerView {
   readonly attendanceEligible: boolean;
   readonly onTrack: boolean;
   readonly completedToDate: boolean;
+  /** Lessons expected by today (a mid-month learner's catch-up lessons included) and how many are done. */
+  readonly lessonsToDate: { readonly completed: number; readonly expected: number };
   readonly atRisk: boolean;
 }
 

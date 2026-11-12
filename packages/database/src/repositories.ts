@@ -11510,8 +11510,14 @@ class ManagerRepository {
                     count(*) filter (where not ${MONTH_LESSON_IS_REVIEW_SQL} and progress.status = 'completed')::int as completed,
                     count(*) filter (where ${MONTH_LESSON_IS_REVIEW_SQL})::int as reviews,
                     count(*) filter (where ${MONTH_LESSON_IS_REVIEW_SQL} and progress.status = 'completed')::int as reviewed,
-                    count(*) filter (where ml.lesson_date between scope.start_date and scope.today)::int as elapsed_lessons,
-                    count(*) filter (where ml.lesson_date between scope.start_date and scope.today and progress.status = 'completed')::int as completed_elapsed
+                    -- Lessons expected by today: a mid-month learner catches up from lesson 1, so every
+                    -- lesson dated <= today counts (not only those from the start date); a Friday review
+                    -- dated before the start date never gates the sequence, so it is not expected.
+                    count(*) filter (where ml.lesson_date <= scope.today
+                      and not (ml.lesson_date < scope.start_date and ${MONTH_LESSON_IS_REVIEW_SQL}))::int as elapsed_lessons,
+                    count(*) filter (where ml.lesson_date <= scope.today
+                      and not (ml.lesson_date < scope.start_date and ${MONTH_LESSON_IS_REVIEW_SQL})
+                      and progress.status = 'completed')::int as completed_elapsed
              from month_lessons ml
              left join progress_records progress on progress.lesson_id = ml.lesson_id and progress.learner_id = scope.learner
              where ml.framework_id = mf.id and ml.status = 'approved' and ml.lesson_id is not null
@@ -11606,6 +11612,7 @@ class ManagerRepository {
           attendanceEligible: state === "active" && (absenceDays <= maxAbsences || facts.attendance_override),
           onTrack: elapsed.length > 0 && daysAttended / elapsed.length >= 0.7,
           completedToDate: facts.elapsed_lessons > 0 && facts.completed_elapsed === facts.elapsed_lessons,
+          lessonsToDate: { completed: facts.completed_elapsed, expected: facts.elapsed_lessons },
           atRisk: state === "active" && (consecutiveAbsences >= 3 || (absenceDays > 0 && absenceDays >= Math.floor(2 * maxAbsences / 3) + 1)
             || (!facts.attendance_override && systemDate < examDate && absenceDays === maxAbsences))
         };
