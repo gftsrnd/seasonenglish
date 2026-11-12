@@ -144,7 +144,8 @@ const prototypeTaskPromptDefaults: Readonly<Record<string, string>> = {
   level_form_generation: prototypePromptDefaults.levelForm,
   micro_grading: prototypePromptDefaults.mgrade,
   coach_dialogue: prototypePromptDefaults.coach,
-  weekly_practice_grading: prototypePromptDefaults.grade
+  weekly_practice_grading: prototypePromptDefaults.grade,
+  lesson_productive_grading: prototypePromptDefaults.lessonProductive
 };
 
 function shouldSyncPrototypePrompt(
@@ -1590,6 +1591,8 @@ class LearningRepository {
     partCode: LessonPartCode;
     requestId: string;
     evidence: LessonPartAttemptEvidenceInput;
+    /** Speaking uploads and self-written Writing are queued for background AI grading. */
+    aiGrading?: boolean;
   }): Promise<LessonPartAttemptView | null> {
     const lesson = await this.findLesson(input.learnerId, input.lessonId);
     const part = lesson?.content.parts.find((candidate) => candidate.code === input.partCode);
@@ -1629,10 +1632,10 @@ class LearningRepository {
         gradingContent = latest.rows[0]?.content.parts.find(item => item.code === input.partCode)?.content ?? gradingContent;
       }
       const duplicate = await client.query<{
-        id: string; attempt_number: number; status: PartEvidence["status"]; answer: string | null;
-        score: string | null; feedback: string | null; artifact_key: string | null;
+        id: string; attempt_number: number; status: StoredLessonAttemptStatus; answer: string | null;
+        score: string | null; feedback: string | null; artifact_key: string | null; grading: LessonAttemptGrading | null;
       }>(
-        `select id, attempt_number, status, answer, score::text, feedback, artifact_key
+        `select id, attempt_number, status, answer, score::text, feedback, artifact_key, grading
          from lesson_part_attempts where learner_id = $1 and request_key = $2`,
         [input.learnerId, input.requestId]
       );
@@ -1642,32 +1645,47 @@ class LearningRepository {
         storedEvidence = mapPartEvidence(existing);
         await client.query("commit");
       } else {
-        const count = await client.query<{ count: string }>(
-          `select count(*)::text as count from lesson_part_attempts
+        // A 'retake' (unclear recording) never uses up one of the two attempts.
+        const count = await client.query<{ count: string; reused: boolean }>(
+          `select count(*) filter (where status <> 'retake')::text as count,
+                  coalesce(bool_or($4::text is not null and artifact_key = $4), false) as reused
+           from lesson_part_attempts
            where learner_id = $1 and lesson_id = $2 and part_code = $3`,
-          [input.learnerId, input.lessonId, input.partCode]
+          [input.learnerId, input.lessonId, input.partCode, input.evidence.artifactKey ?? null]
         );
+        if (input.partCode === "speaking" && count.rows[0]?.reused) throw new Error("LESSON_SPEAKING_NEW_RECORDING_REQUIRED");
         const attemptNumber = Number(count.rows[0]?.count ?? 0) + 1;
         const graded = gradeLessonPart(part.code, gradingContent, input.evidence, attemptNumber);
+        const newAttemptId = randomUUID();
+        const queueAi = Boolean(input.aiGrading) && graded.status === "submitted";
+        const pendingGrading: LessonAttemptGrading = { state: "pending", queuedAt: new Date().toISOString() };
         const inserted = await client.query<{
-          id: string; attempt_number: number; status: PartEvidence["status"]; answer: string | null;
-          score: string | null; feedback: string | null; artifact_key: string | null;
+          id: string; attempt_number: number; status: StoredLessonAttemptStatus; answer: string | null;
+          score: string | null; feedback: string | null; artifact_key: string | null; grading: LessonAttemptGrading | null;
         }>(
           `insert into lesson_part_attempts
-             (id, learner_id, lesson_id, part_code, request_key, attempt_number, status, answer, score, feedback, artifact_key)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             (id, learner_id, lesson_id, part_code, request_key, attempt_number, status, answer, score, feedback, artifact_key, grading)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)
            on conflict (learner_id, request_key) do nothing
-           returning id, attempt_number, status, answer, score::text, feedback, artifact_key`,
-          [randomUUID(), input.learnerId, input.lessonId, input.partCode, input.requestId, attemptNumber,
-            graded.status, input.evidence.answer ?? null, graded.score, graded.feedback, input.evidence.artifactKey ?? null]
+           returning id, attempt_number, status, answer, score::text, feedback, artifact_key, grading`,
+          [newAttemptId, input.learnerId, input.lessonId, input.partCode, input.requestId, attemptNumber,
+            graded.status, input.evidence.answer ?? null, graded.score, graded.feedback, input.evidence.artifactKey ?? null,
+            queueAi ? JSON.stringify(pendingGrading) : null]
         );
+        if (queueAi && inserted.rows[0]) {
+          await client.query(
+            `insert into jobs (id, kind, payload, max_attempts, idempotency_key)
+             values ($1, $2, $3::jsonb, 3, $4) on conflict (idempotency_key) do nothing`,
+            [randomUUID(), LESSON_PRODUCTIVE_GRADING_JOB, JSON.stringify({ learnerId: input.learnerId, attemptId: newAttemptId }), `lesson-grade:${newAttemptId}`]
+          );
+        }
         const row = inserted.rows[0];
         if (!row) {
           const raced = await client.query<{
-            id: string; attempt_number: number; status: PartEvidence["status"]; answer: string | null;
-            score: string | null; feedback: string | null; artifact_key: string | null;
+            id: string; attempt_number: number; status: StoredLessonAttemptStatus; answer: string | null;
+            score: string | null; feedback: string | null; artifact_key: string | null; grading: LessonAttemptGrading | null;
           }>(
-            `select id, attempt_number, status, answer, score::text, feedback, artifact_key
+            `select id, attempt_number, status, answer, score::text, feedback, artifact_key, grading
              from lesson_part_attempts where learner_id = $1 and request_key = $2`,
             [input.learnerId, input.requestId]
           );
@@ -1731,6 +1749,139 @@ class LearningRepository {
     const refreshed = await this.findLesson(input.learnerId, input.lessonId);
     if (!refreshed || !storedEvidence || !attemptId) return null;
     return { lessonId: input.lessonId, partCode: input.partCode, evidence: storedEvidence, progress: refreshed.progress };
+  }
+
+  /** A queued daily Speaking/Writing attempt with the lesson it belongs to, for background AI grading. */
+  async lessonAttemptForGrading(learnerId: string, attemptId: string): Promise<{
+    attempt: { id: string; lessonId: string; partCode: LessonPartCode; attemptNumber: number; answer: string | null; artifactKey: string | null; grading: LessonAttemptGrading | null };
+    lesson: LearnerLessonRecord | null;
+    partContent: Record<string, unknown> | null;
+  } | null> {
+    const result = await this.pool.query<{
+      id: string; lesson_id: string; part_code: LessonPartCode; attempt_number: number; answer: string | null;
+      artifact_key: string | null; grading: LessonAttemptGrading | null; published_content: Record<string, unknown> | null;
+    }>(
+      `select a.id, a.lesson_id, a.part_code, a.attempt_number, a.answer, a.artifact_key, a.grading,
+              (select entry->'content' from lesson_versions lv cross join lateral jsonb_array_elements(lv.content->'parts') entry
+               where lv.lesson_id = a.lesson_id and lv.status = 'published' and entry->>'code' = a.part_code
+               order by lv.version desc limit 1) as published_content
+       from lesson_part_attempts a where a.id = $1 and a.learner_id = $2`,
+      [attemptId, learnerId]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    const lesson = await this.findLesson(learnerId, row.lesson_id);
+    const lessonPart = lesson?.content.parts.find((part) => part.code === row.part_code)?.content ?? null;
+    return {
+      attempt: {
+        id: row.id, lessonId: row.lesson_id, partCode: row.part_code, attemptNumber: row.attempt_number,
+        answer: row.answer, artifactKey: row.artifact_key, grading: row.grading
+      },
+      lesson,
+      partContent: row.published_content ?? lessonPart
+    };
+  }
+
+  /**
+   * Stores the AI result of a pending attempt and moves the part to the same
+   * outcome every other part uses. Only a still-pending attempt is updated, so a
+   * retried job never overwrites a grade or an operator decision.
+   */
+  async saveLessonAttemptGrade(input: {
+    learnerId: string;
+    attemptId: string;
+    status: "correct" | "wrong_retry" | "wrong_exhausted" | "retake";
+    score: number;
+    feedback: string;
+    transcript?: string;
+    grading: LessonAttemptGrading;
+  }): Promise<PartEvidence | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const current = await client.query<{ grading: LessonAttemptGrading | null }>(
+        "select grading from lesson_part_attempts where id = $1 and learner_id = $2 for update",
+        [input.attemptId, input.learnerId]
+      );
+      if (current.rows[0]?.grading?.state !== "pending") {
+        await client.query("rollback");
+        return null;
+      }
+      const updated = await client.query<LessonAttemptRow>(
+        `update lesson_part_attempts
+         set status = $3, score = $4, feedback = $5, answer = coalesce($6, answer), grading = $7::jsonb
+         where id = $1 and learner_id = $2
+         returning id, lesson_id, part_code, attempt_number, status, answer, score::text, feedback, artifact_key, grading`,
+        [input.attemptId, input.learnerId, input.status, input.score, input.feedback, input.transcript ?? null, JSON.stringify(input.grading)]
+      );
+      const row = updated.rows[0]!;
+      const evidence = mapPartEvidence(row);
+      await applyLessonAttemptEvidence(client, input.learnerId, row, evidence);
+      if (input.status === "correct") {
+        await client.query(
+          `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
+           values ($1, $2, null, $4, 'lesson_part', $3) on conflict do nothing`,
+          [randomUUID(), input.learnerId, row.id, Math.max(1, 6 - row.attempt_number)]
+        );
+      }
+      if (input.transcript !== undefined && row.artifact_key) {
+        await client.query(
+          "update files set transcript = $3 where owner_user_id = $1 and object_key = $2 and purpose = 'assessment_audio'",
+          [input.learnerId, row.artifact_key, input.transcript]
+        );
+      }
+      await client.query("commit");
+      return evidence;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** AI could not grade the attempt: it stays submitted for the operator, with a visible state and the error code. */
+  async markLessonAttemptGradingFallback(input: { learnerId: string; attemptId: string; code: string }): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const updated = await client.query<LessonAttemptRow>(
+        `update lesson_part_attempts
+         set grading = coalesce(grading, '{}'::jsonb) || jsonb_build_object('state', 'operator', 'code', $3::text, 'failedAt', now())
+         where id = $1 and learner_id = $2 and grading->>'state' = 'pending'
+         returning id, lesson_id, part_code, attempt_number, status, answer, score::text, feedback, artifact_key, grading`,
+        [input.attemptId, input.learnerId, input.code]
+      );
+      const row = updated.rows[0];
+      if (row) await applyLessonAttemptEvidence(client, input.learnerId, row, mapPartEvidence(row));
+      await client.query("commit");
+      return Boolean(row);
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Failed Speaking/Writing positions from AI-graded daily attempts (M1 error review, Friday review). */
+  async lessonFailedPositions(learnerId: string, options: { since?: string; limit?: number } = {}): Promise<Array<{
+    attemptId: string; lessonId: string; partCode: LessonPartCode; createdAt: string;
+    level: NonNullable<LessonAttemptGrading["level"]>; focus: string | null; failedPositions: LessonAttemptFailedPosition[];
+  }>> {
+    const result = await this.pool.query<{
+      id: string; lesson_id: string; part_code: LessonPartCode; created_at: Date; grading: LessonAttemptGrading;
+    }>(
+      `select id, lesson_id, part_code, created_at, grading from lesson_part_attempts
+       where learner_id = $1 and grading ? 'failedPositions' and jsonb_array_length(grading->'failedPositions') > 0
+         and ($2::timestamptz is null or created_at >= $2::timestamptz)
+       order by created_at desc limit $3`,
+      [learnerId, options.since ?? null, Math.max(1, Math.min(500, options.limit ?? 100))]
+    );
+    return result.rows.map((row) => ({
+      attemptId: row.id, lessonId: row.lesson_id, partCode: row.part_code, createdAt: row.created_at.toISOString(),
+      level: row.grading.level ?? "fail", focus: row.grading.focus ?? null, failedPositions: row.grading.failedPositions ?? []
+    }));
   }
 
   async appealLessonPart(input: StoredRequestEvidence & {
@@ -2897,20 +3048,91 @@ function mapProgress(
 
 function mapPartEvidence(row: {
   attempt_number: number;
-  status: PartEvidence["status"];
+  status: StoredLessonAttemptStatus;
   answer: string | null;
   score: string | null;
   feedback: string | null;
   artifact_key: string | null;
+  grading?: LessonAttemptGrading | null;
 }): PartEvidence {
+  // An unclear recording ('retake') reads as "try again" without using an attempt.
+  const retake = row.status === "retake";
+  const status: PartEvidence["status"] = row.status === "retake" ? "wrong_retry" : row.status;
+  const aiGrading = row.grading?.state === "pending" || row.grading?.state === "operator" ? row.grading.state : undefined;
   return {
-    attempts: row.attempt_number,
-    ...(row.status === undefined ? {} : { status: row.status }),
+    attempts: retake ? Math.max(0, row.attempt_number - 1) : row.attempt_number,
+    ...(status === undefined ? {} : { status }),
     ...(row.answer === null ? {} : { answer: row.answer }),
     ...(row.score === null ? {} : { score: Number(row.score) }),
     ...(row.feedback === null ? {} : { feedback: row.feedback }),
-    ...(row.artifact_key === null ? {} : { artifactKey: row.artifact_key })
+    ...(row.artifact_key === null ? {} : { artifactKey: row.artifact_key }),
+    ...(aiGrading ? { aiGrading } : {})
   };
+}
+
+export const LESSON_PRODUCTIVE_GRADING_JOB = "lesson.productive-grade";
+
+interface LessonAttemptRow {
+  id: string; lesson_id: string; part_code: LessonPartCode; attempt_number: number; status: StoredLessonAttemptStatus;
+  answer: string | null; score: string | null; feedback: string | null; artifact_key: string | null; grading: LessonAttemptGrading | null;
+}
+
+/**
+ * Writes a background-graded attempt into the learner's lesson progress, when it
+ * is still the latest attempt for that part: correct / wrong_exhausted finish the
+ * part, wrong_retry (incl. an unclear recording) reopens it for another try.
+ */
+async function applyLessonAttemptEvidence(client: PoolClient, learnerId: string, row: LessonAttemptRow, evidence: PartEvidence): Promise<void> {
+  const latest = await client.query<{ id: string }>(
+    `select id from lesson_part_attempts where learner_id = $1 and lesson_id = $2 and part_code = $3
+     order by created_at desc, attempt_number desc limit 1`,
+    [learnerId, row.lesson_id, row.part_code]
+  );
+  if (latest.rows[0]?.id !== row.id) return;
+  const progress = await client.query<{ evidence: { completedPartCodes?: LessonPartCode[]; evidence?: Partial<Record<LessonPartCode, PartEvidence>> } | null }>(
+    "select evidence from progress_records where learner_id = $1 and lesson_id = $2 for update",
+    [learnerId, row.lesson_id]
+  );
+  const stored = progress.rows[0]?.evidence;
+  if (!progress.rowCount || !stored) return;
+  const current = stored.evidence?.[row.part_code];
+  const next: PartEvidence = {
+    ...(current?.appealStatus ? { appealStatus: current.appealStatus } : {}),
+    ...(current?.translationViewed !== undefined ? { translationViewed: current.translationViewed } : {}),
+    ...evidence
+  };
+  const finished = ["correct", "wrong_exhausted"].includes(evidence.status ?? "") || evidence.status === "submitted";
+  const completedPartCodes = (stored.completedPartCodes ?? []).filter((code) => code !== row.part_code);
+  if (finished) completedPartCodes.push(row.part_code);
+  await client.query(
+    `update progress_records set evidence = $3::jsonb, updated_at = now() where learner_id = $1 and lesson_id = $2`,
+    [learnerId, row.lesson_id, JSON.stringify({ ...stored, completedPartCodes, evidence: { ...(stored.evidence ?? {}), [row.part_code]: next } })]
+  );
+}
+
+type StoredLessonAttemptStatus = PartEvidence["status"] | "retake";
+
+export interface LessonAttemptFailedPosition {
+  target: string;
+  kind: "pronunciation" | "required_word" | "grammar";
+  note: string;
+}
+
+/** AI grading state stored on lesson_part_attempts.grading. */
+export interface LessonAttemptGrading {
+  state: "pending" | "graded" | "operator";
+  queuedAt?: string;
+  gradedAt?: string;
+  level?: "pass" | "near" | "fail" | "retake";
+  transcript?: string;
+  failedPositions?: LessonAttemptFailedPosition[];
+  usedRequiredWords?: string[];
+  /** Pronunciation focus of the day, kept with the positions for M1 / Friday review. */
+  focus?: string;
+  sttModel?: string;
+  model?: string;
+  traceId?: string;
+  code?: string;
 }
 
 function gradeLessonPart(
@@ -2979,7 +3201,7 @@ class ContentRepository {
          order by lv.version desc limit 1
        ) part on true
        where learner.organization_id = $1 and ($2::uuid is null or second.id = $2)
-         and second.attempt_number = 2 and second.status = 'wrong_exhausted'
+         and second.attempt_number = 2 and second.status = 'wrong_exhausted' and second.grading is null
          and mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'new'))
          and pm.month between to_char(organization_system_date(pm.organization_id) - interval '1 month', 'YYYY-MM')
                           and to_char(organization_system_date(pm.organization_id), 'YYYY-MM')
@@ -4676,7 +4898,7 @@ class ContentRepository {
     );
     const attempts = await client.query<{ id: string; learner_id: string; attempt_number: number; answer: string | null; artifact_key: string | null }>(
       `select id, learner_id, attempt_number, answer, artifact_key from lesson_part_attempts
-       where lesson_id = $1 and part_code = $2 order by learner_id, attempt_number, created_at for update`,
+       where lesson_id = $1 and part_code = $2 and grading is null order by learner_id, attempt_number, created_at for update`,
       [lessonId, partCode]
     );
     const learners = new Map<string, { evidence: PartEvidence; rewardId: string | null; points: number }>();
@@ -10950,6 +11172,8 @@ export interface ManagerAiRuntimeSettings {
   baseUrl: string;
   model: string;
   credential: string;
+  /** Speech-to-text model of an OpenAI-compatible provider; empty when none is configured. */
+  speechToTextModel?: string;
 }
 
 const providerDefaults = (provider: ManagerProviderKind): Pick<ManagerProviderSettingsView, "baseUrl" | "model" | "speechToTextModel"> => {
@@ -11336,7 +11560,8 @@ class ManagerRepository {
       provider: row.provider,
       baseUrl: row.base_url || defaults.baseUrl,
       model: row.model || defaults.model,
-      credential: decryptProviderSecret(row)
+      credential: decryptProviderSecret(row),
+      speechToTextModel: row.speech_to_text_model || defaults.speechToTextModel
     };
   }
 

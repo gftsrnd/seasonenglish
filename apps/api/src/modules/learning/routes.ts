@@ -24,6 +24,7 @@ import { requestEvidenceFields } from "../manager/request-evidence.js";
 import { createRoleGuard } from "../identity/policy.js";
 import { registerWeeklyReviewRoutes } from "./weekly-review-routes.js";
 import type { ContentMediaService } from "../media/index.js";
+import type { LessonProductiveGrading } from "./productive-grading.js";
 
 const partCode = z.enum([
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",
@@ -101,7 +102,8 @@ export function registerLearningRoutes(
   pool: Pool,
   aiRunner?: AiTaskRunner,
   mediaService?: ContentMediaService,
-  aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>
+  aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>,
+  productiveGrading?: LessonProductiveGrading
 ): void {
   const repositories = createRepositories(pool);
   const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
@@ -551,14 +553,37 @@ export function registerLearningRoutes(
     if (!evidence.translated && (lesson.progress.evidence[params.data.partCode]?.attempts ?? 0) >= 2) {
       return reply.code(409).send({ code: "LESSON_ATTEMPTS_EXHAUSTED" });
     }
-    const result = await repositories.learning.submitLessonPartAttempt({
-      learnerId,
-      lessonId: params.data.lessonId,
-      partCode: params.data.partCode,
-      requestId: direct.requestId,
-      evidence
-    });
+    // Speaking uploads and self-written Writing are AI-graded in the background
+    // when a provider (and, for Speaking, speech-to-text) is configured; otherwise
+    // they keep going to the operator as before.
+    const gradable = !evidence.translated && (
+      (part.code === "speaking" && Boolean(evidence.artifactKey))
+      || (part.code === "writing" && isSelfWritingContent(part.content))
+    );
+    const aiGrading = gradable && productiveGrading
+      ? await productiveGrading.available(learnerId, part.code).catch((error: unknown) => {
+          request.log.warn({ code: error instanceof Error ? error.message : "UNKNOWN" }, "Lesson AI grading availability check failed");
+          return false;
+        })
+      : false;
+    let result: Awaited<ReturnType<typeof repositories.learning.submitLessonPartAttempt>>;
+    try {
+      result = await repositories.learning.submitLessonPartAttempt({
+        learnerId,
+        lessonId: params.data.lessonId,
+        partCode: params.data.partCode,
+        requestId: direct.requestId,
+        evidence,
+        aiGrading
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "LESSON_SPEAKING_NEW_RECORDING_REQUIRED") {
+        return reply.code(409).send({ code: "LESSON_SPEAKING_NEW_RECORDING_REQUIRED" });
+      }
+      throw error;
+    }
     if (!result) return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
+    if (result.evidence.aiGrading === "pending") productiveGrading?.kick();
     const translation = finishedAttemptTranslation(part, result.evidence.status);
     return translation ? { ...result, translation } : result;
   });

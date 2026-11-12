@@ -2,7 +2,7 @@ import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
-import type { AiTaskRunner } from "@e4s/ai";
+import type { AiTaskRunner, SpeechTranscriber } from "@e4s/ai";
 import type { ObjectStorage } from "@e4s/storage";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { Pool } from "pg";
@@ -13,7 +13,7 @@ import { registerContentRoutes } from "./modules/content/index.js";
 import { registerEngagementRoutes } from "./modules/engagement/index.js";
 import { registerFileRoutes } from "./modules/files/index.js";
 import { registerIdentityRoutes, type IdentityEmailSender } from "./modules/identity/index.js";
-import { registerLearningRoutes } from "./modules/learning/index.js";
+import { registerLearningRoutes, registerLessonProductiveGrading } from "./modules/learning/index.js";
 import { registerManagerRoutes, type ReminderEmailSender } from "./modules/manager/index.js";
 import { registerRequestEvidenceRoutes } from "./modules/manager/request-evidence.js";
 import { registerHolidayComplaintRoutes } from "./modules/manager/holiday-complaint-routes.js";
@@ -31,6 +31,8 @@ export interface BuildApiOptions {
   secureCookies?: boolean;
   aiRunner?: AiTaskRunner;
   aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>;
+  /** Speech-to-text for daily Speaking grading; undefined keeps recordings with the operator. */
+  speechToTextFactory?: (actorId: string) => Promise<SpeechTranscriber | undefined>;
   /** Local server-side Edge TTS; never a browser speech synthesis fallback. */
   edgeTtsRunner?: EdgeTtsRunner;
   storage?: ObjectStorage;
@@ -75,7 +77,13 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
     ...(options.identityEmailSender ? { emailSender: options.identityEmailSender } : {}),
     otpSecret: options.otpSecret ?? "local-only-change-me"
   });
-  registerLearningRoutes(app, options.pool, options.aiRunner, options.mediaService, options.aiRunnerFactory);
+  const productiveGrading = registerLessonProductiveGrading(app, {
+    pool: options.pool,
+    runnerFor: (actorId) => options.aiRunnerFactory ? options.aiRunnerFactory(actorId) : Promise.resolve(options.aiRunner),
+    transcriberFor: options.speechToTextFactory,
+    storage: options.storage
+  });
+  registerLearningRoutes(app, options.pool, options.aiRunner, options.mediaService, options.aiRunnerFactory, productiveGrading);
   registerAssessmentRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory, options.edgeTtsRunner);
   registerContentRoutes(app, options.pool, options.aiRunner, options.storage, options.aiRunnerFactory, options.mediaService);
   registerManagerRoutes(app, options.pool, {

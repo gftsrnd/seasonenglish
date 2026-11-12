@@ -188,6 +188,12 @@ export interface PartEvidence {
   score?: number | undefined;
   feedback?: string | undefined;
   artifactKey?: string | undefined;
+  /**
+   * Daily Speaking / self-written Writing graded by AI in the background:
+   * "pending" while the result is on its way (the part shows "đang chờ chấm"),
+   * "operator" when AI could not grade it and the operator review keeps it.
+   */
+  aiGrading?: "pending" | "operator" | undefined;
 }
 
 export interface LessonPartAttemptEvidenceInput {

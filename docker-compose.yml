@@ -95,6 +95,8 @@ services:
       # Core-word illustrations (monthly resources). Leave the key empty to disable AI images.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-}
+      # Daily Speaking speech-to-text (empty = gpt-4o-mini-transcribe, "off" = keep recordings for the operator).
+      OPENAI_TRANSCRIPTION_MODEL: ${OPENAI_TRANSCRIPTION_MODEL:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       IMAGE_GENERATION_CONCURRENCY: ${IMAGE_GENERATION_CONCURRENCY:-6}
       RESEND_API_KEY: ${RESEND_API_KEY:-}

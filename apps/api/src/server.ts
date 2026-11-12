@@ -6,6 +6,7 @@ import { loadEnvFile } from "node:process";
 import { buildApi } from "./app.js";
 import { createResendIdentityEmailSender, readIdentityEmailConfiguration } from "./modules/identity/index.js";
 import { createOrganizationAiRunnerFactory, normalizeAiMaxAttempts } from "./modules/ai/runtime.js";
+import { createSpeechToTextFactory, createTranscriberFromEnvironment } from "./modules/ai/speech-to-text.js";
 import { createContentMediaService } from "./modules/media/index.js";
 import { createLocalEdgeTtsRunner } from "./modules/assessment/edge-tts.js";
 import { createOpenverseProvider } from "./modules/media/providers/openverse.js";
@@ -41,6 +42,7 @@ const aiRunnerFactory = createOrganizationAiRunnerFactory(pool, aiRunner, {
   timeoutMs: aiTimeoutMs,
   maxAttempts: aiMaxAttempts
 });
+const speechToTextFactory = createSpeechToTextFactory(pool, createTranscriberFromEnvironment(process.env));
 const storage = createStorageFromEnvironment();
 const mediaService = storage ? createProductionMediaService(storage) : undefined;
 const identityEmailConfiguration = readIdentityEmailConfiguration(process.env);
@@ -67,7 +69,8 @@ const app = buildApi({
   }) } : {}),
   ...(identityEmailSender ? { identityEmailSender } : {}),
   otpSecret: process.env.AUTH_OTP_SECRET ?? "local-only-change-me",
-  aiRunnerFactory
+  aiRunnerFactory,
+  speechToTextFactory
 });
 const reportMaintenanceError = (error: unknown) => {
   process.stderr.write(`[monthly-maintenance-sweep] ${error instanceof Error ? error.message : String(error)}\n`);
