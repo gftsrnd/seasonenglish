@@ -137,6 +137,9 @@
 .monthly-resource-editor-type{padding:1px 7px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:.72rem}
 .monthly-resource-editor-meaning{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .monthly-resource-editor-count{flex:0 0 auto}
+.monthly-resource-editor-register-count{flex:0 0 auto;color:var(--primary)}
+.monthly-resource-editor-register{list-style:none;margin:8px 0 0;padding:8px 10px;border-radius:8px;background:var(--surface);display:grid;gap:4px;font-size:13px}
+.monthly-resource-editor-register small{display:inline-block;min-width:68px;color:var(--muted);font-weight:600}
 .monthly-resource-editor-core>summary:hover{background:var(--surface)}
 /* Allocation view: collapsed day cards keep their own height (no stretching next to an open card) and show the day's core words. */
 .monthly-plan-inspector .monthly-plan-days{align-items:start}

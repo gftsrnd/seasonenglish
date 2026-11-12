@@ -10,8 +10,8 @@ import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { previousMonthlyLessonAudioIndex, withLessonListeningAudio, type ListeningAudioService } from "../assessment/listening-audio.js";
 import { generateMonthlyDayWithAi, generateMonthlyReviewWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
-import { buildMonthlyCatalogPronunciationPrompt, getMonthlyPronunciationTextIssues, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, getMonthlyGrammarPhaseIssues, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
-import { MonthlyCorePhaseShortfallError, runMonthlyCorePhase } from "./monthly-core-phase.js";
+import { buildMonthlyCatalogPronunciationPrompt, getMonthlyPronunciationTextIssues, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, getMonthlyGrammarPhaseIssues, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyAiCallBudgetError, monthlyResourceAiCallLimit, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
+import { isInvalidAiOutputDefault, MonthlyCorePhaseShortfallError, runMonthlyCorePhase } from "./monthly-core-phase.js";
 import { monthlyRegisterCheckpointSchema, resumeMonthlyRegisterCheckpoint, runMonthlyRegisterTermsPhase } from "./monthly-register-phase.js";
 import { runMonthlyEnrichmentWithRefill, type MonthlyCoreEnrichmentOutcome } from "./monthly-enrichment-phase.js";
 import { buildMonthlyCrossLevelCoreExclusions, getMonthlyCoreLevelIssue } from "./monthly-resource-quality-gates.js";
@@ -268,9 +268,20 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const updateProgress = (patch: Parameters<MonthlyResourceProgressStore["update"]>[2]) => resourceProgress.update(progressKey,progressRun.runId,patch);
     // Token usage for this whole generation request, logged once at the end.
     const usageTotals = { calls: 0, inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, startedAt: Date.now() };
+    // Hard ceiling on AI calls per generation request (N6: one A1 request made
+    // ~1,000 calls). Once it is reached every further call fails fast; the core
+    // phase stops starting rounds, checkpoints are kept, and the Operator gets a
+    // clear message instead of an open-ended spend.
+    const aiCallLimit = monthlyResourceAiCallLimit();
+    const aiBudget = { started: 0, exhausted: false };
     const runner = {
       ...baseRunner,
       runTask: async (...args: Parameters<AiTaskRunner["runTask"]>) => {
+        if (aiBudget.started >= aiCallLimit) {
+          aiBudget.exhausted = true;
+          throw new MonthlyAiCallBudgetError(aiCallLimit);
+        }
+        aiBudget.started += 1;
         const result = await baseRunner.runTask(...args);
         usageTotals.calls += 1;
         usageTotals.inputTokens += result.metadata.usage?.inputTokens ?? 0;
@@ -384,6 +395,8 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         supportTargetPerCore: preflightSupportTarget,
         generate: runPhase,
         audit: runSupportAudit,
+        isInvalidAiOutput: (error: unknown) => isInvalidAiOutputDefault(error) || error instanceof MonthlyAiCallBudgetError,
+        isBudgetExhausted: () => aiBudget.started >= aiCallLimit,
         ...(otherLevelCoreWords.size ? { otherLevelCoreWords } : {}),
         ...(initial?.coreTerms.length ? { initial } : {}),
         ...(avoidWords.length ? { avoidWords } : {})
@@ -908,6 +921,9 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       logUsage(error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code) : error instanceof Error ? error.name : "failed");
       if (error instanceof MonthlyResourceCriteriaError) {
         return reply.code(422).send({ code: error.code, requiredVocabularyCount: error.requiredVocabularyCount });
+      }
+      if (aiBudget.exhausted && error instanceof MonthlyResourcePlanError && !(error instanceof MonthlyAiCallBudgetError)) {
+        error = new MonthlyResourcePlanError([...new MonthlyAiCallBudgetError(aiCallLimit).errors, ...error.errors]);
       }
       if (error instanceof MonthlyResourcePlanError) {
         console.error("Monthly resource plan rejected", { issues: error.errors, month: month.month, cefr: criteria.cefr });

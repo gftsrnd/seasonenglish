@@ -53,7 +53,7 @@ export const MONTHLY_CORE_SUB_AREAS = [
 
 const normalize = (value: string) => value.trim().toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim();
 
-const isInvalidAiOutputDefault = (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && ["AI_OUTPUT_INVALID", "AI_OUTPUT_TRUNCATED"].includes(String((error as { code?: unknown }).code)));
+export const isInvalidAiOutputDefault = (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && ["AI_OUTPUT_INVALID", "AI_OUTPUT_TRUNCATED"].includes(String((error as { code?: unknown }).code)));
 
 /** Runs `worker` over `items` with at most `limit` in flight, preserving result order. */
 export async function mapWithConcurrency<T, R>(items: readonly T[], limit: number, worker: (item: T, index: number) => Promise<R>): Promise<R[]> {
@@ -111,6 +111,8 @@ export async function runMonthlyCorePhase(input: {
   avoidWords?: readonly string[];
   /** Core words of the month's other CEFR levels (word -> level): an exclusion list in the prompt and a gate in selection. */
   otherLevelCoreWords?: ReadonlyMap<string, CefrLevel>;
+  /** True once the request-wide AI call budget is used up: no new round or gap-fill starts and the phase ends short (progress is kept). */
+  isBudgetExhausted?: () => boolean;
   now?: () => number;
 }): Promise<{ coreTerms: CoreTerm[]; supportTerms: SupportTerm[]; stats: MonthlyCorePhaseStats }> {
   const now = input.now ?? (() => Date.now());
@@ -147,6 +149,7 @@ export async function runMonthlyCorePhase(input: {
       if (edges.length) stats.auditsSkippedByPrefilter += 1;
       return [];
     }
+    if (input.isBudgetExhausted?.()) return [];
     stats.auditCalls += 1;
     const audited = await input.audit(candidate, kept);
     return keepSemanticallyAuditedSupportCandidates(kept, audited.expandedTerms);
@@ -169,7 +172,12 @@ export async function runMonthlyCorePhase(input: {
     needed: input.supportTargetPerCore
   });
 
+  const budgetExhausted = input.isBudgetExhausted ?? (() => false);
   for (let round = 0; round < maxRounds && accepted.length < input.neededCount; round += 1) {
+    if (budgetExhausted()) {
+      failures.unshift("AI call budget for this generation request was used up");
+      break;
+    }
     stats.rounds += 1;
     const missing = input.neededCount - accepted.length;
     const requested = Math.max(input.minRequest ?? 12, Math.ceil(missing * overProvision));
@@ -284,7 +292,7 @@ export async function runMonthlyCorePhase(input: {
       // Gap-fill only what this part of speech requires; an optional relation
       // (noun word family, verb/adjective umbrella) is never chased here.
       const missingRequired = requiredSupportRelationsFor(candidate.type).filter((relation) => !preliminary.some((term) => term.relation === relation));
-      const gapResults = await Promise.all(missingRequired.map(async (relation: MonthlyStructuralSupportRelation) => {
+      const gapResults = budgetExhausted() ? [] : await Promise.all(missingRequired.map(async (relation: MonthlyStructuralSupportRelation) => {
         try {
           const prompt = buildMonthlySupportRelationCandidatePrompt({
             cefr: input.cefr,

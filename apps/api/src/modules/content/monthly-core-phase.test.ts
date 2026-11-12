@@ -439,6 +439,22 @@ describe("runMonthlyCorePhase (month-wide)", () => {
     expect(message).toContain("word_family=∅");
   });
 
+  it("stops all AI work once the call budget is used up and ends short", async () => {
+    let counter = 0;
+    let produced = 0;
+    const runner = fakeRunner(({ count }) => Array.from({ length: count }, (_value, position) => {
+      produced += 1;
+      return candidateWithEdges(syntheticCore(letters(counter++)), `ai-${position}`, produced <= 1 ? {} : { family: "nofamily", type: "verb" });
+    }));
+    const error = await runMonthlyCorePhase(phaseInput(runner, 3, { maxRounds: 10, maxParallelCalls: 1, isBudgetExhausted: () => runner.generationCalls.length >= 1 })).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(MonthlyCorePhaseShortfallError);
+    // One round ran, the budget then blocked every later round.
+    expect(runner.generationCalls).toHaveLength(1);
+    expect((error as MonthlyCorePhaseShortfallError).errors.join(" ")).toContain("AI call budget");
+    // Audits are blocked too once the budget is gone.
+    expect(runner.auditedWords).toHaveLength(0);
+  });
+
   it("returns accepted cores on a shortfall and continues from them on the next run", async () => {
     let counter = 0;
     let produced = 0;

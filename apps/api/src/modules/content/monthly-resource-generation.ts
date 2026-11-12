@@ -1203,6 +1203,21 @@ export class MonthlyResourcePlanError extends Error {
   }
 }
 
+/** Default ceiling on AI calls for one monthly resource generation request (override with MONTHLY_RESOURCE_AI_CALL_LIMIT). */
+export const MONTHLY_RESOURCE_AI_CALL_LIMIT_DEFAULT = 400;
+
+export function monthlyResourceAiCallLimit(env: Record<string, string | undefined> = process.env): number {
+  const value = Number(env.MONTHLY_RESOURCE_AI_CALL_LIMIT);
+  return Number.isInteger(value) && value > 0 ? value : MONTHLY_RESOURCE_AI_CALL_LIMIT_DEFAULT;
+}
+
+/** Thrown when one generation request reaches its AI call ceiling; checkpoints already saved are kept. */
+export class MonthlyAiCallBudgetError extends MonthlyResourcePlanError {
+  constructor(readonly limit: number) {
+    super([`Đã dùng hết hạn mức ${limit} lượt gọi AI cho lần sinh này nên hệ thống đã dừng để tránh tốn chi phí. Phần đã đạt được lưu lại; bấm sinh lại sẽ tiếp tục từ đó.`]);
+  }
+}
+
 export class MonthlyResourceCriteriaError extends Error {
   constructor(
     readonly code: "VOCABULARY_COUNT_MISMATCH" | "EXPANDED_VOCABULARY_COUNT_MISMATCH",

@@ -163,9 +163,11 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
         {draft.coreTerms.map((core, index) => {
           const supports = supportsByCore.get(core.id) ?? [];
           const problems = coreIssueCount(core.id);
+          // B1–C1 slang / formal alternatives are AI-audited and read-only here; they stay while the core word is unchanged.
+          const register = (resources.coreTerms.find((term) => term.id === core.id)?.registerTerms ?? []);
           const open = openCores.has(core.id);
           return <details key={core.id} className={`monthly-resource-editor-core${problems ? " has-errors" : ""}`} open={open} onToggle={(event) => toggleCore(core.id, (event.currentTarget as HTMLDetailsElement).open)}>
-            <summary><i className="monthly-resource-editor-chevron" aria-hidden="true">▸</i><b>{index + 1}.</b> <span className="monthly-resource-editor-word">{core.word || "(trống)"}</span><small className="monthly-resource-editor-type">{core.type}</small><small className="monthly-resource-editor-meaning">{core.meaning}</small><small className="monthly-resource-editor-count">{supports.length} từ mở rộng</small>{problems > 0 && <em>{problems} lỗi</em>}</summary>
+            <summary><i className="monthly-resource-editor-chevron" aria-hidden="true">▸</i><b>{index + 1}.</b> <span className="monthly-resource-editor-word">{core.word || "(trống)"}</span><small className="monthly-resource-editor-type">{core.type}</small><small className="monthly-resource-editor-meaning">{core.meaning}</small>{register.length > 0 && <small className="monthly-resource-editor-register-count">{register.length} khẩu ngữ/văn phong</small>}<small className="monthly-resource-editor-count">{supports.length} từ mở rộng</small>{problems > 0 && <em>{problems} lỗi</em>}</summary>
             <div className="monthly-resource-editor-row core">
               <label>Từ<input aria-label={`Từ cốt lõi ${index + 1}`} aria-invalid={invalid(core.id, "word")} value={core.word} disabled={disabled} onChange={(event) => updateCore(core.id, { word: event.target.value })} /></label>
               <label>Từ loại<select aria-label={`Từ loại ${index + 1}`} aria-invalid={invalid(core.id, "type")} value={core.type} disabled={disabled} onChange={(event) => updateCore(core.id, { type: event.target.value })}>
@@ -176,6 +178,7 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
               <label>IPA<input aria-label={`IPA từ cốt lõi ${index + 1}`} aria-invalid={invalid(core.id, "ipa")} value={core.ipa} disabled={disabled} onChange={(event) => updateCore(core.id, { ipa: event.target.value })} /></label>
             </div>
             {rowErrors(core.id)}
+            {open && register.length > 0 && <ul className="monthly-resource-editor-register" aria-label={`Khẩu ngữ và văn phong của ${core.word}`}>{register.map((term) => <li key={`${term.kind}-${term.word}`}><small>{term.kind === "slang" ? "Khẩu ngữ" : "Văn phong"}</small> <b>{term.word}</b>{term.definition ? <span className="muted"> — {term.definition}</span> : null}</li>)}</ul>}
             {open && illustrations && (() => {
               const image = illustrationFor(core.id);
               if (!image) return null;
