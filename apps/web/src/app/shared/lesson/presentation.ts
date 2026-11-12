@@ -99,8 +99,9 @@ export function conciseGrammarExample(value: string | undefined): string {
   return normalized || "—";
 }
 
-// Internal roadmap step labels ("Bước 3 (Lỗi thường gặp): …", "Step B1 (Identify): …") are operator copy, not learner copy.
-const GRAMMAR_STEP_LABEL = /^\s*(?:Bước|Step)\s+[A-Z]?\d+[A-Za-z]?\s*(?:\([^)]*\))?\s*[:：–-]\s*/iu;
+// Internal roadmap step labels ("Bước 3 (Lỗi thường gặp): …", "Step B1 (Identify): …", "Bước 1 - Nhận biết: …")
+// are roadmap metadata, hidden from learners and from the operator preview.
+const GRAMMAR_STEP_LABEL = /^\s*(?:Bước|Step)\s+[A-Z]?\d+[A-Za-z]?\s*(?:\([^)]*\))?\s*(?:[–-]\s*[^:：.\n]{1,30}?\s*[:：]|[:：–-])\s*/iu;
 
 export function withoutGrammarStepLabel(value: string): string {
   const trimmed = value.trim();

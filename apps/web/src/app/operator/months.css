@@ -484,3 +484,7 @@ details.monthly-resource-editor-section>:not(summary)+:not(summary){margin-top:1
 .monthly-resource-editor .monthly-illustration-action{display:inline-flex;flex-direction:row;gap:4px;color:var(--text);font-size:.78rem;font-weight:600}
 .monthly-illustration-actions>.monthly-illustration-action:nth-child(3){grid-column:1/-1}
 @media (max-width:560px){.monthly-resource-editor-illustration{grid-template-columns:1fr}.monthly-resource-editor-illustration .monthly-illustration-tile{max-width:200px}}
+
+/* Failed-generation button: icon only in the narrow day cell (the label overflowed next to AI). */
+.monthly-day-cell .monthly-day-actions>button.monthly-view-day{padding:0;width:28px;border-color:var(--danger);background:var(--danger-soft,#fdecea);color:var(--danger)}
+.monthly-day-cell .monthly-day-actions>button.monthly-view-day span{display:none}

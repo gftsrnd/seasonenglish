@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { learnerLessonCopy } from "../shared/lesson/language.js";
+import { withoutGrammarStepLabel } from "../shared/lesson/presentation.js";
 import { LearnerLesson, SharedLessonPartContent } from "./Learning.js";
 
 afterEach(cleanup);
@@ -46,8 +47,10 @@ describe("learner grammar block", () => {
     ]);
   });
 
-  it("keeps the step label in the operator preview", () => {
-    render(<SharedLessonPartContent cefr="A1" language="vi" copy={learnerLessonCopy.vi} grammarAvailable sectionNumber={1} part={grammarPart as any} speak={vi.fn()} openVocabularyModal={vi.fn()} showGrammarStepLabel />);
-    expect(screen.getByText(/^Bước 3 \(Lỗi thường gặp\): Tìm và sửa lỗi/)).toBeInTheDocument();
+  it("strips every step label form", () => {
+    expect(withoutGrammarStepLabel("Bước 1 - Nhận biết: Tìm cấu trúc was/were.")).toBe("Tìm cấu trúc was/were.");
+    expect(withoutGrammarStepLabel("Step A1 (Identify): notice the present simple.")).toBe("Notice the present simple.");
+    expect(withoutGrammarStepLabel("Bước 2 – Biến thể: Luyện câu phủ định.")).toBe("Luyện câu phủ định.");
+    expect(withoutGrammarStepLabel("Step 2: use it.")).toBe("Use it.");
   });
 });
