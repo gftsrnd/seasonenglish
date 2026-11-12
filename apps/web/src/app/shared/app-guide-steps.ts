@@ -182,8 +182,6 @@ managerSteps["/mgr/ops/levels"] = [
   ['[data-guide="op-pending"]', "Hồ sơ chờ duyệt", "Mở hồ sơ để xem **điểm từng kỹ năng** và thông tin xét trình độ. **Vận hành** là người chọn mức."],
   ['[data-guide="op-signals"]', "Tín hiệu đổi mức", "Người học đủ tín hiệu để **thi lên mức** hoặc cần **xem xét hạ mức** trong 14 ngày gần nhất."],
   [".operator-approved-panel", "Học viên đã duyệt", "Mức hiện tại và điểm đầu vào của từng người; Quản lý **chỉ xem**."],
-  ['[data-guide="op-in-progress"]', "Đang làm test", "Người học đã bắt đầu bài đầu vào nhưng chưa nộp."],
-  ['[data-guide="op-unassessed"]', "Chưa làm test", "Người học chưa bắt đầu bài đầu vào."],
 ];
 managerSteps["/mgr/ops/review"] = [
   [".operator-review-panel", "Phản hồi Season", "Mỗi hàng là một người học. Mở hàng để đọc lượt chat và điểm Season đã chấm."],
@@ -235,19 +233,6 @@ const lessonEditorSteps: readonly GuideStep[] = [
   ['.operator-editor-collapsible[data-section="listening"], .operator-editor-section:has(textarea[aria-label="Nội dung nghe"])', "Các phần bài tập", "Từ **Nghe** trở xuống là bài tập: nhập nội dung, câu hỏi và đáp án; audio tải lên phải khớp lời nghe."],
   [".operator-editor-actions", "Kiểm tra và lưu", "Bấm **Kiểm tra & lưu** để lưu bản nháp. Mục còn thiếu sẽ tự mở và gắn nhãn **Cần bổ sung**."],
 ];
-const reopenDialogSteps: readonly GuideStep[] = [
-  [".monthly-reopen-reason", "Yêu cầu mở lại", "Ghi phần cần sửa và **lý do** để Quản lý duyệt. Kết quả đã ghi nhận của học viên được **giữ lại**."],
-];
-const avatarDialogSteps: readonly GuideStep[] = [
-  [".avatar-symbol-options", "Biểu tượng", "Chọn biểu tượng hoặc **chữ cái đầu**. Bản xem thử ở đầu hộp đổi ngay."],
-  [".avatar-swatch-options", "Màu avatar", "Chọn **màu nét** và **màu nền**, xem thử rồi bấm **Lưu avatar**."],
-];
-const planPanelSteps: readonly GuideStep[] = [
-  [".monthly-plan-inspector", "Phân bổ theo ngày", "Mỗi dòng là một ngày học hoặc ôn. Mở ngày để xem **từ vựng**, **ngữ pháp** và **phát âm** được giao."],
-];
-const resourceEditorSteps: readonly GuideStep[] = [
-  [".monthly-resource-editor-section", "Sửa tài nguyên", "Mở mục cần sửa, chỉnh từ và **quan hệ** của từ mở rộng với từ cốt lõi. Sửa hết lỗi được báo rồi **lưu bản nháp**."],
-];
 
 export function guideDefinitions(role: GuideRole, path: string) {
   if (path === "/settings" && role !== "learner") return role === "manager" ? managerSettings : operatorSettings;
@@ -257,13 +242,9 @@ export function guideDefinitions(role: GuideRole, path: string) {
 }
 
 export function guidePopupDefinitions(role: GuideRole, path: string, popup: HTMLElement): readonly GuideStep[] | undefined {
-  if (role === "operator" && (path === "/op/months" || path.startsWith("/op/months/lesson/"))) {
-    if (popup.matches(".operator-lesson-editor")) return lessonEditorSteps;
-    if (popup.matches(".monthly-reopen-dialog")) return reopenDialogSteps;
-  }
-  if (role === "learner" && popup.matches(".avatar-dialog")) return avatarDialogSteps;
-  if ((role === "operator" || role === "manager") && path.endsWith("/months") && popup.matches(".monthly-resource-panel")) return planPanelSteps;
-  if (role === "operator" && path === "/op/months" && popup.matches(".monthly-resource-editor")) return resourceEditorSteps;
+  // Chỉ popup có quy trình nhiều bước mới có hướng dẫn. Hộp thoại nhỏ, tự giải thích (mở lại bài, avatar,
+  // phân bổ theo ngày, sửa tay tài nguyên tháng) không có hướng dẫn nên nút "?" không hiện trong đó.
+  if (role === "operator" && (path === "/op/months" || path.startsWith("/op/months/lesson/")) && popup.matches(".operator-lesson-editor")) return lessonEditorSteps;
   return undefined;
 }
 
@@ -274,8 +255,4 @@ export const allGuideSteps: readonly (readonly [route: string, steps: readonly G
   ["operator /settings", operatorSettings],
   ["operator /op/months/lesson/*", monthlyLessonOperatorSteps],
   ["operator popup lesson editor", lessonEditorSteps],
-  ["operator popup reopen", reopenDialogSteps],
-  ["learner popup avatar", avatarDialogSteps],
-  ["popup plan", planPanelSteps],
-  ["operator popup resource editor", resourceEditorSteps],
 ];

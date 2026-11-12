@@ -132,7 +132,7 @@ describe("AppGuide", () => {
     expect(document.querySelector<HTMLElement>(".app-guide-spotlight")).toBeTruthy();
   });
 
-  it("guides reopening an approved monthly lesson in its page and request dialog", async () => {
+  it("guides the approved monthly lesson page but adds no help button to the small reopen dialog", async () => {
     const page = <div className="row operator-page-title-actions"><button className="operator-lesson-reopen-button">Yêu cầu mở lại</button></div>;
     const { rerender } = render(<><AppGuide role="operator" pathname="/op/months/lesson/framework/1" compact={false} />{page}</>);
     fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
@@ -144,8 +144,8 @@ describe("AppGuide", () => {
       </section>
     </>);
     const dialog = screen.getByRole("dialog", { name: "Yêu cầu mở lại bài 1" });
-    fireEvent.click(await within(dialog).findByRole("button", { name: "Hướng dẫn sử dụng" }));
-    expect(screen.getByRole("heading", { name: "Yêu cầu mở lại" })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Hướng dẫn sử dụng" })).toBeNull());
+    expect(within(dialog).queryByRole("button", { name: "Hướng dẫn sử dụng" })).toBeNull();
   });
 
   it("keeps keyboard navigation inside the guide and restores focus on close", () => {
@@ -420,7 +420,7 @@ describe("AppGuide", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("puts the help trigger inside a supported modal and shows only its steps", async () => {
+  it("shows no help button inside a small modal without its own guide", async () => {
     const content = (avatarOpen: boolean) => <><AppGuide role="learner" pathname="/profile" compact={false} />
       <section className="profile-identity-card"><button>Hồ sơ</button></section>
       {avatarOpen && <section className="avatar-dialog" role="dialog" aria-modal="true" aria-label="Avatar">
@@ -428,17 +428,12 @@ describe("AppGuide", () => {
       </section>}
     </>;
     const { rerender } = render(content(false));
+    expect(screen.getByRole("button", { name: "Hướng dẫn sử dụng" })).toBeTruthy();
     rerender(content(true));
     const avatar = screen.getByRole("dialog", { name: "Avatar" });
-    const trigger = await within(avatar).findByRole("button", { name: "Hướng dẫn sử dụng" });
-    fireEvent.click(trigger);
-    const panel = screen.getByRole("dialog", { name: "Hướng dẫn sử dụng" });
-    expect(within(panel).getByRole("heading", { name: "Biểu tượng" })).toBeTruthy();
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "Hướng dẫn sử dụng" })).toBeNull();
-    expect(screen.getByRole("dialog", { name: "Avatar" })).toBe(avatar);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Hướng dẫn sử dụng" })).toBeNull());
+    expect(within(avatar).queryByRole("button", { name: "Hướng dẫn sử dụng" })).toBeNull();
   });
-
   it("guides the appealable results card and the sent appeals", () => {
     render(<><AppGuide role="learner" pathname="/support" compact />
       <main className="learner-support-page">
