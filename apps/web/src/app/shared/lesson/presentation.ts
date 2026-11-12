@@ -121,7 +121,9 @@ export function withoutGrammarStepLabel(value: string): string {
 export function grammarFormulaLines(formula: string, maxLines = 3): string[] {
   const text = formula.replace(/\s+/gu, " ").trim();
   if (!text) return [];
-  const parts = text.split(/\s+→\s+/u).map((part) => part.trim()).filter(Boolean);
+  let parts = text.split(/\s+→\s+/u).map((part) => part.trim()).filter(Boolean);
+  // Two named patterns written as sentences ("Past simple: … (…). Past continuous: … (…)") also get a line each.
+  if (parts.length < 2) parts = text.split(/(?<=[.;)])\s+(?=\p{Lu}[\p{L}'’ -]{2,30}:\s)/u).map((part) => part.replace(/\.$/u, "").trim()).filter(Boolean);
   if (parts.length < 2 || text.length < 60 || parts.some((part) => part.length < 12)) return [text];
   return parts.length <= maxLines ? parts : [...parts.slice(0, maxLines - 1), parts.slice(maxLines - 1).join(" → ")];
 }

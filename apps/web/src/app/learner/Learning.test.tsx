@@ -645,10 +645,9 @@ describe("learner lesson study content", () => {
     fireEvent.click(screen.getByRole("button", { name: /Từ bao trùm: accident/ }));
     const modal = screen.getByRole("dialog", { name: "Từ bao quát" });
     const entries = modal.querySelectorAll(".vocabulary-relation-audio-item");
-    expect(entries).toHaveLength(2);
-    expect(entries[0]).toHaveTextContent("fell");
-    expect(entries[0]).toHaveTextContent("từ của bài");
-    expect(entries[1]).toHaveTextContent("slipped");
+    // The lesson word is already on the card; the umbrella popup lists only the other words.
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toHaveTextContent("slipped");
     fireEvent.click(screen.getByRole("button", { name: "Nghe từ bao trùm: accident" }));
     fireEvent.click(screen.getByRole("button", { name: "Nghe từ cùng nhóm: slipped" }));
     expect(speak).toHaveBeenCalledWith("accident");
