@@ -7,6 +7,7 @@ import { ErrorText, Notice, PageTitle, AppLink, LearnerSupportCard } from "./ui.
 import { BadgeCertificate, CertificateActions } from "./CertificateDocument.js";
 import { CourseAssessmentResult } from "./CourseCompletion.js";
 import { SeasonProgressCard } from "../shared/SeasonProgressCard.js";
+import { formatPercent, formatScore, formatScoreOutOf } from "../shared/format-score.js";
 
 export function LearnerSurvey({ view, actions }: { view: SurveyView; actions: LearnerCallbacks }) {
   const [rating, setRating] = useState<number | null>(view.answers?.rating ?? null);
@@ -116,12 +117,12 @@ function AssessmentResult({ label, result, action }: { label: string; result: Pr
   </div>;
   return <div className="profile-assessment-result" role="region" aria-label={label}>
     <div className="eyebrow">{shortLabel}{result.approvedLevel ? ` · ${result.approvedLevel}` : ""}</div>
-    <strong className="profile-assessment-total">{result.totalScore}</strong>
+    <strong className="profile-assessment-total">{formatScore(result.totalScore)}</strong>
     <div className="profile-assessment-skills">{ASSESSMENT_SKILLS.map((section) => {
       const score = result.sections[section] ?? 0;
       const max = result.sectionMaxScores?.[section];
       const percent = Math.max(0, Math.min(100, max ? score / max * 100 : score));
-      return <div className="profile-assessment-skill" key={section}><span>{SECTION_LABELS[section]}</span><i aria-hidden="true"><b style={{ width: `${percent}%` }} /></i><small>{max ? `${score}/${max}` : `${percent}%`}</small></div>;
+      return <div className="profile-assessment-skill" key={section}><span>{SECTION_LABELS[section]}</span><i aria-hidden="true"><b style={{ width: `${percent}%` }} /></i><small>{max ? formatScoreOutOf(score, max) : formatPercent(percent)}</small></div>;
     })}</div>
   </div>;
 }

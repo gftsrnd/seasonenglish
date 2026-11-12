@@ -3112,6 +3112,15 @@ body:has(.app-operator) #modal > .dialog > .row {
   border-top: 2px solid var(--line);
   background: var(--surface-2, #f7f5f1);
 }
+/* The total row reuses <th> cells; undo the small, muted, uppercase header look so the total reads first. */
+.operator-total-row > :is(th, td),
+.operator-skill-scores > li.operator-total-row .operator-skill-score-head > b {
+  color: var(--text);
+  font-size: 0.98rem;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: normal;
+}
 
 .operator-manual-score { display: block; margin: 0; border: 0; padding: 0; }
 

@@ -9,6 +9,7 @@ import { useExperience } from "../../features/experience/Experience.js";
 import { cancelExclusiveAudio } from "../../features/experience/audio-precedence.js";
 import { ApiError } from "../../api/runtime.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
+import { formatScore, formatScoreOutOf } from "../shared/format-score.js";
 
 const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing", "speaking"];
 const soundCheckText = "Đây là câu kiểm tra âm thanh. Nếu bạn nghe rõ câu này, tai nghe của bạn đã sẵn sàng.";
@@ -150,7 +151,7 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
       <section className={compact ? "card assessment-prep-compact" : "card"}>
         {compact ? <>
           {definition.kind !== "placement" ? <h2>{definition.title}</h2> : null}
-          <p className="assessment-prep-overview">{definition.sections.length} kỹ năng · {timed ? `${definition.totalMinutes} phút` : "Không tính giờ"} · {definition.totalScore} điểm</p>
+          <p className="assessment-prep-overview">{definition.sections.length} kỹ năng · {timed ? `${definition.totalMinutes} phút` : "Không tính giờ"} · {formatScore(definition.totalScore)} điểm</p>
           <div className="assessment-device-checks">
             <h3>Thử tai nghe/loa và micro</h3>
             {equipmentChecks}
@@ -165,7 +166,7 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
                 <th scope="row">{sectionTableTitle(section.code)}</th>
                 <td>{section.groups.reduce((count, group) => count + group.tasks.length, 0)}</td>
                 {timed ? <td>{section.durationMinutes}</td> : null}
-                <td>{section.maxScore}</td>
+                <td>{formatScore(section.maxScore)}</td>
               </tr>)}</tbody>
             </table>
             {definition.sections.some(section => section.code === "reading" && /ngữ pháp|từ vựng/i.test(section.title))
@@ -178,7 +179,7 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
           </section>
         </> : <>
           <h2>{definition.title}</h2>
-          <div className="table-wrap"><table className="assessment-structure-table" aria-label="Cấu trúc bài test" style={{ width: "100%", tableLayout: "fixed" }}><colgroup><col style={{ width: "13%" }} /><col style={{ width: "18%" }} /><col style={{ width: "12%" }} /><col style={{ width: "57%" }} /></colgroup><thead><tr><th>Phần</th><th>Thời gian</th><th>Điểm</th><th>Nội dung</th></tr></thead><tbody>{definition.sections.map((section) => <tr key={section.code}><td>{sectionTableTitle(section.code)}</td><td>{view.timed === false ? "—" : `${section.durationMinutes} phút`}</td><td><b>{section.maxScore}</b></td><td>{sectionSummary(section.code)}</td></tr>)}</tbody></table></div>
+          <div className="table-wrap"><table className="assessment-structure-table" aria-label="Cấu trúc bài test" style={{ width: "100%", tableLayout: "fixed" }}><colgroup><col style={{ width: "13%" }} /><col style={{ width: "18%" }} /><col style={{ width: "12%" }} /><col style={{ width: "57%" }} /></colgroup><thead><tr><th>Phần</th><th>Thời gian</th><th>Điểm</th><th>Nội dung</th></tr></thead><tbody>{definition.sections.map((section) => <tr key={section.code}><td>{sectionTableTitle(section.code)}</td><td>{view.timed === false ? "—" : `${section.durationMinutes} phút`}</td><td><b>{formatScore(section.maxScore)}</b></td><td>{sectionSummary(section.code)}</td></tr>)}</tbody></table></div>
           {examNote}
           <h3>Quy định làm bài – đọc trước khi bắt đầu</h3>
           {rules}
@@ -339,12 +340,12 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
       <span className="sr-only" role="status" aria-live="polite">{savingCount > 0 ? "Đang lưu câu trả lời…" : "Các câu trả lời đã lưu"}</span>
     </section>
     <section className="card assessment-content-card">
-      <h2>Phần {sectionIndex + 1} – {section.title} <span className="badge">{section.maxScore} điểm</span></h2>
+      <h2>Phần {sectionIndex + 1} – {section.title} <span className="badge">{formatScore(section.maxScore)} điểm</span></h2>
       {section.instructions.length ? <p className="small assessment-section-instructions">{section.instructions.join(" · ")}</p> : null}
       {section.code === "speaking" ? <p className="small muted assessment-speaking-upload-guide">Mỗi task: ghi âm trực tiếp hoặc tải MP3, M4A, WAV, OGG hoặc WebM · tối đa 20 MB.</p> : null}
       <div className="assessment-section-groups">
     {section.groups.map((group, groupIndex) => <section className={`card soft assessment-task-group assessment-task-group-${section.code}`} style={{ marginTop: 0 }} key={group.key}>
-      <div className="assessment-task-group-heading"><h3 className="assessment-task-group-title">{group.title}</h3>{section.code === "writing" && group.tasks.length === 1 ? <span className="badge">{group.tasks[0]?.maxScore} điểm</span> : null}</div>
+      <div className="assessment-task-group-heading"><h3 className="assessment-task-group-title">{group.title}</h3>{section.code === "writing" && group.tasks.length === 1 ? <span className="badge">{formatScore(group.tasks[0]?.maxScore)} điểm</span> : null}</div>
       <p className="assessment-task-group-instruction">{group.instruction}</p>
       <div className="assessment-task-content" style={{ display: "grid", gap: 12, marginTop: 12 }}>
         {group.stimulus ? <Stimulus stimulus={group.stimulus} maxPlays={group.maxPlays ?? 0} played={attempt.audioPlayCounts[`${section.code}:${group.key}`] ?? runtimeAudioCount(view, section.code, group.key)} onPlay={async (text, audioSrc) => {
@@ -490,8 +491,8 @@ function soundCheckStatus(status: string) {
 function AssessmentResult({ attempt }: { attempt: NonNullable<AssessmentView["attempt"]> }) {
   const scores = sectionOrder.flatMap((code) => attempt.sectionScores?.[code] == null ? [] : [[code, attempt.sectionScores[code]!] as const]);
   return <div className="card flat" aria-label="Kết quả bài đánh giá">
-    <div className="row between"><b>Tổng điểm</b><strong>{attempt.totalScore}/100{attempt.suggestedLevel ? ` · ${attempt.suggestedLevel}` : ""}</strong></div>
-    {scores.length ? <div className="grid cols-2" style={{ marginTop: 10 }}>{scores.map(([code, score]) => <div className="row between" key={code}><span>{sectionLabel(code)}</span><b>{score}</b></div>)}</div> : null}
+    <div className="row between"><b>Tổng điểm</b><strong>{formatScoreOutOf(attempt.totalScore, 100)}{attempt.suggestedLevel ? ` · ${attempt.suggestedLevel}` : ""}</strong></div>
+    {scores.length ? <div className="grid cols-2" style={{ marginTop: 10 }}>{scores.map(([code, score]) => <div className="row between" key={code}><span>{sectionLabel(code)}</span><b>{formatScore(score)}</b></div>)}</div> : null}
   </div>;
 }
 
@@ -547,7 +548,7 @@ function Task({ task, number, questionNumber, value, response, view, actions, se
   const answerHint = [task.minWords ? `Tối thiểu ${task.minWords} từ.` : null, task.maxWords ? `Tối đa ${task.maxWords} từ.` : null].filter(Boolean).join(" ");
   const wordTarget = task.minWords && task.maxWords ? `${task.minWords}–${task.maxWords}` : task.minWords ? `≥ ${task.minWords}` : task.maxWords ? `${task.maxWords}` : null;
   return <article className={`card flat assessment-task-card${showHeading ? "" : " assessment-task-response"}`} data-task-key={task.key}>
-    {showHeading ? <div className="assessment-task-heading"><h4>{task.title ?? `Task ${number}`}</h4><span className="badge">{task.maxScore} điểm</span></div> : null}
+    {showHeading ? <div className="assessment-task-heading"><h4>{task.title ?? `Task ${number}`}</h4><span className="badge">{formatScore(task.maxScore)} điểm</span></div> : null}
     <p id={promptId} className="assessment-task-prompt" style={task.responseType === "speaking_evidence" ? { whiteSpace: "pre-line" } : undefined}>{questionNumber ? `${questionNumber}. ` : null}{renderAssessmentPrompt(task.prompt)}</p>
     {task.interaction ? <div className="card soft assessment-roleplay-brief" role="note">
       <b>Khách hàng mở đầu:</b>

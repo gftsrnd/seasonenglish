@@ -7,6 +7,7 @@ import { resolveBackgroundMusic } from "../../features/experience/music-selectio
 import { createMusicPlayer, type MusicPlayer } from "../../features/experience/music-player.js";
 import { useTheme } from "../shared/ThemeProvider.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
+import { formatScoreOutOf } from "../shared/format-score.js";
 
 export type AiConfigurationView = ManagerProviderSettingsView;
 export type AiConfigurationInput = ManagerProviderSettingsInput;
@@ -199,7 +200,7 @@ function OperatorAccountsSection({ overview }: { overview: OperatorSettingsOverv
           <td role="cell" className="settings-account-email">{account.email || "—"}</td>
           <td role="cell" className="settings-account-role">{roleLabel(account.role)}</td>
           <td role="cell" className="settings-account-level"><span className="settings-account-label" aria-hidden="true">Mức</span>{account.role === "learner" ? account.cefr ?? "—" : "—"}</td>
-          <td role="cell" className="settings-account-score"><span className="settings-account-label" aria-hidden="true">Điểm đầu vào</span>{account.role !== "learner" ? "—" : account.placementScore == null ? "Chưa có bài test" : `${account.placementScore}/100`}</td>
+          <td role="cell" className="settings-account-score"><span className="settings-account-label" aria-hidden="true">Điểm đầu vào</span>{account.role !== "learner" ? "—" : account.placementScore == null ? "Chưa có bài test" : formatScoreOutOf(account.placementScore, 100)}</td>
           <td role="cell" className="settings-account-status"><AccountStatusBadge status={account.status} /></td>
         </tr>)}</tbody>
       </table>

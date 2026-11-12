@@ -595,7 +595,7 @@ describe("app coach and weekly practice speech input", () => {
 
     expect(screen.getByRole("heading", { name: "Thử thách lên mức B1" })).toBeInTheDocument();
     expect(screen.getByText("Season nói ở mức B1 · lượt 2/6")).toBeInTheDocument();
-    expect(screen.getByText("TB 3.5/5 · lạc đề 1")).toBeInTheDocument();
+    expect(screen.getByText("TB 3,5/5 · lạc đề 1")).toBeInTheDocument();
     expect(screen.getByText("3.5/5")).toBeInTheDocument();
     expect(screen.getByText(/đã dùng hết 20 lượt chat hôm nay/i)).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Câu trả lời thử thách" })).toBeDisabled();

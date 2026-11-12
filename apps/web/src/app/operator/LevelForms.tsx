@@ -6,6 +6,7 @@ import { operatorDateTime } from "./adapters.js";
 import { ApiError } from "../../api/runtime.js";
 import { ScrollJumpButton, useScrollJump } from "../shared/ScrollJump.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
+import { formatScore } from "../shared/format-score.js";
 
 type LevelFormsUiView = OperatorLevelFormsView & {
   loading?: boolean;
@@ -268,7 +269,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
   }, []);
 
   const renderSection = (section: AssessmentLevelFormUpdateInput["sections"][number], sectionIndex: number) => <details className="operator-level-section" key={section.code}>
-    <summary><span><b>{section.title}</b><small>{section.groups.reduce((count, group) => count + group.tasks.length, 0)} câu · {section.durationMinutes} phút · {section.maxScore} điểm</small></span></summary>
+    <summary><span><b>{section.title}</b><small>{section.groups.reduce((count, group) => count + group.tasks.length, 0)} câu · {section.durationMinutes} phút · {formatScore(section.maxScore)} điểm</small></span></summary>
     <p className="small operator-level-instructions">{section.instructions.join(" · ")}</p>
     {section.groups.map((group, groupIndex) => {
       const audioSrc = group.stimulus?.type === "audio_script" ? group.stimulus.audioSrc?.trim() : undefined;

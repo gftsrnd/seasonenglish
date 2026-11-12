@@ -5,6 +5,7 @@ import { AssessmentAppealForm } from "./AssessmentAppealForm.js";
 import { CertificateActions, CertificateDocument } from "./CertificateDocument.js";
 import type { CourseCompletionView } from "@e4s/contracts";
 import { learnerApiClient } from "../../api/learner.js";
+import { formatScore, formatScoreOutOf } from "../shared/format-score.js";
 
 const sectionNames = { listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" };
 const outcomeNames = { correct: "Đúng", incorrect: "Sai", unanswered: "Chưa trả lời" };
@@ -59,11 +60,11 @@ export function CourseAssessmentResult() {
     <div className="eyebrow">Điểm đầu ra · C1</div>
     {!record ? error ? <p role="alert">Chưa tải được điểm đầu ra. <button type="button" className="btn" onClick={retry}>Thử lại</button></p>
       : <span role="status" className="muted">Đang tải điểm đầu ra…</span> : <>
-      {total !== null ? <div><strong className="profile-assessment-total">{total}</strong><span className="muted"> / {maxScore}</span></div> : <span className="muted">Chưa có tổng điểm.</span>}
+      {total !== null ? <div><strong className="profile-assessment-total">{formatScore(total)}</strong><span className="muted"> / {formatScore(maxScore)}</span></div> : <span className="muted">Chưa có tổng điểm.</span>}
       <details className="course-completion-report">
         <summary><span>Chi tiết điểm đầu ra</span><ChevronDown size={18} aria-hidden="true" /></summary>
         {record.scores.length ? <dl>
-          {record.scores.map(item => <div key={item.section}><dt>{sectionNames[item.section]}</dt><dd>{item.score === null ? "Chưa có điểm" : `${item.score}/${item.maxScore}`}</dd></div>)}
+          {record.scores.map(item => <div key={item.section}><dt>{sectionNames[item.section]}</dt><dd>{item.score === null ? "Chưa có điểm" : formatScoreOutOf(item.score, item.maxScore)}</dd></div>)}
         </dl> : <p>Chưa có bảng điểm chi tiết để hiển thị.</p>}
         {record.objectiveResults?.map(result => <details className="course-completion-questions" key={result.section}>
           <summary>Xem từng câu · {sectionNames[result.section]}</summary>

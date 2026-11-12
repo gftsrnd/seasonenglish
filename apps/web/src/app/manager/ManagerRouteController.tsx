@@ -20,6 +20,7 @@ import { autoSeasonTheme } from "../games/season-visual.js";
 import { useTheme } from "../shared/ThemeProvider.js";
 import { useToast } from "../shared/design-system.js";
 import { ArchiveRestore, ChevronDown, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { formatScoreOutOf } from "../shared/format-score.js";
 
 export type ManagerRouteControllerProps = { role: "manager" | "operator"; currentUserId: string; onSessionRevoked?: (() => void) | undefined };
 
@@ -164,8 +165,8 @@ function LearnerProfileDialog({ view, onClose, onRename }: { view: ManagerLearne
       </form> : <button className="btn btn-sm manager-rename-button" type="button" onClick={() => { setDisplayName(view.learner.displayName); setEditing(true); }}>Đổi tên hiển thị</button>}
       <section className="card soft manager-profile-card" aria-label="Kết quả đánh giá">
         <div className="grid cols-2 manager-profile-assessments">
-          <div><b>Điểm đầu vào</b><p>{view.assessmentScores?.placement == null ? "Chưa có điểm" : `${view.assessmentScores.placement}/100`}</p></div>
-          <div><b>Điểm đầu ra · Pass Course</b><p>{view.assessmentScores?.passCourse == null ? "Chưa có điểm" : `${view.assessmentScores.passCourse}/100`}</p></div>
+          <div><b>Điểm đầu vào</b><p>{view.assessmentScores?.placement == null ? "Chưa có điểm" : formatScoreOutOf(view.assessmentScores.placement, 100)}</p></div>
+          <div><b>Điểm đầu ra · Pass Course</b><p>{view.assessmentScores?.passCourse == null ? "Chưa có điểm" : formatScoreOutOf(view.assessmentScores.passCourse, 100)}</p></div>
         </div>
       </section>
       <div className="card soft manager-profile-card">

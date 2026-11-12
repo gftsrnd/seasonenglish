@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { useManagerSectionHeader } from "../manager/shared.js";
 import type { Cefr, RubricScore, Suggestion } from "./types.js";
+import { formatScoreOutOf } from "../shared/format-score.js";
 
 export function OperatorPage({ children, title }: { children: ReactNode; title: string; hideRouteBack?: boolean }) {
   return <div className="app-operator" aria-label={title}>{children}</div>;
@@ -36,7 +37,7 @@ export function Banner({ tone, icon, children }: { tone: "warn" | "info" | "ok" 
 
 export function Rubric({ value }: { value: RubricScore | null | undefined }) {
   if (!value) return null;
-  return <span className="chips"><span className="chip">Ý: {value.meaning}/5</span><span className="chip">Từ: {value.vocab}/5</span><span className="chip">NP: {value.grammar}/5</span></span>;
+  return <span className="chips"><span className="chip">Ý: {formatScoreOutOf(value.meaning, 5)}</span><span className="chip">Từ: {formatScoreOutOf(value.vocab, 5)}</span><span className="chip">NP: {formatScoreOutOf(value.grammar, 5)}</span></span>;
 }
 
 export function Suggestions({ items = [] }: { items: Suggestion[] | undefined }) {

@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { AssessmentProductiveRubricItem, ManualAssessmentScoreInput } from "@e4s/contracts";
+import { formatScore, formatScoreOutOf } from "../shared/format-score.js";
 
 export type ManualScoreInput = ManualAssessmentScoreInput;
 export function AssessmentMonthlyRubricScore({ rubric, saved, comment, onSave, saving, writingContent, speakingContent }: {
@@ -26,12 +27,12 @@ export function AssessmentMonthlyRubricScore({ rubric, saved, comment, onSave, s
       const total = items.reduce((sum, item) => sum + (Number(scores[item.code]) || 0), 0);
       const maximum = items.reduce((sum, item) => sum + item.maxScore, 0);
       return <details key={skill} className="operator-answer-section operator-manual-score-section" data-assessment-section={skill}>
-        <summary className="operator-answer-section-summary"><b>{skill === "writing" ? "Viết" : "Nói"} · {items.some(({ code }) => scores[code]) ? `${total}/${maximum}` : "Chờ chấm"}</b></summary>
+        <summary className="operator-answer-section-summary"><b>{skill === "writing" ? "Viết" : "Nói"} · {items.some(({ code }) => scores[code]) ? formatScoreOutOf(total, maximum) : "Chờ chấm"}</b></summary>
         {skill === "writing" ? writingContent : speakingContent}
         <div className="operator-manual-rubric" data-manual-rubric={skill}>
           {skill === "speaking" && <p className="small muted">Nghe bản ghi để chấm phát âm và độ liền mạch.</p>}
           <div className="operator-rubric-grid">{items.map(({ code, description, maxScore }) => <label className="operator-rubric-field" key={code}>
-            {description} · tối đa {maxScore} điểm
+            {description} · tối đa {formatScore(maxScore)} điểm
             <input aria-label={`${code} · ${description}`} type="number" min={0} max={maxScore} step="any" value={scores[code] ?? ""} onChange={event => setScores(current => ({ ...current, [code]: event.target.value }))} />
           </label>)}</div>
         </div>
@@ -127,12 +128,12 @@ export function AssessmentManualScore({ writingTasks, speakingTasks, comment, on
   };
   return <div className="operator-manual-score">
     <details className="operator-answer-section operator-manual-score-section" data-assessment-section="writing" aria-labelledby="operator-evidence-writing">
-      <summary className="operator-answer-section-summary"><b id="operator-evidence-writing">Viết · {persistedWritingScore != null ? `${persistedWritingScore}/20` : writingStarted ? `${summary.writingScore}/20 (đang nhập)` : "Chờ chấm"}</b></summary>{writingContent}
-      <div className="operator-manual-rubric" data-manual-rubric="writing">{WRITING_TASKS.map((task, index) => <fieldset key={task.key}><legend><b>{passCourseRubric ? `Bài viết ${index + 1}` : task.label}</b> <span className="small muted">({passCourseRubric ? `tối đa ${taskWeight(task.key, task.weight)} điểm` : task.note})</span></legend><RubricGrid taskKey={task.key} criteria={writing[task.key] ?? {}} onChange={(key, value) => update("writing", task.key, key, value)} fields={WRITING_CRITERIA} max={4} /></fieldset>)}<p className="small muted">{passCourseRubric ? "Mỗi bài viết có 5 tiêu chí, mỗi tiêu chí từ 0 đến 4." : "Mỗi task có rubric riêng: 5 tiêu chí × 0–4; Task 1 quy đổi 7 điểm và Task 2 quy đổi 13 điểm."}</p></div>
+      <summary className="operator-answer-section-summary"><b id="operator-evidence-writing">Viết · {persistedWritingScore != null ? formatScoreOutOf(persistedWritingScore, 20) : writingStarted ? `${formatScoreOutOf(summary.writingScore, 20)} (đang nhập)` : "Chờ chấm"}</b></summary>{writingContent}
+      <div className="operator-manual-rubric" data-manual-rubric="writing">{WRITING_TASKS.map((task, index) => <fieldset key={task.key}><legend><b>{passCourseRubric ? `Bài viết ${index + 1}` : task.label}</b> <span className="small muted">({passCourseRubric ? `tối đa ${formatScore(taskWeight(task.key, task.weight))} điểm` : task.note})</span></legend><RubricGrid taskKey={task.key} criteria={writing[task.key] ?? {}} onChange={(key, value) => update("writing", task.key, key, value)} fields={WRITING_CRITERIA} max={4} /></fieldset>)}<p className="small muted">{passCourseRubric ? "Mỗi bài viết có 5 tiêu chí, mỗi tiêu chí từ 0 đến 4." : "Mỗi task có rubric riêng: 5 tiêu chí × 0–4; Task 1 quy đổi 7 điểm và Task 2 quy đổi 13 điểm."}</p></div>
     </details>
     <details className="operator-answer-section operator-manual-score-section" data-assessment-section="speaking" aria-labelledby="operator-evidence-speaking">
-      <summary className="operator-answer-section-summary"><b id="operator-evidence-speaking">Nói · {persistedSpeakingScore != null ? `${persistedSpeakingScore}/20` : speakingStarted ? `${summary.speakingScore}/20 (đang nhập)` : "Chờ chấm"}</b></summary>{speakingContent}
-      <div className="operator-manual-rubric" data-manual-rubric="speaking">{SPEAKING_TASKS.map((task, index) => <fieldset key={task.key}><legend><b>{passCourseRubric ? `Bài nói ${index + 1}` : task.label}</b> <span className="small muted">({passCourseRubric ? `tối đa ${taskWeight(task.key, 5)} điểm` : task.note})</span></legend><RubricGrid taskKey={task.key} criteria={speaking[task.key] ?? {}} onChange={(key, value) => update("speaking", task.key, key, value)} fields={SPEAKING_CRITERIA} max={5} /></fieldset>)}<p className="small muted">{passCourseRubric ? "Mỗi bài nói có 4 tiêu chí, mỗi tiêu chí từ 0 đến 5. Phần này không chấm phát âm." : "Mỗi task có 4 tiêu chí × 0–5 và được quy đổi về tối đa 5 điểm. MVP không chấm phát âm."}</p></div>
+      <summary className="operator-answer-section-summary"><b id="operator-evidence-speaking">Nói · {persistedSpeakingScore != null ? formatScoreOutOf(persistedSpeakingScore, 20) : speakingStarted ? `${formatScoreOutOf(summary.speakingScore, 20)} (đang nhập)` : "Chờ chấm"}</b></summary>{speakingContent}
+      <div className="operator-manual-rubric" data-manual-rubric="speaking">{SPEAKING_TASKS.map((task, index) => <fieldset key={task.key}><legend><b>{passCourseRubric ? `Bài nói ${index + 1}` : task.label}</b> <span className="small muted">({passCourseRubric ? `tối đa ${formatScore(taskWeight(task.key, 5))} điểm` : task.note})</span></legend><RubricGrid taskKey={task.key} criteria={speaking[task.key] ?? {}} onChange={(key, value) => update("speaking", task.key, key, value)} fields={SPEAKING_CRITERIA} max={5} /></fieldset>)}<p className="small muted">{passCourseRubric ? "Mỗi bài nói có 4 tiêu chí, mỗi tiêu chí từ 0 đến 5. Phần này không chấm phát âm." : "Mỗi task có 4 tiêu chí × 0–5 và được quy đổi về tối đa 5 điểm. MVP không chấm phát âm."}</p></div>
     </details>
     <h4 className="operator-detail-section-title operator-manual-comment-title">Nhận xét</h4><label className="operator-manual-comment"><span className="sr-only">Nhận xét</span><textarea aria-label="Nhận xét" value={note} rows={3} onChange={(event) => setNote(event.target.value)} /></label>
     <button className="btn-sm btn-danger" type="button" disabled={!canSave || saving} onClick={() => { if (canSave && !saving) setConfirming(true); }}>{saving ? "Đang lưu…" : "Lưu điểm chấm tay"}</button>{!canSave && <p className="small muted" role="status">Nhập đủ rubric riêng cho 2 task Viết và 4 task Nói trước khi lưu.</p>}

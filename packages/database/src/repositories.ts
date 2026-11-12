@@ -4,6 +4,7 @@ import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbse
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
 import { pickGameWordExample } from "@e4s/domain/engagement";
+import { formatDisplayScore } from "./score-format.js";
 import { buildMonthlyCalendar, formatMonthlyDayLabel, monthlyLessonDisplayTitle, evaluateMonthlyLessonAccess, monthlyAttendanceDates, mergedVietnamHolidays, withMonthlyExpandedTerms, type MonthlyLessonAccess, type MonthlyVocabularyCore } from "@e4s/domain/monthly";
 import { FROZEN_MONTHLY_ILLUSTRATIONS_SQL, withFrozenMonthlyIllustrations, type FrozenMonthlyIllustration } from "./monthly-illustration-projection.js";
 import { generationFindingsFromPayload } from "./generation-findings.js";
@@ -2645,9 +2646,9 @@ function buildLevelReadiness(input: {
   const displays: Record<LevelReadinessMetric["key"], string> = {
     lessonCompletion: `${input.completedLessons}/${input.totalLessons} bài`,
     firstTryAccuracy: `${input.firstTryCorrect}/${input.firstTryTotal} phần`,
-    weeklyPractice: input.weeklyPractice || input.weeklyPractice === 0 ? `${input.weeklyPractice}/100` : "Chưa có bài được chấm",
-    coachRubric: `${round(input.coachRubric)}/5 · ${input.coachTurns} lượt trong tháng`,
-    wrongRate: `${round(input.wrongRate)}% · ${input.attemptedParts} phần`
+    weeklyPractice: input.weeklyPractice || input.weeklyPractice === 0 ? `${formatDisplayScore(input.weeklyPractice)}/100` : "Chưa có bài được chấm",
+    coachRubric: `${formatDisplayScore(input.coachRubric)}/5 · ${input.coachTurns} lượt trong tháng`,
+    wrongRate: `${formatDisplayScore(input.wrongRate)}% · ${input.attemptedParts} phần`
   };
   const criteria: LevelReadinessMetric[] = calculated.criteria.map((criterion) => ({
     ...criterion, label: labels[criterion.key], display: displays[criterion.key]
@@ -2677,10 +2678,6 @@ function buildAssessmentSnapshots(rows: Array<{
   };
   const passCourse = build("pass_course");
   return { placement: build("placement"), ...(passCourse ? { passCourse } : {}) };
-}
-
-function round(value: number): number {
-  return Math.round(value * 10) / 10;
 }
 
 function mapLessonRow(row: {
@@ -6818,7 +6815,7 @@ class AssessmentRepository {
            on conflict (attempt_id) do update set suggested_level = excluded.suggested_level,
              status = case when assessment_decisions.status = 'approved' then assessment_decisions.status else 'suggested' end,
              reason = case when assessment_decisions.status = 'approved' then assessment_decisions.reason else excluded.reason end`,
-          [randomUUID(), input.attemptId, suggestedLevel, `Tổng điểm chấm tay ${totalScore}/100.`]
+          [randomUUID(), input.attemptId, suggestedLevel, `Tổng điểm chấm tay ${formatDisplayScore(totalScore)}/100.`]
         );
       }
       await client.query(
@@ -7629,7 +7626,7 @@ class AssessmentRepository {
       const turns = Number(row.challenge_turns);
       const average = row.challenge_average === null ? null : Number(row.challenge_average);
       const offTopic = Number(row.challenge_off_topic);
-      const testSummary = row.score_total === null ? "bài thi" : `bài thi ${Number(row.score_total)}/100`;
+      const testSummary = row.score_total === null ? "bài thi" : `bài thi ${formatDisplayScore(Number(row.score_total))}/100`;
       const metrics = phase === "testing"
         ? "đang làm bài thi"
         : phase === "ungraded"
@@ -7638,7 +7635,7 @@ class AssessmentRepository {
             ? `qua ${testSummary} · đang thử thách Season (${turns}/6)`
             : average === null
               ? `chưa đạt: ${testSummary} · cần thi lại`
-              : `chưa đạt: ${average}/5 · ${offTopic} lượt lạc đề`;
+              : `chưa đạt: ${formatDisplayScore(average)}/5 · ${offTopic} lượt lạc đề`;
       return [{
         learnerId: row.learner_id,
         learnerName: row.learner_name,

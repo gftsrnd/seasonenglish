@@ -5,6 +5,7 @@ import type {
 } from "@e4s/contracts";
 import { useModal } from "../shared/ModalProvider.js";
 import { OperatorLevelFormDetail, type LevelFormEditorDetail } from "./LevelForms.js";
+import { formatScore } from "../shared/format-score.js";
 
 const STATUS_COPY: Record<MonthlyFinalExamStatus, { label: string; tone: string; description: string }> = {
   INPUT_ERROR: { label: "Thiếu đầu vào", tone: "danger", description: "Khung tháng thiếu đầu vào bắt buộc." },
@@ -242,7 +243,7 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
         <p className="xs muted">GA chính: {exam.grader.writingGrammarEvidence.gaMain} · GA phụ: {exam.grader.writingGrammarEvidence.gaSecondary} · GB chính: {exam.grader.writingGrammarEvidence.gbMain} · GB phụ: {exam.grader.writingGrammarEvidence.gbSecondary}</p>
         <h5>Speaking B mẫu</h5><p className="small" style={{ whiteSpace: "pre-line" }}>{exam.grader.speakingSample || "—"}</p>
         <p className="xs muted">GA chính: {exam.grader.speakingGrammarEvidence.gaMain} · GB chính: {exam.grader.speakingGrammarEvidence.gbMain}</p>
-        <h5>Rubric</h5><ul className="small">{exam.grader.rubric.map((item) => <li key={item.code}><b>{item.code}</b> ({item.maxScore}) {item.description}</li>)}</ul>
+        <h5>Rubric</h5><ul className="small">{exam.grader.rubric.map((item) => <li key={item.code}><b>{item.code}</b> ({formatScore(item.maxScore)}) {item.description}</li>)}</ul>
       </details>
     </> : null}
   </OperatorLevelFormDetail>;

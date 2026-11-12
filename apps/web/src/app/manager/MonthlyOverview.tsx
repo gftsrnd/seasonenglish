@@ -5,6 +5,7 @@ import { managerApiClient } from "../../api/manager.js";
 import { ReportAction } from "./Report.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { Badge, copyText, downloadText, formatDate, PageTitle, percent } from "./shared.js";
+import { formatScore, formatScoreForExport, formatScoreOutOf } from "../shared/format-score.js";
 
 const levels = ["A1", "A2", "B1", "B2", "C1"] as const;
 const learnerStates: Record<ManagerMonthlyLearnerView["state"], string> = {
@@ -190,7 +191,7 @@ function buildMonthlyReport(view: ManagerMonthlyOverviewView) {
     const passed = metric.value !== null && metric.value >= metric.target;
     return {
       ...metric, passed,
-      result: metric.value === null ? "—" : `${metric.value.toLocaleString("vi-VN")}${metric.unit}`,
+      result: metric.value === null ? "—" : `${formatScore(metric.value)}${metric.unit}`,
       threshold: `≥ ${metric.target}${metric.unit}`,
       assessment: metric.value === null ? "Chưa có dữ liệu" : passed ? "Đạt" : "Chưa đạt"
     };
@@ -258,13 +259,13 @@ function surveyDetail({ submissions, ratingResponses, withoutRatingQuestion, una
 }
 
 export function monthlyExamLabel(exam: ManagerMonthlyLearnerView["exam"]) {
-  return exam.total === null ? examStates[exam.status] : `${exam.total}/100 · ${examStates[exam.status]}`;
+  return exam.total === null ? examStates[exam.status] : `${formatScoreOutOf(exam.total, 100)} · ${examStates[exam.status]}`;
 }
 
 function MonthlySkillScores({ scores }: { scores: ManagerMonthlyLearnerView["exam"]["scores"] }) {
   if (Object.values(scores).every((score) => score === null)) return null;
   return <div className="manager-monthly-skill-scores">
-    {(Object.keys(skills) as (keyof typeof skills)[]).map((key) => <span className="xs muted" key={key}>{skills[key]} {scores[key] ?? "—"}</span>)}
+    {(Object.keys(skills) as (keyof typeof skills)[]).map((key) => <span className="xs muted" key={key}>{skills[key]} {formatScore(scores[key])}</span>)}
   </div>;
 }
 
@@ -332,7 +333,7 @@ function buildManagerMonthlyText(view: ManagerMonthlyOverviewView, report: Retur
       `${learner.learnerName} · ${learner.cefr ?? "Chưa có mức"} · ${learnerStates[learner.state]}`,
       `Điểm danh ${learner.attendedDays}/${learner.elapsedDays} · vắng ${learner.absenceDays}/${learner.maxAbsences}`,
       `Bài học ${learner.lessons.completed}/${learner.lessons.scheduled} · ôn ${learner.reviews.completed}/${learner.reviews.scheduled} · Season ${learner.season.turns}/${learner.season.target}`,
-      `Thi tháng ${monthlyExamLabel(learner.exam)} · ${(Object.keys(skills) as (keyof typeof skills)[]).map((key) => `${skills[key]} ${learner.exam.scores[key] ?? "—"}`).join(" · ")}`,
+      `Thi tháng ${monthlyExamLabel(learner.exam)} · ${(Object.keys(skills) as (keyof typeof skills)[]).map((key) => `${skills[key]} ${formatScore(learner.exam.scores[key])}`).join(" · ")}`,
       `Khiếu nại / kháng nghị · ${learner.complaintCount}`
     ].join("\n")) : ["Chưa có học viên trong bộ lọc này."],
     [`Hài lòng · ${report.metrics[2].result} · ${report.surveyDetail}`],
@@ -352,8 +353,8 @@ export function buildManagerMonthlyCsv(view: ManagerMonthlyOverviewView): string
     learner.email ?? "", learner.learnerName, learner.cefr ?? "", learnerStates[learner.state],
     learner.attendedDays, learner.elapsedDays, learner.absenceDays, learner.maxAbsences,
     learner.lessons.completed, learner.lessons.scheduled, learner.reviews.completed, learner.reviews.scheduled, learner.season.turns, learner.season.target,
-    learner.exam.scores.listening ?? "", learner.exam.scores.reading ?? "", learner.exam.scores.writing ?? "", learner.exam.scores.speaking ?? "",
-    learner.exam.total ?? "", examStates[learner.exam.status], ...Array.from({ length: 4 }, (_, index) => learner.levelCriteria ? (learner.levelCriteria[index] ? "Đạt" : "Chưa đạt") : ""), learner.complaintCount
+    formatScoreForExport(learner.exam.scores.listening), formatScoreForExport(learner.exam.scores.reading), formatScoreForExport(learner.exam.scores.writing), formatScoreForExport(learner.exam.scores.speaking),
+    formatScoreForExport(learner.exam.total), examStates[learner.exam.status], ...Array.from({ length: 4 }, (_, index) => learner.levelCriteria ? (learner.levelCriteria[index] ? "Đạt" : "Chưa đạt") : ""), learner.complaintCount
   ]);
   const cell = (value: string | number) => {
     const content = typeof value === "string" && /^[\t\r\n =+@-]/.test(value) ? `'${value}` : String(value);

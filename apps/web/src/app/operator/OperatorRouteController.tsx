@@ -43,6 +43,7 @@ import { AssessmentDefinitionPreview } from "../shared/AssessmentDefinitionPrevi
 import { ScrollJumpButton, useScrollJump } from "../shared/ScrollJump.js";
 import { useToast } from "../shared/design-system.js";
 import type { AudioEvidence } from "../shared/media/audio-evidence.js";
+import { formatScore, formatScoreOutOf } from "../shared/format-score.js";
 import { adaptAssessmentOverview, adaptLevelForms, adaptLessonMatrix, adaptLessonSet, adaptPrompts, adaptReview, adaptWeeks } from "./adapters.js";
 import type { Cefr, LessonSetActionKey, OperatorReviewActions, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
 import { describeBatchLevelResults, generateLessonWeeksBatchSettled, lessonGenerationJobsSnapshot, startLessonGenerationJob, subscribeLessonGenerationJobs } from "./lesson-generation.js";
@@ -769,7 +770,7 @@ function OperatorProfileEvidence({ detail }: { detail: AssessmentReviewLearnerVi
     <h4>Lịch sử đổi mức</h4>
     {detail.levelHistory.length ? <div className="list">{detail.levelHistory.map((item, index) => <div className="item small" key={`${item.changedAt}-${index}`}><b>{item.from ?? "—"} → {item.to}</b> · {item.mode} · {item.reason}<div className="xs muted">{item.changedAt} · bằng chứng: {item.evidence || "—"}</div></div>)}</div> : <p className="small muted">Chưa có lịch sử đổi mức.</p>}
     <h4>Bài test</h4>
-    {detail.attempts.length ? <div className="list">{detail.attempts.map(item => <div className="item small" key={item.id}><b>{item.title}</b> · {item.kind} · {item.status} · tổng {item.totalScore ?? "—"}<div className="xs muted">Nộp: {item.submittedAt ?? "—"} · mức gợi ý: {item.suggestedLevel ?? "—"}</div></div>)}</div> : <p className="small muted">Chưa có bài test.</p>}
+    {detail.attempts.length ? <div className="list">{detail.attempts.map(item => <div className="item small" key={item.id}><b>{item.title}</b> · {item.kind} · {item.status} · tổng {item.totalScore == null ? "—" : formatScoreOutOf(item.totalScore, 100)}<div className="xs muted">Nộp: {item.submittedAt ?? "—"} · mức gợi ý: {item.suggestedLevel ?? "—"}</div></div>)}</div> : <p className="small muted">Chưa có bài test.</p>}
     {detail.deletionRequests.length > 0 && <><h4>Yêu cầu xoá</h4><div className="list">{detail.deletionRequests.map(item => <div className="item small" key={item.id}><b>{item.status}</b> · {item.reason}<div className="xs muted">Gửi lúc {item.requestedAt}</div></div>)}</div></>}
   </>;
 }
@@ -777,7 +778,7 @@ function OperatorProfileEvidence({ detail }: { detail: AssessmentReviewLearnerVi
 function OperatorChallengeEvidence({ detail }: { detail: AssessmentReviewChallengeView }) {
   const progress = detail.progress;
   return <>
-    <p className="small muted"><b>Tiến độ thử thách:</b> {progress.completedTurns}/{progress.requiredTurns} lượt · TB {progress.average}/5 · {progress.offTopic} lượt lạc đề</p>
+    <p className="small muted"><b>Tiến độ thử thách:</b> {progress.completedTurns}/{progress.requiredTurns} lượt · TB {formatScoreOutOf(progress.average, 5)} · {progress.offTopic} lượt lạc đề</p>
     <div className="row"><Badge tone={progress.passed ? "ok" : progress.complete ? "danger" : "warn"}>{progress.passed ? "Đạt" : progress.complete ? "Chưa đạt" : "Đang làm"}</Badge><Badge>Mức đích: {detail.targetLevel}</Badge></div>
     {detail.turns.length ? <div className="chat" style={{ background: "var(--bg)", padding: 12, borderRadius: 12 }}>{detail.turns.map(turn => <div className="item small" key={turn.id}><b>{turn.speaker === "learner" ? "Học viên" : "Coach"} · lượt {turn.turnNumber}</b><p>{turn.text}</p>{turn.coachText && <p className="muted"><b>Nhận xét:</b> {turn.coachText}</p>}{turn.feedback && <code style={{ display: "block", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>{JSON.stringify(turn.feedback)}</code>}</div>)}</div> : <p className="small muted">Chưa có lượt hội thoại.</p>}
   </>;
@@ -881,7 +882,7 @@ function AssessmentPreviewControl({
           <p className="small muted">
             <span>Phiên bản {form.version} · {form.status === "published" ? "Đã phát hành" : form.status === "draft" ? "Bản nháp" : "Đã lưu lịch sử"}</span>
             <span className="operator-form-meta-divider"> · </span>
-            <span className="operator-form-metrics"><span>{form.sections.length} kỹ năng</span> · <span>{form.totalMinutes} phút</span> · <span>{form.totalScore} điểm</span></span>
+            <span className="operator-form-metrics"><span>{form.sections.length} kỹ năng</span> · <span>{form.totalMinutes} phút</span> · <span>{formatScore(form.totalScore)} điểm</span></span>
           </p>
           <p className="xs muted">Âm thanh: {form.audioConfigured ? "đã cấu hình nguồn audio" : "chưa đủ nguồn audio"}</p>
         </div>

@@ -33,6 +33,7 @@ import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } f
 import { vocabularyPresentationBlocks } from "../shared/lesson/vocabulary-groups.js";
 import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead, learnerObjectiveStatements } from "../shared/lesson/presentation.js";
 import { lessonInstructionSteps } from "../shared/lesson/instructions.js";
+import { formatPercent, formatScoreOutOf } from "../shared/format-score.js";
 import { learnerLessonLanguageForCefr, lessonCopyForCefr, type LearnerLessonLanguage } from "../shared/lesson/language.js";
 import { lessonPartsForTab, lessonPracticeCodes, sharedLessonGrammarAvailable } from "../shared/lesson/structure.js";
 import { LessonPromptText, normalizeLessonBlankPrompt, SharedLessonPartContent, SharedVocabularyModal, type VocabularyModalState } from "../learner/Learning.js";
@@ -301,10 +302,10 @@ export function adaptAssessmentOverview(source: AssessmentReviewOverviewView, co
     }),
     levelRequests: source.pendingLevelUp.map(item => {
       const levels = context.levelRequestDetails?.[item.attemptId];
-      return { id: item.attemptId, learnerName: item.learnerName, from: levels?.from, to: levels?.to ?? item.suggestedLevel as Cefr | undefined, sentAt: operatorDateTime(item.submittedAt), testSummary: context.placementDetails?.[item.attemptId] ? `${context.placementDetails[item.attemptId]!.total}/100` : null, testId: item.attemptId, challengeId: item.challenge ? item.attemptId : null, challengeSummary: item.challenge ? `${item.challenge.average}/5 · ${item.challenge.offTopic} lạc đề` : null };
+      return { id: item.attemptId, learnerName: item.learnerName, from: levels?.from, to: levels?.to ?? item.suggestedLevel as Cefr | undefined, sentAt: operatorDateTime(item.submittedAt), testSummary: context.placementDetails?.[item.attemptId] ? formatScoreOutOf(context.placementDetails[item.attemptId]!.total, 100) : null, testId: item.attemptId, challengeId: item.challenge ? item.attemptId : null, challengeSummary: item.challenge ? `${formatScoreOutOf(item.challenge.average, 5)} · ${item.challenge.offTopic} lạc đề` : null };
     }),
     ready: source.levelSignals.ready.map(item => ({ id: item.learnerId, name: item.learnerName, cefr: item.currentLevel as Cefr, target: item.targetLevel as Cefr, metrics: item.metrics.map(metric => `${metric.label} ${metric.display}`).join(" · ") })),
-    weak: source.levelSignals.weak.map(item => ({ id: item.learnerId, name: item.learnerName, cefr: item.currentLevel as Cefr, metrics: item.wrongWeeks.map(week => `tuần ${week.weekNumber}: ${week.wrongPercent}% sai (${week.partCount} phần)`).join(" · ") })),
+    weak: source.levelSignals.weak.map(item => ({ id: item.learnerId, name: item.learnerName, cefr: item.currentLevel as Cefr, metrics: item.wrongWeeks.map(week => `tuần ${week.weekNumber}: ${formatPercent(week.wrongPercent)} sai (${week.partCount} phần)`).join(" · ") })),
     inFlow: (source.levelSignals.inFlow ?? []).map(item => ({ id: item.learnerId, name: item.learnerName, cefr: item.currentLevel as Cefr, target: item.targetLevel as Cefr, metrics: item.metrics, testId: item.assessmentAttemptId, challengeId: item.challengeAttemptId })),
     approved: source.approvedLearners.map(item => ({ id: item.learnerId, name: item.learnerName, cefr: item.currentLevel as Cefr, placementScore: item.placementScore, monthlyGoal: item.monthlyGoal })),
     unassessed: source.unassessedLearners.map(mapUnassessed),

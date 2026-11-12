@@ -1011,7 +1011,7 @@ describe("OperatorRouteController", () => {
 
     expect(await screen.findByText(/tổng 3\/100/)).toBeInTheDocument();
     expect(screen.getByText("10%")).toBeInTheDocument();
-    expect(screen.getByText("2.5%")).toBeInTheDocument();
+    expect(screen.getByText("2,5%")).toBeInTheDocument();
     expect(screen.getByText("Nhận xét thật từ lần chấm AI")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Hồ sơ:.*Không rõ.*Đọc và ghi chú/i })).toBeInTheDocument();
     expect(getContentReviewAssessment).toHaveBeenCalledWith("attempt-1");

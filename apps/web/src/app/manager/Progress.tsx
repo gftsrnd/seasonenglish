@@ -4,6 +4,7 @@ import { Bell } from "lucide-react";
 import { rewardBadgeIcon, rewardBadgeKey } from "../shared/reward-badge-icons.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { Badge, OperationalCards, PageTitle, formatDate, percent, type ManagerOperationalProps } from "./shared.js";
+import { formatScore, formatScoreForExport } from "../shared/format-score.js";
 
 export type ManagerProgressProps = ManagerOperationalProps & {
   view: ManagerProgressView;
@@ -38,7 +39,7 @@ export function ManagerProgress({ view, monthly, pendingReminderCount, onOpenLea
     <section className="grid cols-3 manager-kpi-grid" data-manager-card-group="kpi">
       <Kpi label={compact ? "Nhịp học" : "Duy trì nhịp học"} value={`${regularPercent}%`} detail={compact ? `${regular}/${activeCount} · ≥70%` : `${regular}/${activeCount} người · ngưỡng 70%`} state={activeCount ? regularPercent >= 70 : null} />
       <Kpi label={compact ? "Hoàn thành" : "Hoàn thành lộ trình tháng"} value={`${completedPercent}%`} detail={compact ? `${completed}/${activeCount} · ≥60%` : `${completed}/${activeCount} hoàn thành lộ trình đến hiện tại · ngưỡng 60%`} state={activeCount ? completedPercent >= 60 : null} />
-      <Kpi label="Hài lòng" value={satisfaction === null ? "—" : `${satisfaction.toLocaleString("vi-VN")}/5`} detail={surveyCount ? compact ? `${surveyCount} phản hồi` : `${surveyCount} phản hồi · ngưỡng 4/5` : compact ? "Chưa khảo sát" : "Chưa có khảo sát"} state={satisfaction === null ? null : satisfaction >= 4} />
+      <Kpi label="Hài lòng" value={satisfaction === null ? "—" : `${formatScore(satisfaction)}/5`} detail={surveyCount ? compact ? `${surveyCount} phản hồi` : `${surveyCount} phản hồi · ngưỡng 4/5` : compact ? "Chưa khảo sát" : "Chưa có khảo sát"} state={satisfaction === null ? null : satisfaction >= 4} />
     </section>
     <section className="card section manager-table-card manager-progress-card">
       <header className="row between manager-section-heading manager-progress-card-header">
@@ -73,7 +74,7 @@ function LearnerRow({ learner, monthly, weekStartDate, onOpen }: { learner: Mana
   const earnedIcons = [...new Set([...learner.earnedBadges, ...(learner.earnedBadgeDetails ?? []).map(({ key }) => key)].map(rewardBadgeIcon))].join("");
   const lessonCount = monthly ? `${monthly.lessons.completed}/${monthly.lessons.scheduled}` : learner.totalLessonsThisWeek ? `${learner.completedLessons}/${learner.totalLessonsThisWeek}` : "—";
   const assessment = monthly ? <span className="small">{monthlyExamLabel(monthly.exam)}</span> : learner.weeklyPracticeStatus === "scored"
-    ? <Badge tone={(learner.weeklyPracticeScore ?? 0) >= 70 ? "ok" : "warn"}>{learner.weeklyPracticeScore}</Badge>
+    ? <Badge tone={(learner.weeklyPracticeScore ?? 0) >= 70 ? "ok" : "warn"}>{formatScore(learner.weeklyPracticeScore)}</Badge>
     : learner.weeklyPracticeStatus === "pending_review" ? <Badge tone="warn">chờ chấm</Badge> : <span className="muted">chưa</span>;
   const coach = monthly ? <>{monthly.season.turns}<span className="xs muted"> /{monthly.season.target}</span></> : <>{learner.coachTurnsThisWeek}{learner.coachTurnsThisWeek >= 50 ? " ✓" : <span className="xs muted"> /50</span>}</>;
   const rewardPoints = <>{reward.icon} <b>★ {learner.rewardPoints}</b>{earnedIcons && <> {earnedIcons}</>}</>;
@@ -91,7 +92,7 @@ function LearnerRow({ learner, monthly, weekStartDate, onOpen }: { learner: Mana
     <td className="manager-progress-desktop-detail">{assessment}</td>
     <td className="manager-progress-desktop-detail" title={rewardTitle}>{rewardPoints}</td>
     <td className="manager-progress-desktop-detail">{lastActivity}</td>
-    <td className="manager-progress-desktop-detail">{learner.placementScore ?? "—"}</td>
+    <td className="manager-progress-desktop-detail">{formatScore(learner.placementScore)}</td>
     <td className="manager-progress-status">{statusBadge}</td>
     <td className="manager-progress-compact-details">
       <details>
@@ -100,7 +101,7 @@ function LearnerRow({ learner, monthly, weekStartDate, onOpen }: { learner: Mana
           <div><dt>Season</dt><dd>{coach}</dd></div>
           <div><dt>{monthly ? "Thi tháng" : "Đánh giá"}</dt><dd>{assessment}</dd></div>
           <div><dt>Điểm thưởng</dt><dd aria-label={rewardTitle}>{rewardPoints}</dd></div>
-          <div><dt>Điểm đầu vào</dt><dd>{learner.placementScore ?? "—"}</dd></div>
+          <div><dt>Điểm đầu vào</dt><dd>{formatScore(learner.placementScore)}</dd></div>
           <div><dt>Hoạt động gần nhất</dt><dd>{lastActivity}</dd></div>
         </dl>
       </details>
@@ -156,10 +157,10 @@ export function buildManagerProgressCsv(view: ManagerProgressView, today = new D
       learner.totalLessonsThisWeek,
       learner.coachTurnsThisWeek,
       practiceStatus,
-      learner.weeklyPracticeStatus === "scored" ? learner.weeklyPracticeScore ?? "" : "",
+      learner.weeklyPracticeStatus === "scored" ? formatScoreForExport(learner.weeklyPracticeScore) : "",
       placementStatus,
       placementScoring,
-      learner.placementScore ?? "—",
+      learner.placementScore == null ? "—" : formatScoreForExport(learner.placementScore),
       learner.rewardPoints,
       learner.earnedBadges.join(", ") || "—"
     ];

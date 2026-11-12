@@ -236,7 +236,7 @@ describe("Operator assessment AI rescore", () => {
       "select suggested_level, reason from assessment_decisions where attempt_id = $1",
       [DEMO_IDS.placementAttempt]
     );
-    expect(decision.rows[0]).toEqual({ suggested_level: "B2", reason: "Tổng điểm chấm tay 70.3/100." });
+    expect(decision.rows[0]).toEqual({ suggested_level: "B2", reason: "Tổng điểm chấm tay 70,3/100." });
 
     const invalid = structuredClone(payload);
     invalid.writingTasks[0]!.criteria.taskCompletion = 5;
