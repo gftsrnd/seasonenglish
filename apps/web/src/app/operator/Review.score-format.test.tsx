@@ -19,7 +19,7 @@ function monthlyFinalDetail(): ContentReviewAssessmentDetailView {
     learnerName: "Kiểm thử monthly ready",
     kind: "final",
     title: "Bài thi tháng",
-    status: "completed",
+    status: "pending_review",
     startedAt: "2026-10-15T08:00:00.000Z",
     submittedAt: "2026-10-15T08:30:00.000Z",
     totalScore: 18.766666666666666,
@@ -49,20 +49,20 @@ function actions(): OperatorReviewActions {
 }
 
 describe("Operator score display formatting", () => {
-  it("formats fractional section, group and total scores with at most two decimals", () => {
+  it("formats fractional section, group and total scores with at most one decimal", () => {
     const { container } = render(<OperatorReviewAssessmentDetail detail={monthlyFinalDetail()} onClose={vi.fn()} />);
     const table = screen.getByRole("table");
 
-    expect(within(table).getByText("7,35/25")).toBeInTheDocument();
-    expect(within(table).getByText("4,41/25")).toBeInTheDocument();
-    expect(screen.getByText("Tin nhắn A · 4,41/16,18 điểm")).toBeInTheDocument();
-    expect(screen.getByText("Đọc · 4,41/25")).toBeInTheDocument();
-    expect(screen.getByText(/Tổng điểm: 18,77\/100/)).toBeInTheDocument();
+    expect(within(table).getByText("7,4/25")).toBeInTheDocument();
+    expect(within(table).getByText("4,4/25")).toBeInTheDocument();
+    expect(screen.getByText("Tin nhắn A · 4,4/16,2 điểm")).toBeInTheDocument();
+    expect(screen.getByText("Đọc · 4,4/25")).toBeInTheDocument();
+    expect(screen.getByText(/Tổng điểm: 18,8\/100/)).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/\d\.\d{3,}|\d,\d{3,}/);
 
     const totalRow = container.querySelector("tr.operator-total-row");
     expect(totalRow).not.toBeNull();
-    expect(within(totalRow as HTMLElement).getByText("18,77/100")).toBeInTheDocument();
+    expect(within(totalRow as HTMLElement).getByText("18,8/100")).toBeInTheDocument();
   });
 
   it("shows the exam list total with its maximum and without the empty level columns", () => {
@@ -79,7 +79,7 @@ describe("Operator score display formatting", () => {
 
     const headers = screen.getAllByRole("columnheader").map(header => header.textContent);
     expect(headers).toEqual(["Người học", "Loại", "Nộp", "Tổng", ""]);
-    expect(screen.getByText("18,77/100")).toBeInTheDocument();
+    expect(screen.getByText("18,8/100")).toBeInTheDocument();
     expect(screen.queryByText("Mức thô")).not.toBeInTheDocument();
     expect(screen.queryByText("AI")).not.toBeInTheDocument();
   });

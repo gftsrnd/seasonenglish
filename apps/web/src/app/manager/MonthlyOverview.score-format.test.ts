@@ -9,11 +9,11 @@ const exam = {
 };
 
 describe("Manager monthly score formatting", () => {
-  it("shows the monthly exam total with two decimals, a decimal comma and its maximum", () => {
-    expect(monthlyExamLabel(exam as never)).toBe("18,77/100 · Đã chấm");
+  it("shows the monthly exam total with one decimal, a decimal comma and its maximum", () => {
+    expect(monthlyExamLabel(exam as never)).toBe("18,8/100 · Đã chấm");
   });
 
-  it("keeps CSV score cells machine-friendly with two-decimal rounding", () => {
+  it("keeps CSV score cells machine-friendly with one-decimal rounding", () => {
     const view = {
       learners: [{
         email: "lan@example.test", learnerName: "Lan", cefr: "A2", state: "active",
@@ -24,7 +24,7 @@ describe("Manager monthly score formatting", () => {
     } as unknown as ManagerMonthlyOverviewView;
     const row = buildManagerMonthlyCsv(view).split("\r\n")[1]!;
 
-    expect(row).toContain('"7.35","4.41","7","","18.77"');
+    expect(row).toContain('"7.4","4.4","7","","18.8"');
     expect(row).not.toMatch(/\d\.\d{3,}/);
   });
 });

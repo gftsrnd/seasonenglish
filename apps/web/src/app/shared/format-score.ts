@@ -1,6 +1,6 @@
 // Shared display formatting for points, scores and percentages.
 // Stored/computed values keep full precision; only the rendered text is rounded
-// to at most two decimals, Vietnamese decimal comma, trailing zeros dropped
+// to at most one decimal, Vietnamese decimal comma, trailing zeros dropped
 // (16.176470588235297 → "16,18", 25 → "25", 18.77 → "18,77", 4.4 → "4,4").
 
 type ScoreInput = number | string | null | undefined;
@@ -16,13 +16,13 @@ function toFiniteNumber(value: ScoreInput): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-/** Rounds half away from zero to two decimals, avoiding binary drift (e.g. 1.005 → 1.01). */
+/** Rounds half away from zero to one decimal, avoiding binary drift (e.g. 1.05 → 1.1). */
 export function roundScore(value: number): number {
-  const rounded = Math.sign(value) * Math.round((Math.abs(value) + Number.EPSILON) * 100) / 100;
+  const rounded = Math.sign(value) * Math.round((Math.abs(value) + Number.EPSILON) * 10) / 10;
   return Object.is(rounded, -0) ? 0 : rounded;
 }
 
-/** Formats a score for display: at most two decimals, decimal comma, no trailing zeros. Non-numeric strings pass through; empty input returns the fallback. */
+/** Formats a score for display: at most one decimal, decimal comma, no trailing zeros. Non-numeric strings pass through; empty input returns the fallback. */
 export function formatScore(value: ScoreInput, fallback = "—"): string {
   const number = toFiniteNumber(value);
   if (number === null) return typeof value === "string" && value.trim() ? value : fallback;
@@ -34,13 +34,13 @@ export function formatScoreOutOf(earned: ScoreInput, max: ScoreInput, fallback =
   return `${formatScore(earned, fallback)}/${formatScore(max, fallback)}`;
 }
 
-/** Percentage text with the same rounding, e.g. 66.666 → "66,67%". */
+/** Percentage text with the same rounding, e.g. 66.666 → "66,7%". */
 export function formatPercent(value: ScoreInput, fallback = "—"): string {
   const number = toFiniteNumber(value);
   return number === null ? fallback : `${formatScore(number)}%`;
 }
 
-/** Machine-friendly number for CSV/text exports: same two-decimal rounding, dot separator, no grouping. */
+/** Machine-friendly number for CSV/text exports: same one-decimal rounding, dot separator, no grouping. */
 export function formatScoreForExport(value: ScoreInput): string {
   const number = toFiniteNumber(value);
   if (number === null) return typeof value === "string" ? value : "";
