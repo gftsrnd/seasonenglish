@@ -7,7 +7,7 @@ import type {
   ContentImageView, CourseCompletionView, LevelChallengeView, MicroLessonView, RewardView, SurveyView, WeeklyPracticeView, AudioArtifactInput,
   RequestEvidenceInput, LearnerAcademicAppealView, LearnerComplaintKind, LearnerComplaintView, WeeklyReviewAnswerInput, WeeklyReviewAnswerResult, WeeklyReviewSessionView
 } from "@e4s/contracts";
-import type { AudioArtifactView } from "@e4s/contracts";
+import type { AudioArtifactView, GameWordSetView } from "@e4s/contracts";
 import { request, uploadMultipart } from "./runtime.js";
 import type { LearnerAudioEvidence } from "../app/learner/contracts.js";
 
@@ -53,6 +53,7 @@ export interface LearnerApiClient {
   useWeeklyGameWordSet(): Promise<GameHubView>;
   deleteGameWordSet(): Promise<GameHubView>;
   resolveGameWordImage(setId: string, wordId: string): Promise<ContentImageView>;
+  prepareGameWordExamples(setId: string): Promise<GameWordSetView>;
   submitGameResult(game: GameKey, input: { requestId: string } & GameFinishInput): Promise<GameResultView>;
   getReward(mode: "preview" | "done"): Promise<RewardView>;
   getSurvey(): Promise<SurveyView>;
@@ -116,6 +117,7 @@ export const learnerApiClient: LearnerApiClient = {
   useWeeklyGameWordSet: () => request("/api/v1/engagement/games/word-set/weekly", { method: "POST", body: "{}" }),
   deleteGameWordSet: () => request("/api/v1/engagement/games/word-set", { method: "DELETE", body: "{}" }),
   resolveGameWordImage: (setId, wordId) => request(`/api/v1/engagement/game-sets/${encodeURIComponent(setId)}/words/${encodeURIComponent(wordId)}/image`),
+  prepareGameWordExamples: (setId) => request(`/api/v1/engagement/game-sets/${encodeURIComponent(setId)}/examples`, { method: "POST", body: "{}" }),
   submitGameResult: (game, input) => request(`/api/v1/engagement/games/${encodeURIComponent(game)}/results`, { method: "POST", body: JSON.stringify(input) }),
   getReward: (mode) => request(`/api/v1/engagement/rewards/${mode}`),
   getSurvey: () => request("/api/v1/engagement/survey"),

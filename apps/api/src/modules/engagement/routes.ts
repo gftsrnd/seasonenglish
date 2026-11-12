@@ -1,7 +1,7 @@
 import type { AudioArtifactInput, AudioArtifactView, GameDescriptor, GameKey, GameTopicModeration, WeeklyPracticeView } from "@e4s/contracts";
 import { randomUUID } from "node:crypto";
-import { vocabularyOutputSchema, weeklyPracticeOutputSchema, type AiTaskRunner } from "@e4s/ai";
-import { arenaEligible, scoreGameAttempt } from "@e4s/domain/engagement";
+import { vocabularyExamplesOutputSchema, vocabularyOutputSchema, weeklyPracticeOutputSchema, type AiTaskRunner } from "@e4s/ai";
+import { arenaEligible, scoreGameAttempt, validGameWordExample } from "@e4s/domain/engagement";
 import { hasSensitiveTopicText, SENSITIVE_TOPIC_MESSAGE_VI, sensitiveTopicIssue, sensitiveTopicSeverity, UNSUITABLE_TOPIC_MESSAGE_VI } from "@e4s/domain/content";
 import { validateWeeklyPractice } from "@e4s/domain/progression";
 import { createRepositories } from "@e4s/database";
@@ -32,7 +32,7 @@ const GAME_DESCRIPTORS: ReadonlyArray<Omit<GameDescriptor, "best">> = [
   { key: "crossword", icon: "🧩", name: "Crosswords", description: "Điền lưới ô chữ theo gợi ý dọc / ngang", goal: "Điền đúng toàn bộ lưới ô chữ.", instructions: ["Mỗi số trên lưới ứng với một gợi ý Ngang → hoặc Dọc ↓ bên dưới.", "Bấm vào ô và gõ chữ; gõ xong tự nhảy sang ô kế, phím mũi tên để di chuyển.", "Bấm Kiểm tra: ô đúng xanh, ô sai đỏ, sửa rồi kiểm tra lại.", "Bí quá thì bấm Gợi ý 1 chữ (mỗi lần trừ 1 điểm)."], scoring: "Điểm = số từ trong lưới trừ số gợi ý đã dùng." },
   { key: "eggs", icon: "🧺", name: "Season catch", description: "Đưa rổ hứng vật phẩm theo mùa mang đúng từ: lá (thu), hoa (xuân), kem (hè), tuyết (đông), lì xì (Tết), quà (Giáng sinh)", goal: "Hứng đúng vật phẩm khớp với gợi ý, 10 lượt.", instructions: ["Gợi ý (nghĩa / định nghĩa) hiện to ở phía trên màn chơi.", "4 vật phẩm của mùa mang 4 từ rơi xuống; kéo chuột / chạm để di chuyển nhân vật (hoặc phím ← →) và đặt rổ dưới vật phẩm đúng.", "Hứng đúng: +1 điểm, lượt mới. Hứng nhầm: mất 1 ❤️ (tim vỡ); hết mạng thì khủng long xuất hiện. Tốc độ rơi theo mức CEFR: A1 ×1, mỗi mức cao hơn cộng thêm ×0,5 (C1 ×3).", "Để vật phẩm đúng rơi xuống đất cũng mất 1 ❤️. Hết 3 ❤️ là kết thúc."], scoring: "+1 điểm mỗi vật phẩm hứng đúng, tối đa 10." },
   { key: "mario", icon: "🍄", name: "Season-rio", description: "Qua từng cổng hộp quà (chắn kín, không nhảy qua được), ăn hết món khoái khẩu khổng lồ trong 10 giây rồi lấy cờ! Nhân vật đổi theo mùa: thỏ, dế, sóc, cánh cụt, én, tuần lộc", goal: "Trả lời đủ 8 hộp quà chắn đường, ăn hết món khổng lồ trong 10 giây và chạm cờ.", instructions: ["Chạy bằng phím ← →, nhảy bằng Space hoặc ↑ (điện thoại: 3 nút dưới màn hình).", "Mỗi hộp quà ? đứng trên một cột gỗ chắn ngang đường: chạm vào hộp hoặc cột → câu hỏi từ vựng, chọn 1 trong 4. Đúng: 🍄 (+1). Sai: mất 1 ❤️. Trả lời xong (đúng hay sai) cổng mới mở, nên không bỏ qua hộp nào được.", "Đường khúc khuỷu: có hộp đặt trên bục gỗ, có hộp trên bục cao phải leo bậc. Cuối màn là món ăn khoái khẩu KHỔNG LỒ của nhân vật: chạm vào là đồng hồ 10 giây chạy; mỗi câu đúng ăn 1 miếng (3 miếng), sai mất 1 ❤️; quá 10 giây món ăn bị hỏng → thua.", "Ăn hết món khổng lồ rồi chạm cờ để về đích. Hết 3 ❤️ hoặc để món ăn hỏng là thua."], scoring: "+1 điểm mỗi hộp quà đúng, +1 mỗi miếng ăn đúng ở Boss (tối đa 11)." },
-  { key: "sort", icon: "🗂️", name: "Word sort", description: "Xếp từng từ vào đúng nhóm từ loại", goal: "Phân loại đúng càng nhiều từ càng tốt.", instructions: ["Mỗi lượt hiện một từ (kèm nghĩa) và các nhóm: Noun, Verb, Adjective, Adverb, Preposition, Phrase…", "Bấm vào nhóm bạn cho là đúng từ loại của từ đó.", "Đúng: +1 và chuỗi tăng; sai: app hiện nhóm đúng, chuỗi về 0.", "Mẹo: nhìn hậu tố (-tion → noun, -ly → adverb) và cách dùng trong cụm từ."], scoring: "+1 điểm mỗi từ đúng; chuỗi đúng liên tiếp dài nhất được ghi lại." },
+  { key: "sort", icon: "🗂️", name: "Word sort", description: "Xếp từng từ vào đúng nhóm từ loại", goal: "Phân loại đúng càng nhiều từ càng tốt.", instructions: ["Mỗi lượt hiện một từ trong câu ví dụ (A1–A2 kèm nghĩa) và các nhóm: Noun, Verb, Adjective, Adverb, Preposition, Phrase…", "Bấm vào nhóm bạn cho là đúng từ loại của từ đó.", "Đúng: +1 và chuỗi tăng; sai: app hiện nhóm đúng, chuỗi về 0.", "Mẹo: nhìn hậu tố (-tion → noun, -ly → adverb) và cách dùng trong cụm từ."], scoring: "+1 điểm mỗi từ đúng; chuỗi đúng liên tiếp dài nhất được ghi lại." },
   { key: "typing", icon: "⌨️", name: "Typing race", description: "Type đúng từ trước khi thanh thời gian cạn!", goal: "Gõ đúng 10 từ thật nhanh, giữ chuỗi combo càng dài càng nhiều điểm.", instructions: ["Mỗi từ có gợi ý: nghĩa tiếng Việt, định nghĩa tiếng Anh và hình minh hoạ (nếu có).", "Thanh thời gian chạy rất nhanh – gõ từ bằng bàn phím ảo (hoặc bàn phím thật) rồi bấm ↵; phím vừa gõ sáng lên.", "Đúng: +10 điểm × combo (combo tăng mỗi từ đúng liên tiếp, tối đa ×5). Sai hoặc hết giờ: combo về 1.", "Chữ đã gõ đúng hiện xanh, sai hiện đỏ – sửa ngay bằng ⌫."], scoring: "10 điểm × combo cho mỗi từ đúng; tối đa 10 từ." }
 ];
 
@@ -202,7 +202,7 @@ export function registerEngagementRoutes(
     try {
       const result = await runner.runTask("vocabulary_generation", {
         topic: parsed.data.topic, cefr: current.cefr, count: 20
-      }, { systemPrompt: `${task.prompt}\n\n${WORD_SET_SAFETY_RULE}` });
+      }, { systemPrompt: `${task.prompt}\n\n${WORD_SET_EXAMPLE_RULE}\n\n${WORD_SET_SAFETY_RULE}` });
       const output = vocabularyOutputSchema.safeParse(result.output);
       if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID", moderation: { state: "ai_rejected", message: "AI không trả về được bộ từ hợp lệ." } satisfies GameTopicModeration });
       const safeWords = output.data.words.filter((word) => !generatedWordIsSensitive(word));
@@ -215,8 +215,11 @@ export function registerEngagementRoutes(
         learnerId, requestId: parsed.data.requestId, taskId: task.taskId, promptVersionId: task.promptVersionId,
         output: {
           topic: output.data.topic,
-          words: safeWords.map(({ imageQuery, ...word }) => ({ ...word, ...(imageQuery ? { imageQuery } : {}) })),
-          distractors: safeDistractors.map(({ imageQuery, ...word }) => ({ ...word, ...(imageQuery ? { imageQuery } : {}) }))
+          words: safeWords.map(({ imageQuery, example, ...word }) => {
+            const context = gameWordExample(example, word.english);
+            return { ...word, ...(context ? { example: context } : {}), ...(imageQuery ? { imageQuery } : {}) };
+          }),
+          distractors: safeDistractors.map(({ imageQuery, example: _example, ...word }) => ({ ...word, ...(imageQuery ? { imageQuery } : {}) }))
         },
         metadata: result.metadata
       });
@@ -244,6 +247,60 @@ export function registerEngagementRoutes(
     const runner = await runnerFor(learnerId);
     return await gameHubView(repositories, learnerId, Boolean(runner))
       ?? reply.code(404).send({ code: "GAME_SET_NOT_FOUND" });
+  });
+
+  // Word sort context sentences for a stored set that predates them: ONE batched AI call for all
+  // missing words, stored on the set so it never repeats (also after a failure). Words the call
+  // cannot cover stay playable without a sentence.
+  const examplesInFlight = new Map<string, Promise<void>>();
+  app.post("/api/v1/engagement/game-sets/:setId/examples", {
+    preHandler: learnerOnly, config: { rateLimit: { max: 10, timeWindow: "1 minute" } }
+  }, async (request, reply) => {
+    const params = z.object({ setId: z.uuid() }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "INVALID_GAME_SET" });
+    const learnerId = request.e4sSession!.user.id;
+    const setId = params.data.setId;
+    const load = async () => (await repositories.engagement.gameHub(learnerId))?.wordSet ?? null;
+    const before = await load();
+    if (!before || before.id !== setId) return reply.code(404).send({ code: "GAME_SET_NOT_FOUND" });
+    if (!before.examplesPending) return before;
+    const key = `${learnerId}:${setId}`;
+    let pending = examplesInFlight.get(key);
+    if (!pending) {
+      pending = backfillGameWordExamples(before).finally(() => examplesInFlight.delete(key));
+      examplesInFlight.set(key, pending);
+    }
+    await pending;
+    return (await load()) ?? reply.code(404).send({ code: "GAME_SET_NOT_FOUND" });
+
+    async function backfillGameWordExamples(wordSet: NonNullable<Awaited<ReturnType<typeof load>>>): Promise<void> {
+      const missing = wordSet.words.filter((word) => !word.example).slice(0, 30);
+      const runner = await runnerFor(learnerId);
+      const task = runner ? await repositories.aiRuns.activeTaskPrompt(learnerId, "vocabulary_generation") : null;
+      // Without a configured AI the set is left untouched, so a later visit with AI can still fill it.
+      if (!runner || !task || !missing.length) return;
+      try {
+        const result = await runner.runTask("vocabulary_examples", {
+          cefr: wordSet.cefr,
+          words: missing.map((word) => ({ id: word.id, english: word.english, partOfSpeech: word.partOfSpeech, vietnamese: word.vietnamese }))
+        }, { systemPrompt: `${WORD_EXAMPLES_BACKFILL_PROMPT}\n\n${WORD_SET_SAFETY_RULE}` });
+        const output = vocabularyExamplesOutputSchema.safeParse(result.output);
+        const byId = new Map(missing.map((word) => [word.id, word]));
+        const examples: Record<string, string> = {};
+        for (const item of output.success ? output.data.examples : []) {
+          const word = byId.get(item.id);
+          const context = word ? gameWordExample(item.example, word.english) : undefined;
+          if (word && context) examples[word.id] = context;
+        }
+        await repositories.engagement.saveGameWordExamples(learnerId, setId, {
+          examples, status: output.success ? "completed" : "failed",
+          run: { requestId: `game-examples:${setId}`, taskId: task.taskId, promptVersionId: task.promptVersionId, metadata: result.metadata }
+        });
+      } catch (error) {
+        request.log.warn({ code: safeAiErrorCode(error) }, "Game word example backfill failed");
+        await repositories.engagement.saveGameWordExamples(learnerId, setId, { examples: {}, status: "failed" });
+      }
+    }
   });
 
   app.get("/api/v1/engagement/game-sets/:setId/words/:wordId/image", {
@@ -410,7 +467,15 @@ async function withPracticeAudio(
 
 /** Appended to the stored vocabulary prompt at run time so existing prompt versions get the rule too. */
 const WORD_SET_SAFETY_RULE = "Safety: keep every word, meaning, definition and imageQuery appropriate for a workplace or everyday-life English class. Never include profanity, slurs, sexual content, hate, violence, death, self-harm, weapons, drugs, gambling, crime, politics, religion, race or sexual-orientation themes; if the topic is unsuitable, use neutral workplace vocabulary instead.";
+const WORD_SET_EXAMPLE_RULE = "Word sort context: every target word also needs example: one short natural English sentence (at most 12 words) that contains the exact English form and uses it as its partOfSpeech, so the sentence alone decides the word class (noun change: \"We need a change in the plan.\"; verb change: \"Please change the date.\"). Distractors need no example.";
+const WORD_EXAMPLES_BACKFILL_PROMPT = "Return valid JSON only. For every supplied word write example: one short, natural English sentence (at most 12 words) for the given CEFR level that contains the exact English form and uses it as the given partOfSpeech, so the sentence alone decides the word class (noun change: \"We need a change in the plan.\"; verb change: \"Please change the date.\"). Return one { id, example } per supplied id, ids copied verbatim.";
 const MIN_SAFE_GENERATED_WORDS = 10;
+
+/** Keeps a context sentence only when it really contains the word, is short and is safe to show. */
+function gameWordExample(example: string | undefined, english: string): string | undefined {
+  const value = validGameWordExample(example, english);
+  return value && !hasSensitiveTopicText(value) ? value : undefined;
+}
 const MIN_SAFE_GENERATED_DISTRACTORS = 4;
 
 function generatedWordIsSensitive(word: { english: string; vietnamese: string; definition?: string | undefined; imageQuery?: string | undefined }): boolean {

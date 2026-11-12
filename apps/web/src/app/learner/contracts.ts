@@ -9,6 +9,7 @@ import type {
   GameDescriptor,
   GameFinishInput,
   GameHubView,
+  GameWordSetView,
   LearnerAvatarData,
   LearnerHomeView as LearnerHomeContractView,
   LearnerComplaintKind,
@@ -176,6 +177,8 @@ export interface LearnerCallbacks {
   finishGame: (input: GameFinishInput) => void | Promise<void>;
   resetGameResult: () => void;
   resolveGameWordImage: (setId: string, wordId: string) => Promise<ContentImageView>;
+  /** Word sort: fills missing context sentences once per set (one batched AI call server-side). */
+  prepareGameWordExamples?: (setId: string) => Promise<GameWordSetView>;
   /** Retained only for old test fixtures; live Arena routes are retired. */
   createDuel: (opponentId: string, game: Exclude<GameDescriptor["key"], "crossword">) => void | Promise<void>;
 }

@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from "pg";
 import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
+import { pickGameWordExample } from "@e4s/domain/engagement";
 import { buildMonthlyCalendar, formatMonthlyDayLabel, monthlyLessonDisplayTitle, evaluateMonthlyLessonAccess, monthlyAttendanceDates, mergedVietnamHolidays, withMonthlyExpandedTerms, type MonthlyLessonAccess, type MonthlyVocabularyCore } from "@e4s/domain/monthly";
 import { FROZEN_MONTHLY_ILLUSTRATIONS_SQL, withFrozenMonthlyIllustrations, type FrozenMonthlyIllustration } from "./monthly-illustration-projection.js";
 import { generationFindingsFromPayload } from "./generation-findings.js";
@@ -9763,9 +9764,16 @@ class EngagementRepository {
     }
     // Monthly sets show the frozen illustration of each word, also for sets saved before the picture existed.
     const learnedImages = new Map(learned.flatMap(word => word.imageUrl ? [[word.english.toLocaleLowerCase("en"), word.imageUrl] as const] : []));
+    // Word sort context lines: learned sets read them from the lesson (also for sets saved before the field existed).
+    const learnedExamples = new Map(learned.flatMap(word => word.example ? [[word.english.toLocaleLowerCase("en"), word.example] as const] : []));
     const words = payload.source === "learned"
-      ? storedWords.map(word => word.imageUrl || !learnedImages.has(word.english.toLocaleLowerCase("en")) ? word : { ...word, imageUrl: learnedImages.get(word.english.toLocaleLowerCase("en"))! })
-      : storedWords;
+      ? storedWords.map(word => {
+        const key = word.english.toLocaleLowerCase("en");
+        const withImage = word.imageUrl || !learnedImages.has(key) ? word : { ...word, imageUrl: learnedImages.get(key)! };
+        return withImage.example || !learnedExamples.has(key) ? withImage : { ...withImage, example: learnedExamples.get(key)! };
+      })
+      : storedWords.map(word => word.example || !learnedExamples.has(word.english.toLocaleLowerCase("en")) ? word : { ...word, example: learnedExamples.get(word.english.toLocaleLowerCase("en"))! });
+    const examplesPending = !payload.examplesBackfill && words.some(word => !word.example);
     const distractors = Array.isArray(payload.distractors) ? payload.distractors as GameWordSetView["words"] : undefined;
     // The record belongs to the learner and the game, not to one word set: learning new words retires the
     // set and creates a new one, and the record must survive that (same rule as the leaderboard).
@@ -9779,7 +9787,8 @@ class EngagementRepository {
       cefr: context.cefr,
       learnedVocabularyAvailable,
       wordSet: { id: row.id, topic: String(payload.topic ?? context.topic), cefr: context.cefr,
-        source: payload.source === "learned" ? "monthly" : "custom", words, ...(distractors ? { distractors } : {}) },
+        source: payload.source === "learned" ? "monthly" : "custom", words, ...(distractors ? { distractors } : {}),
+        ...(examplesPending ? { examplesPending } : {}) },
       best: Object.fromEntries(bestRows.rows.map((item) => [item.game_key, normalizedGameBest(item)]))
     };
   }
@@ -9804,12 +9813,14 @@ class EngagementRepository {
         if (!english || seen.has(key)) continue;
         const vietnamese = typeof value.meaning === "string" && value.meaning.trim() ? value.meaning.trim() : english;
         const partOfSpeech = normalizeGamePartOfSpeech(value.partOfSpeech ?? value.type);
+        const example = pickGameWordExample(english, { examples: value.examples, collocations: value.collocations });
         words.push({
           id: `${lesson.id}-${index + 1}`,
           english,
           vietnamese,
           definition: typeof value.definition === "string" && value.definition.trim() ? value.definition.trim() : vietnamese,
           partOfSpeech,
+          ...(example ? { example } : {}),
           ...(typeof value.imageQuery === "string" && value.imageQuery.trim() ? { imageQuery: value.imageQuery.trim() } : {}),
           ...(typeof value.imageUrl === "string" && value.imageUrl.trim() ? { imageUrl: value.imageUrl.trim() } : {})
         });
@@ -9896,6 +9907,54 @@ class EngagementRepository {
       });
       if (!found) { await client.query("rollback"); return false; }
       await client.query("update game_sets set payload = $2::jsonb where id = $1", [setId, JSON.stringify({ ...payload, words })]);
+      await client.query("commit");
+      return true;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Stores the one-time batched Word sort context backfill on the set: the
+   * sentences for words that lacked one, plus a marker so the AI call never
+   * repeats for this set (also when it failed and nothing was stored).
+   */
+  async saveGameWordExamples(learnerId: string, setId: string, input: {
+    examples: Record<string, string>; status: "completed" | "failed";
+    run?: { requestId: string; taskId: string; promptVersionId: string; metadata: AiRunMetadataInput };
+  }): Promise<boolean> {
+    const context = await this.activeGameContext(learnerId);
+    if (!context) return false;
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const result = await client.query<{ payload: Record<string, unknown> }>(
+        `select payload from game_sets
+         where id = $1 and game_key = 'monthly_vocabulary'
+           and status = 'published' and learner_id = $2 and payload->>'month' = $3 and payload->>'cefr' = $4
+         for update`,
+        [setId, learnerId, context.month, context.cefr]
+      );
+      const payload = result.rows[0]?.payload;
+      if (!payload || !Array.isArray(payload.words) || payload.examplesBackfill) { await client.query("rollback"); return false; }
+      const words = payload.words.map((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+        const word = item as Record<string, unknown>;
+        const example = input.examples[String(word.id ?? "")];
+        return example && !word.example ? { ...word, example } : item;
+      });
+      if (input.run) {
+        await insertAiRun(client, {
+          id: randomUUID(), learnerId, requestId: input.run.requestId, taskId: input.run.taskId,
+          promptVersionId: input.run.promptVersionId, output: { examples: input.examples }, metadata: input.run.metadata
+        });
+      }
+      await client.query("update game_sets set payload = $2::jsonb where id = $1", [setId, JSON.stringify({
+        ...payload, words, examplesBackfill: { status: input.status, at: new Date().toISOString() }
+      })]);
       await client.query("commit");
       return true;
     } catch (error) {

@@ -1029,6 +1029,40 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
   letter-spacing: -.03em;
 }
 
+.sort-clue {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  max-width: min(100%, 60ch);
+}
+
+.sort-context {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  color: var(--text);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.sort-context mark {
+  background: none;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.sort-meaning {
+  color: var(--muted);
+  font-size: .9rem;
+  line-height: 1.35;
+}
+
 .sort-speak,
 .typing-clue-speak {
   display: grid;

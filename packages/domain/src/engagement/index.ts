@@ -7,9 +7,66 @@ export interface GameWord {
   english: string;
   vietnamese: string;
   partOfSpeech: string;
+  /** Short context sentence (or collocation) using the word in `partOfSpeech`; Word sort shows it so context decides the class. */
+  example?: string;
   imageQuery?: string;
   imageUrl?: string;
   imageAttribution?: ContentImageAttribution;
+}
+
+/** Longest context line Word sort shows under the word (one line on desktop, at most two on phones). */
+export const GAME_WORD_EXAMPLE_MAX_CHARS = 90;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Pattern for one word token plus its common inflections (s/es/ed/ing, e-drop, y→ies/ied, doubled consonant). */
+function tokenPattern(token: string): string {
+  const lower = token.toLocaleLowerCase("en");
+  if (!/^[a-z]+$/.test(lower) || lower.length < 2) return escapeRegExp(lower);
+  const variants = new Set<string>([`${escapeRegExp(lower)}(?:s|es|ed|d|ing|'s)?`]);
+  if (lower.endsWith("e")) variants.add(`${lower.slice(0, -1)}ing`);
+  if (/[^aeiou]y$/.test(lower)) variants.add(`${lower.slice(0, -1)}(?:ies|ied)`);
+  if (/[^aeiou][aeiou][bdgklmnprt]$/.test(lower)) variants.add(`${lower}${lower.at(-1)}(?:ed|ing)`);
+  return `(?:${[...variants].join("|")})`;
+}
+
+/**
+ * Locates the game word inside a context line (case-insensitive, whole words,
+ * common inflections allowed). Returns the character span to highlight, or
+ * null when the line does not actually contain the word.
+ */
+export function gameWordContextSpan(context: string, word: string): { start: number; end: number } | null {
+  const tokens = word.trim().split(/\s+/).filter(Boolean);
+  if (!tokens.length || !context.trim()) return null;
+  const pattern = new RegExp(`(?<![A-Za-z])${tokens.map(tokenPattern).join("[\\s-]+")}(?![A-Za-z])`, "i");
+  const match = pattern.exec(context);
+  return match ? { start: match.index, end: match.index + match[0].length } : null;
+}
+
+/** A usable Word sort context: trimmed, short, and containing the word. */
+export function validGameWordExample(context: unknown, word: string): string | undefined {
+  if (typeof context !== "string") return undefined;
+  const value = context.trim().replace(/\s+/g, " ");
+  if (!value || value.length > GAME_WORD_EXAMPLE_MAX_CHARS) return undefined;
+  if (value.toLocaleLowerCase("en") === word.trim().toLocaleLowerCase("en")) return undefined;
+  return gameWordContextSpan(value, word) ? value : undefined;
+}
+
+/**
+ * Picks the context line for a learned lesson word: a full example sentence
+ * first, then a collocation (longest first, it carries more context), always
+ * one that really contains the word.
+ */
+export function pickGameWordExample(word: string, candidates: { examples?: unknown; collocations?: unknown }): string | undefined {
+  const list = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  const valid = (items: string[]) => items.map((item) => validGameWordExample(item, word)).filter((item): item is string => Boolean(item));
+  const examples = valid(list(candidates.examples));
+  const sentence = examples.find((item) => /^[A-Z].*[.!?]$/.test(item));
+  if (sentence) return sentence;
+  const phrases = [...examples, ...valid(list(candidates.collocations))];
+  return phrases.sort((left, right) => right.length - left.length)[0];
 }
 
 export interface GameAnswer {

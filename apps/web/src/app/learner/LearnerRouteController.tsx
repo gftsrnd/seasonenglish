@@ -535,6 +535,7 @@ function LearnerContent({ courseCompleted }: { courseCompleted: boolean }) {
     },
     resetGameResult: () => { gamePending.current = undefined; setUiState((current) => ({ ...current, gameResult: null })); },
     resolveGameWordImage: (setId, wordId) => apiClient.resolveGameWordImage(setId, wordId),
+    prepareGameWordExamples: (setId) => apiClient.prepareGameWordExamples(setId),
     createDuel: async () => { throw new Error("ARENA_RETIRED"); }
   };
 
