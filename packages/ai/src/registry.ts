@@ -53,6 +53,10 @@ import {monthlyFinalWritingBlocksInputSchema,monthlyFinalWritingBlocksOutputSche
 import {monthlyFinalWritingBlockInputSchema,monthlyFinalWritingBlockOutputSchema,monthlyFinalWritingBlockJsonSchema,validateMonthlyFinalWritingBlock} from "./monthly-final-writing-blocks.js";
 import {validateMonthlyFinalListeningBlocks} from "./monthly-final-listening-blocks.js";
 import {monthlyFinalGrammarReviewInputSchema,monthlyFinalGrammarReviewOutputSchema,monthlyFinalGrammarReviewJsonSchema,validateMonthlyFinalGrammarReview} from "./monthly-final-grammar-review.js";
+import {
+  LESSON_PRODUCTIVE_GRADING_TASK, lessonProductiveGradingInputSchema, lessonProductiveGradingOutputJsonSchema,
+  lessonProductiveGradingOutputSchema, validateLessonProductiveGrading
+} from "./lesson-productive-grading.js";
 import type { AiTaskDefinition } from "./types.js";
 import { standardLessonInstruction } from "./lesson-instruction.js";
 
@@ -78,6 +82,11 @@ export class AiTaskRegistry {
 }
 
 export const AI_TASKS = new AiTaskRegistry([
+  {
+    id: LESSON_PRODUCTIVE_GRADING_TASK, promptKey: LESSON_PRODUCTIVE_GRADING_TASK, inputSchema: lessonProductiveGradingInputSchema,
+    outputSchema: lessonProductiveGradingOutputSchema, outputJsonSchema: lessonProductiveGradingOutputJsonSchema,
+    validateOutput: (output, input) => validateLessonProductiveGrading(output as never, input as never)
+  },
   {
     id: "micro_lesson_generation", promptKey: "micro_lesson_generation", inputSchema: microLessonInputSchema,
     outputSchema: microLessonOutputSchema, outputJsonSchema: microLessonOutputJsonSchema

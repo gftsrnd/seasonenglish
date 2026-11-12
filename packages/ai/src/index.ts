@@ -14,4 +14,6 @@ export * from "./pronunciation-assets.js";
 export * from "./lesson-instruction.js";
 export * from "./providers/groq.js";
 export * from "./providers/anthropic.js";
+export * from "./providers/openai-transcription.js";
+export * from "./lesson-productive-grading.js";
 export * from "./tool-markup.js";
