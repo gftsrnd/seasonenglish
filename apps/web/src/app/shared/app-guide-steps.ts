@@ -46,6 +46,8 @@ const learnerSteps: Record<string, readonly GuideStep[]> = {
   ],
   "/lesson/*": [
     [".lesson-part:not(:has(.lesson-answer))", "Phần học", "Mỗi thẻ là một phần học: **từ vựng**, **ngữ pháp** hoặc **phát âm**. Đọc hết và bấm biểu tượng loa để nghe mẫu."],
+    // A1–A2 grammar example cards with a translate icon (Vietnamese popup).
+    [".lesson-part--grammar:has(.lesson-example-wrap)", "Câu ví dụ ngữ pháp", "Chạm vào câu ví dụ để **nghe**. Chạm **biểu tượng dịch** trên thẻ để xem **nghĩa tiếng Việt**."],
     [".lesson-part:has(.lesson-answer)", "Phần luyện tập", "Trả lời rồi bấm **Nộp bài** (bài tiếng Anh: **Submit**) để lưu phần đó. Thấy câu sai đề, bấm **Báo lỗi câu này** (**Report an issue**) để Vận hành xem lại."],
     [".lesson-appeal-form", "Báo lỗi phần bài", "Ghi rõ câu hoặc nội dung bạn cho là sai, đính kèm ảnh nếu có, rồi gửi để **Vận hành** xem lại.", true],
     [".lesson-study-cta", "Xong phần Học", "Học hết các phần phía trên rồi bấm nút ở thẻ này để mở **Luyện tập**."],

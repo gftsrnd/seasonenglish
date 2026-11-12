@@ -101,6 +101,13 @@ describe("roadmap daily lesson contract and gates", () => {
 
   it("gates explanation length and language and the core word in an item", () => {
     const ok = { text: "Lỗi hay gặp: dùng V2 thay V3. Công thức: have/has + V3.", items: [item("Tìm lỗi: I have went to the client."), item("Chọn: She has ___")] };
+    // A1–A2 examples need their Vietnamese popup translations; B1+ must not have them.
+    const translated = { ...ok, examples: ["I have sent the budget.", "We have met the client."], exampleTranslations: ["Tôi đã gửi ngân sách.", "Chúng tôi đã gặp khách hàng."] };
+    expect(monthlyGrammarRoadmapDayIssues(day("common_errors"), "A2", translated, coreWords)).toEqual([]);
+    expect(monthlyGrammarRoadmapDayIssues(day("common_errors"), "A2", { ...translated, exampleTranslations: undefined }, coreWords).map((issue) => issue.code)).toEqual(["MONTHLY_GRAMMAR_ROADMAP_EXAMPLE_TRANSLATION"]);
+    expect(monthlyGrammarRoadmapDayIssues(day("common_errors"), "B1", { ...translated, text: "Use have or has with the past participle." }, coreWords).map((issue) => issue.code)).toEqual(["MONTHLY_GRAMMAR_ROADMAP_EXAMPLE_TRANSLATION"]);
+    expect(monthlyGrammarRoadmapDayContract(day("common_errors"), "A1")).toContain("grammar.exampleTranslations: one short natural Vietnamese translation");
+    expect(monthlyGrammarRoadmapDayContract(day("common_errors"), "C1")).toContain("Do not return grammar.exampleTranslations");
     expect(monthlyGrammarRoadmapDayIssues(day("common_errors"), "A2", ok, coreWords)).toEqual([]);
     const long = { ...ok, text: `Giải thích ${"rất dài ".repeat(40)}` };
     expect(monthlyGrammarRoadmapDayIssues(day("common_errors"), "A2", long, coreWords).map((issue) => issue.code)).toEqual(["MONTHLY_GRAMMAR_ROADMAP_EXPLANATION_LENGTH"]);

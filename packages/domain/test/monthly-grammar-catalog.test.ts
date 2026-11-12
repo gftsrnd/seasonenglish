@@ -4,7 +4,7 @@ import { planMonthlyResourcePool, validateMonthlyCurriculum, type MonthlyResourc
 import { buildMonthlyTeachingCalendar } from "../src/monthly/calendar.js";
 import { dailyTeachingPlan } from "../src/monthly/daily-progression.js";
 import {
-  findMonthlyGrammarCatalogTopic, monthlyGrammarCatalog, monthlyGrammarContentMarkers, monthlyGrammarCoverageIssues, monthlyGrammarDayCode,
+  findMonthlyGrammarCatalogTopic, monthlyGrammarCatalog, monthlyGrammarExampleTranslationIssues, monthlyGrammarContentMarkers, monthlyGrammarCoverageIssues, monthlyGrammarDayCode,
   monthlyGrammarDayStage, monthlyGrammarMonthCodes, monthlyGrammarPairOf, monthlyGrammarTopicTitle, monthlyGrammarUncoveredContents, selectMonthlyGrammarPair
 } from "../src/monthly/grammar-catalog.js";
 
@@ -220,5 +220,22 @@ describe("grammar roadmap coverage gate", () => {
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatch(/does not cover roadmap content: "just\/already\/yet" \(use at least one of: just, already, yet\)/u);
     expect(monthlyGrammarCoverageIssues("A2", [{ ...topic, id: "legacy" }])).toEqual([]);
+  });
+});
+
+describe("A1–A2 grammar example translations", () => {
+  const examples = ["I have sent the report.", "She has booked the room."];
+  it("requires one short Vietnamese translation per example at A1–A2", () => {
+    expect(monthlyGrammarExampleTranslationIssues("A2", examples, ["Tôi đã gửi báo cáo.", "Cô ấy đã đặt phòng."])).toEqual([]);
+    expect(monthlyGrammarExampleTranslationIssues("A1", examples, undefined)[0]).toMatch(/one short Vietnamese translation per grammar.examples sentence/u);
+    expect(monthlyGrammarExampleTranslationIssues("A1", examples, ["Tôi đã gửi báo cáo."])[0]).toMatch(/2 expected, received 1/u);
+    expect(monthlyGrammarExampleTranslationIssues("A2", examples, ["Tôi đã gửi báo cáo.", "She has booked the room."])).toEqual(["grammar.exampleTranslations[1] must be a Vietnamese translation of example 2"]);
+    expect(monthlyGrammarExampleTranslationIssues("A2", examples, ["Tôi đã gửi báo cáo.", `Cô ấy ${"đã đặt phòng ".repeat(20)}`])[0]).toMatch(/must be short/u);
+  });
+
+  it("keeps Vietnamese out of the spoken examples and has no translations from B1", () => {
+    expect(monthlyGrammarExampleTranslationIssues("A2", ["I have sent it. (Tôi đã gửi.)"], ["Tôi đã gửi."])[0]).toMatch(/read aloud in English.*into grammar.exampleTranslations/u);
+    expect(monthlyGrammarExampleTranslationIssues("B1", examples, undefined)).toEqual([]);
+    expect(monthlyGrammarExampleTranslationIssues("B2", examples, ["Tôi đã gửi báo cáo.", "Cô ấy đã đặt phòng."])).toEqual(["grammar.exampleTranslations must be omitted at B2 (no Vietnamese translations from B1)"]);
   });
 });

@@ -1770,7 +1770,8 @@ export const monthlyLessonDayOutputJsonSchema = {
                 } }
               ] }, description: "instruction: strings; grammar review: one {formula,text,examples} object per locked grammar step." },
               formula: { type: "string", description: "grammar formula or sentence pattern." },
-              examples: { type: "array", items: { type: "string" }, description: "grammar examples." },
+              examples: { type: "array", items: { type: "string" }, description: "grammar examples (English only: they are read aloud)." },
+              exampleTranslations: { type: "array", items: { type: "string" }, description: "A1–A2 grammar only: one short Vietnamese translation per grammar example, same order; shown as a popup, never read aloud. Omit from B1." },
               focus: { type: "string", description: "pronunciation target sound written as /IPA/." },
               words: { type: "array", description: "pronunciation: exactly 3 items [{ word, ipa }]." },
               script: { type: "string", description: "listening: the full spoken transcript the app reads aloud (required for listening)." },

@@ -401,3 +401,37 @@ function describeMarkers(item: string): string {
   const { strong, weak } = monthlyGrammarContentMarkers(item);
   return strong.length ? `at least one of: ${strong.join(", ")}` : `all of: ${weak.join(", ")}`;
 }
+
+// ---------------------------------------------------------------------------
+// A1–A2 grammar example translations (product decision 12/11): each English
+// example has a short Vietnamese translation in `exampleTranslations` (same
+// order), shown as a popup only. Audio/TTS reads the English example only, so
+// an example must never contain Vietnamese. B1+ has no translations.
+// ---------------------------------------------------------------------------
+
+export const MONTHLY_GRAMMAR_EXAMPLE_TRANSLATION_MAX_CHARS = 160;
+const VIETNAMESE_TEXT = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉĩịọỏốồổỗộớờởỡợụủũứừửữựỳỵỷỹàáèéìíòóùúý]/iu;
+
+/** Problems with a grammar part's examples/exampleTranslations for the level (empty when fine). */
+export function monthlyGrammarExampleTranslationIssues(cefr: CefrLevel, examples: readonly unknown[], translations: unknown): string[] {
+  const issues: string[] = [];
+  const englishExamples = examples.filter((example): example is string => typeof example === "string" && Boolean(example.trim()));
+  const spokenVietnamese = englishExamples.filter((example) => VIETNAMESE_TEXT.test(example));
+  if (spokenVietnamese.length) issues.push(`grammar.examples are read aloud in English: move the Vietnamese out of "${spokenVietnamese[0]!.slice(0, 80)}"${cefr === "A1" || cefr === "A2" ? " into grammar.exampleTranslations" : ""}`);
+  const list = Array.isArray(translations) ? translations : undefined;
+  if (cefr !== "A1" && cefr !== "A2") {
+    if (list?.some((item) => typeof item === "string" && item.trim())) issues.push(`grammar.exampleTranslations must be omitted at ${cefr} (no Vietnamese translations from B1)`);
+    return issues;
+  }
+  if (!examples.length && !list?.length) return issues;
+  if (!list || list.length !== examples.length) {
+    issues.push(`grammar.exampleTranslations must give one short Vietnamese translation per grammar.examples sentence, same order (${examples.length} expected, received ${list?.length ?? 0})`);
+    return issues;
+  }
+  list.forEach((item, index) => {
+    const value = typeof item === "string" ? item.trim() : "";
+    if (!value || !VIETNAMESE_TEXT.test(value)) issues.push(`grammar.exampleTranslations[${index}] must be a Vietnamese translation of example ${index + 1}`);
+    else if (value.length > MONTHLY_GRAMMAR_EXAMPLE_TRANSLATION_MAX_CHARS) issues.push(`grammar.exampleTranslations[${index}] must be short (at most ${MONTHLY_GRAMMAR_EXAMPLE_TRANSLATION_MAX_CHARS} characters)`);
+  });
+  return issues;
+}

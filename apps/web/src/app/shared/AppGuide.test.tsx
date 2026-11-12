@@ -178,6 +178,22 @@ describe("AppGuide", () => {
     expect(walkSteps()).toEqual(["Phần học", "Xong phần Học", "Hoàn thành bài"]);
   });
 
+  it("points A1–A2 learners at the grammar example card with its translation popup", () => {
+    render(<><AppGuide role="learner" pathname="/lesson/1" compact={false} />
+      <ol><li className="card lesson-part lesson-part--vocabulary">Từ vựng</li>
+        <li className="card lesson-part lesson-part--grammar"><span className="lesson-example-wrap"><button>I have sent it.</button><button aria-label="Xem nghĩa tiếng Việt" /><span role="tooltip" hidden>Tôi đã gửi.</span></span></li></ol>
+      <section className="card lesson-study-cta"><button>Học xong</button></section>
+    </>);
+    expect(walkSteps()).toEqual(["Phần học", "Câu ví dụ ngữ pháp", "Xong phần Học"]);
+  });
+
+  it("skips the grammar example step when examples have no translation (B1+, older lessons)", () => {
+    render(<><AppGuide role="learner" pathname="/lesson/1" compact={false} />
+      <ol><li className="card lesson-part lesson-part--grammar"><button>I have sent it.</button></li></ol>
+    </>);
+    expect(walkSteps()).toEqual(["Phần học"]);
+  });
+
   it("walks through the current screen, skipping missing targets", () => {
     render(<><AppGuide role="learner" pathname="/home" compact={false} />
       <section data-home-block="primary"><a href="/lesson/1">Bài học</a></section>
