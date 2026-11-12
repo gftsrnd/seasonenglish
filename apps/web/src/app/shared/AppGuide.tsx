@@ -76,10 +76,20 @@ function getSpotlight(target: HTMLElement): Spotlight | null {
   if (!target.isConnected || !target.getClientRects().length) return null;
   const rect = target.getBoundingClientRect();
   const padding = 10;
-  const left = Math.max(rect.left - padding, 0);
-  const top = Math.max(rect.top - padding, 0);
-  const width = Math.min(rect.right + padding, document.documentElement.clientWidth || window.innerWidth) - left;
-  const height = Math.min(rect.bottom + padding, window.innerHeight) - top;
+  // Clip to every scrolling/clipping ancestor (e.g. a popup's body) so a tall card never spills past the box.
+  let clipLeft = 0, clipTop = 0;
+  let clipRight = document.documentElement.clientWidth || window.innerWidth, clipBottom = window.innerHeight;
+  for (let node = target.parentElement; node && node !== document.body; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    if (style.overflowY === "visible" && style.overflowX === "visible") continue;
+    const box = node.getBoundingClientRect();
+    clipLeft = Math.max(clipLeft, box.left); clipTop = Math.max(clipTop, box.top);
+    clipRight = Math.min(clipRight, box.right); clipBottom = Math.min(clipBottom, box.bottom);
+  }
+  const left = Math.max(rect.left - padding, clipLeft);
+  const top = Math.max(rect.top - padding, clipTop);
+  const width = Math.min(rect.right + padding, clipRight) - left;
+  const height = Math.min(rect.bottom + padding, clipBottom) - top;
   return width > 0 && height > 0 ? { left, top, width, height } : null;
 }
 
