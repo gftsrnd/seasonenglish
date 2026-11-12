@@ -105,6 +105,98 @@ export function monthlyPronunciationContrastIssue(rule: MonthlyPronunciationCont
   return "the partner must be the same word or stem with only the target feature changed";
 }
 
+/**
+ * Common A1–A2 minimal pairs by target phoneme: [word with the target sound,
+ * real partner with one neighbouring sound]. Used to make a failed
+ * minimal-pair repair actionable (December 2026: "team / teem" came back six
+ * times because "team" has no common minimal partner - "Tim" is a name).
+ * Every pair passes the minimal-pair gate on spelling alone.
+ */
+export const A1A2_MINIMAL_PAIR_SUGGESTIONS: Readonly<Record<string, ReadonlyArray<readonly [string, string]>>> = {
+  "iː": [["seat", "sit"], ["feel", "fill"], ["leave", "live"], ["sheep", "ship"], ["read", "rid"], ["heat", "hit"], ["eat", "it"], ["cheap", "chip"], ["green", "grin"], ["sleep", "slip"]],
+  "ɪ": [["sit", "seat"], ["fill", "feel"], ["live", "leave"], ["ship", "sheep"], ["hit", "heat"], ["it", "eat"], ["chip", "cheap"], ["slip", "sleep"], ["bit", "bet"], ["list", "least"]],
+  "e": [["bed", "bad"], ["pen", "pan"], ["men", "man"], ["set", "sat"], ["bet", "bat"], ["send", "sand"], ["said", "sad"], ["left", "lift"], ["ten", "tin"], ["desk", "disk"]],
+  "æ": [["bad", "bed"], ["man", "men"], ["pan", "pen"], ["sat", "set"], ["bat", "bet"], ["sand", "send"], ["sad", "said"], ["cat", "cut"], ["hat", "hut"], ["back", "buck"]],
+  "ʌ": [["cut", "cat"], ["hut", "hat"], ["cup", "cap"], ["luck", "lock"], ["run", "ran"], ["fun", "fan"]],
+  "ɑː": [["heart", "hat"], ["cart", "cat"], ["park", "pack"], ["last", "lost"]],
+  "ɒ": [["lock", "luck"], ["hot", "hut"], ["shop", "ship"], ["not", "nut"], ["job", "jab"]],
+  "ɔː": [["walk", "wok"], ["short", "shot"], ["port", "pot"]],
+  "ʊ": [["full", "fool"], ["pull", "pool"], ["look", "luck"], ["book", "buck"]],
+  "uː": [["fool", "full"], ["pool", "pull"], ["food", "feed"], ["shoot", "shot"]],
+  "ɜː": [["work", "walk"], ["first", "fast"], ["bird", "bad"], ["shirt", "short"]],
+  "eɪ": [["main", "men"], ["paper", "pepper"]],
+  "aɪ": [["like", "lake"]],
+  "ɔɪ": [["boy", "bay"], ["toy", "tie"]],
+  "aʊ": [["now", "no"], ["found", "fund"], ["house", "horse"]],
+  "əʊ": [["coat", "cot"], ["road", "rod"]],
+  "ɪə": [["here", "her"], ["beer", "bee"]],
+  "eə": [["care", "car"], ["fair", "fur"], ["hair", "her"]],
+  m: [["mail", "nail"], ["mine", "nine"]],
+  n: [["night", "might"], ["sun", "sum"]],
+  l: [["light", "right"], ["lead", "read"], ["long", "wrong"], ["fly", "fry"]],
+  h: [["hat", "at"], ["heat", "eat"], ["hold", "old"], ["hand", "and"]],
+  p: [["pin", "bin"], ["pack", "back"], ["cap", "cab"], ["pay", "bay"]],
+  b: [["bin", "pin"], ["back", "pack"], ["bay", "pay"]],
+  t: [["time", "dime"], ["ten", "den"], ["sent", "send"], ["tie", "die"]],
+  d: [["send", "sent"], ["die", "tie"]],
+  f: [["fan", "van"], ["fine", "vine"]],
+  v: [["van", "fan"], ["very", "berry"]],
+  s: [["sip", "ship"], ["see", "she"], ["sort", "short"], ["sell", "shell"], ["bus", "buzz"]],
+  z: [["buzz", "bus"], ["prize", "price"]],
+  k: [["coat", "goat"], ["back", "bag"], ["class", "glass"]],
+  g: [["goat", "coat"], ["bag", "back"], ["glass", "class"], ["gold", "cold"]],
+  w: [["wine", "vine"], ["west", "vest"], ["wet", "vet"]],
+  j: [["yet", "jet"], ["yes", "less"], ["year", "ear"]],
+  "ŋ": [["thing", "thin"], ["sing", "sin"], ["wing", "win"], ["bang", "ban"]],
+  r: [["right", "light"], ["read", "lead"], ["wrong", "long"], ["fry", "fly"]],
+  "ʃ": [["ship", "sip"], ["she", "see"], ["shell", "sell"], ["short", "sort"]],
+  "tʃ": [["chip", "ship"]],
+  "dʒ": [["jet", "yet"], ["joke", "choke"]],
+  "θ": [["think", "sink"], ["three", "tree"], ["thank", "tank"], ["thin", "tin"], ["path", "pass"]],
+  "ð": [["then", "den"]]
+};
+
+/** Phonemes a stored A1–A2 sound teaches ("/iː/" -> ["iː"]; pair items both sides). */
+function soundPhonemes(cefr: CefrLevel, sound: { ipa: string; catalogId?: string | undefined }): string[] {
+  const item = findMonthlyPronunciationCatalogItem(cefr, sound);
+  if (item?.phonemes?.length) return [...item.phonemes];
+  return sound.ipa.replace(/[/[\]\s]/gu, "").split(/[–~,&-]+/u).filter(Boolean);
+}
+
+/** "example / partner" for each taught example that has a listed common partner. */
+export function monthlyMinimalPairPartners(cefr: CefrLevel, sound: { ipa: string; catalogId?: string | undefined }, taughtExamples: readonly string[]): string[] {
+  const pairs = soundPhonemes(cefr, sound).flatMap((phoneme) => A1A2_MINIMAL_PAIR_SUGGESTIONS[phoneme] ?? []);
+  return [...new Set(taughtExamples.map(monthlyPronunciationExampleText).flatMap((example) => {
+    const partner = pairs.find(([first]) => first === example.toLocaleLowerCase("en-US"))?.[1];
+    return partner ? [`${example} / ${partner}`] : [];
+  }))];
+}
+
+/**
+ * Actionable partner advice for a failed A1–A2 minimal pair: the partner of the
+ * taught example when a common one exists, otherwise the other taught examples
+ * of the same sound that have one, plus model pairs for the sound.
+ */
+export function monthlyMinimalPairRepairAdvice(cefr: CefrLevel, sound: { ipa: string; catalogId?: string | undefined }, example: string, taughtExamples: readonly string[]): string {
+  const phonemes = soundPhonemes(cefr, sound);
+  const pairs = phonemes.flatMap((phoneme) => A1A2_MINIMAL_PAIR_SUGGESTIONS[phoneme] ?? []);
+  const word = monthlyPronunciationExampleText(example).toLocaleLowerCase("en-US");
+  const partnerOf = (candidate: string) => pairs.find(([first]) => first === candidate.toLocaleLowerCase("en-US"))?.[1];
+  const own = partnerOf(word);
+  const others = taughtExamples.map(monthlyPronunciationExampleText).filter((candidate) => candidate.toLocaleLowerCase("en-US") !== word)
+    .flatMap((candidate) => { const partner = partnerOf(candidate); return partner ? [`"${candidate} / ${partner}"`] : []; });
+  const label = phonemes.map((phoneme) => `/${phoneme}/`).join(" or ");
+  const models = pairs.slice(0, 4).map(([first, second]) => `${first} / ${second}`).join(", ");
+  if (own) return `Use "${word} / ${own}".`;
+  return [
+    `"${word}" has no common real word that differs only in ${label || "the target sound"} (a name such as Tim does not count),`,
+    others.length
+      ? `so replace this pair with another of this week's taught ${label} examples and its partner: ${[...new Set(others)].join(" or ")}.`
+      : `so replace this pair with another of this week's taught examples (${taughtExamples.map((candidate) => `"${monthlyPronunciationExampleText(candidate)}"`).join(", ")}) that has a real partner.`,
+    models ? `Real ${label} pairs look like: ${models}.` : ""
+  ].filter(Boolean).join(" ");
+}
+
 function phraseTokens(value: string): string[] {
   return value.toLocaleLowerCase("en-US")
     .replace(/n't\b/gu, " not").replace(/'re\b/gu, " are").replace(/'ve\b/gu, " have").replace(/'ll\b/gu, " will").replace(/'d\b/gu, " would").replace(/'m\b/gu, " am")

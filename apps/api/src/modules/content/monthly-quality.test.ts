@@ -411,7 +411,8 @@ describe("Friday review gate (AI quality round 2, 11/11)", () => {
     ] } });
     expect(codes(evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, speaking(["cost", "coast"], ["can", "cane"])))).not.toContain("MONTHLY_REVIEW_MINIMAL_PAIR_NOT_MINIMAL");
     const bad = evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, speaking(["event", "segment"], ["bat", "box"])).severe.filter((item) => item.code === "MONTHLY_REVIEW_MINIMAL_PAIR_NOT_MINIMAL");
-    expect(bad.map((item) => item.message.split(" is not")[0])).toEqual(["\"event / segment\"", "\"bat / box\""]);
+    // The repair message names the item first (December 2026 A1 L4).
+    expect(bad.map((item) => item.message.split(" is not")[0])).toEqual(["speaking item s1: \"event / segment\"", "speaking item s2: \"bat / box\""]);
   });
 
   it("names the section, the exact count and how many items are missing (MONTHLY_REVIEW_COUNT, A1 W2 returned 1 item per section)", () => {

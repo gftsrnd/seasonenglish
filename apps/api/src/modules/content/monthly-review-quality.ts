@@ -1,4 +1,4 @@
-import { containsVietnameseLearnerText, isExerciseTranslationKey, monthlyPronunciationContrastIssue, monthlyPronunciationContrastRule, monthlyPronunciationExampleText, type MonthlyCurriculumContract, type MonthlyDaySpec, type MonthlyPronunciationContrastRule } from "@e4s/domain";
+import { containsVietnameseLearnerText, isExerciseTranslationKey, monthlyMinimalPairPartners, monthlyMinimalPairRepairAdvice, monthlyPronunciationContrastIssue, monthlyPronunciationContrastRule, monthlyPronunciationExampleText, type MonthlyCurriculumContract, type MonthlyDaySpec, type MonthlyPronunciationContrastRule } from "@e4s/domain";
 import type { MonthlyQualityFinding } from "./monthly-quality.js";
 
 /**
@@ -149,9 +149,13 @@ export function evaluateMonthlyReviewSections(
     const partner = taught.text === spoken(first) ? second : first;
     const issue = monthlyPronunciationContrastIssue(taught.rule, taught.text, partner, { first: ipaByWord.get(taught.text), second: ipaByWord.get(spoken(partner)) });
     if (issue) {
+      // December 2026: "team / teem" came back six times on a generic message. Name the item, say why,
+      // and give real partners (or another taught example of the same sound when the word has none).
+      const sound = contract.sounds.find((candidate) => candidate.id === taught.soundId);
+      const advice = sound ? monthlyMinimalPairRepairAdvice(contract.cefr, sound, taught.text, weekExamples.filter((example) => example.soundId === taught.soundId).map((example) => example.text)) : "";
       add("severe", "speaking", "MONTHLY_REVIEW_MINIMAL_PAIR_NOT_MINIMAL", taught.rule.kind === "minimal_pair"
-        ? `"${first} / ${second}" is not a minimal pair${/homophones/u.test(issue) ? ` (${issue})` : ""}: the two words must sound exactly the same except for the week's target sound, replaced by one neighbouring sound (e.g. ship / sheep, think / sink, fan / van; never homophones such as team / teem or week / weak). Keep the week example word and replace the partner word`
-        : `"${first} / ${second}" is not a valid contrast for ${taught.soundLabel}: ${issue}. Keep the week example "${taught.text}" and use as partner ${taught.rule.guidance}`);
+        ? `${label}: "${first} / ${second}" is not a minimal pair${/homophones/u.test(issue) ? ` (${issue})` : ""}: the two words must sound exactly the same except for the week's target sound ${taught.soundLabel}, replaced by one neighbouring sound (e.g. ship / sheep, think / sink, fan / van; never homophones such as team / teem or week / weak). Keep the week example word when it has a real partner and replace the partner word with a real, common English word. ${advice} Update options, answer, audioText and explanation together`.trim()
+        : `${label}: "${first} / ${second}" is not a valid contrast for ${taught.soundLabel}: ${issue}. Keep the week example "${taught.text}" and use as partner ${taught.rule.guidance}`);
     }
   }
   if (readAloud.length < 1) add("severe", "speaking", "MONTHLY_REVIEW_READ_ALOUD_MISSING", `Speaking needs 1 read-aloud sentence (passage, no options). ${speakingDetail}`);
@@ -236,7 +240,14 @@ export function weekPronunciationExamples(contract: MonthlyCurriculumContract, d
 export function monthlyReviewSpeakingContrastGuidance(contract: MonthlyCurriculumContract, day: MonthlyDaySpec): string {
   const bySound = new Map<string, WeekPronunciationExample[]>();
   for (const example of weekPronunciationExamples(contract, day)) bySound.set(example.soundId, [...(bySound.get(example.soundId) ?? []), example]);
-  return [...bySound.values()].map((examples) => `${examples[0]!.soundLabel}: one option is one of [${examples.map((example) => `"${example.text}"`).join(", ")}] copied exactly; the other option is ${examples[0]!.rule.guidance}`).join(". ");
+  return [...bySound.values()].map((examples) => {
+    const base = `${examples[0]!.soundLabel}: one option is one of [${examples.map((example) => `"${example.text}"`).join(", ")}] copied exactly; the other option is ${examples[0]!.rule.guidance}`;
+    if (examples[0]!.rule.kind !== "minimal_pair") return base;
+    // Name the real partners up front so the model does not reach for a homophone (team / teem).
+    const sound = contract.sounds.find((candidate) => candidate.id === examples[0]!.soundId);
+    const known = sound ? monthlyMinimalPairPartners(contract.cefr, sound, examples.map((example) => example.text)) : [];
+    return known.length ? `${base}; real pairs from these examples: ${known.join(", ")}` : base;
+  }).join(". ");
 }
 
 /** Words of the week's locked pronunciation examples (reviewPronunciationExampleIds), spoken form, normalised and de-duplicated. */
