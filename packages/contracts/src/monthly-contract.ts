@@ -6,6 +6,8 @@ export interface MonthlyGrammarDayPlan {
   mode: "recognize" | "apply" | "contrast" | "read_aloud" | "voice_note" | "personalize" | "shadow" | "mock";
   milestoneIds: string[];
   recallMilestoneIds: string[];
+  /** Grammar roadmap stage of the day (docs/grammar-roadmap.md); only on roadmap months. */
+  stage?: "identify" | "structure" | "variation" | "meaning_use" | "common_errors" | "application" | "link" | "mixed_practice" | "workplace_task" | "error_review" | "long_context" | "mock_test";
 }
 export interface MonthlyPronunciationDayPlan {
   slot: string;
@@ -77,7 +79,7 @@ export interface MonthFrameworkView {
   resources?: {
     coreTerms: Array<{ id: string; word: string; meaning: string; type: string; ipa: string; source: "core_registry"; component: "core"; dayNumber?: number; /** Frozen illustration URL once resources are approved. */ imageUrl?: string; /** The core word's own CEFR label from generation; absent on older pools. */ cefr?: CefrLevel }>;
     supportTerms: Array<{ id: string; word: string; meaning: string; type: string; relation: "umbrella" | "synonym" | "antonym" | "word_family" | "collocation"; source: "example" | "family" | "synonym" | "antonym" | "group" | "manual"; component: "expanded"; dayNumber?: number; relatedCoreTermId?: string; /** CEFR level of the support word (same as the framework level or ±1); absent on pools stored before VH-R33. */ cefr?: CefrLevel }>;
-    grammarTopics: Array<{ id: string; title: string; steps: Array<{ id: string; focus: string; formula: string; usage: string; examples: string[]; dailyObjectives?: string[] | undefined }> }>;
+    grammarTopics: Array<{ id: string; title: string; steps: Array<{ id: string; focus: string; formula: string; usage: string; examples: string[]; dailyObjectives?: string[] | undefined }>; catalogId?: string }>;
     sounds: Array<{ id: string; ipa: string; label: string; examples: Array<{ id: string; word: string; ipa: string }>; /** Roadmap catalog item; absent on older pools. */ catalogId?: string }>;
     carryoverReviews?: Array<{ lessonNumber: number; day: MonthDayPlanView; coreTerms: NonNullable<MonthFrameworkView["resources"]>["coreTerms"]; supportTerms: NonNullable<MonthFrameworkView["resources"]>["supportTerms"]; grammarTopics: NonNullable<MonthFrameworkView["resources"]>["grammarTopics"]; sounds: NonNullable<MonthFrameworkView["resources"]>["sounds"] }>;
     /** Draft pools expose no day allocation. Approved frameworks project saved DaySpecs here for review. */
@@ -115,7 +117,7 @@ export interface MonthlyResourceEditInput {
   expectedVersion: number;
   coreTerms: Array<{ id: string; word: string; type: string; meaning: string; ipa: string }>;
   supportTerms: Array<{ id: string; word: string; meaning: string; type: string; relation: "umbrella" | "synonym" | "antonym" | "word_family" | "collocation"; relatedCoreTermId: string; cefr?: CefrLevel | undefined }>;
-  grammarTopics: Array<{ id: string; title: string; steps: Array<{ id: string; focus: string; formula: string; usage: string; examples: string[]; dailyObjectives?: string[] | undefined }> }>;
+  grammarTopics: Array<{ id: string; title: string; steps: Array<{ id: string; focus: string; formula: string; usage: string; examples: string[]; dailyObjectives?: string[] | undefined }>; catalogId?: string }>;
   sounds: Array<{ id: string; ipa: string; label: string; examples: Array<{ id: string; word: string; ipa: string }> }>;
 }
 

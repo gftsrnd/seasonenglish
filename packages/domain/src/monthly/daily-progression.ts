@@ -1,5 +1,6 @@
 import type { CefrLevel, MonthlyGrammarDayPlan, MonthlyPronunciationDayPlan } from "@e4s/contracts";
 import type { GrammarTopic, PronunciationSound } from "./curriculum.js";
+import { monthlyGrammarDayStage, monthlyGrammarPairOf, monthlyGrammarTopicTitle, MONTHLY_GRAMMAR_STAGE_GUIDE, type MonthlyGrammarCatalogPair, type MonthlyGrammarDayStage } from "./grammar-catalog.js";
 
 /** New-learning ordinal only: Fridays and holidays never advance a separate counter. */
 export function dailyTeachingPlan(n: number, topics: readonly GrammarTopic[], sounds: readonly PronunciationSound[], cefr: CefrLevel, coreWords: readonly string[] = []): { grammarPlan: MonthlyGrammarDayPlan; pronunciationPlan: MonthlyPronunciationDayPlan } {
@@ -17,12 +18,20 @@ export function dailyTeachingPlan(n: number, topics: readonly GrammarTopic[], so
     ? { recognize: "Nhận diện, giải thích cấu trúc và chọn cách dùng", apply: "Vận dụng cấu trúc trong phản hồi công việc có hướng dẫn", contrast: "Phân biệt và phối hợp hai chủ điểm", read_aloud: "Đọc và giải thích cách dùng hai chủ điểm trong đoạn công việc", voice_note: "Tạo phản hồi công việc kết hợp hai chủ điểm", personalize: "Chẩn đoán và sửa lỗi cá nhân trên hai chủ điểm", shadow: "Nói nhại và vận dụng hai chủ điểm", mock: "Làm bài nói thử kết hợp hai chủ điểm" }[mode]
     : { recognize: "Identify, explain and select the form", apply: "Apply the form in a guided workplace response", contrast: "Contrast and combine the two topics", read_aloud: "Read and explain both topics in a workplace message", voice_note: "Produce a workplace response combining both topics", personalize: "Diagnose and correct personal errors on both topics", shadow: "Shadow and apply both topics", mock: "Complete a mock speaking task combining both topics" }[mode];
   const explicitObjective = !combined ? milestones[0]?.dailyObjectives?.[(dayInTopic - 1) % 2] : undefined;
+  // Grammar roadmap months (topics carry roadmap catalog IDs): the day follows
+  // the roadmap stage (A1–A6/B1–B6 scaffolding, K1–K3, M1–M3). Older months keep
+  // their stored plan byte for byte, so approved contracts still validate.
+  const pair = monthlyGrammarPairOf(cefr, topics);
+  const grammarStage = pair ? monthlyGrammarDayStage(n) : undefined;
   const grammarPlan: MonthlyGrammarDayPlan = {
     code: combined ? `${n <= 15 ? "K" : "M"}${n <= 15 ? n - 12 : n - 15}` : `${topicIndex === 0 ? "A" : "B"}${dayInTopic}`,
-    mode,
-    objective: explicitObjective || `${activity}: ${milestones.map(step => step.focus).join(" · ")}${words ? ` (${words})` : ""}.`,
+    mode: grammarStage ? ROADMAP_STAGE_MODES[grammarStage] : mode,
+    objective: grammarStage && pair && combined
+      ? roadmapCombinedObjective(grammarStage, pair, cefr, words)
+      : explicitObjective || (grammarStage ? `${vi ? MONTHLY_GRAMMAR_STAGE_GUIDE[grammarStage].vi : MONTHLY_GRAMMAR_STAGE_GUIDE[grammarStage].en}: ${milestones[0]!.focus}${words ? ` (${words})` : ""}.` : `${activity}: ${milestones.map(step => step.focus).join(" · ")}${words ? ` (${words})` : ""}.`),
     milestoneIds: milestones.map(step => step.id),
-    recallMilestoneIds: n >= 8 && n <= 12 ? [topics[0]!.steps[Math.min(2, Math.floor((n - 8) / 2))]!.id] : []
+    recallMilestoneIds: n >= 8 && n <= 12 ? [topics[0]!.steps[Math.min(2, Math.floor((n - 8) / 2))]!.id] : [],
+    ...(grammarStage ? { stage: grammarStage } : {})
   };
   const soundIndex = Math.floor((n - 1) / 3);
   const exampleSet = (n - 1) % 3 + 1;
@@ -40,6 +49,32 @@ export function dailyTeachingPlan(n: number, topics: readonly GrammarTopic[], so
     ...(stage === "read_aloud" || stage === "mock" ? { requiredPositions: targetSounds.flatMap(sound => sound.examples.slice(0, 2).map(example => ({ soundId: sound.id, exampleId: example.id }))) } : {})
   };
   return { grammarPlan, pronunciationPlan };
+}
+
+const ROADMAP_STAGE_MODES: Readonly<Record<MonthlyGrammarDayStage, MonthlyGrammarDayPlan["mode"]>> = {
+  identify: "recognize", structure: "apply", variation: "apply", meaning_use: "recognize", common_errors: "recognize", application: "apply",
+  link: "contrast", mixed_practice: "apply", workplace_task: "voice_note", error_review: "personalize", long_context: "read_aloud", mock_test: "mock"
+};
+
+/** Objective of a roadmap combination day (K1–K3, M1–M3); K1 depends on the pair type. */
+function roadmapCombinedObjective(stage: MonthlyGrammarDayStage, pair: MonthlyGrammarCatalogPair, cefr: CefrLevel, words: string): string {
+  const vi = cefr === "A1" || cefr === "A2";
+  const a = monthlyGrammarTopicTitle(cefr, pair.topicA);
+  const b = monthlyGrammarTopicTitle(cefr, pair.topicB);
+  const situation = vi ? pair.situationVi : pair.situationEn;
+  const tail = words ? ` (${words})` : "";
+  const text: Partial<Record<MonthlyGrammarDayStage, { vi: string; en: string }>> = {
+    link: pair.pairType === "contrast"
+      ? { vi: `K1 Phân biệt A–B: chọn đúng ${a} hay ${b} theo tình huống ${situation}`, en: `K1 Contrast A–B: choose ${a} or ${b} for each situation about ${situation}` }
+      : { vi: `K1 Nối A–B: ghép ${a} và ${b} vào cùng một câu về ${situation}`, en: `K1 Link A–B: join ${a} and ${b} in one sentence about ${situation}` },
+    mixed_practice: { vi: `K2 Luyện trộn: điền chỗ trống trong email/tin nhắn 4–6 câu cần cả ${a} và ${b}`, en: `K2 Mixed practice: fill the gaps in a 4–6 sentence email or message that needs both ${a} and ${b}` },
+    workplace_task: { vi: `K3 Task công sở: viết 2–3 câu dùng cả ${a} và ${b} cho tình huống ${situation}, so với đáp án mẫu`, en: `K3 Workplace task: write 2–3 sentences using both ${a} and ${b} about ${situation}, then compare with a model answer` },
+    error_review: { vi: `M1 Sửa lỗi: tổng hợp lỗi hay gặp nhất của ${a} và ${b}`, en: `M1 Error review: the most common errors with ${a} and ${b}` },
+    long_context: { vi: `M2 Ngữ cảnh dài: hội thoại hoặc email công sở dài hơn dùng ${a} và ${b}`, en: `M2 Longer context: a longer workplace dialogue or email using ${a} and ${b}` },
+    mock_test: { vi: `M3 Thi thử: bài thi thử theo cấu trúc đề tháng với ${a} và ${b}`, en: `M3 Mock test: a short mock in the monthly exam format with ${a} and ${b}` }
+  };
+  const entry = text[stage]!;
+  return `${vi ? entry.vi : entry.en}${tail}.`;
 }
 
 export function monthlyTeachingCode(n: number): string {

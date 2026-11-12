@@ -219,6 +219,8 @@ export interface GrammarTopic {
   id: string;
   title: string;
   steps: GrammarStep[];
+  /** Roadmap catalog topic this topic teaches (see grammar-catalog.ts); absent on older pools. */
+  catalogId?: string;
 }
 
 export interface PronunciationExample {
