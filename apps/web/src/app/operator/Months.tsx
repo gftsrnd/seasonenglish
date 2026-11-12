@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Eye, Pencil, Sparkles, Square } from "lucide-react";
 import type { CefrLevel, MonthlyResourceEditInput, MonthlyFinalDraftView, MonthlyFinalUpdateInput, MonthlyOperatorOverviewView, MonthlyQualityFindingView } from "@e4s/contracts";
-import { buildMonthlyCalendar, monthlyDayKind, monthlyNewLessonOrdinal, recommendedMonthlyResourceCriteria, formatMonthlyDayLabel, withMonthlyExpandedTerms, withMonthlyGrammarSteps, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
+import { buildMonthlyCalendar, monthlyDayKind, monthlyNewLessonOrdinal, recommendedMonthlyResourceCriteria, formatMonthlyDayLabel, monthlyLessonDisplayTitle, withMonthlyExpandedTerms, withMonthlyGrammarSteps, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { useToast } from "../shared/design-system.js";
 import { useDialog, useModal } from "../shared/ModalProvider.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
@@ -593,10 +593,11 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
   const [requestingReopen, setRequestingReopen] = useState(false);
   const parts = lesson.content?.parts ?? [];
   const dateLabel = `${date.slice(8, 10)}/${date.slice(5, 7)}`;
-  const title = lesson.content?.title || (lesson.kind === "review" ? "Ôn tập" : `Bài ${lesson.lessonNumber}`);
   const day = resources?.roadmap?.days.find((item) => item.lessonNumber === lesson.lessonNumber);
   const dayOrdinal = day?.newLessonNumber ?? (lesson.kind === "new" ? monthlyNewLessonOrdinal(lesson.lessonNumber, buildMonthlyCalendar(date.slice(0, 7))) : undefined);
   const teachingLabel = formatMonthlyDayLabel({ kind: lesson.kind, ...(dayOrdinal ? { newLessonNumber: dayOrdinal } : {}), ...(day?.reviewWeekNumber ? { reviewWeekNumber: day.reviewWeekNumber } : {}), ...(day?.grammarPlan ? { grammarPlan: day.grammarPlan } : {}), ...(day?.pronunciationPlan ? { pronunciationPlan: day.pronunciationPlan } : {}) });
+  // Same number as the header: a stored "Bài N" from the raw slot (review days counted) shows the new-lesson ordinal.
+  const title = monthlyLessonDisplayTitle(lesson.content?.title, { kind: lesson.kind, newLessonNumber: dayOrdinal, reviewWeekNumber: day?.reviewWeekNumber }) || (lesson.kind === "review" ? "Ôn tập" : teachingLabel);
   const dayCoreIds = new Set(day ? (day.kind === "review" ? day.reviewTermIds : day.coreTermIds) : []);
   const daySupportIds = new Set(day ? (day.kind === "review" ? day.reviewExpandedTermIds : day.expandedTermIds) : []);
   // Older drafts were saved before expanded terms were attached at generation time.
@@ -622,7 +623,7 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
       {exercise && <section className="card operator-practice-review" aria-label="Câu hỏi cần kiểm tra"><OperatorPracticeReview sectionNumber={1} headingText="Câu hỏi cần kiểm tra" part={exercise as never} /></section>}
       {parts.length ? <OperatorLessonPreview cefr={cefr} lessonId={`monthly-${lesson.lessonNumber}`} parts={reviewParts as never} {...(lesson.kind === "review" ? { studyTabLabel: cefr === "A1" || cefr === "A2" ? "Ôn tập" : "Review", collapsibleVocabulary: true, practiceContent: <MonthlyReviewPractice parts={reviewParts} english={!(cefr === "A1" || cefr === "A2")} /> } : {})} /> : <p className="muted">Nội dung bài chưa tải được.</p>}
     </div>
-    {requestingReopen && <MonthlyReopenRequest label={lesson.kind === "review" ? "bài ôn" : `bài ${lesson.lessonNumber}`} onCancel={() => setRequestingReopen(false)} onSubmit={async (reason) => { await onRequestReopen?.(reason); setRequestingReopen(false); }} />}
+    {requestingReopen && <MonthlyReopenRequest label={lesson.kind === "review" ? "bài ôn" : dayOrdinal ? `bài ${dayOrdinal}` : "bài học"} onCancel={() => setRequestingReopen(false)} onSubmit={async (reason) => { await onRequestReopen?.(reason); setRequestingReopen(false); }} />}
   </OperatorPage>;
 }
 

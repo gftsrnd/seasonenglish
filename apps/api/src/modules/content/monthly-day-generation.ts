@@ -1,4 +1,4 @@
-import { monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
+import { monthlyLessonDisplayTitle, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
 import { MONTHLY_LESSON_PART_CONTENT_CONTRACT, type AiTaskRunner } from "@e4s/ai";
 import { evaluateMonthlyLessonQuality, monthlyLockedPlanExpectations, normalizeFormula, type MonthlyLessonCandidate, type MonthlyLockedPlanExpectations, type MonthlyQualityReport, type MonthlyQualityFinding } from "./monthly-quality.js";
 import { rebalanceAnswerTextPositions, type AnswerTextChoice } from "../shared/answer-order.js";
@@ -45,6 +45,9 @@ export function monthlyLearnerLanguageContract(cefr: string): string {
   ].join(" ");
 }
 
+/** daySpec.lessonNumber is the calendar slot (review days included); it is never the learner-facing lesson number. */
+export const MONTHLY_LESSON_TITLE_RULE = "LESSON TITLE: name the lesson focus (grammar pattern or task). Do not put a lesson or day number in the title; daySpec.lessonNumber is an internal calendar slot that also counts review days. Lessons are numbered by daySpec.newLessonNumber and review days are labelled as review, never \"Bài N\".";
+
 export const MONTHLY_DAY_COMPONENTS = [
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",
   "listening", "reading", "writing", "word_class", "word_use", "speaking"
@@ -77,11 +80,15 @@ Review pronunciation output contract: Keep pronunciation.focus equal to the firs
 
 ${monthlyReviewExerciseContract(coreTerms.length, grammarSteps.length, contract.cefr, monthlyReviewWordFormCandidates(coreTerms, daySupportTerms), monthlyReviewSpeakingContrastGuidance(contract, daySpec))}
 
-${monthlyLearnerLanguageContract(contract.cefr)}` : `${systemPrompt}
+${monthlyLearnerLanguageContract(contract.cefr)}
+
+${MONTHLY_LESSON_TITLE_RULE}` : `${systemPrompt}
 
 Part content field contract: ${MONTHLY_LESSON_PART_CONTENT_CONTRACT}
 
-${monthlyLearnerLanguageContract(contract.cefr)}`;
+${monthlyLearnerLanguageContract(contract.cefr)}
+
+${MONTHLY_LESSON_TITLE_RULE}`;
       const call = async (requested: readonly string[], note: string, maxOutputTokens: number) => {
         let result;
         try { result = await runner.runTask("monthly_lesson_day", {
@@ -302,7 +309,9 @@ export async function generateMonthlyDay(input: {
   let report: MonthlyQualityReport = { severe: [], light: [], contractVersion: input.contract.version };
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const generated = await input.generate({ contract: input.contract, dayNumber: input.dayNumber, components: requestedComponents, daySpec, coreTerms, grammarStep, grammarSteps, sound, sounds, pronunciationExamples, priorParts: parts, repairFindings: report.severe });
-    title = generated.title || title;
+    // The model sees the raw calendar slot (daySpec.lessonNumber, which counts review days); a "Bài N"
+    // title must use the new-lesson ordinal, and a review day is never titled "Bài N".
+    title = monthlyLessonDisplayTitle(generated.title, { kind: daySpec.kind, newLessonNumber: daySpec.newLessonNumber ?? input.contract.daySpecs.filter((day) => day.kind === "new" && day.lessonNumber <= daySpec.lessonNumber).length, reviewWeekNumber: daySpec.reviewWeekNumber }) || title;
     // D1 (approved 11/11): the plan, not the model, owns the locked fields; the gate below still verifies them.
     parts = applyMonthlyLockedPlanFields(input.contract, daySpec, dropSupportTermVocabularyCards(input.contract, mergeParts(parts, generated.parts, requestedComponents, kind === "review")));
     const candidate = { title, parts };

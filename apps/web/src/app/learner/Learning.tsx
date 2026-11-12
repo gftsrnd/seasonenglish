@@ -11,7 +11,7 @@ import type {
   PartEvidence
 } from "@e4s/contracts";
 import type { LearnerCallbacks, LessonView } from "./contracts.js";
-import { ErrorText, Notice, PageTitle, AppLink, learnerLessonLabel } from "./ui.js";
+import { ErrorText, Notice, PageTitle, AppLink, learnerLessonLabel, learnerLessonPhrase } from "./ui.js";
 import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } from "../shared/lesson/VocabularyCard.js";
 import { vocabularyPresentationBlocks } from "../shared/lesson/vocabulary-groups.js";
 import { GrammarExampleButton } from "../shared/lesson/GrammarExampleButton.js";
@@ -189,8 +189,8 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
     const heading = reviewGate
       ? `Hoàn thành ${reviewWeekLabel(view.lock.reviewWeekNumber)} để mở bài này`
       : prior ? "Học bù bài trước đã nhé" : openDate ? `Bài này mở vào ${openDate}` : "Bài này chưa mở";
-    const blockerLabel = reviewGate ? `Làm ${reviewWeekLabel(view.lock.reviewWeekNumber)}` : view.lock.blocker ? `Học bài ${lessonDayLabel(view.lock.blocker.dayNumber)} ngay` : "";
-    return <div className="app-learner-page"><div className="card"><div className="row" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ flex: 1 }}><div className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><LockKeyhole size={16} aria-hidden="true" /> Bài {view.lesson.dayNumber}/{view.lock.totalLessons} · {prior ? "chưa mở" : "chưa đến ngày"}</div><h3>{heading}</h3><p className="small">{view.lock.message}</p><div className="row">{prior && view.lock.blocker ? <AppLink className="btn btn-primary" href={`/lesson/${view.lock.blocker.id}`} navigate={actions.navigate}>{blockerLabel}</AppLink> : <AppLink className="btn btn-primary" href="/coach" navigate={actions.navigate}>Luyện với Season</AppLink>}<AppLink className="btn" href="/home" navigate={actions.navigate}>← Về trang chủ</AppLink></div></div></div></div></div>;
+    const blockerLabel = reviewGate ? `Làm ${reviewWeekLabel(view.lock.reviewWeekNumber)}` : view.lock.blocker ? `Học ${view.lock.blocker.label ? learnerLessonPhrase(view.lock.blocker.label) : `bài ${lessonDayLabel(view.lock.blocker.dayNumber)}`} ngay` : "";
+    return <div className="app-learner-page"><div className="card"><div className="row" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ flex: 1 }}><div className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><LockKeyhole size={16} aria-hidden="true" /> {view.lesson.teachingLabel ? learnerLessonLabel(view.lesson) : `Bài ${view.lesson.dayNumber}/${view.lock.totalLessons}`} · {prior ? "chưa mở" : "chưa đến ngày"}</div><h3>{heading}</h3><p className="small">{view.lock.message}</p><div className="row">{prior && view.lock.blocker ? <AppLink className="btn btn-primary" href={`/lesson/${view.lock.blocker.id}`} navigate={actions.navigate}>{blockerLabel}</AppLink> : <AppLink className="btn btn-primary" href="/coach" navigate={actions.navigate}>Luyện với Season</AppLink>}<AppLink className="btn" href="/home" navigate={actions.navigate}>← Về trang chủ</AppLink></div></div></div></div></div>;
   }
   if (lesson.kind === "review" && actions.getWeeklyReviewSession) {
     return <WeeklyReview key={lesson.id} title={lesson.title} cefr={lesson.cefr} actions={actions} />;

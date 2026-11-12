@@ -24,6 +24,24 @@ describe("Operator monthly planner", () => {
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: sales" })).toBeInTheDocument();
   });
 
+  it("numbers a stored raw-slot title like the header: 09/11 is Bài 5 (the 06/11 review is not counted), never Bài 6", () => {
+    const calendar = buildMonthlyCalendar("2026-11");
+    const slot = calendar.effectiveDays.indexOf("2026-11-09") + 1;
+    expect(monthlyDayKind(slot - 1, calendar)).toBe("review");
+    const ordinal = monthlyNewLessonOrdinal(slot, calendar)!;
+    expect(ordinal).toBe(slot - 1);
+    render(<MonthlyLessonPreview date="2026-11-09" cefr="A1" onClose={vi.fn()} lesson={{ lessonNumber: slot, lessonDate: "2026-11-09", kind: "new", status: "approved", scopeHash: "scope", locked: true, correctionCount: 0, quality: { severe: [], light: [] }, content: { title: `Bài ${slot}`, parts: [{ code: "instruction", title: "Hướng dẫn", content: { guidance: "Học bài mới." } }] } }} />);
+    expect(screen.getByRole("heading", { level: 1, name: new RegExp(`09/11 · Bài ${ordinal} · Mức A1`) })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: `Bài ${ordinal}` })).toBeInTheDocument();
+    expect(screen.queryByText(`Bài ${slot}`)).not.toBeInTheDocument();
+  });
+
+  it("labels a review whose stored title is a raw 'Bài N' as review", () => {
+    render(<MonthlyLessonPreview date="2026-11-06" cefr="A1" onClose={vi.fn()} lesson={{ lessonNumber: 5, lessonDate: "2026-11-06", kind: "review", status: "approved", scopeHash: "scope", locked: true, correctionCount: 0, quality: { severe: [], light: [] }, content: { title: "Bài 5", parts: [{ code: "instruction", title: "Hướng dẫn", content: { guidance: "Ôn lại." } }] } }} />);
+    expect(screen.getByRole("heading", { level: 3, name: "Ôn tập" })).toBeInTheDocument();
+    expect(screen.queryByText("Bài 5")).not.toBeInTheDocument();
+  });
+
   it("shows the complete Monday-to-Sunday calendar for the selected month", () => {
     const { container } = render(<ToastProvider><OperatorMonths
       month="2026-11"

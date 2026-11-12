@@ -263,7 +263,7 @@ function SentRequests({ client, id, page }: { client: OperatorApiClient; id: str
           rows.push({
             id: item.id, kind: "Mở khóa", title: reopenLabels[item.target], reason: item.reason, status: item.status,
             context: resources ? `${resources.month} · ${resources.cefr} · Phiên bản ${resources.frameworkVersion}`
-              : lesson ? `${lesson.date} · ${lesson.cefr} · Bài ${lesson.number}` : "",
+              : lesson ? `${lesson.date} · ${lesson.cefr} · ${item.target === "weekly_review" ? "Ôn tập" : `Bài ${lesson.newLessonNumber ?? lesson.number}`}` : "",
             submittedAt: item.createdAt, decidedAt: item.decidedAt, response: item.decisionReason
           });
         }

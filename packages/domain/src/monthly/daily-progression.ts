@@ -89,6 +89,29 @@ export function formatMonthlyDayLabel(day: { kind: "new" | "review"; newLessonNu
   return day.newLessonNumber ? `Bài ${day.newLessonNumber}` : "Bài học mới";
 }
 
+const MONTHLY_TITLE_NUMBER_PREFIX = /^\s*(Bài học|Bài|Lesson)\s*#?\s*(\d+)(?!\d)\s*(?:[:\-–—·.|]\s*)?/iu;
+
+/**
+ * One numbering everywhere: new lessons count only new-lesson days ("Bài 1…N",
+ * review days excluded) and review days are never "Bài N". Stored titles may
+ * carry a number taken from the raw calendar slot (`lesson_number`, which also
+ * counts review days), e.g. "Bài 6" for the 5th new lesson; this rewrites only
+ * such a leading "Bài N" / "Lesson N" prefix and keeps the rest of the title.
+ */
+export function monthlyLessonDisplayTitle(title: string | null | undefined, day: { kind: "new" | "review"; newLessonNumber?: number | null | undefined; reviewWeekNumber?: number | null | undefined }): string {
+  const text = (title ?? "").trim();
+  const match = MONTHLY_TITLE_NUMBER_PREFIX.exec(text);
+  if (!match) return text;
+  const rest = text.slice(match[0].length).trim();
+  if (day.kind === "review") {
+    const label = day.reviewWeekNumber ? `Ôn tuần ${day.reviewWeekNumber}` : "Ôn tập";
+    return rest ? `${label}: ${rest}` : label;
+  }
+  if (!day.newLessonNumber) return text;
+  const separator = text.slice(match.index + match[1]!.length).match(/^\s*#?\s*\d+(\s*[:\-–—·.|]\s*|\s+)?/u)?.[1] ?? "";
+  return `${match[1]} ${day.newLessonNumber}${rest ? separator || " " : ""}${rest}`;
+}
+
 /** Draft scaffolds may be inspected, but approval requires explicit reviewed daily goals. */
 export function validateMonthlyGrammarObjectives(topics: readonly GrammarTopic[]): string[] {
   return topics.flatMap(topic => { const goals = topic.steps.flatMap(step => step.dailyObjectives ?? []); const problems: string[] = []; if (topic.steps.some(step => step.dailyObjectives?.length !== 2 || step.dailyObjectives.some(goal => goal.trim().length < 10))) problems.push(`Grammar topic ${topic.id} requires two explicit daily objectives per milestone`); if (new Set(goals.map(goal => goal.trim().toLocaleLowerCase("en-US").replace(/[\s\p{P}]+/gu," "))).size !== goals.length) problems.push(`Grammar topic ${topic.id} repeats a daily objective`); return problems; });

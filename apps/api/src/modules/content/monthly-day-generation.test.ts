@@ -366,3 +366,21 @@ describe("monthly day generation - AI quality round 2 (11/11)", () => {
     expect(result.lesson!.parts.find((item) => item.code === "speaking")!.content.sample).toBe("The cost is high.");
   });
 });
+
+describe("monthly day generation - lesson numbering (12/11)", () => {
+  it("titles a new lesson by its new-lesson ordinal, never by the raw calendar slot that counts Friday reviews", async () => {
+    const scope = contract();
+    delete scope.daySpecs[0]!.newLessonNumber; // old plans: the ordinal is counted from the new DaySpecs
+    const generated = await generateMonthlyDay({ contract: scope, dayNumber: 1, generate: async (input) => ({ title: "Bài 2: The cost is high", parts: input.components.map((code) => part(code)) }) });
+    expect(generated.status, JSON.stringify(generated.report.severe)).toBe("ready");
+    expect(generated.lesson!.title).toBe("Bài 1: The cost is high");
+    const prompts: string[] = [];
+    const runner = { runTask: async (_task: string, input: Record<string, any>, options: { systemPrompt: string }) => {
+      prompts.push(options.systemPrompt);
+      return { output: { lesson: { title: "Cost", parts: input.components.map((code: string) => part(code)) } }, metadata: {} };
+    } } as unknown as import("@e4s/ai").AiTaskRunner;
+    await generateMonthlyDayWithAi(contract(), 1, runner, "Prompt");
+    expect(prompts[0]).toContain("LESSON TITLE");
+    expect(prompts[0]).toContain("daySpec.newLessonNumber");
+  });
+});

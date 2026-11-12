@@ -160,7 +160,8 @@ export interface LessonLockView {
   message: string;
   dayNumber: number;
   totalLessons: number;
-  blocker?: { id: string; dayNumber: number; title: string };
+  /** `label` (monthly): learner-facing name of the blocking day, "Bài N" (new lessons only) or "Ôn tuần N". */
+  blocker?: { id: string; dayNumber: number; title: string; label?: string };
   opensAt?: string;
   /** Calendar week of the gating Friday review (reason "review"). */
   reviewWeekNumber?: number;

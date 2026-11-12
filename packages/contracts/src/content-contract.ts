@@ -34,7 +34,8 @@ export interface ReopenRequestView {
   readonly archivedAt?: string | null;
   /** Present only when target is `monthly_resources`. */
   readonly monthlyResources?: MonthlyResourcesReopenDetailView;
-  readonly lesson?: { readonly date: string; readonly cefr: CefrLevel; readonly number: number };
+  /** `number` is the raw calendar slot; `newLessonNumber` is the learner-facing "Bài N" (Friday reviews not counted), absent for review days. */
+  readonly lesson?: { readonly date: string; readonly cefr: CefrLevel; readonly number: number; readonly newLessonNumber?: number };
 }
 
 export interface NotificationEventView {

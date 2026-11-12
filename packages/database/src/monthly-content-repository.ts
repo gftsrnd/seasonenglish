@@ -943,8 +943,9 @@ export class MonthlyContentRepository {
   }
 
   private async listOrganizationReopenRequests(organizationId: string, requestedBy: string | null = null): Promise<ReopenRequestView[]> {
-    const result = await this.database.query<ReopenRequestRow & { lesson_date: string; cefr: CefrLevel; lesson_number: number }>(
+    const result = await this.database.query<ReopenRequestRow & { lesson_date: string; cefr: CefrLevel; lesson_number: number; new_lesson_ordinal: number }>(
       `select mlc.id, ml.lesson_date::text as lesson_date, mf.cefr, ml.lesson_number,
+              (select count(*)::int from jsonb_array_elements(mf.curriculum_contract->'daySpecs') as ordinal_spec(item) where ordinal_spec.item->>'kind' = 'new' and (ordinal_spec.item->>'lessonNumber')::int <= ml.lesson_number) as new_lesson_ordinal,
               case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'weekly_review' else 'daily_lesson' end as target,
               ml.id as target_id, mlc.requested_by, mlc.reason, mlc.status, mlc.decision_reason, mlc.created_at, mlc.decided_at, mlc.archived_at
        from month_lesson_corrections mlc
@@ -960,7 +961,7 @@ export class MonthlyContentRepository {
       status: row.status === "requested" ? "pending" : row.status === "rejected" ? "rejected" : "approved",
       decisionReason: row.decision_reason, createdAt: row.created_at.toISOString(), decidedAt: row.decided_at?.toISOString() ?? null,
       archivedAt: row.archived_at?.toISOString() ?? null,
-      lesson: { date: row.lesson_date, cefr: row.cefr, number: row.lesson_number }
+      lesson: { date: row.lesson_date, cefr: row.cefr, number: row.lesson_number, ...(row.target === "daily_lesson" && row.new_lesson_ordinal ? { newLessonNumber: row.new_lesson_ordinal } : {}) }
     }));
     const frameworkRequests = await this.listFrameworkReopenRequests(organizationId, requestedBy);
     return [...lessonRequests, ...frameworkRequests].sort((left, right) => right.createdAt.localeCompare(left.createdAt));

@@ -1,4 +1,5 @@
 import { monthlyManualSeed } from "./monthly-manual-seed.js";
+import { monthlyLessonDisplayTitle } from "@e4s/domain/monthly";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import "./styles.css";
@@ -289,6 +290,11 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     catch (reason) { if (propagateError) throw reason; const detail = message(reason); setError(detail); toast.show({ message: detail, tone: "danger" }); return undefined; }
     finally { setBusy(false); }
   };
+  // Toasts name the day the way the calendar does: "bài 7" is the 7th new lesson (Friday reviews not counted), a review is "bài ôn".
+  const monthDayLabel = (dayNumber: number) => {
+    const day = overview?.calendar?.find((item) => item.lessonNumber === dayNumber && (item.kind === "new" || item.kind === "review"));
+    return day?.kind === "review" ? "bài ôn" : day?.newLessonNumber ? `bài ${day.newLessonNumber}` : "bài học";
+  };
   const openDayEditor = (frameworkId: string, dayNumber: number, cellSlot?: { kind: "new" | "review"; date?: string | undefined; title?: string | undefined }) => {
     const framework = overview?.frameworks.find((item) => item.id === frameworkId);
     const savedLesson = framework?.lessons.find((item) => item.lessonNumber === dayNumber);
@@ -306,10 +312,12 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
       ? (calendarDay?.reviewWeekNumber ? `Bài ôn tuần ${calendarDay.reviewWeekNumber}` : "Bài ôn tập")
       : calendarDay?.newLessonNumber ? `Bài ${calendarDay.newLessonNumber}` : undefined);
     const meta = { ...(kind ? { kind } : {}), ...(date ? { date } : {}), ...(seed ? { vocabularyCount: seed.vocabularyCount } : {}), ...(defaultTitle ? { defaultTitle } : {}) };
-    setEditor(saved?.parts?.length ? { frameworkId, dayNumber, initial: saved, ...meta } : seed ? { frameworkId, dayNumber, initial: { title: seed.title, parts: seed.parts }, ...meta } : { frameworkId, dayNumber, ...meta });
+    // A saved title "Bài 8" taken from the raw slot is shown (and re-saved) with the calendar's number.
+    const savedTitle = saved?.title && kind ? monthlyLessonDisplayTitle(saved.title, { kind, newLessonNumber: calendarDay?.newLessonNumber, reviewWeekNumber: calendarDay?.reviewWeekNumber }) : saved?.title;
+    setEditor(saved?.parts?.length ? { frameworkId, dayNumber, initial: { ...saved, ...(savedTitle ? { title: savedTitle } : {}) }, ...meta } : seed ? { frameworkId, dayNumber, initial: { title: seed.title, parts: seed.parts }, ...meta } : { frameworkId, dayNumber, ...meta });
   };
   const dayEditor = !readOnly && editor ? <LessonFormEditor weekNumber={0} cefr={cefr} initial={editor.initial?.parts?.length ? { dayNumber: editor.dayNumber - 1, title: editor.initial.title || editor.defaultTitle || `Bài ${editor.dayNumber}`, durationMinutes: 10, parts: editor.initial.parts.map((part) => ({ code: (part.code || "instruction") as import("@e4s/contracts").LessonPartCode, title: part.title || part.code || "Nội dung", content: part.content || {} })) } : { ...emptyLesson(editor.dayNumber - 1), ...(editor.defaultTitle ? { title: editor.defaultTitle } : {}) }} vocabularyCount={editor.vocabularyCount ?? 3} kind={editor.kind === "review" ? "review" : "lesson"} onSave={async (lesson) => {
-    const result = await run(() => client.saveContentMonthDay(editor.frameworkId, editor.dayNumber, { title: lesson.title, parts: lesson.parts }), `Đã lưu bản nháp bài ${editor.dayNumber}.`);
+    const result = await run(() => client.saveContentMonthDay(editor.frameworkId, editor.dayNumber, { title: lesson.title, parts: lesson.parts }), `Đã lưu bản nháp ${monthDayLabel(editor.dayNumber)}.`);
     if (result) setEditor(undefined);
   }} headingOverride={`${editor.kind === "review" ? "Soạn bài ôn" : "Soạn bài"} ngày ${editor.date ? `${editor.date.slice(8, 10)}/${editor.date.slice(5, 7)}` : `#${editor.dayNumber}`} · ${cefr}`} onCancel={() => setEditor(undefined)} uploadMedia={client.uploadContentMedia} busy={busy} /> : null;
   if (!overview && !error) return <Status>Đang tải khung tháng…</Status>;
@@ -324,7 +332,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
           const title = lesson.kind === "review" ? "Duyệt bài ôn" : "Duyệt bài học";
           if (!await modal.confirm({ title, message: "Bài sẽ được khóa chỉnh sửa sau khi duyệt.", confirmLabel: "Duyệt bài" })) return;
           let approved = false;
-          await run(async () => { await client.approveContentMonthDay(framework.id, lesson.lessonNumber); approved = true; }, `Đã duyệt bài ${lesson.lessonNumber}.`);
+          await run(async () => { await client.approveContentMonthDay(framework.id, lesson.lessonNumber); approved = true; }, `Đã duyệt ${monthDayLabel(lesson.lessonNumber)}.`);
           if (approved) navigate(paths.months);
         },
         onEdit: () => openDayEditor(framework.id, lesson.lessonNumber),
@@ -445,7 +453,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
       onComposeDay: openDayEditor,
       onViewDay: (frameworkId, dayNumber) => navigate(`${paths.months}/lesson/${frameworkId}/${dayNumber}?month=${month}`),
       onSaveDay: async (id, dayNumber, lesson) => {
-        const result = await run(() => client.saveContentMonthDay(id, dayNumber, lesson), `Đã lưu bản nháp bài ${dayNumber}.`);
+        const result = await run(() => client.saveContentMonthDay(id, dayNumber, lesson), `Đã lưu bản nháp ${monthDayLabel(dayNumber)}.`);
         if (!result) throw new Error("Không lưu được bản nháp tháng.");
         return result;
       },
@@ -460,7 +468,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         return result;
       },
       onAcknowledge: async (id, dayNumber, findingKeys) => { await run(() => client.acknowledgeContentMonthQuality(id, dayNumber, findingKeys)); },
-      onApproveDay: async (id, dayNumber) => { await run(() => client.approveContentMonthDay(id, dayNumber), `Đã duyệt bài ${dayNumber}.`); },
+      onApproveDay: async (id, dayNumber) => { await run(() => client.approveContentMonthDay(id, dayNumber), `Đã duyệt ${monthDayLabel(dayNumber)}.`); },
       onCreateCorrection: async (id, dayNumber, reason) => {
         const result = await run(() => client.createContentMonthCorrection(id, dayNumber, reason));
         if (!result) throw new Error("Không tạo được revision hiệu chỉnh.");

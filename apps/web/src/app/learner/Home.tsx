@@ -2,7 +2,7 @@ import { RequestEvidenceFields, requestEvidenceArgs, type RequestEvidenceDraft }
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { BookOpen, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MessageCircle, Play, Sprout } from "lucide-react";
 import type { LearnerHomeView, LearnerCallbacks } from "./contracts.js";
-import { Notice, PageTitle, Progress, AppLink, LearnerSupportCard, learnerLessonLabel } from "./ui.js";
+import { Notice, PageTitle, Progress, AppLink, LearnerSupportCard, learnerLessonLabel, learnerLessonPhrase } from "./ui.js";
 import { buildMonthlyTeachingCalendar } from "@e4s/domain/monthly";
 import { LevelReadinessCard } from "./LevelReadiness.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
@@ -152,10 +152,10 @@ function PrimaryLesson({ view, next, actions }: { view: LearnerHomeView; next: L
     const dateLocked = next.lock.reason === "date";
     const reviewGate = next.lock.reason === "review";
     const reviewLabel = next.lock.reviewWeekNumber ? `bài ôn tuần ${next.lock.reviewWeekNumber}` : "bài ôn tuần trước";
-    return <section className="hero" style={{ background: "var(--mint)", color: "var(--text)" }} data-home-block="primary"><div className="eyebrow">{period}</div><h2>{dateLocked ? next.lock.opensAt ? `Bài này mở vào ${formatLessonDate(next.lock.opensAt)}` : "Bài này chưa mở" : reviewGate ? `Hoàn thành ${reviewLabel} để mở bài này` : "Học bù bài trước đã nhé"}</h2><p>{dateLocked ? "Chưa đến ngày học nên chưa có nút học bài này." : reviewGate ? "Bài đầu tuần mới chỉ mở khi đã xong bài ôn của tuần trước." : "Hoàn thành bài trước để mở bài này."}</p>{!dateLocked && blocker ? <AppLink className="btn btn-primary" href={`/lesson/${blocker.id}`} navigate={actions.navigate}>{reviewGate ? `Làm ${reviewLabel}` : `Học bài ${monthly ? blocker.dayNumber : `T${blocker.dayNumber + 1}`} ngay`}</AppLink> : null}</section>;
+    return <section className="hero" style={{ background: "var(--mint)", color: "var(--text)" }} data-home-block="primary"><div className="eyebrow">{period}</div><h2>{dateLocked ? next.lock.opensAt ? `Bài này mở vào ${formatLessonDate(next.lock.opensAt)}` : "Bài này chưa mở" : reviewGate ? `Hoàn thành ${reviewLabel} để mở bài này` : "Học bù bài trước đã nhé"}</h2><p>{dateLocked ? "Chưa đến ngày học nên chưa có nút học bài này." : reviewGate ? "Bài đầu tuần mới chỉ mở khi đã xong bài ôn của tuần trước." : "Hoàn thành bài trước để mở bài này."}</p>{!dateLocked && blocker ? <AppLink className="btn btn-primary" href={`/lesson/${blocker.id}`} navigate={actions.navigate}>{reviewGate ? `Làm ${reviewLabel}` : `Học ${blocker.label ? learnerLessonPhrase(blocker.label) : monthly ? `bài ${blocker.dayNumber}` : `bài T${blocker.dayNumber + 1}`} ngay`}</AppLink> : null}</section>;
   }
   const catchUp = isCatchUp(view, next);
-  return <section className={`hero home-primary-lesson${catchUp ? " home-primary-lesson--catch-up" : ""}`} data-home-block="primary"><div><div className="eyebrow">{catchUp ? "Bài học bù" : "Bài hôm nay"} · {learnerLessonLabel(next)} · {period}</div><h2>{catchUp ? "Học bù bài trước đã nhé" : next.title}</h2>{catchUp ? <p style={{ margin: 0 }}>Hoàn thành bài {next.dayNumber}: {next.title}</p> : <div style={{ fontWeight: 700 }}>{monthly.themeTitle}</div>}</div><div className="row" style={{ gap: 14, fontWeight: 800, fontSize: ".9rem" }}><span className="row" style={{ gap: 6 }}><ClockIcon /> {view.schedule.lessonMinutes} phút</span><span>{view.metrics.completedLessons}/{view.metrics.totalLessons} bài đã học</span></div><AppLink className="btn btn-primary btn-lg btn-block" href={`/lesson/${next.id}`} navigate={actions.navigate}>{catchUp ? `Học bài ${next.dayNumber} ngay` : "Học ngay"}</AppLink></section>;
+  return <section className={`hero home-primary-lesson${catchUp ? " home-primary-lesson--catch-up" : ""}`} data-home-block="primary"><div><div className="eyebrow">{catchUp ? "Bài học bù" : "Bài hôm nay"} · {learnerLessonLabel(next)} · {period}</div><h2>{catchUp ? "Học bù bài trước đã nhé" : next.title}</h2>{catchUp ? <p style={{ margin: 0 }}>Hoàn thành {learnerLessonPhrase(learnerLessonLabel(next))}: {next.title}</p> : <div style={{ fontWeight: 700 }}>{monthly.themeTitle}</div>}</div><div className="row" style={{ gap: 14, fontWeight: 800, fontSize: ".9rem" }}><span className="row" style={{ gap: 6 }}><ClockIcon /> {view.schedule.lessonMinutes} phút</span><span>{view.metrics.completedLessons}/{view.metrics.totalLessons} bài đã học</span></div><AppLink className="btn btn-primary btn-lg btn-block" href={`/lesson/${next.id}`} navigate={actions.navigate}>{catchUp ? `Học ${learnerLessonPhrase(learnerLessonLabel(next))} ngay` : "Học ngay"}</AppLink></section>;
 }
 
 function lessonTimingLabel(view: LearnerHomeView, lesson: LearnerHomeView["lessons"][number]) {
@@ -181,7 +181,7 @@ function ClockIcon() {
 function lessonLockLabel(lock: NonNullable<LearnerHomeView["lessons"][number]["lock"]>) {
   if (lock.reason === "date") return `Chưa mở${lock.opensAt ? ` · mở vào ${formatLessonDate(lock.opensAt)}` : ""}`;
   if (lock.reason === "review") return `Chưa mở · xong bài ôn tuần ${lock.reviewWeekNumber ?? "trước"} trước`;
-  return `Chưa mở${lock.blocker ? ` · xong T${lock.blocker.dayNumber + 1} trước` : " · xong bài trước"}`;
+  return `Chưa mở${lock.blocker ? ` · xong ${lock.blocker.label ? learnerLessonPhrase(lock.blocker.label) : `T${lock.blocker.dayNumber + 1}`} trước` : " · xong bài trước"}`;
 }
 
 function formatLessonDate(value: string) {

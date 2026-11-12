@@ -9,6 +9,11 @@ export function learnerLessonLabel(lesson: { dayNumber: number; newLessonNumber?
   return `Bài ${lesson.newLessonNumber ?? legacyOrdinal ?? lesson.dayNumber}`;
 }
 
+/** In-sentence form of a lesson label: "Bài 5" -> "bài 5", "Ôn tuần 1" -> "bài ôn tuần 1". */
+export function learnerLessonPhrase(label: string) {
+  return label.startsWith("Bài ") ? `bài ${label.slice(4)}` : `bài ${label.charAt(0).toLocaleLowerCase("vi")}${label.slice(1)}`;
+}
+
 type AppLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href" | "onClick"> & {
   href: string;
   navigate: (path: string) => void;

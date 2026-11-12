@@ -3,7 +3,7 @@ import type { Pool, PoolClient } from "pg";
 import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
-import { buildMonthlyCalendar, formatMonthlyDayLabel, evaluateMonthlyLessonAccess, monthlyAttendanceDates, mergedVietnamHolidays, withMonthlyExpandedTerms, type MonthlyLessonAccess, type MonthlyVocabularyCore } from "@e4s/domain/monthly";
+import { buildMonthlyCalendar, formatMonthlyDayLabel, monthlyLessonDisplayTitle, evaluateMonthlyLessonAccess, monthlyAttendanceDates, mergedVietnamHolidays, withMonthlyExpandedTerms, type MonthlyLessonAccess, type MonthlyVocabularyCore } from "@e4s/domain/monthly";
 import { FROZEN_MONTHLY_ILLUSTRATIONS_SQL, withFrozenMonthlyIllustrations, type FrozenMonthlyIllustration } from "./monthly-illustration-projection.js";
 import { generationFindingsFromPayload } from "./generation-findings.js";
 import { MonthlyContentRepository } from "./monthly-content-repository.js";
@@ -2560,7 +2560,8 @@ function mapLessonRow(row: {
   return {
     id: row.id,
     ...(row.exercise_version_id && row.monthly_kind === "new" ? { exerciseVersionId: row.exercise_version_id } : {}),
-    title: row.title,
+    // Monthly titles use the same number as teachingLabel (new lessons only, Friday reviews not counted).
+    title: row.monthly_kind ? monthlyLessonDisplayTitle(row.title, { kind: row.monthly_kind, newLessonNumber: row.monthly_day_spec?.newLessonNumber ?? row.monthly_new_ordinal, reviewWeekNumber: row.monthly_day_spec?.reviewWeekNumber ?? row.monthly_review_ordinal }) || row.title : row.title,
     dayNumber: row.day_number,
     ...(row.monthly_kind ? { teachingLabel: formatMonthlyDayLabel({ ...row.monthly_day_spec, kind: row.monthly_kind, newLessonNumber: row.monthly_day_spec?.newLessonNumber ?? row.monthly_new_ordinal, reviewWeekNumber: row.monthly_day_spec?.reviewWeekNumber ?? row.monthly_review_ordinal }), ...(row.monthly_kind === "new" && row.monthly_new_ordinal ? { newLessonNumber: row.monthly_day_spec?.newLessonNumber ?? row.monthly_new_ordinal } : {}) } : {}),
     weekNumber: row.week_number,
@@ -2842,7 +2843,9 @@ function applyMonthlyLessonAccess(
       return { ...record, lock: { reason: "date", message: "Bạn đã xong các bài trước; hôm nay có thể luyện thêm với Season.", dayNumber: record.dayNumber, totalLessons, opensAt: decision.opensAt } };
     }
     const blocker = byNumber.get(decision.blockerLessonNumber);
-    const blockerView = blocker ? { id: blocker.id, dayNumber: blocker.dayNumber, title: blocker.title } : undefined;
+    // Name the blocker like the calendar: "Bài N" counts new lessons only; a review is "Ôn tuần N", never "Bài N".
+    const blockerLabel = blocker ? (blocker.monthlyKind === "review" ? blocker.teachingLabel ?? "Ôn tập" : blocker.newLessonNumber ? `Bài ${blocker.newLessonNumber}` : blocker.teachingLabel) : undefined;
+    const blockerView = blocker ? { id: blocker.id, dayNumber: blocker.dayNumber, title: blocker.title, ...(blockerLabel ? { label: blockerLabel } : {}) } : undefined;
     if (decision.reason === "review") {
       return { ...record, lock: {
         reason: "review",
@@ -2854,7 +2857,7 @@ function applyMonthlyLessonAccess(
     return { ...record, lock: {
       reason: "prior",
       message: blocker
-        ? `Bạn chưa hoàn thành bài ${blocker.dayNumber}/${totalLessons} · ${blocker.title}. Các bài nối tiếp nhau nên không bỏ qua được: xong bài đó thì bài này tự mở.`
+        ? `Bạn chưa hoàn thành ${blockerLabel ? monthlyLessonPhrase(blockerLabel) : `bài ${blocker.dayNumber}/${totalLessons}`} · ${blocker.title}. Các bài nối tiếp nhau nên không bỏ qua được: xong bài đó thì bài này tự mở.`
         : "Bạn chưa hoàn thành bài trước. Xong bài đó thì bài này tự mở.",
       dayNumber: record.dayNumber, totalLessons,
       ...(blockerView ? { blocker: blockerView } : {})
@@ -2864,6 +2867,11 @@ function applyMonthlyLessonAccess(
 
 function lessonDayLabel(dayNumber: number): string {
   return (["T2", "T3", "T4", "T5", "T6", "T7", "CN"] as const)[dayNumber - 1] ?? `Bài ${dayNumber}`;
+}
+
+/** "Bài 5" -> "bài 5", "Ôn tuần 1" -> "bài ôn tuần 1" for use inside a sentence. */
+function monthlyLessonPhrase(label: string): string {
+  return label.startsWith("Bài ") ? `bài ${label.slice(4)}` : `bài ${label.charAt(0).toLocaleLowerCase("vi")}${label.slice(1)}`;
 }
 
 function mapProgress(

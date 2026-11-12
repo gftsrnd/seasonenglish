@@ -74,6 +74,28 @@ describe("OperatorRouteController", () => {
     expect(await screen.findByLabelText("Tiêu đề bài")).toHaveValue("Bài ôn tuần 1");
   });
 
+  it("shows a saved raw-slot title 'Bài N' with the calendar's new-lesson number when editing a draft", async () => {
+    const user = userEvent.setup();
+    const calendar = buildMonthlyCalendar("2026-11");
+    const firstReview = calendar.effectiveDays.findIndex((_date, index) => monthlyDayKind(index + 1, calendar) === "review") + 1;
+    const afterReview = firstReview + 1;
+    const ordinal = monthlyNewLessonOrdinal(afterReview, calendar)!;
+    const date = calendar.effectiveDays[afterReview - 1]!;
+    const draft = { lessonNumber: afterReview, lessonDate: date, kind: "new", status: "draft", scopeHash: "scope", locked: false, correctionCount: 0, quality: { severe: [], light: [] }, content: { title: `Bài ${afterReview}`, parts: [{ code: "instruction", title: "Hướng dẫn", content: {} }] } };
+    const overview = {
+      systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true },
+      brief: { month: "2026-11", title: "Updates", brief: "Project updates", context: "Office", communicationGoal: "Report", version: 1, status: "approved" },
+      calendar: calendar.effectiveDays.map((day, index) => ({ date: day, kind: monthlyDayKind(index + 1, calendar), lessonNumber: index + 1, ...(monthlyDayKind(index + 1, calendar) === "new" ? { newLessonNumber: monthlyNewLessonOrdinal(index + 1, calendar)! } : { reviewWeekNumber: 1 }) })),
+      frameworks: (["A1", "A2", "B1", "B2", "C1"] as const).map((cefr) => ({ id: `framework-${cefr}`, cefr, version: 1, status: "approved", scopeHash: "scope", lessons: cefr === "A1" ? [draft] : [], quality: { severe: [], light: [] }, resources: { coreTerms: [], supportTerms: [], grammarTopics: [], sounds: [] }, publication: { ready: false, publishedOn: null } }))
+    };
+    const client = { getContentMonth: vi.fn().mockResolvedValue(overview), getContentMonthResourceCheckpoint: vi.fn().mockResolvedValue(undefined), saveContentMonthDay: vi.fn(), uploadContentMedia: vi.fn() };
+    const { container } = render(<ToastProvider><MemoryRouter initialEntries={["/op/months"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
+    await screen.findByRole("heading", { name: "Tài nguyên tháng" });
+    const cell = await waitFor(() => container.querySelector<HTMLElement>(`#monthly-day-${date}`)!);
+    await user.click(within(cell).getByRole("button", { name: `Soạn tay bài ${ordinal}` }));
+    expect(await screen.findByLabelText("Tiêu đề bài")).toHaveValue(`Bài ${ordinal}`);
+  });
+
   it("uses the sidebar without repeating an operational navigation bar on Operator screens", async () => {
     const client = { getContentWeeks: vi.fn().mockResolvedValue({ pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [] }) };
     render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
