@@ -5,7 +5,13 @@
  * lesson shows them deterministically instead of relying on the model to copy
  * them. AI output also uses plain strings for synonyms; cards need { word }.
  */
-export interface MonthlyVocabularyCore { id: string; word: string; meaning?: string; type?: string; ipa?: string; imageUrl?: string }
+import { monthlyRegisterLexicalDetails, monthlyRegisterTermsApply, validMonthlyRegisterTerms, type MonthlyRegisterTerm } from "./register-terms.js";
+
+export interface MonthlyVocabularyCore {
+  id: string; word: string; meaning?: string; type?: string; ipa?: string; imageUrl?: string;
+  /** L-042, B1–C1: audited slang / formal-register alternatives, shown as lexical details ("Khẩu ngữ" / "Văn phong"). */
+  registerTerms?: readonly MonthlyRegisterTerm[] | undefined;
+}
 export interface MonthlyVocabularySupport {
   id: string; word: string; meaning?: string; type?: string; relation: string; relatedCoreTermId?: string;
   /** B1–C1 synonym/antonym only: a short simple-English definition shown on the card instead of the Vietnamese meaning. */
@@ -231,9 +237,24 @@ function attachTerms(
       }
       if (!item.type && core.type) item.type = core.type;
       if (!item.pronunciation && (item.ipa || core.ipa)) item.pronunciation = item.ipa ?? core.ipa;
+      if (cefr && monthlyRegisterTermsApply(cefr)) attachRegisterDetails(item, core, cefr);
     }
     return item;
   });
+}
+
+/**
+ * L-042 (B1–C1): the card's slang/formal lexical details come only from the
+ * approved plan's audited register alternatives. A slang/poetic detail the
+ * lesson model wrote itself was never audited and is removed; synonym/antonym
+ * details are untouched. No register alternative means no such detail.
+ */
+function attachRegisterDetails(item: Item, core: MonthlyVocabularyCore, cefr: string): void {
+  const hadDetails = Array.isArray(item.lexicalDetails);
+  const own = hadDetails ? (item.lexicalDetails as unknown[]).filter((detail) => !(detail && typeof detail === "object" && ["slang", "poetic"].includes(String((detail as Item).kind)))) : [];
+  const details = [...own, ...monthlyRegisterLexicalDetails(validMonthlyRegisterTerms(core, cefr))];
+  if (details.length) item.lexicalDetails = details;
+  else if (hadDetails && (item.lexicalDetails as unknown[]).length) delete item.lexicalDetails;
 }
 
 /** Applies {@link attachMonthlyExpandedTerms} to a lesson's vocabulary part, leaving other parts untouched. */

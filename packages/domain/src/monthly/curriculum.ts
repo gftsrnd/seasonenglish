@@ -1,5 +1,6 @@
 import type { CefrLevel, MonthlyGrammarDayPlan, MonthlyPronunciationDayPlan } from "@e4s/contracts";
 import { dailyTeachingPlan } from "./daily-progression.js";
+import { validMonthlyRegisterTerms, type MonthlyRegisterTerm } from "./register-terms.js";
 
 export interface MonthlyCalendar {
   month: string;
@@ -30,6 +31,12 @@ export interface CoreTerm {
   imageUrl?: string;
   /** The core word's own CEFR level as labelled by the generator (kept for level audits); absent on older pools. */
   cefr?: CefrLevel;
+  /**
+   * L-042, B1–C1 only: optional audited slang ("Khẩu ngữ") / formal-register
+   * ("Văn phong") alternatives for this exact sense, at most one of each.
+   * Absent when none exists (the normal case), at A1–A2 and on older pools.
+   */
+  registerTerms?: MonthlyRegisterTerm[];
 }
 
 export interface SupportTerm {
@@ -517,7 +524,12 @@ export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): Mont
     month: pool.month,
     cefr: pool.cefr,
     theme: pool.theme,
-    coreTerms: pool.coreTerms.map(({ id, word, meaning, type, ipa, imageUrl, cefr }) => ({ id, word, meaning, type, ipa, ...(imageUrl ? { imageUrl } : {}), ...(cefr ? { cefr } : {}) })),
+    coreTerms: pool.coreTerms.map((term) => {
+      const { id, word, meaning, type, ipa, imageUrl, cefr } = term;
+      // L-042: B1–C1 register alternatives must survive planning too (like support definitions, de4b6ba).
+      const registerTerms = validMonthlyRegisterTerms(term, pool.cefr);
+      return { id, word, meaning, type, ipa, ...(imageUrl ? { imageUrl } : {}), ...(cefr ? { cefr } : {}), ...(registerTerms.length ? { registerTerms } : {}) };
+    }),
     supportTerms: plannedSupportTerms,
     grammarTopics: pool.grammarTopics,
     sounds: pool.sounds

@@ -1,4 +1,4 @@
-import { MONTHLY_RELATION_DEFINITION_MAX_WORDS, monthlyRelationMeaningIssue, allowedMonthlySupportLevels, describeRequiredSupportRelations, isMonthlyCoreLevelAllowed, isMonthlySupportLevelAllowed, maxMonthlyWordFamilyLevel, buildMonthlyCalendar, monthlyCorePartOfSpeech, monthlyDayKind, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, monthlyIpaExampleMatchesTarget, monthlyPronunciationPairSide, optionalStructuralSupportRelationsFor, type MonthlyPronunciationCatalogItem, requiredSupportRelationsFor, monthlyGrammarCoverageIssues, monthlyGrammarTopicTitle, MONTHLY_GRAMMAR_PAIR_TYPE_LABELS, type MonthlyGrammarCatalogPair, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
+import { MONTHLY_RELATION_DEFINITION_MAX_WORDS, monthlyRelationMeaningIssue, selectMonthlyRegisterTerms, allowedMonthlySupportLevels, describeRequiredSupportRelations, isMonthlyCoreLevelAllowed, isMonthlySupportLevelAllowed, maxMonthlyWordFamilyLevel, buildMonthlyCalendar, monthlyCorePartOfSpeech, monthlyDayKind, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, monthlyIpaExampleMatchesTarget, monthlyPronunciationPairSide, optionalStructuralSupportRelationsFor, type MonthlyPronunciationCatalogItem, requiredSupportRelationsFor, monthlyGrammarCoverageIssues, monthlyGrammarTopicTitle, MONTHLY_GRAMMAR_PAIR_TYPE_LABELS, type MonthlyGrammarCatalogPair, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
 import type { CefrLevel } from "@e4s/contracts";
 import { monthlyResourcePlanOutputSchema, type MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.js";
@@ -122,7 +122,9 @@ export const CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS = {
   expandedTerms: "monthly-resource-category-v33-relation-meanings",
   /** v3: the two topics are the roadmap pair chosen with 12-month memory (docs/grammar-roadmap.md); older grammar checkpoints are regenerated. */
   grammarTopics: "monthly-resource-grammar-v3-roadmap-pair",
-  pronunciationTargets: CURRENT_MONTHLY_PRONUNCIATION_SCHEMA_VERSION
+  pronunciationTargets: CURRENT_MONTHLY_PRONUNCIATION_SCHEMA_VERSION,
+  /** L-042 (new category, no existing checkpoint is invalidated): optional B1–C1 slang / formal-register alternatives. */
+  registerTerms: "monthly-resource-register-v1"
 } as const;
 
 export function isCurrentMonthlyResourceCheckpointCategory(category: string, lineage: unknown): boolean {
@@ -1134,7 +1136,9 @@ export function buildMonthlyResourcesFromAiPlan(
   /** Roadmap catalog item of each pronunciation target, stored on the sound for the 12-month memory. */
   pronunciationCatalogIds: readonly (string | undefined)[] = [],
   /** Roadmap catalog topic of each grammar topic (A, B), stored on the topic for the 12-month memory. */
-  grammarCatalogIds: readonly (string | undefined)[] = []
+  grammarCatalogIds: readonly (string | undefined)[] = [],
+  /** L-042: audited B1–C1 slang / formal-register alternatives keyed by plan core id (ignored at A1–A2). */
+  registerTerms: ReadonlyArray<{ coreId: string; kind: string; word: string; definition: string }> = []
 ): MonthlyResourcePoolContract {
   const calendar = buildMonthlyCalendar(month);
   const newLessonDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar) === "new" ? [index + 1] : []);
@@ -1152,7 +1156,10 @@ export function buildMonthlyResourcesFromAiPlan(
 
   const coreIdMap = new Map(plan.coreTerms.map((term, index) => [term.id, `${cefr.toLowerCase()}-core-${index + 1}`]));
   const coreTerms = [...plan.coreTerms]
-    .map(({ id, word, meaning, type, ipa, cefr: coreCefr }, index) => ({ id: coreIdMap.get(id) ?? `${cefr.toLowerCase()}-core-${index + 1}`, word, meaning, type, ipa, source: "core_registry" as const, component: "core" as const, ...(coreCefr ? { cefr: coreCefr } : {}) }));
+    .map(({ id, word, meaning, type, ipa, cefr: coreCefr }, index) => {
+      const register = selectMonthlyRegisterTerms({ word }, registerTerms.filter((term) => term.coreId === id), { cefr }).selected;
+      return { id: coreIdMap.get(id) ?? `${cefr.toLowerCase()}-core-${index + 1}`, word, meaning, type, ipa, source: "core_registry" as const, component: "core" as const, ...(coreCefr ? { cefr: coreCefr } : {}), ...(register.length ? { registerTerms: register } : {}) };
+    });
   const supportTerms = [...plan.expandedTerms]
     .map((term, index) => ({
       id: `${cefr.toLowerCase()}-expanded-${index + 1}`,

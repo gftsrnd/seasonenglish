@@ -94,6 +94,43 @@ function poolFor(): Parameters<typeof planMonthlyResourcePool>[0] {
 }
 
 describe("monthly curriculum contract", () => {
+  // L-042 end to end: optional register alternatives survive planning and become the card's lexical details (B1–C1 only).
+  it.each(["B1", "B2", "C1"] as const)("%s: core register alternatives reach the approved contract and the card's lexical details", (cefr) => {
+    const pool = poolFor();
+    pool.cefr = cefr;
+    pool.coreTerms[0]!.registerTerms = [
+      { kind: "slang", word: "touch base", definition: "talk briefly to check on progress", register: "Informal: casual spoken workplace English" },
+      { kind: "poetic", word: "convene", definition: "come together for a formal meeting", register: "Formal: formal or literary writing" }
+    ];
+    const contract = planMonthlyResourcePool(pool);
+    expect(contract.coreTerms[0]!.registerTerms?.map((term) => term.word)).toEqual(["touch base", "convene"]);
+    expect(contract.coreTerms.slice(1).every((core) => core.registerTerms === undefined)).toBe(true);
+    const day = contract.daySpecs.find((candidate) => candidate.kind === "new" && candidate.coreTermIds.includes(contract.coreTerms[0]!.id))!;
+    const cores = contract.coreTerms.filter((core) => day.coreTermIds.includes(core.id));
+    const supports = contract.supportTerms.filter((term) => day.expandedTermIds.includes(term.id));
+    // The lesson model's own slang detail was never audited and is replaced; its synonym detail stays.
+    const items = cores.map((core, index) => ({ word: core.word, ...(index === 0 ? { lexicalDetails: [{ kind: "slang", word: "invented", definition: "made up by the model" }, { kind: "synonym", word: "gathering", definition: "a group of people together" }] } : {}) }));
+    const [part] = withMonthlyExpandedTerms([{ code: "vocabulary", content: { items } }], cores, supports, cefr);
+    const cards = part!.content.items as unknown as Array<{ word: string; lexicalDetails?: Array<Record<string, unknown>> }>;
+    expect(cards[0]!.lexicalDetails).toEqual([
+      { kind: "synonym", word: "gathering", definition: "a group of people together" },
+      { kind: "slang", word: "touch base", definition: "talk briefly to check on progress", context: "Informal: casual spoken workplace English" },
+      { kind: "poetic", word: "convene", definition: "come together for a formal meeting", context: "Formal: formal or literary writing" }
+    ]);
+    // A core without alternatives gets no lexical details at all (absence is normal).
+    expect(cards.slice(1).every((card) => card.lexicalDetails === undefined)).toBe(true);
+  });
+
+  it.each(["A1", "A2"] as const)("%s: register alternatives are never planned or shown", (cefr) => {
+    const pool = poolFor();
+    pool.cefr = cefr;
+    pool.coreTerms[0]!.registerTerms = [{ kind: "slang", word: "touch base", definition: "talk briefly to check on progress", register: "informal" }];
+    const contract = planMonthlyResourcePool(pool);
+    expect(contract.coreTerms[0]!.registerTerms).toBeUndefined();
+    const [part] = withMonthlyExpandedTerms([{ code: "vocabulary", content: { items: [{ word: pool.coreTerms[0]!.word }] } }], [{ ...pool.coreTerms[0]! }], [], cefr);
+    expect((part!.content.items as Array<Record<string, unknown>>)[0]!.lexicalDetails).toBeUndefined();
+  });
+
   // 12/11 end to end: definitions written on the resource pool survive planning and reach the lesson cards.
   it.each(["B1", "B2", "C1"] as const)("%s: pool definitions reach the approved contract and every synonym/antonym on the card", (cefr) => {
     const pool = poolFor();

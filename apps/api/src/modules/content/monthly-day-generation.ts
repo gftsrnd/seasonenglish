@@ -131,7 +131,8 @@ ${MONTHLY_WORD_FORM_SCOPE_RULE}`;
           cefr: contract.cefr,
           daySpec,
           components: requested,
-          lockedScope: { coreTerms, grammarStep, grammarSteps, sound, sounds, pronunciationExamples, theme: contract.theme, supportTerms: daySupportTerms },
+          // L-042: register alternatives are attached to the cards afterwards, not sent to the lesson model.
+          lockedScope: { coreTerms: coreTerms.map(({ registerTerms: _registerTerms, ...term }) => term), grammarStep, grammarSteps, sound, sounds, pronunciationExamples, theme: contract.theme, supportTerms: daySupportTerms },
           priorParts,
           priorGrammarExamples,
           repairIssues: repairFindings,

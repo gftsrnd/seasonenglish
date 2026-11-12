@@ -1015,6 +1015,31 @@ export const monthlyResourcePlanOutputJsonSchema = {
   }
 } satisfies Record<string, unknown>;
 
+/**
+ * L-042 (B1–C1 only): optional slang / formal-register alternatives for the
+ * month's cores, generated in ONE batched call per level and checked by ONE
+ * batched audit call (same task, audit prompt). Returning no items is valid.
+ */
+const monthlyRegisterTermItemSchema = z.object({
+  coreId: z.string().trim().min(1).max(100),
+  kind: z.enum(["slang", "poetic"]),
+  word: z.string().trim().min(1).max(60),
+  definition: z.string().trim().min(1).max(200)
+}).strict();
+export const monthlyRegisterTermsOutputSchema = z.object({ items: z.array(monthlyRegisterTermItemSchema).max(240) }).strict();
+export type MonthlyRegisterTermsTaskOutput = z.infer<typeof monthlyRegisterTermsOutputSchema>;
+export const monthlyRegisterTermsOutputJsonSchema = {
+  type: "object", additionalProperties: false, required: ["items"],
+  properties: {
+    items: { type: "array", maxItems: 240, items: { type: "object", additionalProperties: false, required: ["coreId", "kind", "word", "definition"], properties: {
+      coreId: { type: "string" },
+      kind: { type: "string", enum: ["slang", "poetic"] },
+      word: { type: "string" },
+      definition: { type: "string", description: "Short simple-English definition or usage note (2-14 words, no Vietnamese, not using the word itself)." }
+    } } }
+  }
+} satisfies Record<string, unknown>;
+
 const strictWordSlotSchema = z.object({
   word: z.string().trim().min(1),
   ipa: z.string().trim().regex(/^\/.+\/$/u, "IPA must be enclosed in slashes")

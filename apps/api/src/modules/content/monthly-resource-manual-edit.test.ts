@@ -172,6 +172,21 @@ function levelPoolFixture(cefr: "A1" | "B1" | "C1"): MonthlyResourcePoolContract
 }
 
 describe("manual monthly resource edit quality gates (WP9)", () => {
+  it("L-042: keeps a core's register alternatives while its word and part of speech are unchanged", () => {
+    const pool = levelPoolFixture("B1");
+    const registerTerms = [{ kind: "slang" as const, word: "touch base", definition: "talk briefly to check on progress", register: "Informal: casual spoken workplace English" }];
+    pool.coreTerms[0]!.registerTerms = registerTerms;
+    pool.coreTerms[1]!.registerTerms = registerTerms;
+    const input = editInputFrom(pool);
+    input.coreTerms[0]!.meaning = "nghĩa đã sửa";
+    input.coreTerms[1]!.word = "replacedword";
+    const result = applyMonthlyResourceEdit(pool, input);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.pool.coreTerms[0]!.registerTerms).toEqual(registerTerms);
+    expect(result.pool.coreTerms[1]!.registerTerms).toBeUndefined();
+  });
+
   it("accepts the level fixtures unchanged", () => {
     for (const cefr of ["A1", "B1", "C1"] as const) {
       const pool = levelPoolFixture(cefr);

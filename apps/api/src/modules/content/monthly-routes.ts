@@ -1,4 +1,4 @@
-import { monthlyPronunciationCatalog, MONTHLY_PRONUNCIATION_MEMORY_MONTHS, selectMonthlyPronunciationItems, MONTHLY_GRAMMAR_MEMORY_MONTHS, selectMonthlyGrammarPair, buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlyPhrasePlacements, maxMonthlySupportRepeats, monthlyDayKind, monthlyScopeHash, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, hasRequiredMonthlySupportRelations, requiredSupportRelationsFor, type MonthlyCurriculumContract } from "@e4s/domain";
+import { monthlyPronunciationCatalog, monthlyRegisterTermsApply, MONTHLY_PRONUNCIATION_MEMORY_MONTHS, selectMonthlyPronunciationItems, MONTHLY_GRAMMAR_MEMORY_MONTHS, selectMonthlyGrammarPair, buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlyPhrasePlacements, maxMonthlySupportRepeats, monthlyDayKind, monthlyScopeHash, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, hasRequiredMonthlySupportRelations, requiredSupportRelationsFor, type MonthlyCurriculumContract } from "@e4s/domain";
 import { monthlyResourcePlanOutputSchema, monthlyTopicSuggestionOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import { MonthlyResourceProgressStore } from "./monthly-resource-progress.js";
@@ -12,6 +12,7 @@ import { withLessonListeningAudio, type ListeningAudioService } from "../assessm
 import { generateMonthlyDayWithAi, generateMonthlyReviewWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
 import { buildMonthlyCatalogPronunciationPrompt, getMonthlyPronunciationTextIssues, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, getMonthlyGrammarPhaseIssues, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
 import { MonthlyCorePhaseShortfallError, runMonthlyCorePhase } from "./monthly-core-phase.js";
+import { monthlyRegisterCheckpointSchema, resumeMonthlyRegisterCheckpoint, runMonthlyRegisterTermsPhase } from "./monthly-register-phase.js";
 import { runMonthlyEnrichmentWithRefill, type MonthlyCoreEnrichmentOutcome } from "./monthly-enrichment-phase.js";
 import { buildMonthlyCrossLevelCoreExclusions, getMonthlyCoreLevelIssue } from "./monthly-resource-quality-gates.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
@@ -755,6 +756,19 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       }
       request.log.info({ month: month.month, cefr: criteria.cefr, phase: "enrichment", enrichedCores: firstIncompleteCore >= 0 ? coreTerms.length - firstIncompleteCore : 0, supports: expandedTerms.length, ...enrichmentStats, refillCycles: enrichmentRefill?.refillCycles ?? 0, refilledCores: enrichmentRefill?.refilledCores ?? 0, droppedCores: enrichmentRefill?.droppedCores ?? [], elapsedMs: Date.now() - enrichmentStartedAt }, "Monthly resource enrichment phase finished");
 
+      // L-042: optional B1–C1 slang / formal-register alternatives — one batched
+      // generation + one batched audit per level, only for cores not yet checked.
+      // Never mandatory and never fatal: a failed call just yields none.
+      const registerResume = resumeMonthlyRegisterCheckpoint(readCheckpointCategory("registerTerms", monthlyRegisterCheckpointSchema), coreTerms);
+      const registerItems = [...registerResume.items];
+      if (monthlyRegisterTermsApply(criteria.cefr) && registerResume.pending.length) {
+        const registerPhase = await runMonthlyRegisterTermsPhase({ runner, cefr: criteria.cefr, theme: theme.title, cores: registerResume.pending, supports: expandedTerms });
+        request.log.info({ month: month.month, cefr: criteria.cefr, phase: "register", cores: registerResume.pending.length, calls: registerPhase.calls, generated: registerPhase.generated, accepted: registerPhase.items.length, rejected: registerPhase.rejected.slice(0, 12), failed: registerPhase.failed }, "Monthly register alternatives phase finished");
+        if (!registerPhase.failed) {
+          registerItems.push(...registerPhase.items);
+          await saveCheckpointCategory("registerTerms", { checkedCores: [...registerResume.checked, ...registerResume.pending.map(({ id, word }) => ({ id, word }))], items: registerItems });
+        }
+      }
       const monthlyVocabularyForPronunciation = [...coreTerms, ...expandedTerms].map((term) => `${term.word} (${term.meaning})`).join("; ");
       updateProgress({phase:"grammarTopics",counts:{coreTerms:coreTerms.length,expandedTerms:expandedTerms.length}});
       let grammarResult = getMonthlyGrammarPhaseIssues(cachedGrammarResult, criteria.cefr, grammarPair).length === 0 ? cachedGrammarResult : undefined;
@@ -883,7 +897,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         grammarTopics: grammarResult.grammarTopics,
         pronunciationTargets
       });
-      const pool = buildMonthlyResourcesFromAiPlan(month.month, criteria.cefr, theme, criteria, plan, pronunciationItems.map((item) => item.id), [grammarPair.topicA.id, grammarPair.topicB.id]);
+      const pool = buildMonthlyResourcesFromAiPlan(month.month, criteria.cefr, theme, criteria, plan, pronunciationItems.map((item) => item.id), [grammarPair.topicA.id, grammarPair.topicB.id], registerItems);
       updateProgress({phase:"saving",counts:{coreTerms:pool.coreTerms.length,expandedTerms:pool.supportTerms.length,grammarTopics:pool.grammarTopics.length,pronunciationTargets:pool.sounds.length}});
       const framework = await repositories.monthlyContent.saveResourceDraft(actorId, pool);
       updateProgress({status:"completed"});

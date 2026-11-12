@@ -265,7 +265,9 @@ export function applyMonthlyResourceEdit(existing: MonthlyResourcePoolContract, 
       // The generator's CEFR label stays only while the word itself is unchanged.
       const previous = existing.coreTerms.find((term) => term.id === core.id);
       const cefr = previous?.cefr && previous.word.trim().toLocaleLowerCase("en-US") === core.word.trim().toLocaleLowerCase("en-US") ? previous.cefr : undefined;
-      return { id: core.id, word: core.word.trim(), meaning: core.meaning.trim(), type: core.type.trim(), ipa: core.ipa.trim(), source: "core_registry" as const, component: "core" as const, ...(cefr ? { cefr } : {}) };
+      // L-042: generated slang / formal-register alternatives stay only while the word and part of speech are unchanged.
+      const registerTerms = previous?.registerTerms?.length && previous.word.trim().toLocaleLowerCase("en-US") === core.word.trim().toLocaleLowerCase("en-US") && previous.type.trim().toLocaleLowerCase("en-US") === core.type.trim().toLocaleLowerCase("en-US") ? previous.registerTerms : undefined;
+      return { id: core.id, word: core.word.trim(), meaning: core.meaning.trim(), type: core.type.trim(), ipa: core.ipa.trim(), source: "core_registry" as const, component: "core" as const, ...(cefr ? { cefr } : {}), ...(registerTerms ? { registerTerms } : {}) };
     }),
     supportTerms: input.supportTerms.map((support) => ({
       id: support.id,

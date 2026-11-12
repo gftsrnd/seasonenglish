@@ -1,4 +1,4 @@
-import { buildMonthlyCalendar, maxMonthlySupportRepeats, monthlyDayKind, planMonthlyResourcePool, validateMonthlyCurriculum } from "@e4s/domain";
+import { buildMonthlyCalendar, maxMonthlySupportRepeats, monthlyDayKind, monthlyPronunciationCatalog, planMonthlyResourcePool, validateMonthlyCurriculum } from "@e4s/domain";
 import type { MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { describe, expect, it } from "vitest";
 import { isValidMonthlyPronunciationIpaTarget, MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT, validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.js";
@@ -1286,5 +1286,37 @@ describe("support quality rules (umbrella reuse, adjective umbrella, -ness, -ly,
     expect(monthlySupportQualityIssue({ word: "good", type: "adjective", cefr: "A1" }, { word: "better", relation: "antonym" }, 0)).toMatch(/comparative/u);
     expect(monthlySupportQualityIssue(adjective, { word: "smaller", relation: "antonym" }, 0)).toMatch(/comparative/u);
     expect(monthlySupportQualityIssue(adjective, { word: "big", relation: "antonym" }, 0)).toBeUndefined();
+  });
+});
+
+describe("L-042 register alternatives in the resource pool", () => {
+  const register = [
+    { coreId: "core-1-1", kind: "slang", word: "touch base", definition: "talk briefly to check on progress" },
+    { coreId: "core-1-1", kind: "poetic", word: "convene", definition: "come together for a formal meeting" },
+    { coreId: "core-1-2", kind: "slang", word: "bullshit", definition: "talk that is not true" }
+  ];
+  // B1+ pronunciation targets must be the level's catalog notations.
+  const levelPlan = (cefr: "B1" | "B2" | "C1") => {
+    const plan = planFor();
+    const catalog = monthlyPronunciationCatalog(cefr);
+    plan.pronunciationTargets.forEach((target, index) => { target.ipa = catalog[index]!.notation; });
+    return plan;
+  };
+  it("B1–C1: audited alternatives are stored on the mapped core and survive planning", () => {
+    for (const cefr of ["B1", "B2", "C1"] as const) {
+      const pool = buildMonthlyResourcesFromAiPlan(month, cefr, theme, criteria, levelPlan(cefr), [], [], register);
+      expect(pool.coreTerms[0]!.id).toBe(`${cefr.toLowerCase()}-core-1`);
+      expect(pool.coreTerms[0]!.registerTerms?.map((term) => [term.kind, term.word])).toEqual([["slang", "touch base"], ["poetic", "convene"]]);
+      // The sensitive-text filter drops the vulgar one; a core without alternatives carries no field.
+      expect(pool.coreTerms[1]!.registerTerms).toBeUndefined();
+      const contract = planMonthlyResourcePool(pool);
+      expect(contract.coreTerms[0]!.registerTerms?.map((term) => term.word)).toEqual(["touch base", "convene"]);
+    }
+  });
+  it("A1–A2 ignore them, and no alternatives is the normal case", () => {
+    const pool = buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, planFor(), [], [], register);
+    expect(pool.coreTerms.every((core) => core.registerTerms === undefined)).toBe(true);
+    expect(buildMonthlyResourcesFromAiPlan(month, "B2", theme, criteria, levelPlan("B2")).coreTerms.every((core) => core.registerTerms === undefined)).toBe(true);
+    expect(isCurrentMonthlyResourceCheckpointCategory("registerTerms", { schemaVersion: CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS.registerTerms })).toBe(true);
   });
 });

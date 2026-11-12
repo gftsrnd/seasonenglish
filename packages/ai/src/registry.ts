@@ -30,6 +30,7 @@ import {
   weekSuggestionsInputSchema, weekSuggestionsOutputJsonSchema, weekSuggestionsOutputSchema,
   monthlyTopicSuggestionInputSchema, monthlyTopicSuggestionOutputJsonSchema, monthlyTopicSuggestionOutputSchema,
   monthlyResourcePlanInputSchema, monthlyResourcePlanOutputJsonSchema, monthlyResourcePlanOutputSchema,
+  monthlyRegisterTermsOutputJsonSchema, monthlyRegisterTermsOutputSchema,
   weeklyLessonPlanBlueprintInputSchema, weeklyLessonPlanBlueprintOutputJsonSchema, weeklyLessonPlanBlueprintOutputSchema,
   assessmentGradingInputSchema, assessmentGradingOutputJsonSchema, assessmentGradingOutputSchema,
   productiveAssessmentGradingInputSchema, productiveAssessmentGradingOutputJsonSchema, productiveAssessmentGradingOutputSchema, validateProductiveAssessmentGrading,
@@ -118,6 +119,11 @@ export const AI_TASKS = new AiTaskRegistry([
   {
     id: "monthly_resource_generation", promptKey: "monthly_resource_generation", inputSchema: monthlyResourcePlanInputSchema,
     outputSchema: monthlyResourcePlanOutputSchema, outputJsonSchema: monthlyResourcePlanOutputJsonSchema
+  },
+  {
+    // L-042: optional B1–C1 slang / formal-register alternatives (one batched generation + one batched audit per level).
+    id: "monthly_register_terms", promptKey: "monthly_resource_generation", inputSchema: z.record(z.string(), z.unknown()),
+    outputSchema: monthlyRegisterTermsOutputSchema, outputJsonSchema: monthlyRegisterTermsOutputJsonSchema
   },
   {
     id: "weekly_lesson_plan_blueprint", promptKey: "weekly_lessons", inputSchema: weeklyLessonPlanBlueprintInputSchema,
