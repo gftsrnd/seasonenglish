@@ -4586,3 +4586,8 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 /* Pending placement rows: the row summary was 26px tall on iPad and desktop; make the whole header a 44px target. */
 .app-operator .operator-pending-review > summary { min-height: 44px; }
 .app-operator .operator-pending-review-body details > summary { min-height: 36px; padding-block: 8px; }
+
+/* Pending review cards: a closed card is just its summary, centred vertically (no leftover header gap below). */
+.app-operator .operator-pending-review > summary.operator-pending-review-summary { align-items: center; }
+.app-operator .operator-pending-review:not([open]) > summary.operator-pending-review-summary { margin: 0; padding-block: 0; }
+.app-operator .operator-pending-review:not([open]) { padding-block: 14px; }
