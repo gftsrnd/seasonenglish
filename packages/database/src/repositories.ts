@@ -4010,12 +4010,13 @@ class ContentRepository {
         cefr: CefrLevel | null; week_number: number | null; day_number: number | null; lesson_title: string | null;
         part_code: string | null; attempts: number | null; answer: string | null; ai_feedback: string | null;
         part_content: Record<string, unknown> | null; scope: string | null; has_evidence: boolean; exercise_version_id: string | null; proposed_level: CefrLevel | null;
+        lesson_label: string | null;
       }>(`select combined.* from (
             select a.id, u.display_name as learner_name, a.reason, a.status, a.resolution, a.created_at,
                    'assessment'::text as kind, null::uuid as submission_id, null::text as current_score, aa.id as attempt_id,
                    null::text as cefr, null::int as week_number, null::int as day_number, d.title as lesson_title,
                    null::text as part_code, null::int as attempts, null::text as answer, null::text as ai_feedback,
-                   null::jsonb as part_content, a.request_scope as scope, a.screenshot is not null as has_evidence, null::uuid as exercise_version_id, a.proposed_level
+                   null::jsonb as part_content, a.request_scope as scope, a.screenshot is not null as has_evidence, null::uuid as exercise_version_id, a.proposed_level, null::text as lesson_label
             from appeals a join users u on u.id = a.learner_id and u.role = 'learner' and u.status = 'active'
             join assessment_attempts aa on aa.id = a.attempt_id
             join assessment_versions av on av.id = aa.assessment_version_id
@@ -4026,7 +4027,7 @@ class ContentRepository {
                    'weekly_practice'::text as kind, pa.submission_id, ps.score->>'total' as current_score, null::uuid as attempt_id,
                    null::text as cefr, null::int as week_number, null::int as day_number, null::text as lesson_title,
                    null::text as part_code, null::int as attempts, ps.content->>'text' as answer, ps.feedback->>'message' as ai_feedback,
-                   jsonb_build_object('prompt', ps.prompt_snapshot->>'task') as part_content, pa.request_scope, pa.screenshot is not null, null::uuid, null::text
+                   jsonb_build_object('prompt', ps.prompt_snapshot->>'task') as part_content, pa.request_scope, pa.screenshot is not null, null::uuid, null::text, null::text
             from practice_appeals pa
             join practice_submissions ps on ps.id = pa.submission_id
             join users u on u.id = pa.learner_id and u.role = 'learner' and u.status = 'active'
@@ -4038,7 +4039,11 @@ class ContentRepository {
                    coalesce((pr.evidence->'evidence'->lpa.part_code->>'attempts')::int, latest_attempt.attempt_number, 0) as attempts,
                    coalesce(pr.evidence->'evidence'->lpa.part_code->>'answer', latest_attempt.answer) as answer,
                    coalesce(pr.evidence->'evidence'->lpa.part_code->>'feedback', latest_attempt.feedback) as ai_feedback,
-                   lesson_part.part_content, lpa.request_scope, lpa.screenshot is not null, lpa.exercise_version_id, null::text
+                   lesson_part.part_content, lpa.request_scope, lpa.screenshot is not null, lpa.exercise_version_id, null::text,
+                   (select case when mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review')) then 'Ôn tập'
+                           else 'Bài ' || (select count(*) from jsonb_array_elements(mf.curriculum_contract->'daySpecs') as label_spec(item)
+                                            where label_spec.item->>'kind' = 'new' and (label_spec.item->>'lessonNumber')::int <= ml.lesson_number) end
+                    from month_lessons ml join month_frameworks mf on mf.id = ml.framework_id where ml.lesson_id = l.id limit 1) as lesson_label
             from lesson_part_appeals lpa
             join users u on u.id = lpa.learner_id and u.role = 'learner' and u.status = 'active'
             join lessons l on l.id = lpa.lesson_id
@@ -4098,7 +4103,7 @@ class ContentRepository {
           const content = row.part_content ?? {};
           const options = lessonExerciseOptions(content);
           return row.kind === "lesson_part" ? {
-            cefr: row.cefr, weekNumber: row.week_number, dayNumber: row.day_number,
+            cefr: row.cefr, weekNumber: row.week_number, dayNumber: row.day_number, ...(row.lesson_label ? { lessonLabel: row.lesson_label } : {}),
             lessonTitle: row.lesson_title, partCode: row.part_code, attempts: row.attempts, exerciseVersionId: row.exercise_version_id,
             answer: row.answer, aiFeedback: row.ai_feedback,
             question: typeof content.prompt === "string" ? content.prompt : typeof content.task === "string" ? content.task : null,

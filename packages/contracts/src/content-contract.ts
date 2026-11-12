@@ -235,6 +235,8 @@ export interface ContentReviewView {
     cefr?: CefrLevel | null;
     weekNumber?: number | null;
     dayNumber?: number | null;
+    /** Monthly lessons: "Bài N" counted without Friday reviews, or "Ôn tập". */
+    lessonLabel?: string;
     lessonTitle?: string | null;
     partCode?: string | null;
     exerciseVersionId?: string | null;

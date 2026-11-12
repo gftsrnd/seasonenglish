@@ -775,7 +775,7 @@ export interface ReviewAdapterDetails {
 export function adaptReviewAppeal(item: ContentReviewView["appeals"][number]): ReviewAppeal {
   const lessonPart = item.kind === "lesson_part";
   const title = lessonPart
-    ? ["Bài học tháng", item.dayNumber == null ? null : `Bài ${item.dayNumber + 1}`, item.lessonTitle].filter(Boolean).join(" · ")
+    ? ["Bài học tháng", item.lessonLabel ?? (item.dayNumber == null ? null : `Bài ${item.dayNumber + 1}`), item.lessonTitle].filter(Boolean).join(" · ")
     : item.kind === "assessment" ? item.lessonTitle || "Bài kiểm tra" : "Bài thực hành tuần";
   return {
     id: item.id, learnerName: item.learnerName, title, at: operatorDateTime(item.createdAt),
