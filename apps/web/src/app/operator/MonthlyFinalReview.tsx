@@ -101,7 +101,8 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
     warnings: [],
     versions: [],
     deleteReason: null,
-    ...(exam ? { targetLevel: exam.framework.cefr } : {})
+    ...(exam ? { targetLevel: exam.framework.cefr } : {}),
+    ...(exam?.autoFixed?.length ? { autoFixed: exam.autoFixed } : {})
   }), [draft, exam]);
 
   const save = async (sections: AssessmentLevelFormUpdateInput) => {

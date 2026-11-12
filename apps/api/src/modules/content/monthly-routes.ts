@@ -8,7 +8,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
-import { withLessonListeningAudio, type ListeningAudioService } from "../assessment/listening-audio.js";
+import { previousMonthlyLessonAudioIndex, withLessonListeningAudio, type ListeningAudioService } from "../assessment/listening-audio.js";
 import { generateMonthlyDayWithAi, generateMonthlyReviewWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
 import { buildMonthlyCatalogPronunciationPrompt, getMonthlyPronunciationTextIssues, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, getMonthlyGrammarPhaseIssues, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
 import { MonthlyCorePhaseShortfallError, runMonthlyCorePhase } from "./monthly-core-phase.js";
@@ -1062,7 +1062,9 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       return reply.code(422).send({ code: "MONTHLY_GENERATION_QUALITY_FAILED", report: result.report, attempts: result.attempts, candidate: result.candidate ?? null });
     }
     // Listening audio (Edge TTS) right after generation; a failure is marked on the part and the lesson is still saved.
-    result.lesson = (await withLessonListeningAudio(result.lesson, listeningAudio, actorId)).lesson;
+    // An unchanged script keeps the audio of the day's current draft (no new synthesis).
+    const previousAudio = await previousMonthlyLessonAudioIndex(pool, id, dayNumber).catch(() => new Map<string, string>());
+    result.lesson = (await withLessonListeningAudio(result.lesson, listeningAudio, actorId, { previous: previousAudio })).lesson;
     await repositories.monthlyContent.saveMonthlyDayDraft(actorId, id, dayNumber, result.lesson, result.report);
     return result;
   });
@@ -1101,7 +1103,9 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       return reply.code(422).send({ code: "MONTHLY_GENERATION_QUALITY_FAILED", report: result.report, attempts: result.attempts, candidate: result.candidate ?? null });
     }
     // Listening audio (Edge TTS) right after generation; a failure is marked on the part and the lesson is still saved.
-    result.lesson = (await withLessonListeningAudio(result.lesson, listeningAudio, actorId)).lesson;
+    // An unchanged script keeps the audio of the day's current draft (no new synthesis).
+    const previousAudio = await previousMonthlyLessonAudioIndex(pool, id, dayNumber).catch(() => new Map<string, string>());
+    result.lesson = (await withLessonListeningAudio(result.lesson, listeningAudio, actorId, { previous: previousAudio })).lesson;
     await repositories.monthlyContent.saveMonthlyDayDraft(actorId, id, dayNumber, result.lesson, result.report);
     return result;
   });

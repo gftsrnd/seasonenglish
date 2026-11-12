@@ -195,6 +195,10 @@ function assemble(contract: MonthlyCurriculumContract, framework: MonthlyFinalFr
 
   // Answer positions are balanced across the whole Listening section (both messages).
   const listeningFlat = rebalanceAnswerPositions(parts.listening.flatMap((message) => message.questions), `${framework.scopeHash}:L`);
+  const autoFixed = source === "ai" ? [
+    monthlyFinalPositionFixNote("Nghe", parts.listening.flatMap((message) => message.questions)),
+    monthlyFinalPositionFixNote("Đọc", parts.reading)
+  ].filter((note): note is string => Boolean(note)) : [];
   let cursor = 0;
   const listeningGroups = parts.listening.map((message) => {
     const questions = listeningFlat.slice(cursor, cursor + message.questions.length);
@@ -277,7 +281,8 @@ function assemble(contract: MonthlyCurriculumContract, framework: MonthlyFinalFr
     audio: { status: "SCRIPT_ONLY", reviewedAt: null, reviewedBy: null },
     manualConfirmations: [],
     checks: [],
-    generatedAt: now.toISOString()
+    generatedAt: now.toISOString(),
+    ...(autoFixed.length ? { autoFixed } : {})
   };
 
   const blueprint: StoredAssessmentDefinition = {
@@ -303,6 +308,24 @@ function assemble(contract: MonthlyCurriculumContract, framework: MonthlyFinalFr
     ]
   };
   return withEvaluation(blueprint, contract);
+}
+
+/**
+ * GEN17 position pattern of the AI's own answer order (before the seeded
+ * shuffle). When it would have failed, the shuffle fixed it deterministically
+ * and the draft says so; option texts and keys are unchanged.
+ */
+export function monthlyFinalPositionFixNote(label: string, items: readonly ChoiceDraft[]): string | null {
+  const answers = items.map((item) => item.correctIndex);
+  const n = answers.length;
+  if (n < 6) return null;
+  const counts = LETTERS.map((_, index) => answers.filter((answer) => answer === index).length);
+  let longestRun = 1; let run = 1;
+  for (let index = 1; index < n; index += 1) { run = answers[index] === answers[index - 1] ? run + 1 : 1; longestRun = Math.max(longestRun, run); }
+  const skewed = Math.max(...counts) > Math.ceil(n * 0.45) || Math.min(...counts) < Math.floor(n * 0.2);
+  const cycle = answers.every((answer, index) => answer === index % 3);
+  if (!skewed && longestRun <= 3 && !cycle) return null;
+  return `Phần ${label}: đổi thứ tự lựa chọn để đáp án chia đều A/B/C (bản AI: ${LETTERS.map((letter, index) => `${letter} ${counts[index]}`).join(" · ")}${longestRun > 3 ? `, ${longestRun} câu liền cùng đáp án` : ""}); nội dung câu và đáp án giữ nguyên.`;
 }
 
 /** Re-runs every GEN check and stores the results and the derived status on the blueprint. */

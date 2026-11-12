@@ -95,6 +95,8 @@ export interface MonthlyFinalExamMeta {
   manualConfirmationLog?: Array<{ code: MonthlyFinalGenCode; confirmedBy: string; confirmedAt: string }>;
   checks: MonthlyFinalCheckView[];
   generatedAt: string;
+  /** What the generation fixed by itself before the draft was shown ("Hệ thống đã tự sửa: …"). */
+  autoFixed?: string[];
 }
 
 export interface MonthlyFinalDraftView {

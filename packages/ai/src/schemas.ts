@@ -1979,6 +1979,28 @@ export const levelFormProductionOutputJsonSchema = {
   type: "object", additionalProperties: false, required: ["writingPrompts", "speakingPrompts"],
   properties: { writingPrompts: { type: "array", minItems: 2, maxItems: 2, items: { type: "string" } }, speakingPrompts: { type: "array", minItems: 4, maxItems: 4, items: { type: "string" } } }
 } satisfies Record<string, unknown>;
+/**
+ * Targeted repair of a few level-up items (one call per section): the route
+ * sends only the offending questions and merges the returned ones by `id`.
+ */
+export const levelFormItemRepairOutputSchema = z.object({
+  items: z.array(assessmentChoiceSchema.extend({ id: z.number().int().min(0).max(59) })).min(1).max(40)
+});
+export type LevelFormItemRepairOutput = z.infer<typeof levelFormItemRepairOutputSchema>;
+export const levelFormItemRepairOutputJsonSchema = {
+  type: "object", additionalProperties: false, required: ["items"],
+  properties: {
+    items: { type: "array", minItems: 1, maxItems: 40, items: {
+      type: "object", additionalProperties: false, required: ["id", "prompt", "options", "correctIndex"],
+      properties: {
+        id: { type: "integer", minimum: 0, maximum: 59 },
+        prompt: { type: "string" },
+        options: { type: "array", minItems: 4, maxItems: 4, items: { type: "string" } },
+        correctIndex: { type: "integer", minimum: 0, maximum: 3 }
+      }
+    } }
+  }
+} satisfies Record<string, unknown>;
 const cefrSuggestionLevelSchema = z.enum(["A1", "A2", "B1", "B2", "C1"]);
 const weeklyLessonBlueprintPlanSchema = z.object({
   A1: z.array(z.string().trim().min(1).max(500)).length(5),

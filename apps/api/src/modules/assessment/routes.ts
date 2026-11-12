@@ -42,7 +42,7 @@ import { requestEvidenceFields } from "../manager/request-evidence.js";
 import type { EdgeTtsRunner } from "./edge-tts.js";
 import type { ObjectStorage } from "@e4s/storage";
 import { synthesizeListeningScript } from "./dialogue-tts.js";
-import { listeningAudioServiceFor, withBlueprintListeningAudio } from "./listening-audio.js";
+import { blueprintListeningAudioIndex, listeningAudioServiceFor, withBlueprintListeningAudio } from "./listening-audio.js";
 import { registerMonthlyFinalRoutes } from "./monthly-final-routes.js";
 import { createRoleGuard } from "../identity/policy.js";
 import { monthlyExamEligibility } from "../learning/routes.js";
@@ -52,6 +52,7 @@ import {
   evaluateLevelFormQuality, levelFormExamTitle, levelFormQualityInputFromOutput, levelFormQualityInputFromSections, LevelFormQualityError,
   splitLevelFormListeningParts, type LevelFormQualityRecord, type LevelFormQualityReport
 } from "./level-form-quality.js";
+import { autoFixLevelFormOutput } from "./level-form-auto-fix.js";
 
 const kindParam = z.object({ kind: z.enum(["placement", "levelup", "level-up", "monthly", "final", "pass-course", "passcourse"]) });
 const formPreviewKindParam = z.object({ kind: z.enum(["placement", "level_up", "final", "pass_course"]) });
@@ -581,7 +582,10 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
         runner.runTask("level_form_production_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only exactly two writing prompts and four speaking prompts.`, maxOutputTokens: 2_000 })
       ]);
       const completedReading = await completeLevelFormReading(runner, params.data.targetLevel, reading.output as { passage: string; questions: LevelFormTaskOutput["reading"]["questions"][number][] });
-      const assembled = assembleLevelFormFromAi(params.data.targetLevel, { listening: listening.output, reading: completedReading, production: production.output });
+      // Auto-fix before the draft is shown: answer positions (deterministic) and one or two
+      // targeted AI repair rounds for the offending questions only; the rest stays for the Operator.
+      const assembled = await autoFixAssembledLevelForm(runner, assembleLevelFormFromAi(params.data.targetLevel, { listening: listening.output, reading: completedReading, production: production.output }),
+        (message, details) => request.log.warn(details, message));
       const completeOutput = assembled.output;
       if (task) await repositories.aiRuns.recordSucceeded({
         userId: actorId,
@@ -593,7 +597,9 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       });
       if (!assembled.quality.passed) throw new LevelFormQualityError(assembled.quality.severe);
       // Listening audio right after generation; a TTS failure keeps the form (marked on the group) for the manual buttons.
-      const withAudio = await withBlueprintListeningAudio(assembled.blueprint, listeningAudio, actorId);
+      // An unchanged part script keeps the audio of the earlier draft/published form (no new synthesis).
+      const previous = await previousLevelFormAudio(repositories.assessments, actorId, params.data.targetLevel);
+      const withAudio = await withBlueprintListeningAudio(assembled.blueprint, listeningAudio, actorId, { previous });
       if (withAudio.failed) request.log.warn({ failed: withAudio.failed }, "Level form listening audio synthesis failed");
       const form = await repositories.assessments.createLevelFormDraft(actorId, params.data.targetLevel, withAudio.blueprint);
       return reply.code(201).send({ ...form, publishedAt: null });
@@ -1126,6 +1132,21 @@ function assessmentErrorCode(error: unknown, fallback: string): string {
   return error instanceof Error && /^[A-Z0-9_]+$/.test(error.message) ? error.message : fallback;
 }
 
+/** script hash → audioSrc over the target level's current draft and published forms; empty on any read error. */
+async function previousLevelFormAudio(
+  repository: ReturnType<typeof createRepositories>["assessments"], actorId: string, targetLevel: "A2" | "B1" | "B2" | "C1"
+): Promise<Map<string, string>> {
+  try {
+    const forms = (await repository.listLevelForms(actorId)).filter((form) => form.targetLevel === targetLevel);
+    const details = await Promise.all(forms.map((form) => repository.getLevelFormDetail(actorId, form.versionId)));
+    const index = new Map<string, string>();
+    for (const detail of details) for (const [hash, url] of blueprintListeningAudioIndex(detail)) if (!index.has(hash)) index.set(hash, url);
+    return index;
+  } catch {
+    return new Map();
+  }
+}
+
 async function completeLevelFormReading(
   runner: AiTaskRunner,
   targetLevel: "A2" | "B1" | "B2" | "C1",
@@ -1177,6 +1198,10 @@ export interface AssembledLevelForm {
   quality: LevelFormQualityReport;
   /** Draft blueprint; light gate warnings are stored on it as `levelFormQuality`. */
   blueprint: StoredAssessmentDefinition & { levelFormQuality: LevelFormQualityRecord };
+  /** Seed of the answer shuffle (the auto-fix rebalances repaired questions with the same seed). */
+  seed: string;
+  targetLevel: "A2" | "B1" | "B2" | "C1";
+  checkedAt: string;
 }
 
 /**
@@ -1203,11 +1228,26 @@ export function assembleLevelFormFromAi(
     reading: { ...output.reading, questions: rebalanceAnswerPositions(output.reading.questions, `${seed}:reading`, 4) }
   };
   const quality = evaluateLevelFormQuality(levelFormQualityInputFromOutput(shuffled));
-  const blueprint = {
-    ...normalizeLevelFormQuestionPrompts(levelFormBlueprint(targetLevel, shuffled)),
-    levelFormQuality: { checkedAt: (options.now ?? new Date()).toISOString(), warnings: quality.light }
-  };
-  return { output, shuffled, quality, blueprint };
+  const checkedAt = (options.now ?? new Date()).toISOString();
+  const blueprint = levelFormDraftBlueprint(targetLevel, shuffled, { checkedAt, warnings: quality.light });
+  return { output, shuffled, quality, blueprint, seed, targetLevel, checkedAt };
+}
+
+function levelFormDraftBlueprint(targetLevel: "A2" | "B1" | "B2" | "C1", shuffled: LevelFormTaskOutput, record: LevelFormQualityRecord): AssembledLevelForm["blueprint"] {
+  return { ...normalizeLevelFormQuestionPrompts(levelFormBlueprint(targetLevel, shuffled)), levelFormQuality: record };
+}
+
+/**
+ * Applies the generation auto-fix (level-form-auto-fix.ts) to an assembled
+ * form and rebuilds the blueprint; the notes are stored as
+ * `levelFormQuality.autoFixed` and shown as "Hệ thống đã tự sửa: …".
+ */
+export async function autoFixAssembledLevelForm(
+  runner: AiTaskRunner | undefined, assembled: AssembledLevelForm, log?: (message: string, details: Record<string, unknown>) => void
+): Promise<AssembledLevelForm & { autoFixed: string[] }> {
+  const fixed = await autoFixLevelFormOutput(runner, { targetLevel: assembled.targetLevel, original: assembled.output, shuffled: assembled.shuffled, seed: assembled.seed, ...(log ? { log } : {}) });
+  const record: LevelFormQualityRecord = { checkedAt: assembled.checkedAt, warnings: fixed.quality.light, ...(fixed.autoFixed.length ? { autoFixed: fixed.autoFixed } : {}) };
+  return { ...assembled, shuffled: fixed.output, quality: fixed.quality, blueprint: levelFormDraftBlueprint(assembled.targetLevel, fixed.output, record), autoFixed: fixed.autoFixed };
 }
 
 /**

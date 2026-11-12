@@ -58,6 +58,8 @@ export interface LevelFormQualityReport {
 export interface LevelFormQualityRecord {
   checkedAt: string;
   warnings: LevelFormQualityIssue[];
+  /** What the generation auto-fix changed before the draft was shown ("Hệ thống đã tự sửa"). */
+  autoFixed?: string[];
 }
 
 /**

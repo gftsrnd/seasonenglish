@@ -25,8 +25,55 @@ export async function generateMonthlyFinalListening(runner:AiTaskRunner,input:Mo
     }
     return {...result,output:monthlyFinalListeningMessageOutputSchema.parse(result.output)};
   }));
-  const output={listening:{messages:generated.map(result=>result.output)}};
-  const issues=validateMonthlyFinalListeningOutput(output,input);
+  let output={listening:{messages:generated.map(result=>result.output)}};
+  let issues=validateMonthlyFinalListeningOutput(output,input);
+  // Only the section-wide option-length rule failed (GEN17): one targeted repair of the
+  // options of the message with the most uniquely-longest keys; scripts are never touched.
+  if(issues.length&&issues.every(issue=>issue.path==="listening.messages"&&issue.message.includes("uniquely longest"))){
+    const repaired=await repairMonthlyFinalListeningOptionLengths(runner,input,output.listening.messages,issues.map(issue=>issue.message).join(" ")).catch(()=>null);
+    if(repaired){
+      const candidate={listening:{messages:repaired}};
+      const candidateIssues=validateMonthlyFinalListeningOutput(candidate,input);
+      if(!candidateIssues.length){output=candidate;issues=candidateIssues;}
+    }
+  }
   if(issues.length)throw Object.assign(new Error("Assigned listening messages did not satisfy the exam scope"),{code:"AI_OUTPUT_INVALID",issues});
   return {output,metadata:generated[0]!.metadata};
+}
+
+type ListeningMessage=MonthlyFinalListeningOutput["listening"]["messages"][number];
+const keyIsUniqueLongest=(question:{options:string[];correctIndex:number})=>{
+  const key=question.options[question.correctIndex]?.trim().length??0;
+  return question.options.every((option,index)=>index===question.correctIndex||option.trim().length<key);
+};
+
+/**
+ * Rewrites only the wrong options of the uniquely-longest-key questions of ONE
+ * message. Merged per question: the prompt, the exact correct option text,
+ * evidence and the script stay as generated (audio and evidence unaffected).
+ */
+export async function repairMonthlyFinalListeningOptionLengths(runner:AiTaskRunner,input:MonthlyFinalGenerationInput,messages:ListeningMessage[],feedback:string):Promise<ListeningMessage[]|null>{
+  const ranked=messages.map((message,index)=>({index,count:message.questions.filter(keyIsUniqueLongest).length})).sort((left,right)=>right.count-left.count);
+  const target=ranked[0];
+  if(!target?.count)return null;
+  const message=messages[target.index]!;
+  const ids=message.questions.filter(keyIsUniqueLongest).map(question=>question.termId);
+  const terms=input.targets.listening.filter(term=>message.questions.some(question=>question.termId===term.id));
+  const slice={...input,targets:{...input.targets,listening:terms},messageLabel:message.label,scriptPlan:listeningScriptPlan({...input,targets:{...input.targets,listening:terms}})};
+  const result=await runner.runTask("monthly_final_listening_message_generation",slice,{
+    systemPrompt:`Repair only the answer options of listening Message ${message.label} at ${input.cefr}. Return the complete message with the same script blocks, the same questions, prompts, termIds, evidence and explanations, and the exact same correct option text. For ${ids.join(", ")}: rewrite only the wrong options so at least one plausible wrong option is as long as or longer than the correct option in characters, parallel in form and clearly wrong according to the script. Never pad with empty words.`,
+    messages:[{role:"user",content:JSON.stringify(slice)},{role:"assistant",content:JSON.stringify(message)},{role:"user",content:feedback}],
+    maxOutputTokens:6500,maxAttempts:1
+  });
+  const repaired=monthlyFinalListeningMessageOutputSchema.parse(result.output);
+  const byTerm=new Map(repaired.questions.map(question=>[question.termId,question]));
+  const questions=message.questions.map(question=>{
+    const next=byTerm.get(question.termId);
+    if(!next||!ids.includes(question.termId))return question;
+    const key=question.options[question.correctIndex]!.trim();
+    const nextKey=next.options[next.correctIndex]?.trim();
+    if(nextKey!==key||next.options.length!==question.options.length||new Set(next.options.map(option=>option.trim().toLocaleLowerCase())).size!==next.options.length)return question;
+    return {...question,options:next.options.map(option=>option.trim()),correctIndex:next.correctIndex};
+  });
+  return messages.map((item,index)=>index===target.index?{...item,questions}:item);
 }

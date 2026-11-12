@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { OperatorPracticeReview, type OperatorLessonPart } from "./adapters.js";
+import { AudioSynthesisNotice } from "./AudioSynthesisNotice.js";
 
 /**
  * Operator view of the Friday review exercises (e4s_cau_truc_bai_on_cuoi_tuan).
@@ -45,6 +46,7 @@ export function MonthlyReviewPractice({ parts, english = false }: { parts: reado
           const showPassage = section.code === "reading" && index === 0 ? passage : "";
           return <section className={`card lesson-part lesson-part--${section.code} operator-practice-review monthly-review-card`} key={`${section.code}-${text(item.id) || index}`}>
             <OperatorPracticeReview sectionNumber={sectionIndex + 1} headingText={heading} part={asPracticePart(section.code, heading, item, showPassage, english)} />
+            {text(item.audioText) ? <AudioSynthesisNotice mark={item.audioSynthesis} hasAudio={Boolean(text(item.audioUrl))} retry="học viên sẽ nghe bằng giọng đọc của trình duyệt; sinh lại bài ôn để thử lại" /> : null}
             {text(item.explanation) ? <p className="small monthly-review-explanation"><strong>{english ? "Explanation" : "Giải thích"}:</strong> {text(item.explanation)}</p> : null}
             {variants.length ? <details className="monthly-review-variant"><summary className="small">{english ? "Question asked again if the learner gets this wrong (same point, new context)" : "Câu hỏi lại khi học viên làm sai (cùng điểm kiến thức, ngữ cảnh khác)"}</summary>{variants.map((variant, variantIndex) => <div className="monthly-review-variant-card" key={text(variant.id) || variantIndex}>
               <OperatorPracticeReview sectionNumber={sectionIndex + 1} headingText={`${heading} · ${english ? "asked again" : "hỏi lại"}`} part={asPracticePart(section.code, heading, variant, "", english)} />

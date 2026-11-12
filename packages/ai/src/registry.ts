@@ -26,6 +26,7 @@ import {
   weeklyLessonSkillsReviewOutputJsonSchema, weeklyLessonSkillsReviewOutputSchema,
   levelFormInputSchema, levelFormOutputJsonSchema, levelFormOutputSchema, levelFormPartialOutputSchema,
   levelFormReadingRepairInputSchema, levelFormReadingRepairOutputJsonSchema, levelFormReadingRepairOutputSchema,
+  levelFormItemRepairOutputJsonSchema, levelFormItemRepairOutputSchema,
   levelFormListeningOutputJsonSchema, levelFormListeningOutputSchema, levelFormReadingOutputJsonSchema, levelFormReadingOutputSchema, levelFormProductionOutputJsonSchema, levelFormProductionOutputSchema,
   weekSuggestionsInputSchema, weekSuggestionsOutputJsonSchema, weekSuggestionsOutputSchema,
   monthlyTopicSuggestionInputSchema, monthlyTopicSuggestionOutputJsonSchema, monthlyTopicSuggestionOutputSchema,
@@ -136,6 +137,11 @@ export const AI_TASKS = new AiTaskRegistry([
   {
     id: "level_form_reading_repair", promptKey: "level_form_generation", inputSchema: levelFormReadingRepairInputSchema,
     outputSchema: levelFormReadingRepairOutputSchema, outputJsonSchema: levelFormReadingRepairOutputJsonSchema
+  },
+  {
+    // Auto-fix before the draft is shown: only the offending questions of one section, merged back by id.
+    id: "level_form_item_repair", promptKey: "level_form_generation", inputSchema: z.record(z.string(), z.unknown()),
+    outputSchema: levelFormItemRepairOutputSchema, outputJsonSchema: levelFormItemRepairOutputJsonSchema
   },
   { id: "level_form_listening_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormListeningOutputSchema, outputJsonSchema: levelFormListeningOutputJsonSchema },
   { id: "level_form_reading_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormReadingOutputSchema, outputJsonSchema: levelFormReadingOutputJsonSchema },

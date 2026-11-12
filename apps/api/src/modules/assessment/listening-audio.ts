@@ -148,13 +148,16 @@ const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
  * items: each variant's `audioText` → `audioUrl`.
  */
 export async function withLessonListeningAudio<T extends LessonLike>(
-  lesson: T, service: ListeningAudioService | undefined, ownerUserId: string, options: { now?: Date } = {}
-): Promise<{ lesson: T; generated: number; failed: number }> {
+  lesson: T, service: ListeningAudioService | undefined, ownerUserId: string, options: { now?: Date; previous?: ReadonlyMap<string, string> } = {}
+): Promise<{ lesson: T; generated: number; failed: number; reused: number }> {
   const at = (options.now ?? new Date()).toISOString();
   const synth = service ? memoized(service, ownerUserId) : undefined;
-  let generated = 0; let failed = 0;
+  let generated = 0; let failed = 0; let reused = 0;
   const synthesize = async (script: string): Promise<{ audioUrl?: string; audioSynthesis: ListeningAudioSynthesisMark }> => {
     const hash = listeningScriptHash(script);
+    // Regeneration: an unchanged script keeps the earlier file instead of a new synthesis.
+    const earlier = options.previous?.get(hash);
+    if (earlier) { reused += 1; return { audioUrl: earlier, audioSynthesis: { status: "generated", engine: "edge-tts", scriptHash: hash, at } }; }
     if (!synth) { failed += 1; return { audioSynthesis: { status: "failed", engine: "edge-tts", scriptHash: hash, at, code: "EDGE_TTS_UNAVAILABLE" } }; }
     try {
       const stored = await synth(script).pending;
@@ -188,5 +191,32 @@ export async function withLessonListeningAudio<T extends LessonLike>(
     if (!script || text(content.audioUrl)) return part;
     return { ...part, content: { ...content, ...(await synthesize(script)) } };
   }));
-  return { lesson: { ...lesson, parts } as T, generated, failed };
+  return { lesson: { ...lesson, parts } as T, generated, failed, reused };
+}
+
+/** script hash → audioUrl of a stored lesson's listening part and review items (for regeneration reuse). */
+export function lessonListeningAudioIndex(lesson: { parts?: ReadonlyArray<{ code: string; content?: Record<string, unknown> }> } | null | undefined): Map<string, string> {
+  const index = new Map<string, string>();
+  const remember = (script: unknown, url: unknown) => { if (text(script) && text(url)) index.set(listeningScriptHash(text(script)), text(url)); };
+  for (const part of lesson?.parts ?? []) {
+    if (part.code !== "listening" || !part.content) continue;
+    remember(part.content.script, part.content.audioUrl);
+    for (const raw of Array.isArray(part.content.items) ? part.content.items : []) {
+      if (!raw || typeof raw !== "object") continue;
+      const item = raw as Record<string, unknown>;
+      remember(item.audioText, item.audioUrl);
+      for (const variant of Array.isArray(item.variants) ? item.variants : []) {
+        if (variant && typeof variant === "object") remember((variant as Record<string, unknown>).audioText, (variant as Record<string, unknown>).audioUrl);
+      }
+    }
+  }
+  return index;
+}
+
+/** The current (latest) stored content of one monthly day, or null (first generation). */
+export async function previousMonthlyLessonAudioIndex(db: Pick<Pool, "query">, frameworkId: string, dayNumber: number): Promise<Map<string, string>> {
+  const result = await db.query<{ content: { parts?: Array<{ code: string; content?: Record<string, unknown> }> } | null }>(
+    `select lv.content from month_lessons ml join lesson_versions lv on lv.lesson_id = ml.lesson_id
+     where ml.framework_id = $1 and ml.lesson_number = $2 order by lv.version desc limit 1`, [frameworkId, dayNumber]);
+  return lessonListeningAudioIndex(result.rows[0]?.content);
 }

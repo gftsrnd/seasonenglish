@@ -69,6 +69,8 @@ export interface AssessmentStimulus {
   type: "audio_script" | "passage" | "message" | "table";
   text?: string;
   audioSrc?: string;
+  /** Automatic Edge TTS after AI generation; "failed" keeps the script for the manual buttons. */
+  audioSynthesis?: { status: "generated" | "failed"; code?: string; scriptHash?: string; at?: string; engine?: string };
   lines?: Array<{ speaker: string; text: string }>;
   headers?: string[];
   rows?: string[][];
@@ -338,6 +340,8 @@ export interface AssessmentLevelFormDetailView extends AssessmentLevelFormView {
   versions: AssessmentLevelFormView[];
   deletable: boolean;
   deleteReason: string | null;
+  /** What the generation auto-fix changed before the draft was shown ("Hệ thống đã tự sửa: …"). */
+  autoFixed?: string[];
 }
 
 /**

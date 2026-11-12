@@ -7,6 +7,7 @@ import { ApiError } from "../../api/runtime.js";
 import { ScrollJumpButton, useScrollJump } from "../shared/ScrollJump.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { formatScore } from "../shared/format-score.js";
+import { AudioSynthesisNotice, AutoFixedNote } from "./AudioSynthesisNotice.js";
 
 type LevelFormsUiView = OperatorLevelFormsView & {
   loading?: boolean;
@@ -68,7 +69,7 @@ export function OperatorLevelForms({ view, actions, readOnly = false, unavailabl
 }
 
 /** The fields the shared assessment editor needs; level-up details and monthly finals both provide them. */
-export type LevelFormEditorDetail = Pick<AssessmentLevelFormDetailView, "title" | "status" | "sections" | "warnings" | "versions" | "deleteReason"> & { targetLevel?: CefrLevel };
+export type LevelFormEditorDetail = Pick<AssessmentLevelFormDetailView, "title" | "status" | "sections" | "warnings" | "versions" | "deleteReason"> & { targetLevel?: CefrLevel; autoFixed?: string[] };
 
 type LevelFormDetailProps = {
   detail: LevelFormEditorDetail | AssessmentLevelFormDetailView;
@@ -289,6 +290,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
             {uploadAudio ? <label className="btn-sm" aria-busy={audioBusy && audioJob.kind === "upload" || undefined}>{audioBusy && audioJob.kind === "upload" ? "Đang tải…" : audioSrc ? "Thay file audio" : "Tải file audio"}<input hidden type="file" accept="audio/*" aria-label={`${audioSrc ? "Thay" : "Tải"} audio cho ${group.title}`} disabled={Boolean(audioJob)} onChange={(event) => void uploadGroupAudio(sectionIndex, groupIndex, group.key, event.target.files?.[0])} /></label> : null}
           </div> : null}
           {audioError?.groupKey === group.key ? <p className="small form-error operator-level-audio-error" role="alert">{audioError.message}</p> : null}
+          {group.stimulus?.type === "audio_script" ? <AudioSynthesisNotice mark={group.stimulus.audioSynthesis} hasAudio={Boolean(audioSrc)} retry={editing && !readOnly ? undefined : "mở Sửa đề rồi bấm Sinh audio Edge TTS để thử lại"} /> : null}
         </div> : null}
         <div className="operator-level-question-list" role="list" aria-label={`Câu hỏi phần ${section.title}`}>{group.tasks.map((task, taskIndex) => <article className="operator-level-question" role="listitem" key={task.key}>
           <div className="operator-level-question-number">Câu {taskIndex + 1}<span>{task.key}</span></div>
@@ -320,6 +322,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
         </section> : null}
         {actionError ? <p className="small form-error" role="alert">{actionError}</p> : null}
         {detail.deleteReason && <div className="banner warn"><div className="body small">Không thể xoá: {detail.deleteReason}</div></div>}
+        <AutoFixedNote notes={detail.autoFixed} />
         {hideValidation ? null : detail.warnings.length ? <LevelFormWarnings warnings={detail.warnings} /> : onPublish ? null : <div className="banner ok"><div className="body small">Đề đủ cấu trúc hiện tại, chưa có cảnh báo.</div></div>}
         {children}
         <h4>Chi tiết 4 phần</h4>

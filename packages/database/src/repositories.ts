@@ -7946,7 +7946,8 @@ class AssessmentRepository {
       warnings,
       versions,
       deletable,
-      deleteReason
+      deleteReason,
+      ...levelFormAutoFixed(row.blueprint)
     };
   }
 
@@ -14595,3 +14596,10 @@ export function createRepositories(pool: Pool) {
 }
 
 export type DatabaseRepositories = ReturnType<typeof createRepositories>;
+
+/** Generation auto-fix notes stored on a level-up blueprint (`levelFormQuality.autoFixed`). */
+function levelFormAutoFixed(blueprint: StoredAssessmentDefinition): { autoFixed?: string[] } {
+  const notes = (blueprint as { levelFormQuality?: { autoFixed?: unknown } }).levelFormQuality?.autoFixed;
+  const list = Array.isArray(notes) ? notes.filter((note): note is string => typeof note === "string" && Boolean(note.trim())) : [];
+  return list.length ? { autoFixed: list } : {};
+}
