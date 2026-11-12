@@ -105,8 +105,9 @@ const GRAMMAR_STEP_LABEL = /^\s*(?:Bước|Step)\s+[A-Z]?\d+[A-Za-z]?\s*(?:\([^)
 
 export function withoutGrammarStepLabel(value: string): string {
   const trimmed = value.trim();
-  // A roadmap day prefix ("Ngày 1: Bước 1 – …", "Day 3: Step B2 …") goes with the step label.
-  const withoutDay = trimmed.replace(/^\s*(?:Ngày|Day)\s+\d+\s*[:：–-]\s*(?=(?:Bước|Step)\s)/iu, "");
+  // A roadmap day prefix ("Ngày 1: Bước 1 – …", "Day 3: Step B2 …") or a daily plan code
+  // ("A3 Bước 2 - Biến thể: …", "K1: Step 3 …") goes with the step label.
+  const withoutDay = trimmed.replace(/^\s*(?:(?:[Nn]gày|[Dd]ay)\s+\d+\s*[:：–-]\s*|[ABKM]\d{1,2}\s*[:：–-]?\s*)(?=(?:[Bb]ước|[Ss]tep)\s)/u, "");
   const body = withoutDay.replace(GRAMMAR_STEP_LABEL, "").trim();
   if (!body || body === trimmed) return trimmed;
   return body.charAt(0).toLocaleUpperCase("vi") + body.slice(1);

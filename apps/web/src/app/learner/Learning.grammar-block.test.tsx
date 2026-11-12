@@ -52,5 +52,8 @@ describe("learner grammar block", () => {
     expect(withoutGrammarStepLabel("Step A1 (Identify): notice the present simple.")).toBe("Notice the present simple.");
     expect(withoutGrammarStepLabel("Bước 2 – Biến thể: Luyện câu phủ định.")).toBe("Luyện câu phủ định.");
     expect(withoutGrammarStepLabel("Step 2: use it.")).toBe("Use it.");
+    expect(withoutGrammarStepLabel("A3 Bước 2 - Biến thể: Luyện câu phủ định.")).toBe("Luyện câu phủ định.");
+    expect(withoutGrammarStepLabel("K1: Step 3 (Mixed): combine both topics.")).toBe("Combine both topics.");
+    expect(withoutGrammarStepLabel("A3 is a level code, not a step label.")).toBe("A3 is a level code, not a step label.");
   });
 });

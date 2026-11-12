@@ -117,13 +117,13 @@ describe("operator granular lesson editor", () => {
     render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
 
     await user.click(screen.getByText("Mở rộng từ 1"));
-    await user.type(screen.getByLabelText("Word family từ 1"), "colleague | noun | đồng nghiệp; collegial | adjective | mang tính đồng nghiệp");
+    await user.type(screen.getByLabelText("Họ từ của từ 1"), "colleague | noun | đồng nghiệp; collegial | adjective | mang tính đồng nghiệp");
     await user.type(screen.getByLabelText("Từ đồng nghĩa từ 1"), "coworker | A2 | phổ biến; associate | B1 | trang trọng");
     await user.type(screen.getByLabelText("Từ trái nghĩa từ 1"), "competitor | B1 | đối thủ");
     await user.type(screen.getByLabelText("Từ bao trùm từ 1"), "people at work");
     await user.type(screen.getByLabelText("Nghĩa từ bao trùm từ 1"), "người trong công việc");
     await user.type(screen.getByLabelText("Từ cùng nhóm từ 1"), "manager | quản lý; client | khách hàng");
-    expect(screen.getByLabelText("Audio word family: colleague URL")).toBeInTheDocument();
+    expect(screen.getByLabelText("Audio họ từ: colleague URL")).toBeInTheDocument();
     expect(screen.getByLabelText("Audio từ đồng nghĩa: coworker URL")).toBeInTheDocument();
     expect(screen.getByLabelText("Audio từ trái nghĩa: competitor URL")).toBeInTheDocument();
     expect(screen.getByLabelText("Audio từ bao trùm: people at work URL")).toBeInTheDocument();
@@ -144,11 +144,11 @@ describe("operator granular lesson editor", () => {
 
     cleanup();
     render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="A2" initial={saved} onSave={vi.fn()} onCancel={() => undefined} /></ModalProvider>);
-    expect(screen.getByLabelText("Word family từ 1")).toHaveValue("colleague | noun | đồng nghiệp; collegial | adjective | mang tính đồng nghiệp");
+    expect(screen.getByLabelText("Họ từ của từ 1")).toHaveValue("colleague | noun | đồng nghiệp; collegial | adjective | mang tính đồng nghiệp");
     expect(screen.getByLabelText("Từ đồng nghĩa từ 1")).toHaveValue("coworker | A2 | phổ biến; associate | B1 | trang trọng");
     expect(screen.getByLabelText("Từ trái nghĩa từ 1")).toHaveValue("competitor | B1 | đối thủ");
     expect(screen.getByLabelText("Từ cùng nhóm từ 1")).toHaveValue("manager | quản lý; client | khách hàng");
-    expect(screen.getByLabelText("Audio word family: colleague URL")).toBeInTheDocument();
+    expect(screen.getByLabelText("Audio họ từ: colleague URL")).toBeInTheDocument();
   });
 
   it("uses clear styled media actions instead of a raw file chooser", () => {
@@ -240,7 +240,7 @@ describe("operator granular lesson editor", () => {
     render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="A1" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} uploadMedia={vi.fn()} /></ModalProvider>);
 
     fireEvent.change(screen.getByLabelText("Cụm từ 1"), { target: { value: "every day; one day; day shift" } });
-    fireEvent.change(screen.getByLabelText("Word family từ 1"), { target: { value: "daily | adjective | hằng ngày" } });
+    fireEvent.change(screen.getByLabelText("Họ từ của từ 1"), { target: { value: "daily | adjective | hằng ngày" } });
     fireEvent.change(screen.getByLabelText("Từ đồng nghĩa từ 1"), { target: { value: "date | A1 | ngày tháng" } });
     fireEvent.change(screen.getByLabelText("Từ trái nghĩa từ 1"), { target: { value: "night | A1 | ban đêm" } });
     fireEvent.change(screen.getByLabelText("Từ bao trùm từ 1"), { target: { value: "time" } });
@@ -250,7 +250,7 @@ describe("operator granular lesson editor", () => {
       ["Audio cụm từ 1.1 URL", "/audio/every-day.mp3"],
       ["Audio cụm từ 1.2 URL", "/audio/one-day.mp3"],
       ["Audio cụm từ 1.3 URL", "/audio/day-shift.mp3"],
-      ["Audio word family: daily URL", "/audio/daily.mp3"],
+      ["Audio họ từ: daily URL", "/audio/daily.mp3"],
       ["Audio từ đồng nghĩa: date URL", "/audio/date.mp3"],
       ["Audio từ trái nghĩa: night URL", "/audio/night.mp3"],
       ["Audio từ bao trùm: time URL", "/audio/time.mp3"],
@@ -345,5 +345,66 @@ describe("operator granular lesson editor", () => {
     expect(pronunciation).toEqual(expect.objectContaining({ focus: "/eɪ/", words: ["safe", "day", "take"], audioUrl: "" }));
     expect(pronunciation).not.toHaveProperty("phonemeAudioId");
     expect(pronunciation).not.toHaveProperty("phonemeAudioUrl");
+  });
+
+  it("monthly lessons hide the legacy per-item media fields but save their stored values unchanged", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const initial = { dayNumber: 2, title: "Bài 3", durationMinutes: 10, parts: [
+      { code: "vocabulary" as const, title: "Từ vựng", content: { items: [{ word: "report", meaning: "báo cáo", collocations: ["send a report", "a short report", "report data"], collocationAudioUrls: ["/a1.mp3", "", ""], imageUrl: "/illustrations/report.png", imageAttribution: { creator: "E4S (AI minh họa)", licence: "Nội dung nội bộ", licenceUrl: "", sourceUrl: "/illustrations/report.png" }, audioUrl: "/word.mp3" }] } },
+      { code: "grammar" as const, title: "Ngữ pháp", content: { formula: "Subject + V", examples: ["I send it."], exampleAudioUrls: ["/g1.mp3"], dailyCode: "A3", objective: "A3 Bước 2 - Biến thể: Luyện câu phủ định.", milestoneIds: ["a2-grammar-1-step-2"], recallMilestoneIds: [], items: [{ id: "g1", prompt: "She ___ it.", options: ["sends", "send", "sending", "sent"], answer: "sends", explanation: "He/she: V-s.", milestoneId: "a2-grammar-1-step-2" }] } }
+    ] };
+    render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A2" monthly vocabularyCount={1} grammarStepLabels={{ "a2-grammar-1-step-2": "Câu phủ định với do/does" }} headingOverride="Soạn bài ngày 03/12 · A2" initial={initial} onSave={onSave} onCancel={() => undefined} uploadMedia={vi.fn()} /></ModalProvider>);
+    expect(screen.queryByLabelText("Ảnh minh họa từ 1 URL")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Audio từ vựng 1 URL")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Audio cụm từ 1.1 URL")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Audio ví dụ ngữ pháp/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Bật audio cho Ngữ pháp" })).not.toBeInTheDocument();
+    // Listening audio is still uploadable (the retry path when synthesis failed).
+    expect(screen.getByLabelText("File audio phần Nghe URL")).toBeInTheDocument();
+
+    // Daily practice: no internal codes or step ids; options on one row like the other sections.
+    const daily = screen.getByText("Luyện tập theo ngày", { selector: "legend" }).closest("fieldset")!;
+    expect(daily).toHaveTextContent("Mục tiêu ngữ pháp: Luyện câu phủ định.");
+    expect(daily).not.toHaveTextContent("A3");
+    expect(daily).not.toHaveTextContent("a2-grammar-1-step-2");
+    expect(screen.queryByLabelText("Câu 1 – Chủ điểm ngữ pháp")).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Câu luyện tập 1" }).querySelector(".grid.cols-4")).not.toBeNull();
+    expect(screen.getByLabelText("Câu 1 – Lựa chọn 1")).toHaveAttribute("placeholder", "Lựa chọn 1");
+
+    await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu tạm" }));
+    const saved = onSave.mock.calls[0]![0] as { parts: Array<{ code: string; content: Record<string, unknown> }> };
+    const item = (saved.parts.find(part => part.code === "vocabulary")!.content.items as Array<Record<string, unknown>>)[0]!;
+    expect(item).toEqual(expect.objectContaining({ imageUrl: "/illustrations/report.png", audioUrl: "/word.mp3", collocationAudioUrls: ["/a1.mp3", "", ""] }));
+    // An unchanged picture keeps its stored credit instead of being re-credited to the Operator.
+    expect(item.imageAttribution).toEqual(expect.objectContaining({ creator: "E4S (AI minh họa)" }));
+    expect(saved.parts.find(part => part.code === "grammar")!.content).toEqual(expect.objectContaining({ exampleAudioUrls: ["/g1.mp3"] }));
+  });
+
+  it("names grammar steps by title when a daily question can practise more than one", () => {
+    const initial = { dayNumber: 8, title: "Bài 8", durationMinutes: 10, parts: [
+      { code: "grammar" as const, title: "Ngữ pháp", content: { dailyCode: "B2", objective: "Dùng was/were.", milestoneIds: ["a2-g2-s1"], recallMilestoneIds: ["a2-g1-s1"], items: [{ id: "g1", prompt: "?", options: ["a", "b", "c", "d"], answer: "a", explanation: "", milestoneId: "a2-g1-s1" }] } }
+    ] };
+    render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A2" monthly grammarStepLabels={{ "a2-g2-s1": "Quá khứ của to be" }} initial={initial} onSave={vi.fn()} onCancel={() => undefined} /></ModalProvider>);
+    const select = screen.getByLabelText("Câu 1 – Chủ điểm ngữ pháp");
+    expect(Array.from(select.querySelectorAll("option")).map(option => option.textContent)).toEqual(["Chọn chủ điểm", "Quá khứ của to be", "Ôn lại chủ điểm trước"]);
+    expect(select).toHaveValue("a2-g1-s1");
+  });
+
+  it("pins the day's findings under the header and jumps to the named section", async () => {
+    const user = userEvent.setup();
+    render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A2" monthly initial={emptyLesson(2)} onSave={vi.fn()} onCancel={() => undefined} findings={{ title: "Lần sinh AI gần nhất chưa đạt", lines: [
+      { key: "a", code: "MONTHLY_INVENTED_WORD_FORM", component: "word_use", severity: "severe", where: "Câu 5 · Dùng từ", what: "Thay từ không có thật." },
+      { key: "b", code: "MONTHLY_ANSWER_LONGEST_OPTION", component: "listening", severity: "light", where: "Câu 1 · Nghe", what: "Viết các lựa chọn dài gần bằng nhau." }
+    ] }} /></ModalProvider>);
+    const panel = screen.getByRole("region", { name: "Các mục cần sửa" });
+    expect(panel.closest(".operator-editor-sticky-header")).not.toBeNull();
+    expect(panel).toHaveTextContent("1 lỗi nặng · 1 cảnh báo");
+    expect(panel).toHaveTextContent("Nặng Câu 5 · Dùng từ: Thay từ không có thật.");
+    await user.click(screen.getByRole("button", { name: "Câu 5 · Dùng từ" }));
+    await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)));
+    expect(document.activeElement).toBe(screen.getByLabelText("Dùng từ – Câu hỏi"));
   });
 });

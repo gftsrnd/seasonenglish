@@ -1,5 +1,5 @@
 import { monthlyManualSeed } from "./monthly-manual-seed.js";
-import { MONTHLY_PART_TITLES } from "./monthly-failure-findings.js";
+import { describeMonthlyFindings, MONTHLY_PART_TITLES, type MonthlyFindingLine } from "./monthly-failure-findings.js";
 import { monthlyLessonDisplayTitle } from "@e4s/domain/monthly";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";
@@ -220,7 +220,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
   const [resourceGenerationActive,setResourceGenerationActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> }; kind?: "new" | "review"; date?: string; vocabularyCount?: number; defaultTitle?: string; cefr?: CefrLevel }>();
+  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> }; kind?: "new" | "review"; date?: string; vocabularyCount?: number; defaultTitle?: string; cefr?: CefrLevel; findings?: { title: string; lines: MonthlyFindingLine[] }; grammarStepLabels?: Record<string, string> }>();
   const systemMonthInitialized = useRef(false);
   useEffect(() => { if (linkedMonth) setMonth(linkedMonth); }, [linkedMonth]);
   const pendingScrollRestore = useRef<number | null>(null);
@@ -321,12 +321,22 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     // No draft yet but a failed AI candidate: start from that candidate so the Operator only fixes the flagged items.
     const candidate = savedLesson?.generationFailure?.candidate;
     const candidateTitle = displayTitle(candidate?.title);
-    setEditor(saved?.parts?.length ? { frameworkId, dayNumber, initial: { ...saved, ...(savedTitle ? { title: savedTitle } : {}) }, ...meta }
-      : candidate?.parts?.length ? { frameworkId, dayNumber, initial: { ...(candidateTitle ? { title: candidateTitle } : {}), parts: candidate.parts.map((part) => ({ ...part, title: part.title || MONTHLY_PART_TITLES[part.code ?? ""] || part.code || "Nội dung" })) }, ...meta }
-      : seed ? { frameworkId, dayNumber, initial: { title: seed.title, parts: seed.parts }, ...meta } : { frameworkId, dayNumber, ...meta });
+    // The findings the Operator is fixing stay pinned in the editor: the draft's own check, or the failed candidate's.
+    const findingKind = kind === "review" ? "review" as const : "new" as const;
+    const findingSource = saved?.parts?.length
+      ? savedLesson?.status !== "approved" && savedLesson ? { title: "Kiểm tra chất lượng bản nháp", findings: [...savedLesson.quality.severe, ...savedLesson.quality.light], parts: saved.parts } : undefined
+      : candidate?.parts?.length && savedLesson?.generationFailure ? { title: "Lần sinh AI gần nhất chưa đạt", findings: [...savedLesson.generationFailure.report.severe, ...savedLesson.generationFailure.report.light], parts: candidate.parts } : undefined;
+    const findingLines = findingSource ? describeMonthlyFindings(findingSource.findings, { kind: findingKind, parts: findingSource.parts }) : [];
+    // Daily practice questions name their grammar step by its short title, never by its id.
+    const carryoverTopics = framework?.resources?.carryoverReviews?.find((item) => item.lessonNumber === dayNumber)?.grammarTopics ?? [];
+    const grammarStepLabels = Object.fromEntries([...(framework?.resources?.grammarTopics ?? []), ...carryoverTopics].flatMap((topic) => topic.steps).map((step) => [step.id, step.focus || step.formula]));
+    const editorMeta = { ...meta, grammarStepLabels, ...(findingSource && findingLines.length ? { findings: { title: findingSource.title, lines: findingLines } } : {}) };
+    setEditor(saved?.parts?.length ? { frameworkId, dayNumber, initial: { ...saved, ...(savedTitle ? { title: savedTitle } : {}) }, ...editorMeta }
+      : candidate?.parts?.length ? { frameworkId, dayNumber, initial: { ...(candidateTitle ? { title: candidateTitle } : {}), parts: candidate.parts.map((part) => ({ ...part, title: part.title || MONTHLY_PART_TITLES[part.code ?? ""] || part.code || "Nội dung" })) }, ...editorMeta }
+      : seed ? { frameworkId, dayNumber, initial: { title: seed.title, parts: seed.parts }, ...editorMeta } : { frameworkId, dayNumber, ...editorMeta });
   };
   const editorCefr = editor?.cefr ?? cefr;
-  const dayEditor = !readOnly && editor ? <LessonFormEditor weekNumber={0} cefr={editorCefr} initial={editor.initial?.parts?.length ? { dayNumber: editor.dayNumber - 1, title: editor.initial.title || editor.defaultTitle || `Bài ${editor.dayNumber}`, durationMinutes: 10, parts: editor.initial.parts.map((part) => ({ code: (part.code || "instruction") as import("@e4s/contracts").LessonPartCode, title: part.title || part.code || "Nội dung", content: part.content || {} })) } : { ...emptyLesson(editor.dayNumber - 1), ...(editor.defaultTitle ? { title: editor.defaultTitle } : {}) }} vocabularyCount={editor.vocabularyCount ?? 3} kind={editor.kind === "review" ? "review" : "lesson"} onSave={async (lesson) => {
+  const dayEditor = !readOnly && editor ? <LessonFormEditor weekNumber={0} cefr={editorCefr} initial={editor.initial?.parts?.length ? { dayNumber: editor.dayNumber - 1, title: editor.initial.title || editor.defaultTitle || `Bài ${editor.dayNumber}`, durationMinutes: 10, parts: editor.initial.parts.map((part) => ({ code: (part.code || "instruction") as import("@e4s/contracts").LessonPartCode, title: part.title || part.code || "Nội dung", content: part.content || {} })) } : { ...emptyLesson(editor.dayNumber - 1), ...(editor.defaultTitle ? { title: editor.defaultTitle } : {}) }} vocabularyCount={editor.vocabularyCount ?? 3} kind={editor.kind === "review" ? "review" : "lesson"} monthly grammarStepLabels={editor.grammarStepLabels} findings={editor.findings} onSave={async (lesson) => {
     const label = monthDayLabel(editor.dayNumber);
     const report = await run(() => client.saveContentMonthDay(editor.frameworkId, editor.dayNumber, { title: lesson.title, parts: lesson.parts }));
     if (!report) return;

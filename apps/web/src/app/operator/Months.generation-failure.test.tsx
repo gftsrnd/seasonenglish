@@ -30,9 +30,12 @@ describe("Operator monthly day: failed AI generation (December 2026 N3)", () => 
     expect(within(section).getByText("Không duyệt được")).toBeInTheDocument();
     expect(within(section).getByText(/team \/ teem là hai từ đồng âm/)).toBeInTheDocument();
     expect(within(section).getByText(/Đáp án đúng thường là lựa chọn dài nhất/)).toBeInTheDocument();
-    expect(within(section).getByText(/Bản nháp hiện có ở trên vẫn được giữ nguyên/)).toBeInTheDocument();
+    expect(within(section).getByText(/Bản nháp hiện có vẫn được giữ nguyên/)).toBeInTheDocument();
+    // The findings sit in the sticky, collapsible dock above the lesson.
+    expect(section.closest(".operator-monthly-findings-dock")).not.toBeNull();
+    expect(within(section).getByText(/1 lỗi nặng · 1 cảnh báo/)).toBeInTheDocument();
     // The candidate renders with the ordinary lesson preview, below the kept draft's own preview.
-    expect(section).toHaveTextContent(/hướng dẫn làm bài/i);
+    expect(screen.getByRole("region", { name: "Bản AI chưa đạt" })).toHaveTextContent(/hướng dẫn làm bài/i);
     expect(screen.getByTestId("monthly-lesson-4")).toHaveTextContent(/hướng dẫn làm bài/i);
     expect(screen.getByTestId("monthly-lesson-4")).not.toHaveTextContent("Chưa có bản nháp đạt yêu cầu.");
   });

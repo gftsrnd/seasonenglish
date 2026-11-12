@@ -13,7 +13,7 @@ const invented = { severity: "severe" as const, code: "MONTHLY_INVENTED_WORD_FOR
 describe("describeMonthlyFindings", () => {
   it("says where (exercise number as the preview shows it) and what to fix, in Vietnamese", () => {
     expect(describeMonthlyFindings([invented], { kind: "new", parts: dailyParts })).toEqual([{
-      key: "MONTHLY_INVENTED_WORD_FORM-0-0", severity: "severe", where: "Câu 5 · Dùng từ",
+      key: "MONTHLY_INVENTED_WORD_FORM-0-0", code: "MONTHLY_INVENTED_WORD_FORM", component: "word_use", severity: "severe", where: "Câu 5 · Dùng từ",
       what: "Lựa chọn C dùng từ không có thật “colleagueing”; thay bằng một từ tiếng Anh có thật."
     }]);
   });

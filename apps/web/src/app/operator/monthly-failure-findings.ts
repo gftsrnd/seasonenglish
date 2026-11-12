@@ -19,7 +19,8 @@ export const MONTHLY_REVIEW_SECTIONS: ReadonlyArray<{ code: string; title: strin
 
 type Part = { code?: string; title?: string; content?: Record<string, unknown> };
 export interface MonthlyFindingContext { kind: "new" | "review"; parts: readonly Part[] }
-export interface MonthlyFindingLine { key: string; severity: "severe" | "light"; where: string; what: string }
+/** `component` is the lesson part the line points at (e.g. "word_use"), `code` the gate finding code. */
+export interface MonthlyFindingLine { key: string; code: string; component: string; severity: "severe" | "light"; where: string; what: string }
 
 const CHOICE_CODES = "listening|reading|writing|word_class|word_use|grammar|speaking";
 const LABEL = new RegExp(`^(${CHOICE_CODES})(?: item (\\d+)(?: variant (\\d+))?)?`, "u");
@@ -33,18 +34,18 @@ const REPLACE_REAL_WORD = "thay bằng một từ tiếng Anh có thật.";
  */
 export function describeMonthlyFindings(findings: readonly MonthlyQualityFindingView[], context: MonthlyFindingContext): MonthlyFindingLine[] {
   return findings.flatMap((finding, index) => describeFinding(finding, context).map((line, lineIndex) => ({
-    key: `${finding.code}-${index}-${lineIndex}`, severity: finding.severity, ...line
+    key: `${finding.code}-${index}-${lineIndex}`, code: finding.code, component: line.component ?? finding.component ?? "", severity: finding.severity, where: line.where, what: line.what
   })));
 }
 
-function describeFinding(finding: MonthlyQualityFindingView, context: MonthlyFindingContext): Array<{ where: string; what: string }> {
+function describeFinding(finding: MonthlyQualityFindingView, context: MonthlyFindingContext): Array<{ where: string; what: string; component?: string }> {
   const component = finding.component ?? "";
   const section = sectionLabel(component, context);
   const message = finding.message;
   const single = (what: string) => [{ where: section, what }];
   const perLabel = (body: string, describe: (segment: LabelSegment) => string) => {
     const segments = labelSegments(body);
-    return segments.length ? segments.map((segment) => ({ where: sectionLabel(segment.code, context, segment), what: describe(segment) })) : null;
+    return segments.length ? segments.map((segment) => ({ where: sectionLabel(segment.code, context, segment), what: describe(segment), component: segment.code })) : null;
   };
   switch (finding.code) {
     case "MONTHLY_INVENTED_WORD_FORM":
