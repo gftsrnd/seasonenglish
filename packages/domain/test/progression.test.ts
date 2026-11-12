@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildLevelReadiness,
   calculateWeeklyPracticeScore,
+  LEVEL_READINESS_THRESHOLDS,
   createLevelRetryPlan,
   nextEffectiveMonday,
   passesLevelUpExam,
@@ -65,6 +66,20 @@ describe("P2 progression policy", () => {
       thresholds: { days: 21, lessons: 85, firstTry: 70, submission: 75, coach: 3.5, coachTurns: 6, wrong: 25, minParts: 5 },
       examAvailable: true
     }).eligible).toBe(true);
+  });
+
+  it("keeps the retired Settings thresholds as the fixed former defaults", () => {
+    expect(LEVEL_READINESS_THRESHOLDS).toEqual({ days: 14, lessons: 90, firstTry: 75, submission: 80, coach: 4, coachTurns: 6, wrong: 30, minParts: 4 });
+    expect(Object.isFrozen(LEVEL_READINESS_THRESHOLDS)).toBe(true);
+    const readiness = buildLevelReadiness({
+      metrics: { lessonCompletion: 90, firstTryAccuracy: 75, weeklyPractice: 80, coachRubric: 4, coachTurns: 5, wrongRate: 0, attemptedParts: 4 },
+      thresholds: LEVEL_READINESS_THRESHOLDS,
+      examAvailable: true
+    });
+    expect(readiness.windowDays).toBe(14);
+    expect(readiness.criteria.map((criterion) => [criterion.key, criterion.target, criterion.met])).toEqual([
+      ["lessonCompletion", 90, true], ["firstTryAccuracy", 75, true], ["weeklyPractice", 80, true], ["coachRubric", 4, false]
+    ]);
   });
 
   it("requires total 70 and at least 50 percent in every level-up skill", () => {

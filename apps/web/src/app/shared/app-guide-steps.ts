@@ -97,7 +97,7 @@ const learnerSteps: Record<string, readonly GuideStep[]> = {
 const operatorSteps: Record<string, readonly GuideStep[]> = {
   "/op": [
     ['[data-guide="op-pending"]', "Hồ sơ chờ duyệt", "Mở từng hồ sơ để xem điểm 4 kỹ năng và thông tin người học, chọn **Mức duyệt** rồi xác nhận để xếp trình độ."],
-    ['[data-guide="op-signals"]', "Tín hiệu đổi mức", "Người học đủ tín hiệu để **thi lên mức** hoặc cần **xem xét hạ mức** trong 14 ngày gần nhất. Ngưỡng chỉnh trong Cài đặt."],
+    ['[data-guide="op-signals"]', "Tín hiệu đổi mức", "Người học đủ điều kiện **thi lên mức** theo kết quả các tháng, hoặc sai nhiều **hai tuần liền** nên cần xem xét hạ mức. Bấm **Hạ mức** để chuyển xuống."],
     [".operator-approved-panel", "Học viên đã duyệt", "Mức hiện tại và điểm đầu vào của từng người. Bấm **Đổi level** để chuyển mức, **Mục tiêu** để đặt mục tiêu tháng, **Hồ sơ** để xem chi tiết."],
     ['[data-guide="op-in-progress"]', "Đang làm test", "Người học đã bắt đầu bài đầu vào nhưng chưa nộp. Bấm **Hồ sơ** để xem thông tin đã điền."],
     ['[data-guide="op-unassessed"]', "Chưa làm test", "Người học chưa bắt đầu bài đầu vào. Bấm **Hồ sơ** để xem thông tin trước khi nhắc họ làm bài."],
@@ -204,7 +204,6 @@ function settingsStep(panel: string, title: string, text: string): GuideStep {
 const themeGuide = settingsStep("theme", "Giao diện theo mùa", "Chọn giao diện **theo mùa**, **theo lễ** hoặc **Tự động** đổi theo ngày, rồi bấm **Lưu** để áp dụng cho cả tổ chức.");
 const musicGuide = settingsStep("music", "Nhạc nền", "Bật nhạc nền, chọn bản nhạc hoặc dán liên kết, chỉnh âm lượng. Bấm **Nghe thử** trước khi **Lưu nhạc nền**.");
 const learningGuide = settingsStep("monthly", "Học theo tháng", "Thời lượng học khuyến nghị mỗi ngày và **giới hạn lượt chat** với Season. Bấm **Lưu** để áp dụng.");
-const levelsGuide = settingsStep("levels", "Ngưỡng lên và hạ mức", "Số ngày xét và các **tỷ lệ** dùng để xét lên hoặc hạ mức người học. Bấm **Lưu ngưỡng** sau khi sửa.");
 
 const managerSettings: readonly GuideStep[] = [
   [".manager-security-notices", "Thông báo bảo mật", "Các lần **đổi hoặc đặt lại PIN, mật khẩu** và báo cáo xác thực gần đây của người dùng. Mở toàn bộ danh sách khi có nhiều thông báo."],
@@ -212,7 +211,6 @@ const managerSettings: readonly GuideStep[] = [
   settingsStep("test-date", "Ngày hệ thống thử", "Ngày giả lập điều khiển **lịch học**, quyền vào bài, điểm danh và thông báo của **cả tổ chức**."),
   learningGuide,
   settingsStep("images", "Ảnh minh họa từ vựng", "Chọn **nguồn ảnh** cho từ vựng. Bấm **Thử ảnh** để xem mẫu, **Xoá cache ảnh** khi đổi nguồn."),
-  levelsGuide,
   settingsStep("policy", "Nhắc học và báo cáo", "Số **ngày không hoạt động** thì cần nhắc học, và có gửi **báo cáo tháng** hay không."),
   settingsStep("data", "Dữ liệu", "**Xuất JSON** để sao lưu, **Xuất CSV** để xem tiến độ. **Nhập JSON** sẽ ghi đè dữ liệu, kiểm tra đúng tệp trước."),
   settingsStep("accounts", "Người dùng", "Vai trò và trạng thái từng tài khoản. Mỗi hàng có **Khoá**, **Đặt lại** mật khẩu hoặc PIN và **Xoá**; cuối thẻ để thêm người dùng."),
@@ -221,7 +219,6 @@ const operatorSettings: readonly GuideStep[] = [
   themeGuide,
   musicGuide,
   learningGuide,
-  levelsGuide,
   settingsStep("exam-requests", "Yêu cầu đổi đề", "Nhập **email đội phát triển** và mô tả phần cần đổi, rồi gửi yêu cầu cho **đề đầu vào** hoặc **đề đầu ra**."),
   settingsStep("accounts", "Người dùng", "Vai trò, mức học và trạng thái đăng nhập của từng người. Vận hành **chỉ xem**."),
 ];

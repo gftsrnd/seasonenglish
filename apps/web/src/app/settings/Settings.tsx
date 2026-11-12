@@ -99,7 +99,6 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
   const themePanel: SettingsPanel = { id: "theme", label: "Giao diện theo mùa / lễ", content: <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!({ ...productDraft, theme: experienceDraft.theme }) } : {})} /> };
   const musicPanel: SettingsPanel = { id: "music", label: "Nhạc nền của Season", content: <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} /> };
   const learningPanel: SettingsPanel = { id: "monthly", label: "Học theo tháng", content: managerDraft && <MonthlyLearningSection value={managerDraft} onChange={setManagerDraft} coachLimitReadOnly={role === "operator"} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> };
-  const levelPanel: SettingsPanel = { id: "levels", label: "Ngưỡng xét lên / hạ mức", content: managerDraft && <LevelSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> };
   const panels: SettingsPanel[] = role === "manager" ? [
     { id: "security", label: "Thông báo bảo mật", content: securityNotices },
     { id: "prompts", label: "Prompt & rubric", content: <section className="card" aria-label="Cấu hình Prompt & rubric"><h3>Prompt & rubric</h3><p className="small muted">Quản lý hướng dẫn AI và rubric chấm trong khu vực Cài đặt, tách khỏi các thao tác vận hành hằng ngày.</p><a className="btn" href="/settings/prompts">Mở Prompt & rubric</a></section> },
@@ -108,7 +107,6 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
       { id: "test-date", label: "Ngày hệ thống thử", content: <SystemTestDateSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> },
       learningPanel,
       { id: "images", label: "Ảnh minh hoạ từ vựng", content: <ImageSection value={productDraft} onChange={setProductDraft} {...(actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!(productDraft) } : {})} {...(actions.onTestImage ? { onTest: () => actions.onTestImage!(productDraft) } : {})} {...(actions.onClearImageCache ? { onClear: actions.onClearImageCache } : {})} /> },
-      levelPanel,
       themePanel,
       musicPanel,
       { id: "policy", label: "Nhắc học và báo cáo", content: <PolicySection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> },
@@ -120,7 +118,6 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
     musicPanel,
     ...(operatorOverview && managerDraft ? [
       learningPanel,
-      levelPanel,
       { id: "exam-requests", label: "Yêu cầu đổi đề", content: <AssessmentTestChangeRequests
         {...(actions.onRequestPlacementTestChange ? { onPlacementSend: actions.onRequestPlacementTestChange } : {})}
         {...(actions.onRequestFinalTestChange ? { onFinalSend: actions.onRequestFinalTestChange } : {})}
@@ -265,7 +262,6 @@ function legacyExperience(product: ProductPreferencesView, settings?: ManagerSet
   };
 }
 
-function LevelSection({ value, onChange, onSave }: ManagerSectionProps) { const labels: Record<keyof ManagerSettingsView["levelUp"], string> = { days: "Số ngày xét", lessons: "Bài học hoàn thành ≥ (%)", firstTry: "Đúng ngay lần đầu ≥ (%)", submission: "Bài thực hành gần nhất ≥ (/100)", coach: "Rubric Season trung bình ≥ (/5)", coachTurns: "Số lượt chat tối thiểu", wrong: "Hạ mức: tỉ lệ sai > (%)", minParts: "Hạ mức: số phần tối thiểu/tháng" }; return <section className="card"><h3>Ngưỡng xét lên / hạ mức</h3><p className="small muted">Xét trong số ngày gần nhất: đủ 4 ngưỡng đầu = &quot;Sẵn sàng thi lên level&quot; (trừ C1). Khi kết quả chưa đạt ngưỡng trong nhiều lần xét liên tiếp, hệ thống gợi ý xem xét hạ mức (trừ A1).</p><div className="grid cols-4 settings-level-fields">{(Object.keys(labels) as (keyof ManagerSettingsView["levelUp"])[]).map((key) => <NumberField key={key} label={labels[key]} value={value.levelUp[key]} min={key === "coach" ? 0 : 1} max={key === "coach" ? 5 : key === "days" ? 60 : 100} step={key === "coach" ? 0.5 : 1} onChange={(next) => onChange({ ...value, levelUp: { ...value.levelUp, [key]: next } })} />)}</div><Save label="Lưu ngưỡng" onSave={onSave} /></section>; }
 
 function ThemeSection({ value, onChange, onSave, readOnly = false }: { value: OrganisationExperienceView; onChange: (value: OrganisationExperienceView) => void; onSave?: () => void | Promise<void>; readOnly?: boolean }) {
   const { previewTheme, clearThemePreview } = useTheme();

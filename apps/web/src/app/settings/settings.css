@@ -804,7 +804,7 @@
   gap: 12px;
 }
 .settings-page[data-compact] .settings-ai-base-url { grid-column: 1 / -1; }
-.settings-page[data-compact] :is(.settings-monthly-fields, .settings-level-fields) {
+.settings-page[data-compact] .settings-monthly-fields {
   align-items: end;
 }
 .settings-page[data-compact] .settings-theme-picker { margin: 0; }
@@ -821,9 +821,6 @@
 
 @media (max-width: 760px) {
   .settings-page[data-compact] .settings-panel-toggle { scroll-margin-block-start: 64px; }
-  .settings-page[data-compact] .settings-level-fields {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .settings-page[data-compact] .settings-ai-fallback-control {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;

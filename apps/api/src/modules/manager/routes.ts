@@ -42,7 +42,7 @@ const managerSettingsInput = z.object({
   courseTheme: z.string().max(160), coachDailyLimit: z.number().int().min(1).max(200),
   testTimed: z.boolean(), testTimes: z.object({ listening: z.number().int().min(1).max(60), reading: z.number().int().min(1).max(60), writing: z.number().int().min(1).max(60), speaking: z.number().int().min(1).max(60) }),
   testWarnLimit: z.number().int().min(1).max(10),
-  levelUp: z.object({ days: z.number().int().min(1).max(60), lessons: z.number().min(1).max(100), firstTry: z.number().min(1).max(100), submission: z.number().min(1).max(100), coach: z.number().min(0).max(5), coachTurns: z.number().int().min(0).max(100), wrong: z.number().min(1).max(100), minParts: z.number().int().min(1).max(50) }),
+  // levelUp (the removed "Ngưỡng xét lên / hạ mức" card) is no longer accepted; an old client's value is stripped.
   backgroundMusic: z.object({ enabled: z.boolean(), url: z.string().max(1000), volume: z.number().int().min(0).max(100), customUrl: z.string().max(1000).optional(), playlistId: z.string().max(200).optional() }),
   baseWebhookUrl: z.string().max(1000), baseWebhookTemplate: z.string().max(4000)
 }).refine(input => new Date(`${input.pilotStartDate}T00:00:00Z`).getUTCDay() === 1, { path: ["pilotStartDate"], message: "Pilot must start on Monday" });

@@ -91,7 +91,6 @@ describe("ManagerRouteController", () => {
       settings: managerSettings,
       pilot: { startDate: managerSettings.pilotStartDate, weeks: managerSettings.pilotWeeks, weekOverride: managerSettings.weekOverride, minMinutesPerDay: managerSettings.minMinutesPerDay, courseTheme: managerSettings.courseTheme, coachDailyLimit: managerSettings.coachDailyLimit },
       test: { timed: managerSettings.testTimed, times: managerSettings.testTimes, warnLimit: managerSettings.testWarnLimit },
-      levelUp: managerSettings.levelUp,
       accounts: []
     });
     renderManager(<ThemeProvider><MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="operator" currentUserId="operator-1" /></MemoryRouter></ThemeProvider>);
@@ -882,7 +881,6 @@ describe("ManagerRouteController", () => {
       settings: managerSettings,
       pilot: { startDate: managerSettings.pilotStartDate, weeks: managerSettings.pilotWeeks, weekOverride: managerSettings.weekOverride, minMinutesPerDay: managerSettings.minMinutesPerDay, courseTheme: managerSettings.courseTheme, coachDailyLimit: managerSettings.coachDailyLimit },
       test: { timed: managerSettings.testTimed, times: managerSettings.testTimes, warnLimit: managerSettings.testWarnLimit },
-      levelUp: managerSettings.levelUp,
       accounts: []
     } satisfies OperatorSettingsOverviewView);
     const saveProduct = vi.spyOn(apiClient, "saveProductPreferences").mockResolvedValue({ ...product, theme: "winter" });
@@ -920,7 +918,6 @@ describe("ManagerRouteController", () => {
       settings: managerSettings,
       pilot: { startDate: managerSettings.pilotStartDate, weeks: managerSettings.pilotWeeks, weekOverride: managerSettings.weekOverride, minMinutesPerDay: managerSettings.minMinutesPerDay, courseTheme: managerSettings.courseTheme, coachDailyLimit: managerSettings.coachDailyLimit },
       test: { timed: managerSettings.testTimed, times: managerSettings.testTimes, warnLimit: managerSettings.testWarnLimit },
-      levelUp: managerSettings.levelUp,
       accounts: []
     });
 
@@ -937,7 +934,6 @@ const managerSettings = {
   pilotStartDate: "2026-10-12", simulatedSystemDate: "2026-10-12", pilotWeeks: 2, weekOverride: 0, minMinutesPerDay: 15,
   courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20,
   testTimed: true, testTimes: { listening: 15, reading: 20, writing: 20, speaking: 15 }, testWarnLimit: 3,
-  levelUp: { days: 14, lessons: 90, firstTry: 75, submission: 80, coach: 4, coachTurns: 6, wrong: 30, minParts: 4 },
   backgroundMusic: { enabled: true, url: "", volume: 22 }, baseWebhookUrl: "", baseWebhookTemplate: "{}"
 } satisfies ManagerSettingsView;
 const organisationExperience = { theme: "auto", backgroundMusic: { enabled: true, playlistId: "auto", customUrl: "", volume: 22 } } satisfies OrganisationExperienceView;

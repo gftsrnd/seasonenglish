@@ -209,7 +209,6 @@ export interface OperatorSettingsOverviewView {
     readonly times: ManagerSettingsView["testTimes"];
     readonly warnLimit: number;
   };
-  readonly levelUp: ManagerSettingsView["levelUp"];
   readonly accounts: readonly ManagerAccountView[];
 }
 
@@ -475,10 +474,6 @@ export interface ManagerSettingsView {
   readonly testTimed: boolean;
   readonly testTimes: { readonly listening: number; readonly reading: number; readonly writing: number; readonly speaking: number };
   readonly testWarnLimit: number;
-  readonly levelUp: {
-    readonly days: number; readonly lessons: number; readonly firstTry: number; readonly submission: number;
-    readonly coach: number; readonly coachTurns: number; readonly wrong: number; readonly minParts: number;
-  };
   readonly backgroundMusic: { readonly enabled: boolean; readonly url: string; readonly volume: number };
   readonly baseWebhookUrl: string;
   readonly baseWebhookTemplate: string;

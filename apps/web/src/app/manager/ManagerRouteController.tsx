@@ -328,8 +328,7 @@ function SettingsRoute({ role, currentUserId, onSessionRevoked }: ManagerRouteCo
         ...current,
         settings: saved,
         pilot: { startDate: saved.pilotStartDate, weeks: saved.pilotWeeks, weekOverride: saved.weekOverride, minMinutesPerDay: saved.minMinutesPerDay, courseTheme: saved.courseTheme, coachDailyLimit: saved.coachDailyLimit },
-        test: { timed: saved.testTimed, times: saved.testTimes, warnLimit: saved.testWarnLimit },
-        levelUp: saved.levelUp
+        test: { timed: saved.testTimed, times: saved.testTimes, warnLimit: saved.testWarnLimit }
       } : current);
       notify("Đã lưu cấu hình vận hành.");
     } catch { notify("Không lưu được cấu hình vận hành.", "danger"); }

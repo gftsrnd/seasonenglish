@@ -18,6 +18,16 @@ export interface LevelReadinessThresholds {
   minParts: number;
 }
 
+/**
+ * Fixed legacy readiness criteria (formerly the Settings card "Ngưỡng xét lên / hạ mức", removed).
+ * Level-up eligibility follows the monthly rule (evaluateMonthlyLevelUpReadiness) or a staff
+ * override; these values only shape the per-criterion targets in `levelReadiness.criteria`
+ * and the look-back window of the non-monthly queries. Same values as the old defaults.
+ */
+export const LEVEL_READINESS_THRESHOLDS: Readonly<LevelReadinessThresholds> = Object.freeze({
+  days: 14, lessons: 90, firstTry: 75, submission: 80, coach: 4, coachTurns: 6, wrong: 30, minParts: 4
+});
+
 export interface LevelReadinessMetrics {
   lessonCompletion: number;
   firstTryAccuracy: number;

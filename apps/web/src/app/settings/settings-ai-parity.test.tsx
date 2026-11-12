@@ -42,7 +42,6 @@ beforeEach(() => {
     pilotStartDate: "2026-10-12", pilotWeeks: 2, weekOverride: 0, minMinutesPerDay: 15,
     courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20,
     testTimed: true, testTimes: { listening: 15, reading: 20, writing: 20, speaking: 15 }, testWarnLimit: 3,
-    levelUp: { days: 14, lessons: 90, firstTry: 75, submission: 80, coach: 4, coachTurns: 6, wrong: 30, minParts: 4 },
     backgroundMusic: { enabled: true, url: "", volume: 22 }, baseWebhookUrl: "", baseWebhookTemplate: "{\"base_content\":\"{message}\"}"
   });
   client.getManagerAccounts.mockResolvedValue({ organizationName: "GFT Demo", accounts: [] });
@@ -143,7 +142,6 @@ describe("Manager AI provider settings", () => {
       pilotStartDate: "2026-10-12", pilotWeeks: 2, weekOverride: 0, minMinutesPerDay: 15,
       courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20,
       testTimed: true, testTimes: { listening: 15, reading: 20, writing: 20, speaking: 15 }, testWarnLimit: 3,
-      levelUp: { days: 14, lessons: 90, firstTry: 75, submission: 80, coach: 4, coachTurns: 6, wrong: 30, minParts: 4 },
       backgroundMusic: { enabled: false, url: "", volume: 22 }, baseWebhookUrl: "", baseWebhookTemplate: "{\"base_content\":\"{message}\"}"
     });
     window.history.pushState({}, "", "/settings");

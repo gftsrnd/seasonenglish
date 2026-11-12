@@ -1,6 +1,6 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, afterEach, describe, expect, it, vi } from "vitest";
-import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
+import { createRepositories, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
@@ -175,6 +175,41 @@ describe("Manager settings operational actions", () => {
       payload: { snapshot: { version: 1, settings: { ...exported.json().settings, reminderInactiveDays: 0 } } }
     });
     expect(invalidSettings.statusCode).toBe(400);
+  });
+
+  it("no longer accepts, stores or returns the retired level-up thresholds (Ngưỡng xét lên / hạ mức)", async () => {
+    // A value saved by the old card stays in the row but drives nothing and is never returned.
+    const strict = { days: 3, lessons: 100, firstTry: 100, submission: 100, coach: 5, coachTurns: 99, wrong: 1, minParts: 1 };
+    await pool.query(
+      `insert into organization_settings (organization_id, configuration) values ($1, jsonb_build_object('levelUp', $2::jsonb))
+       on conflict (organization_id) do update set configuration = jsonb_set(organization_settings.configuration, '{levelUp}', $2::jsonb, true)`,
+      [DEMO_IDS.organization, JSON.stringify(strict)]
+    );
+    const current = await app.inject({ method: "GET", url: "/api/v1/manager/settings", headers: { cookie: managerCookie } });
+    expect(current.statusCode, current.body).toBe(200);
+    expect(current.json()).not.toHaveProperty("levelUp");
+    const overview = await app.inject({ method: "GET", url: "/api/v1/operator/settings-overview", headers: { cookie: operatorCookie } });
+    expect(overview.statusCode, overview.body).toBe(200);
+    expect(overview.json()).not.toHaveProperty("levelUp");
+    expect(overview.json().settings).not.toHaveProperty("levelUp");
+
+    // An old client still sends levelUp (even out of the old range): accepted, ignored, not stored.
+    const { organizationName: _organizationName, pilotCycle: _pilotCycle, coachDailyLimitStartsMonth: _starts, ...settings } = current.json();
+    const legacyLevelUp = { days: 999, lessons: 0, firstTry: 0, submission: 0, coach: 0, coachTurns: 0, wrong: 100, minParts: 0 };
+    for (const [url, cookie] of [["/api/v1/manager/settings", managerCookie], ["/api/v1/operator/settings", operatorCookie]] as const) {
+      const saved = await app.inject({ method: "PUT", url, headers: { cookie }, payload: { ...settings, levelUp: legacyLevelUp } });
+      expect(saved.statusCode, `${url}: ${saved.body}`).toBe(200);
+      expect(saved.json()).not.toHaveProperty("levelUp");
+    }
+    const stored = await pool.query<{ level_up: unknown }>("select configuration->'levelUp' as level_up from organization_settings where organization_id = $1", [DEMO_IDS.organization]);
+    expect(stored.rows[0]?.level_up).toEqual(strict);
+
+    // Readiness criteria use the fixed former defaults, not the stored strict values.
+    const progress = await createRepositories(pool).learning.getProgressDashboard(DEMO_IDS.learner);
+    expect(progress?.levelReadiness.windowDays).toBe(14);
+    expect(Object.fromEntries((progress?.levelReadiness.criteria ?? []).map((item) => [item.key, item.target]))).toEqual({
+      lessonCompletion: 90, firstTryAccuracy: 75, weeklyPractice: 80, coachRubric: 4
+    });
   });
 
   it("keeps every operational settings action Manager-only", async () => {

@@ -118,7 +118,8 @@ describe("Operator app rebuild", () => {
     expect(screen.getByRole("option", { name: "A1 – Mới bắt đầu" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Chưa có API key/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Một số thao tác có thể bị khóa vì chức năng tương ứng/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "ngưỡng" })).toHaveAttribute("href", "/settings");
+    // The retired "Ngưỡng xét lên / hạ mức" Settings card is gone, so the header no longer links to it.
+    expect(screen.queryByRole("link", { name: "ngưỡng" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "đề thi lên mức" })).toHaveAttribute("href", "/op/levelforms");
     await user.click(screen.getByRole("button", { name: "Đã xử lý" }));
     expect(onResolveTopicReport).toHaveBeenCalledWith("r1");

@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
+import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, LEVEL_READINESS_THRESHOLDS, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
 import { pickGameWordExample } from "@e4s/domain/engagement";
@@ -2037,18 +2037,8 @@ class LearningRepository {
     const row = learner.rows[0];
     if (!row) return null;
 
-    const settingsResult = await this.pool.query<{ level_up: Partial<LevelReadinessThresholds> | null }>(
-      `select os.configuration->'levelUp' as level_up
-       from users u left join organization_settings os on os.organization_id = u.organization_id
-       where u.id = $1`, [learnerId]
-    );
-    const configured = settingsResult.rows[0]?.level_up ?? {};
-    const thresholds: LevelReadinessThresholds = {
-      days: Number(configured.days ?? 14), lessons: Number(configured.lessons ?? 90),
-      firstTry: Number(configured.firstTry ?? 75), submission: Number(configured.submission ?? 80),
-      coach: Number(configured.coach ?? 4), coachTurns: Number(configured.coachTurns ?? 6),
-      wrong: Number(configured.wrong ?? 30), minParts: Number(configured.minParts ?? 4)
-    };
+    // Fixed criteria; a stored organization_settings.configuration.levelUp is no longer read.
+    const thresholds: LevelReadinessThresholds = { ...LEVEL_READINESS_THRESHOLDS };
 
     const monthlyContext = await this.getActiveMonthlyContext(learnerId);
     const monthlyLessons = monthlyContext ? await this.listMonthlyLessons(learnerId, monthlyContext.month) : [];
@@ -5417,14 +5407,6 @@ function importedSettings(
     next.testTimes = {
       listening: times.listening as number, reading: times.reading as number,
       writing: times.writing as number, speaking: times.speaking as number
-    };
-  }
-  const level = isRecord(candidate.levelUp) ? candidate.levelUp : undefined;
-  if (level && ["days", "lessons", "firstTry", "submission", "coach", "coachTurns", "wrong", "minParts"].every((key) => typeof level[key] === "number")) {
-    next.levelUp = {
-      days: level.days as number, lessons: level.lessons as number, firstTry: level.firstTry as number,
-      submission: level.submission as number, coach: level.coach as number, coachTurns: level.coachTurns as number,
-      wrong: level.wrong as number, minParts: level.minParts as number
     };
   }
   return next;
@@ -11691,7 +11673,6 @@ class ManagerRepository {
       minMinutesPerDay: 15,
       courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 30,
       testTimed: true, testTimes: { listening: 15, reading: 20, writing: 20, speaking: 15 }, testWarnLimit: 3,
-      levelUp: { days: 14, lessons: 90, firstTry: 75, submission: 80, coach: 4, coachTurns: 6, wrong: 30, minParts: 4 },
       backgroundMusic: { enabled: true, url: "", volume: 22 },
       baseWebhookUrl: "", baseWebhookTemplate: "{\"base_content\":\"{message}\"}"
     };
@@ -11700,8 +11681,10 @@ class ManagerRepository {
       [organizationId]
     );
     const settings = result.rows[0];
+    // A levelUp stored by the removed "Ngưỡng xét lên / hạ mức" card stays in the row but is never returned.
+    const { levelUp: _retiredLevelUp, ...configuration } = (settings?.configuration ?? {}) as Partial<Omit<ManagerSettingsView, "organizationName">> & { levelUp?: unknown };
     const base = settings
-      ? { ...defaults, ...settings.configuration, reminderInactiveDays: settings.reminder_inactive_days, weeklyReportEnabled: settings.weekly_report_enabled,
+      ? { ...defaults, ...configuration, reminderInactiveDays: settings.reminder_inactive_days, weeklyReportEnabled: settings.weekly_report_enabled,
           baseWebhookUrl: "", baseWebhookTemplate: defaults.baseWebhookTemplate,
           programName: activeProgram?.name ?? defaults.programName,
           pilotStartDate: activeProgram?.start_date ?? defaults.pilotStartDate,
@@ -11709,7 +11692,6 @@ class ManagerRepository {
           pilotWeeks: activeProgram?.week_count ?? defaults.pilotWeeks,
           weekOverride: 0,
           testTimes: { ...defaults.testTimes, ...settings.configuration?.testTimes },
-          levelUp: { ...defaults.levelUp, ...settings.configuration?.levelUp },
           backgroundMusic: { ...defaults.backgroundMusic, ...settings.configuration?.backgroundMusic } }
       : defaults;
     if (!activeProgram) return base;
@@ -12664,7 +12646,6 @@ class ManagerRepository {
       },
       settings: { organizationName: organization.name, ...settings },
       test: { timed: settings.testTimed, times: settings.testTimes, warnLimit: settings.testWarnLimit },
-      levelUp: settings.levelUp,
       accounts: directory.accounts
     };
   }

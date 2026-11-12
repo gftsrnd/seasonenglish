@@ -15,7 +15,6 @@ const manager: ManagerSettingsView = {
   aiTestDisabled: false,
   pilotStartDate: "2026-10-12", simulatedSystemDate: "2026-10-12", pilotWeeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20,
   testTimed: true, testTimes: { listening: 15, reading: 20, writing: 20, speaking: 15 }, testWarnLimit: 3,
-  levelUp: { days: 14, lessons: 90, firstTry: 75, submission: 80, coach: 4, coachTurns: 6, wrong: 30, minParts: 4 },
   backgroundMusic: { enabled: true, url: "", volume: 22 }, baseWebhookUrl: "", baseWebhookTemplate: "{\"base_content\":\"{message}\"}"
 };
 const product: ProductPreferencesView = { theme: "auto", vocabImageSource: "wikimedia" };
@@ -54,7 +53,7 @@ describe("new Settings app branch", () => {
   it("keeps Manager sections in app order", () => {
     const { container } = render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} accounts={<section><h3>Người dùng</h3></section>} />);
     expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual([
-      "Prompt & rubric", "Kết nối AI", "Ngày hệ thống thử", "Học theo tháng", "Ảnh minh hoạ từ vựng", "Ngưỡng xét lên / hạ mức", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Chính sách nhắc học và báo cáo", "Dữ liệu", "Người dùng"
+      "Prompt & rubric", "Kết nối AI", "Ngày hệ thống thử", "Học theo tháng", "Ảnh minh hoạ từ vựng", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Chính sách nhắc học và báo cáo", "Dữ liệu", "Người dùng"
     ]);
     expect(screen.getByText(/Khoá nhà cung cấp được lưu an toàn ở server/)).toBeInTheDocument();
     expect(screen.getByText("Xuất JSON")).toBeInTheDocument();
@@ -75,7 +74,6 @@ describe("new Settings app branch", () => {
       settings: manager,
       pilot: { startDate: "2026-10-12", weeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20 },
       test: { timed: true, times: { listening: 15, reading: 20, writing: 20, speaking: 15 }, warnLimit: 3 },
-      levelUp: manager.levelUp,
       accounts: []
     };
     if (role === "manager") render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} actions={actions()} />);
@@ -91,7 +89,6 @@ describe("new Settings app branch", () => {
       settings: manager,
       pilot: { startDate: "2026-10-12", weeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20 },
       test: { timed: true, times: { listening: 15, reading: 25, writing: 20, speaking: 15 }, warnLimit: 3 },
-      levelUp: manager.levelUp,
       accounts: []
     };
     if (role === "manager") render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} actions={actions()} />);
@@ -109,7 +106,6 @@ describe("new Settings app branch", () => {
       settings: manager,
       pilot: { startDate: manager.pilotStartDate, weeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: manager.courseTheme, coachDailyLimit: 20 },
       test: { timed: true, times: manager.testTimes, warnLimit: 3 },
-      levelUp: manager.levelUp,
       accounts: []
     };
     if (role === "manager") render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} actions={actions()} />);
@@ -196,7 +192,6 @@ describe("new Settings app branch", () => {
       settings: manager,
       pilot: { startDate: "2026-10-12", weeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: manager.courseTheme, coachDailyLimit: 20 },
       test: { timed: true, times: manager.testTimes, warnLimit: 3 },
-      levelUp: manager.levelUp,
       accounts: [
         { id: "locked", displayName: "Học viên A", email: "a@example.com", role: "learner", status: "disabled", createdAt: "2026-10-12T00:00:00.000Z" },
         { id: "active", displayName: "Nhân sự B", email: "b@example.com", role: "operator", status: "active", createdAt: "2026-10-12T00:00:00.000Z" },
@@ -216,18 +211,18 @@ describe("new Settings app branch", () => {
       settings: manager,
       pilot: { startDate: "2026-10-12", weeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20 },
       test: { timed: true, times: { listening: 15, reading: 20, writing: 20, speaking: 15 }, warnLimit: 3 },
-      levelUp: manager.levelUp,
       accounts: [{ id: "learner-1", displayName: "Học viên A", email: "a@example.com", role: "learner", status: "active", createdAt: "2026-10-12T00:00:00.000Z" }]
     };
     const callbacks = actions();
     const { container } = render(<SettingsPage role="operator" operatorOverview={overview} product={product} experience={experience} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={callbacks} />);
-    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Giao diện theo mùa / lễ", "Nhạc nền của Season", "Học theo tháng", "Ngưỡng xét lên / hạ mức", "Yêu cầu đổi đề", "Người dùng"]);
+    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Giao diện theo mùa / lễ", "Nhạc nền của Season", "Học theo tháng", "Yêu cầu đổi đề", "Người dùng"]);
     expect(screen.getByText("Học viên A")).toBeInTheDocument();
     expect(screen.queryByText(/Lịch pilot|Số tuần của chu kỳ|Chu kỳ/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Nghe (phút)")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lưu thiết lập học theo tháng" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Lưu bài test" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Lưu ngưỡng" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Lưu ngưỡng" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Ngưỡng xét lên|Số ngày xét|Hạ mức: tỉ lệ sai|Sẵn sàng thi lên level/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Thêm học viên/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Prompt & rubric" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Mở Prompt & rubric" })).not.toBeInTheDocument();
@@ -254,7 +249,7 @@ describe("new Settings app branch", () => {
   });
 
   it("keeps input and output test change requests in one Operator card", async () => {
-    const overview: OperatorSettingsOverviewView = { organizationName: "GFT Demo", settings: manager, pilot: { startDate: "2026-10-12", weeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: manager.courseTheme, coachDailyLimit: 20 }, test: { timed: true, times: manager.testTimes, warnLimit: 3 }, levelUp: manager.levelUp, accounts: [] };
+    const overview: OperatorSettingsOverviewView = { organizationName: "GFT Demo", settings: manager, pilot: { startDate: "2026-10-12", weeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: manager.courseTheme, coachDailyLimit: 20 }, test: { timed: true, times: manager.testTimes, warnLimit: 3 }, accounts: [] };
     const callbacks = actions();
     render(<SettingsPage role="operator" operatorOverview={overview} product={product} capabilities={capabilities} actions={callbacks} />);
 
