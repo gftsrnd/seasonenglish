@@ -52,9 +52,10 @@ const learnerSteps: Record<string, readonly GuideStep[]> = {
   ],
   "/lesson/*": [
     [":not(:has(> .lesson-part .lesson-example-wrap)) > .lesson-part:not(:has(.lesson-answer))", "Phần học", "Mỗi thẻ là một phần học: **từ vựng**, **ngữ pháp** hoặc **phát âm**. Đọc hết và bấm biểu tượng loa để nghe mẫu."],
-    // A1–A2: the same step sits on the grammar card, whose examples carry a translate icon (Vietnamese popup).
-    [".lesson-part--grammar:has(.lesson-example-wrap)", "Phần học", "Mỗi thẻ là **từ vựng**, **ngữ pháp** hoặc **phát âm**; bấm loa để nghe mẫu. Chạm câu ví dụ để **nghe**, chạm **biểu tượng dịch** để xem **nghĩa tiếng Việt**."],
-    [".lesson-part:has(.lesson-answer)", "Phần luyện tập", "Trả lời rồi bấm **Nộp bài** (bài tiếng Anh: **Submit**) để lưu phần đó. Thấy câu sai đề, bấm **Báo lỗi câu này** (**Report an issue**) để Vận hành xem lại."],
+    // With translate icons (A1–A2 grammar examples, synonym/antonym chips with a meaning) the same step sits on the
+    // first card that has them: the vocabulary card, else the grammar card.
+    [".lesson-part:is(.lesson-part--vocabulary:has(.lesson-example-wrap--chip), .lesson-part--grammar:has(.lesson-example-wrap:not(.lesson-example-wrap--chip)))", "Phần học", "Mỗi thẻ là **từ vựng**, **ngữ pháp** hoặc **phát âm**; bấm loa để nghe mẫu. Chạm **biểu tượng dịch** cạnh câu ví dụ hoặc từ đồng nghĩa, trái nghĩa để xem **nghĩa**."],
+    [".lesson-part:has(.lesson-answer)", "Phần luyện tập", "Trả lời rồi bấm **Nộp bài** (**Submit**). Làm đúng hoặc hết lượt, **bản dịch** câu hỏi và đáp án hiện ra; câu sai đề, bấm **Báo lỗi câu này** (**Report an issue**)."],
     [".lesson-appeal-form", "Báo lỗi phần bài", "Ghi rõ câu hoặc nội dung bạn cho là sai, đính kèm ảnh nếu có, rồi gửi để **Vận hành** xem lại.", true],
     [".lesson-study-cta", "Xong phần Học", "Học hết các phần phía trên rồi bấm nút ở thẻ này để mở **Luyện tập**."],
     [".lesson-completion", "Hoàn thành bài", "Làm xong các phần bắt buộc thì nút **Hoàn thành bài học** (**Complete lesson**) mở. Bấm để lưu tiến độ học hoặc lượt ôn lại."],

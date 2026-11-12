@@ -225,7 +225,7 @@ export const learnerLessonCopy: Record<LearnerLessonLanguage, LearnerLessonCopy>
     answerAria: (partCode) => `Answer for ${partCode}`,
     hintLabel: "Hint",
     answerRevealLabel: "Answer",
-    translationHeading: "Answer explanation",
+    translationHeading: "Vietnamese translation",
     translationQuestionLabel: "Question",
     translationAnswerLabel: "Answer",
     practiceGuideAria: "Instructions",

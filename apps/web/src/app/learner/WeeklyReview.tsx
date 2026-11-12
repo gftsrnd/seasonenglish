@@ -16,7 +16,7 @@ export function WeeklyReview({ title, cefr, actions }: { title: string; cefr: Ce
   const [answer, setAnswer] = useState("");
   /** Uploaded read-aloud recording (part 6b): recording the full sentence is enough to pass. */
   const [recordedAudio, setRecordedAudio] = useState<string>();
-  const [feedback, setFeedback] = useState<{ correct: boolean; text: string; willRetry: boolean } | null>(null);
+  const [feedback, setFeedback] = useState<{ correct: boolean; text: string; willRetry: boolean; translation?: { question: string; answer: string } | undefined } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [flipped, setFlipped] = useState<Set<number>>(new Set());
@@ -49,7 +49,8 @@ export function WeeklyReview({ title, cefr, actions }: { title: string; cefr: Ce
     try {
       const result = await actions.answerWeeklyReview({ sectionCode: question.sectionCode, itemId: question.itemId, ...(value.trim() ? { answer: value } : {}), ...(artifactKey ? { artifactKey } : {}) });
       setRecordedAudio(undefined);
-      setFeedback({ correct: result.correct, text: result.feedback, willRetry: result.willRetry });
+      // A correctly answered (finished) item comes back with its Vietnamese question/answer translation.
+      setFeedback({ correct: result.correct, text: result.feedback, willRetry: result.willRetry, translation: result.correct ? result.translation : undefined });
       setSession(result.session);
       setAnswer("");
     } catch {
@@ -109,6 +110,11 @@ export function WeeklyReview({ title, cefr, actions }: { title: string; cefr: Ce
     {feedback ? <Notice tone={feedback.correct ? "ok" : "warn"}>
       <span role="status">{feedback.text}{feedback.willRetry ? (english ? " This point comes back at the end of the section." : " Câu này sẽ quay lại ở cuối phần.") : ""}</span>
     </Notice> : null}
+    {feedback?.translation ? <section className="lesson-exercise-translation" aria-label={english ? "Vietnamese translation of the last question" : "Bản dịch câu vừa làm"} data-testid="review-exercise-translation"><Notice tone="info">
+      <strong>{english ? "Vietnamese translation" : "Bản dịch tiếng Việt"}</strong>
+      <span className="lesson-exercise-translation-line">{english ? "Question" : "Câu hỏi"}: <span lang="vi">{feedback.translation.question}</span></span>
+      <span className="lesson-exercise-translation-line">{english ? "Answer" : "Đáp án"}: <span lang="vi">{feedback.translation.answer}</span></span>
+    </Notice></section> : null}
     {question ? <section className="card stack" aria-label={section?.title ?? question.sectionCode}>
       <div className="eyebrow">{section?.title}{question.retry ? <span className="badge" style={{ marginLeft: 8 }}><RotateCcw size={12} aria-hidden="true" /> {english ? "Try again" : "Làm lại"}</span> : null}</div>
       {question.audioText ? <button type="button" className="btn weekly-review-listen" onClick={() => actions.speak(question.audioText!)}><Volume2 size={18} aria-hidden="true" /> {english ? "Listen" : "Nghe"}</button> : null}

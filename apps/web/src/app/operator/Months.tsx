@@ -602,7 +602,7 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
   // Older drafts were saved before expanded terms were attached at generation time.
   const dayGrammarIds = day ? (day.kind === "review" ? day.reviewGrammarStepIds ?? [] : day.grammarStepIds) : [];
   const dayGrammarSteps = resources ? resources.grammarTopics.flatMap((topic) => topic.steps).filter((step) => dayGrammarIds.includes(step.id)) : [];
-  const enrichedParts = resources ? withMonthlyGrammarSteps(withMonthlyExpandedTerms(parts, resources.coreTerms.filter((term) => dayCoreIds.has(term.id)), resources.supportTerms.filter((term) => daySupportIds.has(term.id))), dayGrammarSteps) : parts;
+  const enrichedParts = resources ? withMonthlyGrammarSteps(withMonthlyExpandedTerms(parts, resources.coreTerms.filter((term) => dayCoreIds.has(term.id)), resources.supportTerms.filter((term) => daySupportIds.has(term.id)), cefr), dayGrammarSteps) : parts;
   const reviewParts = enrichedParts.map((part) => ({ code: part.code ?? "instruction", title: MONTHLY_PART_TITLES[part.code ?? ""] ?? part.title ?? part.code ?? "Nội dung", content: part.content ?? {} }));
   const exercise = focusedPart ? reviewParts.find(part => part.code === focusedPart) : undefined;
   const kindLabel = lesson.kind === "review" ? "Ôn tập" : "Bài mới";

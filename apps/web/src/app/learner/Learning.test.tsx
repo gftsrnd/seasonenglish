@@ -1113,8 +1113,8 @@ describe("learner lesson study content", () => {
 
     const correct = { ...lesson, progress: { ...lesson.progress, completedPartCodes: ["objective", "reading"], evidence: { reading: { attempts: 2, status: "correct", answer: "Second floor", feedback: "Đúng rồi." } } } };
     rerender(<LearnerLesson view={{ lesson: correct, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
-    expect(screen.getByRole("region", { name: "Bản dịch phần Đọc" })).toHaveTextContent("Câu hỏi: Phòng ở đâu?");
-    expect(screen.getByRole("region", { name: "Bản dịch phần Đọc" })).toHaveTextContent("Đáp án: Ở tầng hai.");
+    expect(screen.getByRole("region", { name: "Bản dịch tiếng Việt · Đọc" })).toHaveTextContent("Câu hỏi: Phòng ở đâu?");
+    expect(screen.getByRole("region", { name: "Bản dịch tiếng Việt · Đọc" })).toHaveTextContent("Đáp án: Ở tầng hai.");
   });
 
   it("shows the actual question and answer translations after the learner requests them", async () => {
@@ -1130,7 +1130,7 @@ describe("learner lesson study content", () => {
     render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
     fireEvent.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
 
-    const translation = screen.getByRole("region", { name: "Bản dịch phần Đọc" });
+    const translation = screen.getByRole("region", { name: "Bản dịch tiếng Việt · Đọc" });
     expect(translation).toHaveTextContent("Câu hỏi: Phòng ở đâu?");
     expect(translation).toHaveTextContent("Đáp án: Ở tầng hai.");
   });

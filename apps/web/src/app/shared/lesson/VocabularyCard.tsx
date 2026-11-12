@@ -3,6 +3,7 @@ import { Umbrella, Users, Volume2 } from "lucide-react";
 import { ContentImage } from "../media/ContentImage.js";
 import { learnerLessonCopy, type LearnerLessonLanguage } from "./language.js";
 import { playExclusiveMedia } from "../../../features/experience/audio-precedence.js";
+import { MeaningPopupControl } from "./GrammarExampleButton.js";
 
 export interface VocabularyRelationChip {
   label: string;
@@ -11,6 +12,10 @@ export interface VocabularyRelationChip {
   count?: number;
   icon?: "umbrella" | "family";
   onClick?: (() => void) | undefined;
+  /** Synonym/antonym meaning shown in a popup from a translate icon at the chip's end (A1–A2 Vietnamese, B1+ English); never spoken. */
+  meaning?: string | undefined;
+  /** Language of `meaning`; also picks the icon label. */
+  meaningLang?: "vi" | "en";
 }
 export function VocabularyCard({ item, loadImage, speak, relations = [], language = "vi" }: {
   item: LessonVocabularyItem;
@@ -37,9 +42,12 @@ export function VocabularyCard({ item, loadImage, speak, relations = [], languag
     {relations.length ? <div className="vocabulary-card-relations" aria-label={copy.vocabulary.relations}>{relations.map((relation) => {
       const className = `chip${relation.tone ? ` ${relation.tone}` : ""}`;
       const content = <>{relation.icon === "umbrella" ? <Umbrella size={14} aria-hidden="true" /> : relation.icon === "family" ? <Users size={14} aria-hidden="true" /> : null}<span className="vocabulary-card-chip-label">{relation.label}</span>{relation.count ? <span className="vocabulary-card-chip-count">+{relation.count}</span> : null}</>;
-      return relation.onClick
+      const chip = relation.onClick
         ? <button className={className} type="button" title={relation.label} aria-label={relation.ariaLabel ?? (relation.count ? `${relation.label} · ${relation.count} từ` : relation.label)} onClick={relation.onClick} key={relation.ariaLabel ?? relation.label}>{content}</button>
         : <span className={className} key={relation.label}>{content}</span>;
+      if (!relation.meaning?.trim()) return chip;
+      const english = relation.meaningLang === "en";
+      return <MeaningPopupControl key={relation.ariaLabel ?? relation.label} hint={relation.meaning} label={english ? "View meaning" : "Xem nghĩa"} lang={english ? "en" : "vi"} variant="chip">{chip}</MeaningPopupControl>;
     })}</div> : null}
   </article>;
 }

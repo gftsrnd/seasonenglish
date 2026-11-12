@@ -2127,3 +2127,11 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
 .lesson-page .lesson-example-wrap>.lesson-example-translate:hover,.lesson-page .lesson-example-wrap>.lesson-example-translate[aria-expanded="true"]{color:var(--text)}
 .lesson-page .lesson-example-translation{position:absolute;top:calc(100% + 4px);left:0;z-index:20;width:max-content;max-width:min(320px,calc(100vw - 32px));padding:6px 10px;border-radius:8px;background:var(--text);color:var(--surface);font-size:.85rem;line-height:1.4;box-shadow:0 4px 14px rgba(0,0,0,.18);white-space:normal}
 .lesson-page .lesson-example-translation[hidden]{display:none}
+/* Synonym/antonym chips with a meaning: the grammar example's divider + translate icon at the chip's end; the chip still wraps as a whole. */
+.lesson-page .vocabulary-card-relations>.lesson-example-wrap--chip{display:inline-grid;max-width:100%;min-width:0}
+.lesson-page .lesson-example-wrap--chip>.chip{width:100%;padding-right:44px}
+.lesson-page .lesson-example-wrap--chip>.lesson-example-translate{width:36px;min-width:36px;border-radius:0 7px 7px 0}
+/* Exercise translation after a finished question: an info notice in the feedback area, one line each for question and answer. */
+.lesson-exercise-translation{min-width:0}
+.lesson-exercise-translation .banner .body{display:grid;gap:2px;min-width:0;overflow-wrap:break-word}
+.lesson-exercise-translation .lesson-exercise-translation-line{display:block;min-width:0}
