@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { ContentLessonDraftInput, LessonPartCode } from "@e4s/contracts";
 import { TriangleAlert, Upload } from "lucide-react";
 import { useModal } from "../shared/ModalProvider.js";
@@ -7,8 +7,9 @@ import { DailyTeachingEditor } from "./DailyTeachingEditor.js";
 import { Banner, Button } from "./primitives.js";
 import { AudioSynthesisNotice } from "./AudioSynthesisNotice.js";
 import { EditorSection, Field, OptionFields } from "./LessonEditorFields.js";
-import { MonthlyFindingsPanel } from "./MonthlyFindingsPanel.js";
-import type { MonthlyFindingLine } from "./monthly-failure-findings.js";
+import { EditorFindingsStrip } from "./MonthlyFindingsPanel.js";
+import { MONTHLY_REVIEW_SECTIONS, type MonthlyFindingLine } from "./monthly-failure-findings.js";
+import { applyReviewContents, readReviewContents, REVIEW_SECTION_CODES, reviewItemKey, ReviewSectionEditor, reviewSectionKey, validateReviewContents, type ReviewContents } from "./LessonFormEditorReview.js";
 
 const lessonPartOrder = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"] as const;
 type VocabularyRow = {
@@ -34,7 +35,7 @@ type VocabularyRow = {
 };
 type EditorState = {
   title: string; objective: string; instructionSteps: string; instructionAudioUrl: string;
-  grammar: string; grammarUsage: string; grammarExamples: string; grammarExampleAudioUrls: string[]; grammarAudioUrl: string; grammarAudioEnabled: boolean; grammarUnavailable: boolean; vocabulary: VocabularyRow[];
+  grammar: string; grammarUsage: string; grammarExamples: string; grammarExampleList: string[]; grammarExampleAudioUrls: string[]; grammarAudioUrl: string; grammarAudioEnabled: boolean; grammarUnavailable: boolean; vocabulary: VocabularyRow[];
   pronunciationFocus: string; pronunciationWords: string; pronunciationWordAudioUrls: string[]; pronunciationTip: string;
   listeningScript: string; listeningAudioUrl: string; listeningQuestion: string; listeningOptions: string[]; listeningAnswer: number;
   readingPassage: string; readingAudioUrl: string; readingQuestion: string; readingOptions: string[]; readingAnswer: number;
@@ -75,7 +76,8 @@ export function LessonFormEditor({
   kind = "lesson",
   monthly = false,
   grammarStepLabels,
-  findings
+  findings,
+  focusFinding
 }: {
   weekNumber: number;
   cefr: string;
@@ -101,13 +103,19 @@ export function LessonFormEditor({
   grammarStepLabels?: Readonly<Record<string, string>> | undefined;
   /** Monthly: the day's quality findings (draft check or failed AI candidate), pinned under the header. */
   findings?: { title: string; lines: MonthlyFindingLine[] } | undefined;
+  /** Key of the finding to open the editor on (a per-line "Sửa" on the day page); otherwise the first finding. */
+  focusFinding?: string | undefined;
 }) {
   const modal = useModal();
   const [state, setState] = useState<EditorState>(() => readLesson(initial, vocabularyCount));
   const reviewTargets = Array.isArray(record(initial.parts.find(part => part.code === "pronunciation")?.content).reviewTargets)
     ? (record(initial.parts.find(part => part.code === "pronunciation")?.content).reviewTargets as unknown[]).map(record)
     : [];
+  const review = kind === "review";
+  // Review exercises: every question and retry version of the six parts, edited in place (see LessonFormEditorReview).
+  const [reviewContents, setReviewContents] = useState<ReviewContents>(() => review ? readReviewContents(initial.parts) : {});
   const dailyGrammar = record(initial.parts.find(part => part.code === "grammar")?.content);
+  const showGrammarUsage = !monthly || Boolean(stringValue(dailyGrammar.usage).trim());
   const dailyPronunciation = record(initial.parts.find(part => part.code === "pronunciation")?.content);
   const [dailyEdits, setDailyEdits] = useState<{ items: unknown[]; passage: string }>();
   const [problems, setProblems] = useState<string[]>([]);
@@ -121,24 +129,35 @@ export function LessonFormEditor({
   const section = (key: string, title: string, node: ReactNode) => compactSections
     ? <details className="operator-editor-collapsible" data-section={key} data-issue={issueSections.has(key) || undefined} open={openSections.has(key)} onToggle={event => { const open = event.currentTarget.open; setOpenSections(current => { if (current.has(key) === open) return current; const next = new Set(current); if (open) next.add(key); else next.delete(key); return next; }); }}><summary><span>{title}</span>{issueSections.has(key) ? <span className="operator-editor-collapsible-issue">Cần bổ sung</span> : null}</summary>{node}</details>
     : <div className="operator-editor-anchor" data-section={key}>{node}</div>;
-  // A finding line jumps to its section: opens it on narrow screens, then scrolls it just below the pinned header.
+  // A finding line jumps to its field: opens the section on narrow screens, scrolls it just below the pinned
+  // header and focuses the exact question / retry version / answer choice the finding names, when it names one.
   const findingSection = (line: MonthlyFindingLine): string => {
     const component = line.component;
-    if (component === "grammar" && dailyGrammar.dailyCode && !/OBJECTIVE|EXAMPLES|REPEATED|WORDS|SCOPE|VOICE/u.test(line.code)) return "daily";
+    if (review && REVIEW_SECTION_CODES.includes(component) && reviewContents[component]) {
+      const studyGrammar = component === "grammar" && !line.item && /GRAMMAR_(SCOPE|EXAMPLE|DAILY)|OBJECTIVE/u.test(line.code);
+      if (!studyGrammar) return reviewSectionKey(component);
+    }
+    if (component === "grammar" && dailyGrammar.dailyCode && !review && !/OBJECTIVE|EXAMPLES|REPEATED|WORDS|SCOPE|VOICE/u.test(line.code)) return "daily";
     if (component === "objective" || !component) return "general";
     return ["instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"].includes(component) ? component : "general";
   };
-  const jumpToFinding = (line: MonthlyFindingLine) => {
+  const jumpToFinding = (line: MonthlyFindingLine, behavior: ScrollBehavior = "smooth") => {
     const key = findingSection(line);
     setOpenSections(current => current.has(key) ? current : new Set([...current, key]));
     requestAnimationFrame(() => {
       const dialog = dialogRef.current;
-      const target = dialog?.querySelector<HTMLElement>(`[data-section="${key}"]`);
-      if (!dialog || !target) return;
+      const section = dialog?.querySelector<HTMLElement>(`[data-section="${key}"]`);
+      if (!dialog || !section) return;
+      const question = key.startsWith("review-") && line.item
+        ? section.querySelector<HTMLElement>(line.variant ? `[data-review-variant="${reviewItemKey(line.component, line.item, line.variant)}"]` : `[data-review-item="${reviewItemKey(line.component, line.item)}"]`)
+        : null;
+      const block = question ?? section;
+      const field = line.option !== undefined ? block.querySelector<HTMLElement>(`[data-option-index="${line.option}"]`) : null;
+      const target = field ?? block;
       const header = dialog.querySelector<HTMLElement>(".operator-editor-sticky-header");
-      const top = target.getBoundingClientRect().top - dialog.getBoundingClientRect().top + dialog.scrollTop - (header?.offsetHeight ?? 0) - 12;
-      if (typeof dialog.scrollTo === "function") dialog.scrollTo({ top, behavior: "smooth" });
-      focusableElements(target).find(element => element.tagName !== "SUMMARY")?.focus({ preventScroll: true });
+      const top = target.getBoundingClientRect().top - dialog.getBoundingClientRect().top + dialog.scrollTop - (header?.offsetHeight ?? 0) - (field ? 48 : 12);
+      if (typeof dialog.scrollTo === "function") dialog.scrollTo({ top, behavior });
+      (field ?? focusableElements(block).find(element => element.tagName !== "SUMMARY"))?.focus({ preventScroll: true });
     });
   };
   const editing = initial.parts.some(part => Object.keys(record(part.content)).length > 0);
@@ -152,7 +171,10 @@ export function LessonFormEditor({
     const dialog = dialogRef.current;
     if (!dialog) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Opened to fix findings: land on the chosen (else the first) flagged item instead of the top of the form.
+    const opening = findings?.lines.find(line => line.key === focusFinding) ?? findings?.lines[0];
     (focusableElements(dialog)[0] ?? dialog).focus();
+    if (opening) jumpToFinding(opening, "auto");
     return () => {
       if (previous?.isConnected) previous.focus();
     };
@@ -188,7 +210,7 @@ export function LessonFormEditor({
   };
   const submit = async () => {
     if (busy) return;
-    const nextProblems = validateLesson(state, vocabularyCount);
+    const nextProblems = [...validateLesson(state, vocabularyCount, review), ...(review ? validateReviewContents(reviewContents) : [])];
     if (nextProblems.length && !forceSave) { setProblems(nextProblems); setForceSave(true); setOpenSections(current => new Set([...current, ...nextProblems.map(problemSection).filter(Boolean)])); return; }
     if (!await modal.confirm({
       title: forceSave ? "Lưu tạm bài học?" : "Kiểm tra và lưu bài?",
@@ -197,16 +219,16 @@ export function LessonFormEditor({
     })) return;
     setSaveError(undefined);
     try {
-      const lesson = buildLesson(initial, state);
-      if (dailyEdits) lesson.parts = lesson.parts.map(part => part.code === "grammar" ? { ...part, content: { ...part.content, items: dailyEdits.items } } : part.code === "pronunciation" ? { ...part, content: { ...part.content, passage: dailyEdits.passage } } : part);
+      const lesson = buildLesson(initial, state, { monthly, review: review ? reviewContents : undefined });
+      if (dailyEdits && !review) lesson.parts = lesson.parts.map(part => part.code === "grammar" ? { ...part, content: { ...part.content, items: dailyEdits.items } } : part.code === "pronunciation" ? { ...part, content: { ...part.content, passage: dailyEdits.passage } } : part);
       await onSave(lesson);
     } catch (reason) {
       setSaveError(describeSaveError(reason));
     }
   };
   return <div className="modal-backdrop operator-modal-scope" role="presentation" onClick={event => { if (event.target === event.currentTarget && !busy) onCancel(); }}><section ref={dialogRef} className="dialog wide operator-lesson-editor" role="dialog" aria-modal="true" aria-labelledby="lesson-editor-title" aria-describedby="lesson-editor-description" aria-busy={busy || undefined} tabIndex={-1} onKeyDown={handleKeyDown}>
-    <header className="operator-editor-sticky-header"><div className="row between operator-editor-heading"><h3 id="lesson-editor-title">{heading}</h3><Button type="button" small disabled={busy} onClick={onCancel}>Đóng</Button></div>{findings?.lines.length ? <MonthlyFindingsPanel className="operator-editor-findings" label="Các mục cần sửa" title={findings.title} lines={findings.lines} onSelect={jumpToFinding} /> : null}</header>
-    <p id="lesson-editor-description" className="xs muted operator-editor-description">{kind === "review" ? `Bài ôn tuần: ôn ${vocabularyCount} từ cốt lõi của tuần, ngữ pháp và các âm đã học, kèm 6 bài tập Nghe/Đọc/Viết/Từ loại/Dùng từ/Nói. Không thêm tài nguyên mới.` : `Mỗi bài cần ${vocabularyCount} từ (mỗi từ 3 cụm), ngữ pháp, phát âm (1 âm + 3 từ) và 6 bài tập Nghe/Đọc/Viết/Từ loại/Dùng từ/Nói.`} Câu trắc nghiệm: 4 lựa chọn tiếng Anh, chỉ một đáp án đúng. {cefr === "A1" || cefr === "A2" ? "A1–A2: giải thích tiếng Việt." : "B1+: dùng tiếng Anh."}{monthly ? " Ảnh minh họa lấy từ bộ ảnh của tháng; audio từ, cụm từ và câu ví dụ được tạo tự động." : ""}</p>
+    <header className="operator-editor-sticky-header"><div className="row between operator-editor-heading"><h3 id="lesson-editor-title">{heading}</h3><Button type="button" small disabled={busy} onClick={onCancel}>Đóng</Button></div>{findings?.lines.length ? <EditorFindingsStrip lines={findings.lines} onSelect={line => jumpToFinding(line)} /> : null}</header>
+    <p id="lesson-editor-description" className="xs muted operator-editor-description">{kind === "review" ? `Bài ôn tuần: ôn ${vocabularyCount} từ cốt lõi của tuần, ngữ pháp và các âm đã học, kèm 6 phần bài tập ôn (mỗi câu có bản làm lại khi học viên làm sai). Không thêm tài nguyên mới.` : `Mỗi bài cần ${vocabularyCount} từ (mỗi từ 3 cụm), ngữ pháp, phát âm (1 âm + 3 từ) và 6 bài tập Nghe/Đọc/Viết/Từ loại/Dùng từ/Nói.`} Câu trắc nghiệm: 4 lựa chọn tiếng Anh, chỉ một đáp án đúng. {cefr === "A1" || cefr === "A2" ? "A1–A2: giải thích tiếng Việt." : "B1+: dùng tiếng Anh."}{monthly ? " Ảnh minh họa lấy từ bộ ảnh của tháng; audio từ, cụm từ và câu ví dụ được tạo tự động." : ""}</p>
     <div className="operator-lesson-editor-form">
       {section("general", "Chung", <EditorSection title="Chung" disabled={busy}><Field label="Tiêu đề bài" hint={monthly ? "Tên hiển thị theo lịch tháng. VD: Bài 7, Bài ôn tuần 2." : "Tên ngắn của mẫu câu, bằng tiếng Anh. VD: I work as…"}><input aria-label="Tiêu đề bài" value={state.title} onChange={event => set("title", event.target.value)} /></Field><Field label="Mục tiêu bài học" hint="Mỗi mục tiêu một dòng. Hệ thống tự bỏ phần mở đầu bị lặp khi hiển thị."><textarea aria-label="Mục tiêu bài học" value={state.objective} onChange={event => set("objective", event.target.value)} /></Field></EditorSection>)}
       {section("instruction", "Hướng dẫn", <EditorSection title="Hướng dẫn" disabled={busy}><Field label="Các bước hướng dẫn" hint="Mỗi bước một dòng hoặc cách nhau bằng dấu ;"><textarea aria-label="Các bước hướng dẫn" value={state.instructionSteps} onChange={event => set("instructionSteps", event.target.value)} /></Field></EditorSection>)}
@@ -231,15 +253,17 @@ export function LessonFormEditor({
         </div>)}</div>
         {monthly ? null : <span className="xs muted">Có thể tải ảnh từ máy hoặc dán URL ảnh. Nếu để trống, bài vẫn hiển thị gọn mà không tạo khung ảnh rỗng.</span>}
       </EditorSection>)}
-      {section("grammar", "Ngữ pháp", <EditorSection title="Ngữ pháp" disabled={busy}><label className="row small"><input type="checkbox" checked={state.grammarUnavailable} onChange={event => set("grammarUnavailable", event.target.checked)} />Bài này không có nội dung ngữ pháp phù hợp</label>{state.grammarUnavailable ? <p className="xs muted">Phần Ngữ pháp sẽ được đánh dấu không áp dụng và ẩn với học viên. Không cần nhập nội dung giả.</p> : <><Field label="Ngữ pháp" hint="Công thức hoặc mẫu câu ngắn, có thể dùng ngay."><textarea aria-label="Ngữ pháp" value={state.grammar} onChange={event => set("grammar", event.target.value)} /></Field><Field label="Cách dùng ngữ pháp" hint="Giải thích khi nào và trong ngữ cảnh nào dùng mẫu câu."><textarea aria-label="Cách dùng ngữ pháp" value={state.grammarUsage} onChange={event => set("grammarUsage", event.target.value)} /></Field><Field label="Câu ví dụ để đọc thành tiếng" hint="2–3 câu tiếng Anh, cách nhau bằng dấu ;"><textarea aria-label="Câu ví dụ ngữ pháp" value={state.grammarExamples} placeholder="I work as a tester.; She works in the sales team." onChange={event => set("grammarExamples", event.target.value)} /></Field><EntryAudioFields hidden={monthly} labelPrefix="Audio ví dụ ngữ pháp" values={splitValues(state.grammarExamples, /[;\n]/)} audioUrls={state.grammarExampleAudioUrls} onChange={setGrammarExampleAudio} uploadMedia={uploadMedia} />{monthly ? null : <><label className="row small"><input type="checkbox" checked={state.grammarAudioEnabled} onChange={event => set("grammarAudioEnabled", event.target.checked)} />Bật audio cho Ngữ pháp</label>{state.grammarAudioEnabled ? <MediaField label="Audio Ngữ pháp" kind="audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm" value={state.grammarAudioUrl} onChange={value => set("grammarAudioUrl", value)} uploadMedia={uploadMedia} compact /> : null}</>}</>}</EditorSection>)}
+      {section("grammar", "Ngữ pháp", <EditorSection title="Ngữ pháp" disabled={busy}>{!monthly || state.grammarUnavailable ? <label className="row small"><input type="checkbox" checked={state.grammarUnavailable} onChange={event => set("grammarUnavailable", event.target.checked)} />Bài này không có nội dung ngữ pháp phù hợp</label> : null}{state.grammarUnavailable ? <p className="xs muted">Phần Ngữ pháp sẽ được đánh dấu không áp dụng và ẩn với học viên. Không cần nhập nội dung giả.</p> : <><Field label="Ngữ pháp" hint="Công thức hoặc mẫu câu ngắn, có thể dùng ngay."><textarea aria-label="Ngữ pháp" value={state.grammar} onChange={event => set("grammar", event.target.value)} /></Field>{showGrammarUsage ? <Field label="Cách dùng ngữ pháp" hint="Giải thích khi nào và trong ngữ cảnh nào dùng mẫu câu."><textarea aria-label="Cách dùng ngữ pháp" value={state.grammarUsage} onChange={event => set("grammarUsage", event.target.value)} /></Field> : null}{monthly ? <GrammarExampleList values={state.grammarExampleList} onChange={value => set("grammarExampleList", value)} /> : <Field label="Câu ví dụ để đọc thành tiếng" hint="2–3 câu tiếng Anh, cách nhau bằng dấu ;"><textarea aria-label="Câu ví dụ ngữ pháp" value={state.grammarExamples} placeholder="I work as a tester.; She works in the sales team." onChange={event => set("grammarExamples", event.target.value)} /></Field>}<EntryAudioFields hidden={monthly} labelPrefix="Audio ví dụ ngữ pháp" values={splitValues(state.grammarExamples, /[;\n]/)} audioUrls={state.grammarExampleAudioUrls} onChange={setGrammarExampleAudio} uploadMedia={uploadMedia} />{monthly ? null : <><label className="row small"><input type="checkbox" checked={state.grammarAudioEnabled} onChange={event => set("grammarAudioEnabled", event.target.checked)} />Bật audio cho Ngữ pháp</label>{state.grammarAudioEnabled ? <MediaField label="Audio Ngữ pháp" kind="audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm" value={state.grammarAudioUrl} onChange={value => set("grammarAudioUrl", value)} uploadMedia={uploadMedia} compact /> : null}</>}</>}</EditorSection>)}
       {section("pronunciation", kind === "review" ? "Phát âm ôn tập" : "Phát âm", <EditorSection title={kind === "review" ? "Phát âm ôn tập" : "Phát âm"} disabled={busy}>{reviewTargets.length > 1 ? <p className="xs muted">Bài ôn luyện {reviewTargets.length} âm: {reviewTargets.map(target => `${stringValue(target.focus)} (${(Array.isArray(target.words) ? target.words.map(word => stringValue(record(word).word)) : []).join(", ")})`).join(" · ")}. Ô bên dưới là âm hiển thị đầu tiên.</p> : null}<div className="grid cols-3"><Field label="Âm mục tiêu"><input aria-label="Âm mục tiêu" value={state.pronunciationFocus} onChange={event => set("pronunciationFocus", event.target.value)} /></Field><Field label="3 từ luyện âm"><input aria-label="3 từ luyện âm" value={state.pronunciationWords} onChange={event => set("pronunciationWords", event.target.value)} /></Field><Field label="Mẹo phát âm"><input aria-label="Mẹo phát âm" value={state.pronunciationTip} onChange={event => set("pronunciationTip", event.target.value)} /></Field></div><EntryAudioFields hidden={monthly} labelPrefix="Audio từ luyện âm" values={splitValues(state.pronunciationWords, /[,;\n]/)} audioUrls={state.pronunciationWordAudioUrls} onChange={setPronunciationWordAudio} uploadMedia={uploadMedia} /></EditorSection>)}
-      {dailyGrammar.dailyCode ? section("daily", "Luyện tập theo ngày", <DailyTeachingEditor grammar={dailyGrammar} pronunciation={dailyPronunciation} grammarStepLabels={grammarStepLabels} disabled={busy} onChange={(items, passage) => setDailyEdits({items, passage})} />) : null}
+      {dailyGrammar.dailyCode && !review ? section("daily", "Luyện tập theo ngày", <DailyTeachingEditor grammar={dailyGrammar} pronunciation={dailyPronunciation} grammarStepLabels={grammarStepLabels} disabled={busy} onChange={(items, passage) => setDailyEdits({items, passage})} />) : null}
+      {review ? MONTHLY_REVIEW_SECTIONS.map((reviewSection, index) => { const content = reviewContents[reviewSection.code]; return content ? <Fragment key={reviewSection.code}>{section(reviewSectionKey(reviewSection.code), `Phần ${index + 1} · ${reviewSection.title}`, <ReviewSectionEditor code={reviewSection.code} sectionNumber={index + 1} title={reviewSection.title} content={content} disabled={busy} onChange={next => setReviewContents(current => ({ ...current, [reviewSection.code]: next }))} />)}</Fragment> : null; }) : <>
       {section("listening", "Nghe", <EditorSection title="Nghe" disabled={busy}><Field label="Nội dung nghe" hint="Nếu chưa tải file audio thật, phần Nghe chưa thể phát."><textarea aria-label="Nội dung nghe" value={state.listeningScript} placeholder="1–2 câu tiếng Anh" onChange={event => set("listeningScript", event.target.value)} /></Field><MediaField label="File audio phần Nghe" kind="audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm" value={state.listeningAudioUrl} onChange={value => set("listeningAudioUrl", value)} uploadMedia={uploadMedia} /><AudioSynthesisNotice mark={(initial.parts.find(part => part.code === "listening")?.content as Record<string, unknown> | undefined)?.audioSynthesis} hasAudio={Boolean(state.listeningAudioUrl.trim())} retry="tải file audio phần Nghe hoặc sinh lại bài để thử lại" /><QuestionFields prefix="Nghe" question={state.listeningQuestion} options={state.listeningOptions} answer={state.listeningAnswer} onQuestion={value => set("listeningQuestion", value)} onOptions={value => set("listeningOptions", value)} onAnswer={value => set("listeningAnswer", value)} /></EditorSection>)}
       {section("reading", "Đọc", <EditorSection title="Đọc" disabled={busy}><Field label="Đoạn văn"><textarea value={state.readingPassage} placeholder="2–4 câu tiếng Anh" onChange={event => set("readingPassage", event.target.value)} /></Field><QuestionFields prefix="Đọc" question={state.readingQuestion} options={state.readingOptions} answer={state.readingAnswer} onQuestion={value => set("readingQuestion", value)} onOptions={value => set("readingOptions", value)} onAnswer={value => set("readingAnswer", value)} /></EditorSection>)}
       {section("writing", "Viết", <EditorSection title="Viết" disabled={busy}><Field label="Dạng bài"><select value={state.writingType} onChange={event => set("writingType", event.target.value as EditorState["writingType"])}><option value="fill">Điền từ</option><option value="mcq">Trắc nghiệm</option><option value="write">Tự viết</option></select></Field><Field label="Đề bài"><textarea value={state.writingPrompt} onChange={event => set("writingPrompt", event.target.value)} /></Field><OptionFields prefix="Viết" options={state.writingOptions} onChange={value => set("writingOptions", value)} optional /><Field label="Đáp án"><input value={state.writingAnswer} onChange={event => set("writingAnswer", event.target.value)} /></Field></EditorSection>)}
       {section("word_class", "Từ loại", <EditorSection title="Từ loại" disabled={busy}><QuestionFields prefix="Từ loại" question={state.wordClassQuestion} options={state.wordClassOptions} answer={state.wordClassAnswer} onQuestion={value => set("wordClassQuestion", value)} onOptions={value => set("wordClassOptions", value)} onAnswer={value => set("wordClassAnswer", value)} /></EditorSection>)}
       {section("word_use", "Dùng từ", <EditorSection title="Dùng từ" disabled={busy}><QuestionFields prefix="Dùng từ" question={state.wordUseQuestion} options={state.wordUseOptions} answer={state.wordUseAnswer} onQuestion={value => set("wordUseQuestion", value)} onOptions={value => set("wordUseOptions", value)} onAnswer={value => set("wordUseAnswer", value)} /></EditorSection>)}
       {section("speaking", "Nói", <EditorSection title="Nói" disabled={busy}><Field label="Yêu cầu"><input aria-label="Yêu cầu" value={state.speakingInstruction} placeholder="Nói to câu sau." onChange={event => set("speakingInstruction", event.target.value)} /></Field><Field label="Câu mẫu học viên phải nói"><textarea aria-label="Câu mẫu học viên phải nói" value={state.speakingSample} onChange={event => set("speakingSample", event.target.value)} /></Field></EditorSection>)}
+      </>}
       {saveError && <div role="alert"><Banner tone="danger" icon={<TriangleAlert className="operator-banner-svg" size={17} strokeWidth={2.25} />}>{saveError}</Banner></div>}
       {problems.length > 0 && <div role="alert"><Banner tone="warn"><div className="small"><b>{problems.length} mục cần bổ sung:</b><ul>{problems.map(problem => <li key={problem}>{problem}</li>)}</ul><p>Bạn có thể sửa tiếp, hoặc lưu tạm: bài sẽ bị gắn nhãn &quot;chưa đủ 4 kỹ năng&quot; cho đến khi bổ sung.</p></div></Banner></div>}
       <div className="row operator-editor-actions"><Button type="button" disabled={busy} onClick={onCancel}>Huỷ</Button>{busy && <span className="small muted" role="status" aria-live="polite">Đang lưu…</span>}<Button type="button" className="operator-lesson-save-button" primary busy={busy} disabled={busy} onClick={() => void submit()}>{busy ? "Đang lưu…" : forceSave ? "Lưu dù còn thiếu" : "Kiểm tra & lưu"}</Button></div>
@@ -249,6 +273,8 @@ export function LessonFormEditor({
 
 function problemSection(problem: string): string {
   const text = problem.toLowerCase();
+  const reviewPart = /^phần (\d+) · /u.exec(text);
+  if (reviewPart) { const code = MONTHLY_REVIEW_SECTIONS[Number(reviewPart[1]) - 1]?.code; return code ? reviewSectionKey(code) : ""; }
   if (text.includes("tiêu đề")) return "general";
   if (text.includes("từ vựng") || text.includes("cụm từ")) return "vocabulary";
   if (text.includes("phát âm")) return "pronunciation";
@@ -276,6 +302,12 @@ function QuestionFields({ prefix, question, options, answer, onQuestion, onOptio
   return <><Field label="Câu hỏi"><input aria-label={`${prefix} – Câu hỏi`} value={question} onChange={event => onQuestion(event.target.value)} /></Field><OptionFields prefix={prefix} options={options} onChange={onOptions} /><Field label="Đáp án đúng"><select aria-label={`${prefix} – Đáp án đúng`} value={answer} onChange={event => onAnswer(Number(event.target.value))}>{[0, 1, 2, 3].map(index => <option key={index} value={index}>Lựa chọn {index + 1}</option>)}</select></Field></>;
 }
 
+/** Monthly grammar examples: one input per sentence (the 3-example rule), never one ";"-joined textarea. */
+function GrammarExampleList({ values, onChange }: { values: string[]; onChange(value: string[]): void }) {
+  const slots = Math.max(3, values.length);
+  return <div className="field" role="group" aria-label="Câu ví dụ ngữ pháp"><span>Câu ví dụ để đọc thành tiếng</span><div className="operator-grammar-example-list">{Array.from({ length: slots }, (_, index) => <input key={index} aria-label={`Câu ví dụ ngữ pháp ${index + 1}`} value={values[index] ?? ""} placeholder={`Câu ví dụ ${index + 1} (tiếng Anh)`} onChange={event => onChange(replaceAt(values, index, event.target.value))} />)}</div><small className="xs muted">Mỗi ô một câu tiếng Anh, tối đa 3 câu.</small></div>;
+}
+
 function readLesson(lesson: ContentLessonDraftInput, vocabularyCount = 3): EditorState {
   const get = (code: LessonPartCode) => record(lesson.parts.find(part => part.code === code)?.content);
   const objective = get("objective"), instruction = get("instruction"), vocabulary = get("vocabulary"), grammar = get("grammar"), pronunciation = get("pronunciation"), listening = get("listening"), reading = get("reading"), writing = get("writing"), wordClass = get("word_class"), wordUse = get("word_use"), speaking = get("speaking");
@@ -291,6 +323,7 @@ function readLesson(lesson: ContentLessonDraftInput, vocabularyCount = 3): Edito
     grammar: stringValue(grammar.formula || grammar.text),
     grammarUsage: stringValue(grammar.usage),
     grammarExamples: listValue(grammar.examples).join("; "),
+    grammarExampleList: listValue(grammar.examples),
     grammarExampleAudioUrls: listValue(grammar.exampleAudioUrls),
     grammarAudioUrl: stringValue(grammar.audioUrl),
     grammarAudioEnabled: Boolean(stringValue(grammar.audioUrl)),
@@ -353,7 +386,7 @@ function readLesson(lesson: ContentLessonDraftInput, vocabularyCount = 3): Edito
   };
 }
 
-function validateLesson(state: EditorState, vocabularyCount = 3): string[] {
+function validateLesson(state: EditorState, vocabularyCount = 3, review = false): string[] {
   const problems: string[] = [];
   if (!state.title.trim()) problems.push("thiếu tiêu đề");
   if (!state.grammarUnavailable && !state.grammar.trim()) problems.push("thiếu ngữ pháp");
@@ -362,10 +395,13 @@ function validateLesson(state: EditorState, vocabularyCount = 3): string[] {
   if (vocabulary.some(row => !row.meaning.trim())) problems.push("từ vựng thiếu nghĩa tiếng Việt");
   const missingPhrases = vocabulary.filter(row => splitValues(row.examples, /[;\n]/).length < 3).map(row => row.word.trim());
   if (missingPhrases.length) problems.push(`chưa đủ 3 cụm từ chứa từ đó cho: ${missingPhrases.join(", ")}`);
-  checkQuestion(problems, "Nghe", state.listeningScript, state.listeningQuestion, state.listeningOptions, state.listeningAnswer);
-  checkQuestion(problems, "Đọc", state.readingPassage, state.readingQuestion, state.readingOptions, state.readingAnswer);
-  if (!state.writingPrompt.trim()) problems.push("thiếu phần Viết"); else if (!state.writingAnswer.trim()) problems.push("Viết: thiếu đáp án"); else if (state.writingType === "fill" && (state.writingPrompt.match(/___/g)?.length ?? 0) !== 1) problems.push("Viết dạng điền cần đúng một chỗ trống ___");
-  if (!state.speakingSample.trim()) problems.push("thiếu phần Nói (câu mẫu)");
+  // Review exercises are checked per question by validateReviewContents.
+  if (!review) {
+    checkQuestion(problems, "Nghe", state.listeningScript, state.listeningQuestion, state.listeningOptions, state.listeningAnswer);
+    checkQuestion(problems, "Đọc", state.readingPassage, state.readingQuestion, state.readingOptions, state.readingAnswer);
+    if (!state.writingPrompt.trim()) problems.push("thiếu phần Viết"); else if (!state.writingAnswer.trim()) problems.push("Viết: thiếu đáp án"); else if (state.writingType === "fill" && (state.writingPrompt.match(/___/g)?.length ?? 0) !== 1) problems.push("Viết dạng điền cần đúng một chỗ trống ___");
+    if (!state.speakingSample.trim()) problems.push("thiếu phần Nói (câu mẫu)");
+  }
   const pronunciationWords = splitValues(state.pronunciationWords, /[,;\n]/);
   if (!state.pronunciationFocus.trim() && !pronunciationWords.length && !state.pronunciationTip.trim()) problems.push("thiếu phần Phát âm"); else { if (!state.pronunciationFocus.trim()) problems.push("Phát âm: thiếu âm mục tiêu"); if (pronunciationWords.length < 3) problems.push("Phát âm: cần đủ 3 từ luyện"); }
   return problems;
@@ -373,10 +409,16 @@ function validateLesson(state: EditorState, vocabularyCount = 3): string[] {
 
 function checkQuestion(problems: string[], label: string, body: string, question: string, options: string[], answer: number) { const choices = options.filter(choice => choice.trim()); if (![body, question, ...choices].some(value => value.trim())) { problems.push(`thiếu phần ${label}`); return; } if (!body.trim()) problems.push(`${label}: thiếu nội dung`); if (!question.trim()) problems.push(`${label}: thiếu câu hỏi`); if (choices.length < 4) problems.push(`${label}: chuẩn mới là 4 lựa chọn`); if (!options[answer]?.trim()) problems.push(`${label}: đáp án phải trùng nguyên văn một lựa chọn`); }
 
-function buildLesson(initial: ContentLessonDraftInput, state: EditorState): ContentLessonDraftInput {
+const reviewStudyCodes: readonly string[] = ["objective", "instruction", "vocabulary", "grammar", "pronunciation"];
+
+function buildLesson(initial: ContentLessonDraftInput, state: EditorState, options: { monthly?: boolean; review?: ReviewContents | undefined } = {}): ContentLessonDraftInput {
   const prior = (code: LessonPartCode) => record(initial.parts.find(part => part.code === code)?.content);
   const priorVocabulary = prior("vocabulary");
   const priorVocabularyItems = Array.isArray(priorVocabulary.items) ? priorVocabulary.items : [];
+  // Monthly examples come from one input per sentence; a cleared input drops its sentence and that sentence's audio.
+  const monthlyExamples = state.grammarExampleList.map((value, index) => ({ value: value.trim(), audioUrl: state.grammarExampleAudioUrls[index]?.trim() ?? "" })).filter(example => example.value);
+  const grammarExamples = options.monthly ? monthlyExamples.map(example => example.value) : splitValues(state.grammarExamples, /[;\n]/);
+  const grammarExampleAudioUrls = options.monthly ? monthlyExamples.map(example => example.audioUrl) : alignAudioUrls(grammarExamples, state.grammarExampleAudioUrls);
   const { phonemeAudioId: _legacyPhonemeAudioId, phonemeAudioUrl: _legacyPhonemeAudioUrl, ...priorPronunciation } = prior("pronunciation");
   const known: ContentLessonDraftInput["parts"] = [
     { code: "objective", title: "Mục tiêu bài học", content: buildObjectiveContent(prior("objective"), state.objective) },
@@ -384,7 +426,7 @@ function buildLesson(initial: ContentLessonDraftInput, state: EditorState): Cont
     { code: "vocabulary", title: "Từ vựng", content: { ...priorVocabulary, items: state.vocabulary.map((row, index) => ({ ...record(priorVocabularyItems[index]), word: row.word.trim(), type: row.type.trim(), pronunciation: row.pronunciation.trim(), meaning: row.meaning.trim(), collocations: splitValues(row.examples, /[;\n]/), examples: splitValues(row.examples, /[;\n]/), collocationAudioUrls: alignedAudioUrls(row.examples, row.exampleAudioUrls), exampleAudioUrls: alignedAudioUrls(row.examples, row.exampleAudioUrls), family: parseStructuredEntries(row.family, ["type", "meaning"], row.familyAudioUrls), synonyms: parseStructuredEntries(row.synonyms, ["level", "note"], row.synonymAudioUrls), antonyms: parseStructuredEntries(row.antonyms, ["level", "note"], row.antonymAudioUrls), umbrella: buildUmbrella(row), imageUrl: row.imageUrl.trim(), audioUrl: row.audioUrl.trim(), ...(row.imageUrl.trim() && row.imageUrl.trim() !== stringValue(record(priorVocabularyItems[index]).imageUrl).trim() ? { imageAttribution: { creator: "Người vận hành", licence: "Nội dung nội bộ", licenceUrl: "", sourceUrl: row.imageUrl.trim() } } : {}) })) } },
     { code: "grammar", title: "Ngữ pháp", content: state.grammarUnavailable
       ? { status: "unavailable", hidden: true, reason: "no_suitable_content" }
-      : { ...prior("grammar"), status: "available", hidden: false, formula: state.grammar.trim(), usage: state.grammarUsage.trim(), examples: splitValues(state.grammarExamples, /[;\n]/), exampleAudioUrls: alignAudioUrls(splitValues(state.grammarExamples, /[;\n]/), state.grammarExampleAudioUrls), audioUrl: state.grammarAudioEnabled ? state.grammarAudioUrl.trim() : "" } },
+      : { ...prior("grammar"), status: "available", hidden: false, formula: state.grammar.trim(), usage: state.grammarUsage.trim(), examples: grammarExamples, exampleAudioUrls: grammarExampleAudioUrls, audioUrl: state.grammarAudioEnabled ? state.grammarAudioUrl.trim() : "" } },
     { code: "pronunciation", title: "Phát âm", content: { ...priorPronunciation, focus: state.pronunciationFocus.trim(), words: splitValues(state.pronunciationWords, /[,;\n]/).map(word => { const known = (Array.isArray(priorPronunciation.words) ? priorPronunciation.words : []).map(record).find(item => stringValue(item.word ?? item.w).trim().toLowerCase() === word.toLowerCase()); const ipa = known ? stringValue(known.ipa) : ""; return ipa ? { word, ipa } : word; }),wordAudioUrls: alignAudioUrls(splitValues(state.pronunciationWords, /[,;\n]/), state.pronunciationWordAudioUrls), instruction: state.pronunciationTip.trim(), audioUrl: "" } },
     { code: "listening", title: "Nghe", content: { ...prior("listening"), script: state.listeningScript.trim(), audioUrl: state.listeningAudioUrl.trim(), prompt: state.listeningQuestion.trim(), options: state.listeningOptions.map(value => value.trim()).filter(Boolean), answer: state.listeningOptions[state.listeningAnswer]?.trim() ?? "" } },
     { code: "reading", title: "Đọc", content: { ...prior("reading"), text: state.readingPassage.trim(), prompt: state.readingQuestion.trim(), options: state.readingOptions.map(value => value.trim()).filter(Boolean), answer: state.readingOptions[state.readingAnswer]?.trim() ?? "", audioUrl: "" } },
@@ -393,6 +435,18 @@ function buildLesson(initial: ContentLessonDraftInput, state: EditorState): Cont
     { code: "word_use", title: initial.parts.find(part => part.code === "word_use")?.title ?? "Dùng từ", content: { ...prior("word_use"), prompt: state.wordUseQuestion.trim(), options: state.wordUseOptions.map(value => value.trim()).filter(Boolean), answer: state.wordUseOptions[state.wordUseAnswer]?.trim() ?? "", audioUrl: "" } },
     { code: "speaking", title: "Nói", content: { ...prior("speaking"), instruction: state.speakingInstruction.trim(), sample: state.speakingSample.trim(), answer: state.speakingSample.trim(), audioUrl: "" } }
   ];
+  if (options.review) {
+    // Review: the study parts are rebuilt from the form; the exercise parts keep their stored shape (and order) with
+    // only the edited questions changed. No daily single-question fields are written onto them, and no part is added or reordered.
+    const reviewContents = options.review;
+    const study = new Map(known.filter(part => reviewStudyCodes.includes(part.code)).map(part => [part.code, part]));
+    const withReviewItems = (part: ContentLessonDraftInput["parts"][number]) => {
+      const edited = reviewContents[part.code];
+      return part.code === "grammar" && edited && Array.isArray(edited.items) ? { ...part, content: { ...part.content, items: edited.items } } : part;
+    };
+    const parts = initial.parts.map(part => { const built = study.get(part.code); return built ? withReviewItems(built) : applyReviewContents(part, reviewContents); });
+    return { dayNumber: initial.dayNumber, title: state.title.trim(), durationMinutes: initial.durationMinutes || 10, parts };
+  }
   return { dayNumber: initial.dayNumber, title: state.title.trim(), durationMinutes: initial.durationMinutes || 10, parts: [...known, ...initial.parts.filter(part => !lessonPartOrder.includes(part.code as typeof lessonPartOrder[number]))] };
 }
 

@@ -393,18 +393,161 @@ describe("operator granular lesson editor", () => {
     expect(select).toHaveValue("a2-g1-s1");
   });
 
-  it("pins the day's findings under the header and jumps to the named section", async () => {
+  it("pins a compact findings strip under the header, opens on the first finding and jumps to the exact field", async () => {
     const user = userEvent.setup();
-    render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A2" monthly initial={emptyLesson(2)} onSave={vi.fn()} onCancel={() => undefined} findings={{ title: "Lần sinh AI gần nhất chưa đạt", lines: [
-      { key: "a", code: "MONTHLY_INVENTED_WORD_FORM", component: "word_use", severity: "severe", where: "Câu 5 · Dùng từ", what: "Thay từ không có thật." },
+    const initial = { ...emptyLesson(2), parts: emptyLesson(2).parts.map(part => part.code === "word_use" ? { ...part, content: { prompt: "Choose", options: ["a", "b", "He was colleagueing me.", "d"], answer: "a" } } : part) };
+    render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A2" monthly initial={initial} onSave={vi.fn()} onCancel={() => undefined} findings={{ title: "Lần sinh AI gần nhất chưa đạt", lines: [
+      { key: "a", code: "MONTHLY_INVENTED_WORD_FORM", component: "word_use", severity: "severe", where: "Câu 5 · Dùng từ", what: "Thay từ không có thật.", option: 2 },
       { key: "b", code: "MONTHLY_ANSWER_LONGEST_OPTION", component: "listening", severity: "light", where: "Câu 1 · Nghe", what: "Viết các lựa chọn dài gần bằng nhau." }
     ] }} /></ModalProvider>);
-    const panel = screen.getByRole("region", { name: "Các mục cần sửa" });
-    expect(panel.closest(".operator-editor-sticky-header")).not.toBeNull();
-    expect(panel).toHaveTextContent("1 lỗi nặng · 1 cảnh báo");
-    expect(panel).toHaveTextContent("Nặng Câu 5 · Dùng từ: Thay từ không có thật.");
-    await user.click(screen.getByRole("button", { name: "Câu 5 · Dùng từ" }));
+    const strip = screen.getByRole("region", { name: "Các mục cần sửa" });
+    // Inside the sticky header but not in the title row; the editor does not repeat why it was opened.
+    expect(strip.closest(".operator-editor-sticky-header")).not.toBeNull();
+    expect(strip.closest(".operator-editor-heading")).toBeNull();
+    expect(strip).not.toHaveTextContent("Lần sinh AI gần nhất chưa đạt");
+    expect(strip).toHaveTextContent("1 lỗi nặng · 1 cảnh báo");
+    expect(strip).toHaveTextContent("Câu 5 · Dùng từ: Thay từ không có thật.");
+    // Opened on the first finding: its flagged answer choice has focus.
     await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)));
-    expect(document.activeElement).toBe(screen.getByLabelText("Dùng từ – Câu hỏi"));
+    expect(document.activeElement).toBe(screen.getByLabelText("Dùng từ – Lựa chọn 3"));
+    // The chevron lists every finding; each one jumps to its section.
+    await user.click(screen.getByRole("button", { name: "Xem cả 2 mục" }));
+    await user.click(screen.getByRole("button", { name: /^Câu 1 · Nghe/ }));
+    await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)));
+    expect(document.activeElement).toBe(screen.getByLabelText("Nội dung nghe"));
+  });
+
+  it("monthly grammar: no 'no grammar' checkbox, no empty usage field, one input per example", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const initial = { dayNumber: 2, title: "Bài 3", durationMinutes: 10, parts: [
+      { code: "grammar" as const, title: "Ngữ pháp", content: { formula: "was/were + V-ing", examples: ["We were not reviewing the useful feedback during the meeting.", "Was your colleague checking the report?"], exampleAudioUrls: ["/e1.mp3", "/e2.mp3"] } }
+    ] };
+    render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A2" monthly initial={initial} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
+    expect(screen.queryByRole("checkbox", { name: "Bài này không có nội dung ngữ pháp phù hợp" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Cách dùng ngữ pháp")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Câu ví dụ ngữ pháp 1")).toHaveValue("We were not reviewing the useful feedback during the meeting.");
+    expect(screen.getByLabelText("Câu ví dụ ngữ pháp 2")).toHaveValue("Was your colleague checking the report?");
+    expect(screen.getByLabelText("Câu ví dụ ngữ pháp 3")).toHaveValue("");
+    expect(screen.queryByDisplayValue(/\.; /)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Câu ví dụ ngữ pháp 3"), { target: { value: "They were sending the files; then they stopped." } });
+    await saveLesson(user);
+    const grammar = (onSave.mock.calls[0]![0] as { parts: Array<{ code: string; content: Record<string, unknown> }> }).parts.find(part => part.code === "grammar")!.content;
+    // A ";" inside one example stays inside that example.
+    expect(grammar.examples).toEqual(["We were not reviewing the useful feedback during the meeting.", "Was your colleague checking the report?", "They were sending the files; then they stopped."]);
+    expect(grammar.exampleAudioUrls).toEqual(["/e1.mp3", "/e2.mp3", ""]);
+  });
+
+  describe("Friday review (Ôn tuần)", () => {
+    const choice = (id: string, prompt: string, answer: string, extra: Record<string, unknown> = {}) => ({ id, prompt, options: [answer, `${id} b`, `${id} c`, `${id} d`], answer, explanation: `Why ${id}.`, questionTranslation: `Dịch ${id}`, answerTranslation: `Đáp ${id}`, ...extra });
+    const withVariant = (id: string, prompt: string, answer: string) => ({ ...choice(id, prompt, answer), variants: [choice(`${id}-v1`, `${prompt} (retry)`, `${answer} again`)] });
+    const reviewLesson = () => ({ dayNumber: 4, title: "Bài ôn tuần 1", durationMinutes: 10, parts: [
+      { code: "objective" as const, title: "Mục tiêu bài học", content: { text: "Ôn tuần 1", items: [{ text: "Ôn tuần 1" }] } },
+      { code: "vocabulary" as const, title: "Từ vựng", content: { items: [{ word: "report", meaning: "báo cáo" }] } },
+      { code: "grammar" as const, title: "Ngữ pháp", content: { formula: "S + V-s", examples: ["She sends it."], items: [withVariant("grammar-1", "She ___ it.", "sends")] } },
+      { code: "pronunciation" as const, title: "Phát âm", content: { focus: "/s/", words: ["sends", "sits", "sees"] } },
+      { code: "listening" as const, title: "Nghe", content: { items: [{ ...withVariant("listening-1", "What did you hear?", "báo cáo"), audioText: "report", audioUrl: "/r.mp3" }] } },
+      { code: "word_use" as const, title: "Word use", content: { items: [withVariant("word_use-1", "Q1", "A1"), withVariant("word_use-2", "Q2", "A2"), withVariant("word_use-3", "Q3", "A3")] } },
+      { code: "word_class" as const, title: "Word form", content: { items: [withVariant("word_class-1", "He made a ___.", "decision")] } },
+      { code: "reading" as const, title: "Đọc", content: { passage: "Hi team, the report is ready.", items: [{ ...withVariant("reading-1", "What is ready?", "the report"), passage: "Hi team, the report is ready." }] } },
+      { code: "speaking" as const, title: "Nói", content: { items: [
+        { id: "speaking-1", prompt: "Which word?", audioText: "ship", options: ["ship", "sheep"], answer: "ship", explanation: "Short i." },
+        { id: "speaking-3", prompt: "Read aloud.", passage: "The report is ready for the client." },
+        { id: "speaking-4", prompt: "Tell us about your week.", requiredWords: ["report", "client"], minRequiredWords: 2, acceptsAudio: true }
+      ] } }
+    ] });
+    type Lesson = ReturnType<typeof reviewLesson>;
+    const partJson = (lesson: Lesson, code: string) => JSON.stringify(lesson.parts.find(item => item.code === code));
+    const wordUseItems = (lesson: Lesson) => lesson.parts.find(item => item.code === "word_use")!.content.items as Array<Record<string, unknown>>;
+
+    it("shows every question and retry version of every part, with fixed counts", () => {
+      render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A2" monthly kind="review" vocabularyCount={1} initial={reviewLesson()} onSave={vi.fn()} onCancel={() => undefined} /></ModalProvider>);
+      const wordUse = screen.getByText("Phần 2 · Word use (3 câu)", { selector: "legend" }).closest("fieldset")!;
+      expect(wordUse).toHaveTextContent("Câu 1");
+      expect(wordUse).toHaveTextContent("Câu 3");
+      expect(screen.getByLabelText("Word use câu 2 – Câu hỏi")).toHaveValue("Q2");
+      expect(screen.getByLabelText("Word use câu 2 – Lựa chọn 4")).toHaveValue("word_use-2 d");
+      expect(screen.getByLabelText("Word use câu 2 – Giải thích")).toHaveValue("Why word_use-2.");
+      expect(screen.getByLabelText("Word use câu 2 bản làm lại 1 – Câu hỏi")).toHaveValue("Q2 (retry)");
+      expect(screen.getByLabelText("Word use câu 2 bản làm lại 1 – Đáp án đúng")).toHaveDisplayValue("A. A2 again");
+      expect(screen.getByRole("group", { name: "Word use câu 2 bản làm lại 1" })).toHaveTextContent("Bản làm lại 1");
+      // Grammar questions live in their review part; listening keeps the spoken word; speaking keeps its own shapes.
+      expect(screen.getByLabelText("Ngữ pháp câu 1 – Câu hỏi")).toHaveValue("She ___ it.");
+      expect(screen.getByLabelText("Nghe & nhận biết từ câu 1 – Từ app đọc")).toHaveValue("report");
+      expect(screen.getByLabelText("Nghe – Đọc hiểu – Đoạn văn")).toHaveValue("Hi team, the report is ready.");
+      expect(screen.getByLabelText("Phát âm & Nói – Viết câu 1 – Lựa chọn 2")).toHaveValue("sheep");
+      expect(screen.queryByLabelText("Phát âm & Nói – Viết câu 1 – Lựa chọn 3")).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Phát âm & Nói – Viết câu 2 – Câu đọc to")).toHaveValue("The report is ready for the client.");
+      expect(screen.getByLabelText("Phát âm & Nói – Viết câu 3 – Từ bắt buộc")).toHaveValue("report, client");
+      // The daily single-question fields are not offered for a review, and counts are fixed.
+      expect(screen.queryByLabelText("Nghe – Câu hỏi")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Thêm câu|Bỏ câu/ })).not.toBeInTheDocument();
+    });
+
+    it("saves an edit to question 2 of a part and keeps questions 1 and 3, the retry versions and every other part unchanged", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const initial = reviewLesson();
+      const before = JSON.parse(JSON.stringify(initial)) as Lesson;
+      render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A2" monthly kind="review" vocabularyCount={1} initial={initial} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
+      fireEvent.change(screen.getByLabelText("Word use câu 2 – Câu hỏi"), { target: { value: "Q2 edited" } });
+      fireEvent.change(screen.getByLabelText("Word use câu 2 – Lựa chọn 1"), { target: { value: "A2 edited" } });
+      await saveLesson(user);
+      const saved = onSave.mock.calls[0]![0] as Lesson;
+      const savedItems = wordUseItems(saved), beforeItems = wordUseItems(before);
+      // Question 2: only the edited fields changed (the answer followed its option); its retry version is untouched.
+      expect(JSON.stringify(savedItems[1])).toBe(JSON.stringify({ ...beforeItems[1], prompt: "Q2 edited", options: ["A2 edited", "word_use-2 b", "word_use-2 c", "word_use-2 d"], answer: "A2 edited" }));
+      expect(JSON.stringify(savedItems[1]!.variants)).toBe(JSON.stringify(beforeItems[1]!.variants));
+      // Questions 1 and 3, with their retry versions, are byte-identical.
+      expect(JSON.stringify(savedItems[0])).toBe(JSON.stringify(beforeItems[0]));
+      expect(JSON.stringify(savedItems[2])).toBe(JSON.stringify(beforeItems[2]));
+      // Every other review part is byte-identical, in the same order; no daily fields or parts (writing) are added.
+      for (const code of ["listening", "word_class", "reading", "speaking"]) expect(partJson(saved, code)).toBe(partJson(before, code));
+      expect(saved.parts.map(item => item.code)).toEqual(before.parts.map(item => item.code));
+      // Grammar: the study fields come from the form; its review questions are kept as they were.
+      expect(JSON.stringify(saved.parts.find(item => item.code === "grammar")!.content.items)).toBe(JSON.stringify(before.parts.find(item => item.code === "grammar")!.content.items));
+    });
+
+    it("an unchanged review saves its exercise parts byte-identical", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const initial = reviewLesson();
+      const before = JSON.parse(JSON.stringify(initial)) as Lesson;
+      render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A2" monthly kind="review" vocabularyCount={1} initial={initial} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
+      await saveLesson(user);
+      const saved = onSave.mock.calls[0]![0] as Lesson;
+      for (const code of ["listening", "word_use", "word_class", "reading", "speaking"]) expect(partJson(saved, code)).toBe(partJson(before, code));
+    });
+
+    it("editing the reading passage updates the copies on its questions", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A2" monthly kind="review" vocabularyCount={1} initial={reviewLesson()} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
+      fireEvent.change(screen.getByLabelText("Nghe – Đọc hiểu – Đoạn văn"), { target: { value: "Hi team, the client report is ready." } });
+      await saveLesson(user);
+      const reading = (onSave.mock.calls[0]![0] as Lesson).parts.find(item => item.code === "reading")!.content as { passage: string; items: Array<{ passage: string; variants: Array<Record<string, unknown>> }> };
+      expect(reading.passage).toBe("Hi team, the client report is ready.");
+      expect(reading.items[0]!.passage).toBe("Hi team, the client report is ready.");
+    });
+
+    it("a finding on a retry version lands on that version's flagged answer choice", async () => {
+      render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A2" monthly kind="review" vocabularyCount={1} initial={reviewLesson()} onSave={vi.fn()} onCancel={() => undefined} findings={{ title: "Kiểm tra chất lượng bản nháp", lines: [
+        { key: "x", code: "MONTHLY_INVENTED_WORD_FORM", component: "word_use", severity: "severe", where: "Phần 2 · Word use · câu 3 (bản làm lại 1)", what: "Lựa chọn B dùng từ không có thật.", item: 3, variant: 1, option: 1 }
+      ] }} /></ModalProvider>);
+      await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)));
+      expect(document.activeElement).toBe(screen.getByLabelText("Word use câu 3 bản làm lại 1 – Lựa chọn 2"));
+    });
   });
 });
+
+/** Kiểm tra & lưu → (Lưu dù còn thiếu) → confirm in the modal. */
+async function saveLesson(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
+  const force = screen.queryByRole("button", { name: "Lưu dù còn thiếu" });
+  if (force) {
+    await user.click(force);
+    await user.click(screen.getByRole("button", { name: "Lưu tạm" }));
+  } else {
+    await user.click(screen.getAllByRole("button", { name: "Kiểm tra & lưu" }).at(-1)!);
+  }
+}

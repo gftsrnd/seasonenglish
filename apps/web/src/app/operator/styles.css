@@ -4600,18 +4600,20 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 .operator-modal-scope .operator-daily-objective { margin: 0; }
 
 /* Quality findings stay in view while the lesson (day page) or the editor form scrolls.
-   Collapsible to one line; a long list scrolls inside its own box. */
-.operator-monthly-findings { padding: 12px 16px; border-color: #ead19a; background: #fffaf0; }
-.operator-monthly-findings > details > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; cursor: pointer; list-style: none; }
-.operator-monthly-findings > details > summary::-webkit-details-marker { display: none; }
-.operator-monthly-findings > details > summary::before { content: "▾"; color: var(--muted); }
-.operator-monthly-findings > details:not([open]) > summary::before { content: "▸"; }
+   Day page: one row (title, status chip, count, chevron), then one line per problem ending in "Sửa". */
+.operator-monthly-findings { padding: 10px 16px; border-color: #ead19a; background: #fffaf0; }
+.operator-monthly-findings-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.operator-monthly-findings .operator-monthly-findings-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 0 !important; padding: 0; border: 0; background: none; box-shadow: none; font: inherit; color: var(--text); cursor: pointer; }
+.operator-monthly-findings-toggle[aria-expanded="false"] .operator-monthly-findings-chevron { transform: rotate(-90deg); }
+.operator-monthly-findings-chevron { flex: none; color: var(--muted); transition: transform .15s ease; }
 .operator-monthly-findings-title { font-weight: 700; color: var(--text); }
 .operator-monthly-findings-count { margin-left: auto; }
-.operator-monthly-findings-body { display: grid; gap: 10px; max-height: min(34vh, 320px); margin-top: 10px; overflow-y: auto; overscroll-behavior: contain; }
-.operator-monthly-findings-body > p { margin: 0; }
-.operator-monthly-findings-next { align-items: center; gap: 10px; flex-wrap: wrap; }
-.operator-monthly-findings-next > p { margin: 0; }
+.operator-monthly-findings-body { max-height: min(34vh, 320px); margin-top: 8px; overflow-y: auto; overscroll-behavior: contain; }
+.operator-monthly-findings-body[hidden] { display: none; }
+.operator-monthly-findings-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.operator-monthly-findings-list > li { display: flex; align-items: baseline; gap: 8px; }
+.operator-monthly-finding-text { flex: 1 1 auto; min-width: 0; }
+.operator-monthly-findings .operator-monthly-finding-edit { display: inline-flex; flex: none; align-items: center; gap: 4px; min-height: 0 !important; padding: 0 2px; border: 0; background: none; box-shadow: none; font: inherit; font-weight: 700; color: var(--brown, #8a4d08); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .operator-monthly-finding-link { padding: 0; border: 0; background: none; font: inherit; font-weight: 700; color: var(--brown, #8a4d08); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; min-height: 0 !important; }
 .app-operator .operator-monthly-findings-dock { position: sticky; z-index: 9; top: 8px; display: grid; gap: 8px; margin-bottom: 14px; }
 .app-operator .operator-monthly-findings-dock > .operator-monthly-findings { margin: 0; box-shadow: 0 6px 18px rgba(30, 30, 30, .08); }
@@ -4620,5 +4622,31 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
   .app-operator .operator-monthly-findings-dock { top: 64px; }
   .operator-monthly-findings-body { max-height: 28vh; }
 }
-.operator-modal-scope .operator-editor-findings { margin: 8px 0 0; padding: 10px 14px; }
-.operator-modal-scope .operator-editor-findings .operator-monthly-findings-body { max-height: min(26vh, 240px); }
+
+/* Editor header: the title row stays one clean row (title left, Đóng and the guide's "?" right);
+   the findings strip wraps onto its own full-width line below it, inside the same sticky header. */
+.operator-modal-scope .dialog > .operator-editor-sticky-header { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; }
+.operator-modal-scope .dialog > .operator-editor-sticky-header > .operator-editor-heading { flex: 1 1 0; min-width: 0; order: 0; }
+.operator-modal-scope .dialog > .operator-editor-sticky-header > .app-guide-popup-trigger { order: 1; }
+.operator-modal-scope .dialog > .operator-editor-sticky-header > .operator-editor-findings { flex: 1 0 100%; order: 2; }
+.operator-modal-scope .operator-editor-findings { min-width: 0; margin: 8px -22px -7px; padding: 6px 22px; border-top: 1px solid #ead19a; background: #fffaf0; font-size: .86rem; }
+.operator-modal-scope .operator-editor-findings.is-severe { background: #fff4f0; border-top-color: #f0c2b4; }
+.operator-modal-scope .operator-editor-findings-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.operator-modal-scope .operator-editor-findings-count { flex: none; font-weight: 700; color: var(--text); }
+.operator-modal-scope .operator-editor-findings-first { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.operator-modal-scope .operator-editor-finding-link { padding: 0; border: 0; background: none; box-shadow: none; font: inherit; font-weight: 400; color: var(--text); text-align: left; cursor: pointer; min-height: 0 !important; }
+.operator-modal-scope .operator-editor-finding-link > strong { color: var(--brown, #8a4d08); text-decoration: underline; text-underline-offset: 2px; }
+.operator-modal-scope .operator-editor-findings-toggle { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 28px; height: 28px; min-height: 0 !important; margin-left: auto; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: none; color: var(--muted); cursor: pointer; }
+.operator-modal-scope .operator-editor-findings-toggle[aria-expanded="true"] > svg { transform: rotate(180deg); }
+.operator-modal-scope .operator-editor-findings-list { display: grid; gap: 4px; max-height: min(26vh, 220px); margin: 6px 0 2px; padding: 0; overflow-y: auto; list-style: none; }
+.operator-modal-scope .operator-editor-findings-list[hidden] { display: none; }
+.operator-modal-scope .operator-editor-findings-list > li { display: flex; align-items: baseline; gap: 8px; }
+@media (max-width: 840px) {
+  .operator-modal-scope .operator-editor-findings { margin-inline: -16px; padding-inline: 16px; }
+}
+
+/* Review ("Ôn tuần") questions: every question of a part, each retry version indented under it. */
+.operator-modal-scope .operator-review-variant { display: grid; gap: 14px; min-width: 0; margin-left: 14px; padding: 12px 0 0 14px; border-left: 3px solid #ead19a; }
+.operator-modal-scope .operator-review-variant-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.operator-modal-scope .operator-review-question .grid.cols-2 { gap: 16px; }
+.operator-modal-scope .operator-grammar-example-list { display: grid; gap: 8px; }

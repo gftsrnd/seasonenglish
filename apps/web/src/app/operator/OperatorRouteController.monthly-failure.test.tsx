@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -41,13 +41,19 @@ describe("Operator monthly day with a failed AI candidate", () => {
 
     const failure = await screen.findByRole("region", { name: "Lần sinh AI chưa đạt" });
     expect(failure).toHaveTextContent("Câu 2 · Dùng từ: Lựa chọn C dùng từ không có thật “colleagueing”; thay bằng một từ tiếng Anh có thật.");
-    expect(failure).toHaveTextContent("Bấm Sửa bản AI này, sửa các mục được báo, lưu rồi duyệt.");
-    await user.click(screen.getByRole("button", { name: "Sửa bản AI này" }));
+    // The page header's "Sửa tay" opens the candidate at its first finding.
+    await user.click(screen.getByRole("button", { name: "Sửa tay" }));
 
     // The preview route starts at the months page's default level (A1); the heading must name the day's framework level.
     expect(await screen.findByText("Soạn bài ngày 03/12 · A2")).toBeInTheDocument();
     expect(screen.queryByText("Soạn bài ngày 03/12 · A1")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Tiêu đề bài")).toHaveValue("Lesson 3: report, client");
-    expect(screen.getByDisplayValue("My colleague was colleagueing me with the client report.")).toBeInTheDocument();
+    const flagged = screen.getByDisplayValue("My colleague was colleagueing me with the client report.");
+    // Lands on the flagged answer choice (exercise 2 · Dùng từ, option C), not the top of the form.
+    await waitFor(() => expect(document.activeElement).toBe(flagged));
+    // The findings strip sits under the one-row header and does not repeat the panel's title.
+    const strip = screen.getByRole("region", { name: "Các mục cần sửa" });
+    expect(strip).toHaveTextContent("1 lỗi nặng");
+    expect(strip).not.toHaveTextContent("Lần sinh AI gần nhất chưa đạt");
   });
 });

@@ -30,7 +30,9 @@ describe("Operator monthly day: failed AI generation (December 2026 N3)", () => 
     expect(within(section).getByText("Không duyệt được")).toBeInTheDocument();
     expect(within(section).getByText(/team \/ teem là hai từ đồng âm/)).toBeInTheDocument();
     expect(within(section).getByText(/Đáp án đúng thường là lựa chọn dài nhất/)).toBeInTheDocument();
-    expect(within(section).getByText(/Bản nháp hiện có vẫn được giữ nguyên/)).toBeInTheDocument();
+    // One compact row: title, status chip, count and a chevron; no generation timestamp or explanatory paragraph.
+    expect(section).not.toHaveTextContent(/Sinh lúc|Bước tiếp theo|Bấm để/);
+    expect(within(section).getByRole("button", { name: /Lần sinh AI gần nhất chưa đạt/ })).toHaveAttribute("aria-expanded", "true");
     // The findings sit in the sticky, collapsible dock above the lesson.
     expect(section.closest(".operator-monthly-findings-dock")).not.toBeNull();
     expect(within(section).getByText(/1 lỗi nặng · 1 cảnh báo/)).toBeInTheDocument();
@@ -46,25 +48,28 @@ describe("Operator monthly day: failed AI generation (December 2026 N3)", () => 
       quality: { severe: [], light: [] }, generationFailure: failure
     }} />);
     expect(screen.getByText("Chưa có bản nháp đạt yêu cầu.")).toBeInTheDocument();
-    expect(screen.getByText(/chưa phải bản nháp nên chưa duyệt được/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Duyệt bài/ })).not.toBeInTheDocument();
-    // Read-only (no editor): no edit button, no next-step line.
-    expect(screen.queryByRole("button", { name: "Sửa bản AI này" })).not.toBeInTheDocument();
+    // Read-only (no editor): no edit buttons at all.
+    expect(screen.queryByRole("button", { name: /Sửa/ })).not.toBeInTheDocument();
   });
 
-  it("offers to edit the failed candidate and tells the Operator the next step", async () => {
+  it("edits the failed candidate from the page's Sửa tay or from one finding's own Sửa", async () => {
     const onEdit = vi.fn();
     render(<MonthlyLessonPreview date="2026-12-04" cefr="A1" onClose={vi.fn()} onEdit={onEdit} lesson={{
       lessonNumber: 4, lessonDate: "2026-12-04", kind: "review", status: "pending", scopeHash: "scope", locked: false, correctionCount: 0,
       quality: { severe: [], light: [] }, generationFailure: failure
     }} />);
     const section = screen.getByRole("region", { name: "Lần sinh AI chưa đạt" });
-    expect(section).toHaveTextContent("Bấm Sửa bản AI này, sửa các mục được báo, lưu rồi duyệt.");
+    // No second, AI-sounding edit button in the panel: the page header's "Sửa tay" is the one entry point.
+    expect(within(section).queryByRole("button", { name: /Sửa bản AI/ })).not.toBeInTheDocument();
     // Findings name the place (review section) before the text; severity chips stay.
     expect(section).toHaveTextContent("Nặng Phát âm: team / teem là hai từ đồng âm.");
     expect(section).toHaveTextContent("Nhẹ Phần 1 · Nghe & nhận biết từ: Đáp án đúng thường là lựa chọn dài nhất");
-    within(section).getByRole("button", { name: "Sửa bản AI này" }).click();
-    expect(onEdit).toHaveBeenCalledTimes(1);
+    screen.getByRole("button", { name: "Sửa tay" }).click();
+    expect(onEdit).toHaveBeenLastCalledWith();
+    // Each finding line opens the editor on that line's item.
+    within(section).getByRole("button", { name: "Sửa tay: Phần 1 · Nghe & nhận biết từ" }).click();
+    expect(onEdit).toHaveBeenLastCalledWith("MONTHLY_ANSWER_LONGEST_OPTION-1-0");
   });
 
   it("lists a saved draft's own quality findings with the next step", () => {
@@ -75,7 +80,7 @@ describe("Operator monthly day: failed AI generation (December 2026 N3)", () => 
     }} />);
     const section = screen.getByRole("region", { name: "Kiểm tra chất lượng bản nháp" });
     expect(section).toHaveTextContent("Chưa duyệt được");
-    expect(section).toHaveTextContent("Bấm Sửa tay, sửa các mục Nặng, lưu lại rồi duyệt.");
+    expect(within(section).getByRole("button", { name: "Sửa tay: Câu 1 · Dùng từ" })).toBeInTheDocument();
     expect(section).toHaveTextContent("Câu 1 · Dùng từ: Lựa chọn C dùng từ không có thật “colleagueing”");
   });
 });

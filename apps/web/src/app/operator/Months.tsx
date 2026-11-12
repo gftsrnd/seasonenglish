@@ -609,7 +609,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
   </main>;
 }
 
-export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPart, busy = false, onClose, onRequestReopen, onApprove, onEdit, onRegenerate }: { date: string; cefr: CefrLevel; lesson: MonthlyOperatorOverviewView["frameworks"][number]["lessons"][number]; resources?: MonthlyOperatorOverviewView["frameworks"][number]["resources"]; focusedPart?: string | null; busy?: boolean; onClose(): void; onRequestReopen?(reason: string): Promise<void>; onApprove?(): Promise<void> | void; onEdit?(): void; onRegenerate?(): Promise<void> | void }) {
+export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPart, busy = false, onClose, onRequestReopen, onApprove, onEdit, onRegenerate }: { date: string; cefr: CefrLevel; lesson: MonthlyOperatorOverviewView["frameworks"][number]["lessons"][number]; resources?: MonthlyOperatorOverviewView["frameworks"][number]["resources"]; focusedPart?: string | null; busy?: boolean; onClose(): void; onRequestReopen?(reason: string): Promise<void>; onApprove?(): Promise<void> | void; onEdit?(findingKey?: string): void; onRegenerate?(): Promise<void> | void }) {
   const isDraft = lesson.status !== "approved";
   const [requestingReopen, setRequestingReopen] = useState(false);
   const parts = lesson.content?.parts ?? [];
@@ -635,11 +635,6 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
   const editCandidate = Boolean(onEdit && !parts.length && failedParts.length);
   const draftFindings = parts.length ? [...lesson.quality.severe, ...lesson.quality.light] : [];
   const draftSevere = parts.length ? lesson.quality.severe.length : 0;
-  const draftNextStep = draftSevere
-    ? "Bấm Sửa tay, sửa các mục Nặng, lưu lại rồi duyệt."
-    : lesson.quality.light.length > 2
-      ? "Bài có quá hai cảnh báo: bấm Sửa tay, sửa bớt rồi lưu lại để duyệt."
-      : "Kiểm tra các cảnh báo; bấm Duyệt bài nghĩa là bạn đã xem và chấp nhận chúng.";
   const draftLines = isDraft ? describeMonthlyFindings(draftFindings, { kind: lesson.kind, parts: reviewParts }) : [];
   const failureLines = failure ? describeMonthlyFindings([...failure.report.severe, ...failure.report.light], { kind: lesson.kind, parts: failedParts }) : [];
   const kindLabel = lesson.kind === "review" ? "Ôn tập" : "Bài mới";
@@ -647,7 +642,7 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
   return <OperatorPage title={`${kindLabel} ${dateLabel}`} hideRouteBack><PageTitle actions={<div className="row operator-page-title-actions">
     {onApprove && <Button primary className="operator-lesson-approve-button" disabled={busy} onClick={() => void onApprove()}><Check className="operator-button-icon" size={16} strokeWidth={2.5} aria-hidden="true" />Duyệt bài</Button>}
     {onRegenerate && <Button danger disabled={busy} onClick={() => void onRegenerate()}><Sparkles className="operator-button-icon" size={16} aria-hidden="true" />{busy ? "Đang sinh…" : "Sinh lại bằng AI"}</Button>}
-    {onEdit && <Button className="operator-lesson-edit-button" disabled={busy} onClick={onEdit}><Pencil className="operator-button-icon" size={16} aria-hidden="true" />Sửa tay</Button>}
+    {onEdit && <Button className="operator-lesson-edit-button" disabled={busy} onClick={() => onEdit()}><Pencil className="operator-button-icon" size={16} aria-hidden="true" />Sửa tay</Button>}
     {onRequestReopen && <Button className="operator-lesson-reopen-button" disabled={busy} onClick={() => setRequestingReopen(true)}>Yêu cầu mở lại</Button>}
   </div>}>
     <a className="link-button small" href="/op/months" onClick={(event) => { event.preventDefault(); onClose(); }}>← Về lịch tháng</a>
@@ -656,13 +651,8 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
   </PageTitle>
     {/* The findings stay at the top of the view while the lesson below is scrolled, so the Operator always sees what to fix and where. */}
     {(draftLines.length > 0 || failure) && <div className="operator-monthly-findings-dock">
-      {draftLines.length > 0 && <MonthlyFindingsPanel label="Kiểm tra chất lượng bản nháp" title="Kiểm tra chất lượng bản nháp" badge={{ tone: draftSevere ? "danger" : "warn", text: draftSevere ? "Chưa duyệt được" : "Có cảnh báo" }} lines={draftLines} testId={`monthly-draft-quality-${lesson.lessonNumber}`}>
-        <p className="small"><strong>Bước tiếp theo:</strong> {draftNextStep}</p>
-      </MonthlyFindingsPanel>}
-      {failure && <MonthlyFindingsPanel label="Lần sinh AI chưa đạt" title="Lần sinh AI gần nhất chưa đạt" badge={{ tone: "danger", text: "Không duyệt được" }} lines={failureLines} testId={`monthly-generation-failure-${lesson.lessonNumber}`}>
-        <p className="small muted">Sinh lúc {new Date(failure.failedAt).toLocaleString("vi-VN")} sau {failure.attempts} vòng sửa. {parts.length ? "Bản nháp hiện có vẫn được giữ nguyên; bản AI này nằm cuối trang." : "Bản AI này chưa phải bản nháp nên chưa duyệt được."}</p>
-        {editCandidate && <div className="row between operator-monthly-findings-next"><p className="small"><strong>Bước tiếp theo:</strong> Bấm Sửa bản AI này, sửa các mục được báo, lưu rồi duyệt.</p><Button className="operator-lesson-edit-button" disabled={busy} onClick={onEdit}><Pencil className="operator-button-icon" size={16} aria-hidden="true" />Sửa bản AI này</Button></div>}
-      </MonthlyFindingsPanel>}
+      {draftLines.length > 0 && <MonthlyFindingsPanel label="Kiểm tra chất lượng bản nháp" title="Kiểm tra chất lượng bản nháp" badge={{ tone: draftSevere ? "danger" : "warn", text: draftSevere ? "Chưa duyệt được" : "Có cảnh báo" }} lines={draftLines} onEditLine={onEdit && !busy ? (line) => onEdit(line.key) : undefined} testId={`monthly-draft-quality-${lesson.lessonNumber}`} />}
+      {failure && <MonthlyFindingsPanel label="Lần sinh AI chưa đạt" title="Lần sinh AI gần nhất chưa đạt" badge={{ tone: "danger", text: "Không duyệt được" }} lines={failureLines} onEditLine={editCandidate && !busy ? (line) => onEdit?.(line.key) : undefined} testId={`monthly-generation-failure-${lesson.lessonNumber}`} />}
     </div>}
     <div className={`card operator-monthly-lesson${lesson.kind === "review" ? " is-review" : ""}`} data-testid={`monthly-lesson-${lesson.lessonNumber}`}>
       <div className="row between operator-card-header"><h3>{title}</h3></div>

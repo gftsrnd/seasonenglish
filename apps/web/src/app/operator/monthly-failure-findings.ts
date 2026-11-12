@@ -19,8 +19,12 @@ export const MONTHLY_REVIEW_SECTIONS: ReadonlyArray<{ code: string; title: strin
 
 type Part = { code?: string; title?: string; content?: Record<string, unknown> };
 export interface MonthlyFindingContext { kind: "new" | "review"; parts: readonly Part[] }
-/** `component` is the lesson part the line points at (e.g. "word_use"), `code` the gate finding code. */
-export interface MonthlyFindingLine { key: string; code: string; component: string; severity: "severe" | "light"; where: string; what: string }
+/**
+ * `component` is the lesson part the line points at (e.g. "word_use"), `code` the gate finding code.
+ * `item`/`variant` (1-based) name the exact review question and retry version, `option` (0-based) the
+ * flagged answer choice, when the gate says so; the editor jumps to that field.
+ */
+export interface MonthlyFindingLine { key: string; code: string; component: string; severity: "severe" | "light"; where: string; what: string; item?: number; variant?: number; option?: number }
 
 const CHOICE_CODES = "listening|reading|writing|word_class|word_use|grammar|speaking";
 const LABEL = new RegExp(`^(${CHOICE_CODES})(?: item (\\d+)(?: variant (\\d+))?)?`, "u");
@@ -34,18 +38,27 @@ const REPLACE_REAL_WORD = "thay bằng một từ tiếng Anh có thật.";
  */
 export function describeMonthlyFindings(findings: readonly MonthlyQualityFindingView[], context: MonthlyFindingContext): MonthlyFindingLine[] {
   return findings.flatMap((finding, index) => describeFinding(finding, context).map((line, lineIndex) => ({
-    key: `${finding.code}-${index}-${lineIndex}`, code: finding.code, component: line.component ?? finding.component ?? "", severity: finding.severity, where: line.where, what: line.what
+    key: `${finding.code}-${index}-${lineIndex}`, code: finding.code, component: line.component ?? finding.component ?? "", severity: finding.severity, where: line.where, what: line.what,
+    ...(line.item ? { item: line.item } : {}), ...(line.variant ? { variant: line.variant } : {}), ...(line.option !== undefined ? { option: line.option } : {})
   })));
 }
 
-function describeFinding(finding: MonthlyQualityFindingView, context: MonthlyFindingContext): Array<{ where: string; what: string; component?: string }> {
+type DescribedLine = { where: string; what: string; component?: string; item?: number; variant?: number; option?: number };
+
+function describeFinding(finding: MonthlyQualityFindingView, context: MonthlyFindingContext): DescribedLine[] {
   const component = finding.component ?? "";
   const section = sectionLabel(component, context);
   const message = finding.message;
   const single = (what: string) => [{ where: section, what }];
-  const perLabel = (body: string, describe: (segment: LabelSegment) => string) => {
+  const perLabel = (body: string, describe: (segment: LabelSegment) => string, option?: (segment: LabelSegment) => number | undefined): DescribedLine[] | null => {
     const segments = labelSegments(body);
-    return segments.length ? segments.map((segment) => ({ where: sectionLabel(segment.code, context, segment), what: describe(segment), component: segment.code })) : null;
+    return segments.length ? segments.map((segment) => {
+      const optionIndex = option?.(segment);
+      return {
+        where: sectionLabel(segment.code, context, segment), what: describe(segment), component: segment.code,
+        ...(segment.item ? { item: segment.item } : {}), ...(segment.variant ? { variant: segment.variant } : {}), ...(optionIndex !== undefined ? { option: optionIndex } : {})
+      };
+    }) : null;
   };
   switch (finding.code) {
     case "MONTHLY_INVENTED_WORD_FORM":
@@ -54,7 +67,10 @@ function describeFinding(finding: MonthlyQualityFindingView, context: MonthlyFin
         if (!words.length) return `Có từ không có thật; ${REPLACE_REAL_WORD}`;
         const option = optionContaining(context.parts, segment, words[0]!);
         const quoted = words.map(quote).join(", ");
-        return option ? `Lựa chọn ${option} dùng từ không có thật ${quoted}; ${REPLACE_REAL_WORD}` : `Có từ không có thật ${quoted}; ${REPLACE_REAL_WORD}`;
+        return option !== undefined ? `Lựa chọn ${String.fromCharCode(65 + option)} dùng từ không có thật ${quoted}; ${REPLACE_REAL_WORD}` : `Có từ không có thật ${quoted}; ${REPLACE_REAL_WORD}`;
+      }, (segment) => {
+        const word = (segment.detail ?? "").split(/,\s*/u).map((value) => value.trim()).find(Boolean);
+        return word ? optionContaining(context.parts, segment, word) : undefined;
       }) ?? single(`Có từ không có thật; ${REPLACE_REAL_WORD}`);
     case "MONTHLY_WORD_FORM_ASKS_WORD_CLASS":
       return perLabel(afterMarker(message, "Fix: "), () => "Câu hỏi đang hỏi từ loại; hãy viết một câu công việc có một chỗ trống (____) để học viên chọn dạng đúng của từ.")
@@ -164,8 +180,8 @@ function sectionLabel(component: string, context: MonthlyFindingContext, segment
   return `${title}${itemSuffix}`;
 }
 
-/** Letter (A, B, …) of the option that contains `word`, as the preview letters them. */
-function optionContaining(parts: readonly Part[], segment: LabelSegment, word: string): string | undefined {
+/** Index of the option that contains `word` (the preview letters it A, B, …). */
+function optionContaining(parts: readonly Part[], segment: LabelSegment, word: string): number | undefined {
   const content = parts.find((part) => part.code === segment.code)?.content;
   let target: unknown = content;
   if (segment.item) target = asList(content?.items)[segment.item - 1];
@@ -173,7 +189,7 @@ function optionContaining(parts: readonly Part[], segment: LabelSegment, word: s
   const options = asList((target as Record<string, unknown> | undefined)?.options).filter((option): option is string => typeof option === "string");
   const pattern = new RegExp(`(?<![\\p{L}])${word.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?![\\p{L}])`, "iu");
   const index = options.findIndex((option) => pattern.test(option));
-  return index >= 0 ? String.fromCharCode(65 + index) : undefined;
+  return index >= 0 ? index : undefined;
 }
 
 function asList(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }

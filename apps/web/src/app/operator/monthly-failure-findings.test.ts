@@ -14,7 +14,7 @@ describe("describeMonthlyFindings", () => {
   it("says where (exercise number as the preview shows it) and what to fix, in Vietnamese", () => {
     expect(describeMonthlyFindings([invented], { kind: "new", parts: dailyParts })).toEqual([{
       key: "MONTHLY_INVENTED_WORD_FORM-0-0", code: "MONTHLY_INVENTED_WORD_FORM", component: "word_use", severity: "severe", where: "Câu 5 · Dùng từ",
-      what: "Lựa chọn C dùng từ không có thật “colleagueing”; thay bằng một từ tiếng Anh có thật."
+      what: "Lựa chọn C dùng từ không có thật “colleagueing”; thay bằng một từ tiếng Anh có thật.", option: 2
     }]);
   });
 
@@ -25,6 +25,8 @@ describe("describeMonthlyFindings", () => {
       "Phần 2 · Word use · câu 2: Lựa chọn A dùng từ không có thật “sended”; thay bằng một từ tiếng Anh có thật.",
       "Phần 2 · Word use · câu 1 (bản làm lại 1): Có từ không có thật “maked”; thay bằng một từ tiếng Anh có thật."
     ]);
+    // The editor lands on the exact question, retry version and answer choice.
+    expect(lines.map(({ item, variant, option }) => ({ item, variant, option }))).toEqual([{ item: 2, variant: undefined, option: 0 }, { item: 1, variant: 1, option: undefined }]);
   });
 
   it("maps answer-key findings and keeps the gate text for unknown codes", () => {
