@@ -188,14 +188,23 @@ export function AppGuide({ role, pathname, compact }: { role: GuideRole; pathnam
       // The app bar across the top (desktop also has a tall sidebar <header>; ignore it).
       const header = Array.from(document.querySelectorAll("#root > header"), element => element.getBoundingClientRect())
         .find(box => box.height > 0 && box.height < 160 && box.width > window.innerWidth / 2);
-      const top = Math.max(compact ? 64 : 12, header && header.bottom > 0 && header.top <= 0 ? header.bottom + 8 : 0);
-      const bottom = panel.top - 10;
+      let top = Math.max(compact ? 64 : 12, header && header.bottom > 0 && header.top <= 0 ? header.bottom + 8 : 0);
+      let bottom = panel.top - 10;
+      const scroller = guideScroller(activeTarget);
+      // Inside a popup the visible band is the popup's own scrolling body (below its sticky header), not the window:
+      // aligning to the window top hid the card under the popup's edge.
+      if (scroller !== document.scrollingElement && scroller !== document.documentElement && scroller.closest("[role=dialog], .dialog")) {
+        const box = scroller.getBoundingClientRect();
+        const sticky = Array.from(scroller.querySelectorAll<HTMLElement>(":scope > header, :scope > * > header"))
+          .find(element => getComputedStyle(element).position === "sticky")?.getBoundingClientRect();
+        top = Math.max(top, box.top + 8, sticky && sticky.height < 200 ? sticky.bottom + 8 : 0);
+        bottom = Math.min(bottom, box.bottom - 8);
+      }
       if (bottom - top < 80) return; // no usable band above the box (e.g. a very short window)
       const rect = activeTarget.getBoundingClientRect();
       const fits = rect.height <= bottom - top;
       const hidden = rect.top < top - 1 || (fits ? rect.bottom > bottom + 1 : rect.top > bottom - 72);
       if (!hidden) return;
-      const scroller = guideScroller(activeTarget);
       engineScrollUntil.current = Date.now() + 2000;
       if (typeof scroller.scrollBy === "function") scroller.scrollBy({ top: rect.top - top, behavior });
       else scroller.scrollTop += rect.top - top;
