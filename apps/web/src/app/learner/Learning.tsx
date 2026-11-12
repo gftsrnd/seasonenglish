@@ -1060,7 +1060,15 @@ function VocabularyCard({
   const extendedRelations: VocabularyRelationChip[] = isB1Plus
     ? lexicalDetails
       .filter((detail) => !detailedRelationWords.has(`${detail.kind}:${detail.word.trim().toLocaleLowerCase()}`))
-      .map((detail) => ({
+      .map((detail) => detail.kind === "slang" || detail.kind === "poetic" ? {
+        // Slang / formal alternatives: same chip shape as synonyms (word + definition icon), own colour, no translation.
+        tag: lexicalKindLabel(detail.kind, language),
+        label: detail.word,
+        ariaLabel: `${language === "en" ? "Listen" : "Nghe"} ${lexicalKindLabel(detail.kind, language)}: ${detail.word}`,
+        tone: "register" as const,
+        onClick: () => speak(detail.word),
+        ...(detail.definition?.trim() ? { meaning: detail.definition.trim(), meaningLang: "en" as const } : {})
+      } : ({
         label: `${lexicalKindLabel(detail.kind, language)} · ${detail.word}`,
         ariaLabel: `${language === "en" ? "View" : "Xem"} ${lexicalKindLabel(detail.kind, language)}: ${detail.word}`,
         tone: detail.kind === "synonym" ? "synonym" as const : detail.kind === "antonym" ? "antonym" as const : detail.kind === "slang" ? "mid" as const : "low" as const,
@@ -1162,7 +1170,7 @@ function LexicalModal({ item, detail, speak, language }: { item: LessonVocabular
 }
 
 function lexicalKindLabel(kind: LessonVocabularyLexicalDetail["kind"], language: LearnerLessonLanguage = "vi"): string {
-  if (language === "en") return kind === "synonym" ? "Synonym" : kind === "antonym" ? "Antonym" : kind === "slang" ? "Slang" : "Register";
+  if (language === "en") return kind === "synonym" ? "Synonym" : kind === "antonym" ? "Antonym" : kind === "slang" ? "Slang" : "Formal";
   return kind === "synonym" ? "Đồng nghĩa" : kind === "antonym" ? "Trái nghĩa" : kind === "slang" ? "Khẩu ngữ" : "Văn phong";
 }
 

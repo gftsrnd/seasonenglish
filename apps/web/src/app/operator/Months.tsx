@@ -174,7 +174,8 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
   } : proposedResourceCounts;
   const resources = [
     { key: "core" as const, label: "Từ cốt lõi", count: framework?.resources?.coreTerms.length ?? 0, description: "Headword trọng tâm" },
-    { key: "expanded" as const, label: "Từ mở rộng", count: framework?.resources?.supportTerms.length ?? 0, description: "3–9 từ mỗi từ cốt lõi" },
+    // Slang / formal alternatives (B1–C1) are listed and numbered inside the expanded panel, so the card counts them too.
+    { key: "expanded" as const, label: "Từ mở rộng", count: (framework?.resources?.supportTerms.length ?? 0) + (framework?.resources?.coreTerms ?? []).reduce((total, core) => total + (core.registerTerms?.length ?? 0), 0), description: "3–9 từ mỗi từ cốt lõi" },
     { key: "grammar" as const, label: "Ngữ pháp", count: framework?.resources?.grammarTopics.length ?? 0, description: "Điểm ngữ pháp cần dùng" },
     { key: "sounds" as const, label: "Phát âm", count: framework?.resources?.sounds.length ?? 0, description: "Âm và ví dụ thực hành" },
     ...(illustrations ? [{ key: "images" as const, label: "Ảnh minh họa", count: illustrations.images.filter((image) => image.status === "ready").length, description: `/${illustrations.images.length} từ có ảnh` }] : [])
@@ -730,8 +731,7 @@ function VocabularyPanel({ items, variant, registerCores = [] }: { items: Array<
       const standalone = isStandaloneWord(item.word);
       return <li key={item.id} className={standalone ? "standalone" : "phrase"}><i>{index + 1}</i><b>{item.word}</b><small>{variant === "core" ? "Headword" : standalone ? "Từ đơn" : "Cụm bổ trợ"}</small><span>{item.meaning}</span>{item.ipa && <em>{item.ipa}</em>}</li>;
     })}</ol>
-    {variant === "expanded" && registerTerms.length > 0 && <section className="monthly-vocabulary-guidance register" aria-label="Quy tắc khẩu ngữ và văn phong"><b>{registerTerms.length} khẩu ngữ / văn phong</b><span>Cách nói khác của từ cốt lõi, không tính là từ mới và không có bản dịch.</span></section>}
-    {variant === "expanded" && registerTerms.length > 0 && <ul className="monthly-resource-collection expanded register" aria-label="Khẩu ngữ và văn phong">{registerTerms.map((term) => <li key={`${term.coreId}-${term.kind}-${term.word}`} className={isStandaloneWord(term.word) ? "standalone" : "phrase"}><i aria-hidden="true">↳</i><b>{term.word}</b><small>{term.kind === "slang" ? "Khẩu ngữ" : "Văn phong"} · {term.coreWord}</small><span>{term.definition}</span></li>)}</ul>}
+    {variant === "expanded" && registerTerms.length > 0 && <ol className="monthly-resource-collection expanded register" aria-label="Khẩu ngữ và văn phong">{registerTerms.map((term, index) => <li key={`${term.coreId}-${term.kind}-${term.word}`} className={isStandaloneWord(term.word) ? "standalone" : "phrase"}><i>{visible.length + index + 1}</i><b>{term.word}</b><small>{term.kind === "slang" ? "Khẩu ngữ" : "Văn phong"} · {term.coreWord}</small><span>{term.definition}</span></li>)}</ol>}
   </>;
 }
 

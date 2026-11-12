@@ -8,7 +8,9 @@ import { MeaningPopupControl } from "./GrammarExampleButton.js";
 export interface VocabularyRelationChip {
   label: string;
   ariaLabel?: string;
-  tone?: "good" | "mid" | "low" | "umb" | "synonym" | "antonym" | "family";
+  tone?: "good" | "mid" | "low" | "umb" | "synonym" | "antonym" | "family" | "register";
+  /** Small uppercase tag before the label (e.g. SLANG / FORMAL). */
+  tag?: string;
   count?: number;
   icon?: "umbrella" | "family";
   onClick?: (() => void) | undefined;
@@ -43,7 +45,7 @@ export function VocabularyCard({ item, loadImage, speak, relations = [], languag
     {item.examples?.slice(3).map((example, index) => item.exampleAudioUrls?.[index + 3] ? <div className="vocabulary-card-example" key={example}><span className="vocabulary-card-label">{copy.vocabulary.examples}</span><VocabularyAudioButton src={item.exampleAudioUrls[index + 3]!} label={`${copy.modal.listen} ${copy.vocabulary.examples.toLocaleLowerCase()} ${index + 1}: ${example}`} visibleLabel={example} fallback={() => speak(example)} /></div> : <div className="vocabulary-card-example" key={example}><span className="vocabulary-card-label">{copy.vocabulary.examples}</span><VocabularySpeechButton text={example} label={`${copy.modal.listen} ${copy.vocabulary.examples.toLocaleLowerCase()} ${index + 1}: ${example}`} visibleLabel={example} speak={speak} /></div>)}
     {relations.length ? <div className="vocabulary-card-relations" aria-label={copy.vocabulary.relations}>{relations.map((relation) => {
       const className = `chip${relation.tone ? ` ${relation.tone}` : ""}`;
-      const content = <>{relation.icon === "umbrella" ? <Umbrella size={14} aria-hidden="true" /> : relation.icon === "family" ? <Users size={14} aria-hidden="true" /> : null}<span className="vocabulary-card-chip-label">{relation.label}</span>{relation.count ? <span className="vocabulary-card-chip-count">+{relation.count}</span> : null}</>;
+      const content = <>{relation.icon === "umbrella" ? <Umbrella size={14} aria-hidden="true" /> : relation.icon === "family" ? <Users size={14} aria-hidden="true" /> : null}{relation.tag ? <span className="vocabulary-card-chip-tag">{relation.tag}</span> : null}<span className="vocabulary-card-chip-label">{relation.label}</span>{relation.count ? <span className="vocabulary-card-chip-count">+{relation.count}</span> : null}</>;
       const chip = relation.onClick
         ? <button className={className} type="button" title={relation.label} aria-label={relation.ariaLabel ?? (relation.count ? `${relation.label} · ${relation.count} từ` : relation.label)} onClick={relation.onClick} key={relation.ariaLabel ?? relation.label}>{content}</button>
         : <span className={className} key={relation.label}>{content}</span>;

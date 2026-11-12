@@ -181,6 +181,8 @@
 
 .vocabulary-card-relations .chip.synonym { border-color: #b6cc82; background: #e9f1d5; color: #294414; }
 .vocabulary-card-relations .chip.antonym { border-color: #e6b7ad; background: #f8e3de; color: #7d271b; }
+.vocabulary-card-relations .chip.register { border-color: #cdbfe6; background: #f1ecfa; color: #3b2a66; }
+.vocabulary-card-relations .chip .vocabulary-card-chip-tag { margin-right: 6px; font-size: .62rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; opacity: .75; }
 .vocabulary-card-relations .chip.family { border-color: var(--line); background: var(--surface-2); color: var(--text); }
 
 .vocabulary-relation-detail {

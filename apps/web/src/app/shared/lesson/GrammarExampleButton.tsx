@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Languages, Volume2 } from "lucide-react";
+import { BookOpen, Languages, Volume2 } from "lucide-react";
 import "./meaning-popup.css";
 
 /** Mouse events a touch screen emulates right after a tap are ignored for this long. */
@@ -80,7 +80,7 @@ export function MeaningPopupControl({ hint, label, lang, variant, children }: {
       onClick={(event) => { event.stopPropagation(); const next = !(open && pinned.current); pinned.current = next; setOpen(next); }}
       onMouseEnter={() => { if (hovering()) setOpen(true); }}
       onMouseLeave={() => { if (hovering() && !pinned.current) setOpen(false); }}
-    ><Languages size={16} aria-hidden="true" /></button>
+    >{lang === "en" ? <BookOpen size={16} aria-hidden="true" /> : <Languages size={16} aria-hidden="true" />}</button>
     <span ref={popup} id={tooltipId} role="tooltip" className="lesson-example-translation" lang={lang} hidden={!open}>{text}</span>
   </span>;
 }

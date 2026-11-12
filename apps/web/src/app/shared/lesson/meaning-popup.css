@@ -69,6 +69,7 @@
 .lesson-example-wrap--phrase { --meaning-divider: #e5e0da; }
 .lesson-example-wrap--chip:has(> .chip.synonym) { --meaning-divider: #b6cc82; }
 .lesson-example-wrap--chip:has(> .chip.antonym) { --meaning-divider: #e6b7ad; }
+.lesson-example-wrap--chip:has(> .chip.register) { --meaning-divider: #cdbfe6; }
 
 /* Floating meaning popup: a small card under the control (above it near the viewport bottom). */
 .lesson-example-wrap.lesson-example-wrap > .lesson-example-translation {
