@@ -129,6 +129,28 @@ describe("monthly content persistence", () => {
     expect(overview.frameworks[0]?.lessons[0]).toMatchObject({ status: "approved", locked: true, correctionCount: 1 });
   });
 
+  it("caps light findings per lesson, not summed over the month", async () => {
+    const framework = (await repository.getOverview(DEMO_IDS.operator, month)).frameworks[0]!;
+    const light = (dayNumber: number, count: number) => Array.from({ length: count }, (_, index) => ({
+      severity: "light" as const, code: `MONTHLY_TEST_LIGHT_${index}`, message: `Light finding ${index}`, dayNumber, component: "reading"
+    }));
+    // Days 2 and 3 carry two light findings each: four for the month, still approvable one lesson at a time.
+    for (const dayNumber of [2, 3]) {
+      await repository.saveMonthlyDayDraft(DEMO_IDS.operator, framework.id, dayNumber, { title: `Day ${dayNumber}`, parts: [] },
+        { contractVersion: framework.version, severe: [], light: light(dayNumber, 2) });
+      await repository.acknowledgeMonthlyDayQuality(DEMO_IDS.operator, framework.id, dayNumber, [0, 1].map((index) => `MONTHLY_TEST_LIGHT_${index}:${dayNumber}:reading`));
+      await repository.approveMonthlyDay(DEMO_IDS.operator, framework.id, dayNumber);
+    }
+    // A lesson with three light findings is still blocked.
+    await repository.saveMonthlyDayDraft(DEMO_IDS.operator, framework.id, 4, { title: "Day 4", parts: [] },
+      { contractVersion: framework.version, severe: [], light: light(4, 3) });
+    const keys = [0, 1, 2].map((index) => `MONTHLY_TEST_LIGHT_${index}:4:reading`);
+    await expect(repository.acknowledgeMonthlyDayQuality(DEMO_IDS.operator, framework.id, 4, keys)).rejects.toThrow(/two-light/i);
+    await expect(repository.approveMonthlyDay(DEMO_IDS.operator, framework.id, 4)).rejects.toThrow(/quá hai cảnh báo/i);
+    const overview = await repository.getOverview(DEMO_IDS.operator, month);
+    expect(overview.frameworks[0]?.lessons.filter((lesson) => [2, 3].includes(lesson.lessonNumber)).map((lesson) => lesson.status)).toEqual(["approved", "approved"]);
+  });
+
   it("makes only approved monthly lessons at the learner's CEFR available to the learner", async () => {
     await client.query("update enrollments set cefr = 'A1' where learner_id = $1", [DEMO_IDS.learner]);
     const lessons = await createRepositories(client as unknown as Pool).learning.listMonthlyLessons(DEMO_IDS.learner, month);

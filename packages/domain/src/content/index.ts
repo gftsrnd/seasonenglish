@@ -305,7 +305,10 @@ export function containsVietnameseLearnerText(value: unknown): boolean {
 
 function learnerFacingPartContainsVietnamese(part: LessonPart, locked?: Readonly<Record<string, string>>): boolean {
   const visit = (value: unknown, parentKey = ""): boolean => {
-    if (/meaning$/i.test(parentKey) && part.code === "vocabulary") return false;
+    // Vocabulary meanings may be Vietnamese. The plan attaches synonym/antonym
+    // meanings as `note` and illustration credits as `imageAttribution`; both
+    // are meaning/metadata, not learner instructions.
+    if (part.code === "vocabulary" && (/meaning$/i.test(parentKey) || parentKey === "note" || parentKey === "imageAttribution")) return false;
     if (containsVietnameseLearnerText(value)) return true;
     if (Array.isArray(value)) return value.some((item) => visit(item, parentKey));
     if (!value || typeof value !== "object") return false;

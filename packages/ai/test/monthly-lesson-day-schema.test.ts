@@ -12,6 +12,15 @@ describe("monthly lesson day output schema", () => {
     const schema = monthlyLessonDayOutputJsonSchema.properties.parts.items.properties.content.properties.steps.items.anyOf;
     expect(schema).toEqual(expect.arrayContaining([expect.objectContaining({type:"object",required:["formula","text","examples"]}),{type:"string"}]));
   });
+  it("declares review item variants in the tool schema and keeps them through parsing", () => {
+    const itemSchema = monthlyLessonDayOutputJsonSchema.properties.parts.items.properties.content.properties.items.items.anyOf
+      .find((entry) => "properties" in entry) as { properties: Record<string, { type: string; minItems?: number; items?: { properties: Record<string, unknown> } }> };
+    expect(itemSchema.properties.variants).toMatchObject({ type: "array", minItems: 1, maxItems: 1 });
+    expect(Object.keys(itemSchema.properties.variants!.items!.properties)).toEqual(expect.arrayContaining(["prompt", "options", "answer", "explanation"]));
+    const variant = { prompt: "Choose: The team ___ the report.", options: ["sends", "send", "sending", "sent to"], answer: "sends", explanation: "Third person singular." };
+    const fixture = { title: "Weekly review", parts: [{ code: "word_use", content: { items: [{ id: "w1", prompt: "Choose: She ___ the file.", options: ["checks", "check", "checking", "checked to"], answer: "checks", explanation: "Present simple.", variants: [variant] }] } }] };
+    expect((monthlyLessonDayOutputSchema.parse(fixture).lesson.parts[0]?.content.items as Array<{ variants: unknown[] }>)[0]?.variants).toEqual([variant]);
+  });
   it("exposes a flat tool schema with no single wrapper object", () => {
     expect(monthlyLessonDayOutputJsonSchema.required).toEqual(["title", "parts"]);
     expect(Object.keys(monthlyLessonDayOutputJsonSchema.properties)).toEqual(["title", "parts"]);

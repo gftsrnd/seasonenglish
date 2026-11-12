@@ -305,6 +305,26 @@ describe("content publishing policy", () => {
     expect(result).toEqual({ valid: true, issues: [] });
   });
 
+  it("treats plan-attached synonym/antonym notes and illustration credits as vocabulary meanings at B1+", () => {
+    const withRelations = (dayNumber: number, extra: Record<string, unknown>) => {
+      const lesson = englishLesson(dayNumber);
+      const vocabulary = lesson.parts.find((part: any) => part.code === "vocabulary");
+      vocabulary.content.items = vocabulary.content.items.map((item: any) => ({ ...item, ...extra }));
+      return lesson;
+    };
+    const attached = {
+      synonyms: [{ word: "verify", note: "xác minh" }],
+      antonyms: [{ word: "reject", note: "từ chối" }],
+      imageAttribution: { creator: "E4S (AI minh họa)", licence: "Nội dung nội bộ", licenceUrl: "", sourceUrl: "/x.png" }
+    };
+    const vocabularyIssues = (lessons: any[]) => validateLessonPublication(lessons, undefined, "B1").issues.filter((issue) => issue.code === "vocabulary");
+    expect(vocabularyIssues([1, 2, 3, 4, 5].map((day) => withRelations(day, attached)))).toEqual([]);
+    // Any other Vietnamese vocabulary text (here an example sentence) is still rejected.
+    expect(vocabularyIssues([withRelations(1, { ...attached, examples: ["Hãy dùng từ này trong câu."] })])).toEqual([
+      expect.objectContaining({ code: "vocabulary", message: expect.stringContaining("English") })
+    ]);
+  });
+
   it("retires a publication without changing its content payload", () => {
     const payload = { lessons: [completeLesson] };
     expect(retirePublishedContent({ status: "published", payload })).toEqual({ status: "retired", payload });

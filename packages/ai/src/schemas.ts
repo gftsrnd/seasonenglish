@@ -1698,7 +1698,22 @@ export const monthlyLessonDayOutputJsonSchema = {
             description: MONTHLY_LESSON_PART_CONTENT_CONTRACT,
             properties: {
               text: { type: "string", description: "objective/instruction text; for reading this is the reading passage (required for reading)." },
-              items: { type: "array", description: "objective items, or vocabulary items [{ word, type, ipa, meaning, collocations: exactly 3 short English phrases containing the word, synonyms, antonyms }] (vocabulary needs at least 3), or - in a Friday review exercise section - the complete list of review items with the exact count the review contract gives for that section (never a single item)." },
+              items: { type: "array", description: "objective items, or vocabulary items [{ word, type, ipa, meaning, collocations: exactly 3 short English phrases containing the word, synonyms, antonyms }] (vocabulary needs at least 3), or - in a Friday review exercise section - the complete list of review items with the exact count the review contract gives for that section (never a single item); every review item carries variants.",
+                items: { anyOf: [
+                  { type: "string" },
+                  { type: "object", additionalProperties: true, properties: {
+                    id: { type: "string" }, prompt: { type: "string" }, options: { type: "array", items: { type: "string" } },
+                    answer: { type: "string" }, explanation: { type: "string" },
+                    variants: {
+                      type: "array", minItems: 1, maxItems: 1,
+                      description: "Friday review exercise items: exactly 1 alternative item testing the same point in a different workplace context, with the same fields as the item (prompt, options, answer, explanation; never a copy). Shown when the learner retries.",
+                      items: { type: "object", additionalProperties: true, properties: {
+                        id: { type: "string" }, prompt: { type: "string" }, options: { type: "array", items: { type: "string" } },
+                        answer: { type: "string" }, explanation: { type: "string" }
+                      } }
+                    }
+                  } }
+                ] } },
               steps: { type: "array", items: { anyOf: [
                 { type: "string" },
                 { type: "object", required: ["formula", "text", "examples"], additionalProperties: false, properties: {

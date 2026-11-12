@@ -758,14 +758,10 @@ export class MonthlyContentRepository {
     if (expected.length > 0 && (expected.length !== findingKeys.length || expected.some((key) => !findingKeys.includes(key)))) {
       throw new Error("Operator must acknowledge every light finding individually");
     }
-    const count = await this.database.query<{ light_count: string }>(
-      `select coalesce(sum(jsonb_array_length(ml.quality_report->'light')), 0)::text as light_count
-       from month_lessons ml where ml.framework_id = $1`,
-      [frameworkId]
-    );
+    // The light-finding cap is per lesson (one or two light issues may be
+    // acknowledged); a month of 20+ lessons is never summed against it.
     const currentDayLightCount = day.quality_report.light.length;
-    const totalLightCount = Number(count.rows[0]?.light_count ?? 0);
-    if (totalLightCount > 2) throw new Error("Monthly framework exceeds the two-light-finding limit");
+    if (currentDayLightCount > 2) throw new Error("Monthly lesson exceeds the two-light-finding limit");
     const acknowledgement: OperatorAcknowledgementView = { actorId, acknowledgedAt: new Date().toISOString(), findingCodes: findingKeys };
     await this.database.query("update month_lessons set quality_acknowledgement = $2::jsonb where id = $1", [day.id, JSON.stringify(acknowledgement)]);
     await this.audit(actor, "monthly.day_quality_acknowledged", day.id, { frameworkId, dayNumber, findingKeys, currentDayLightCount });
@@ -786,12 +782,7 @@ export class MonthlyContentRepository {
     const day = result.rows[0];
     if (!day || !day.lesson_id) throw httpError(404, "MONTHLY_DAY_DRAFT_NOT_FOUND", "Không tìm thấy bản nháp bài học.");
     if (day.status !== "draft" || day.quality_report.severe.length) throw httpError(409, "MONTHLY_DAY_QUALITY_BLOCKED", "Bài chưa thể duyệt. Hãy mở bản nháp và sửa các mục chất lượng trước khi duyệt lại.");
-    const count = await this.database.query<{ light_count: string }>(
-      `select coalesce(sum(jsonb_array_length(ml.quality_report->'light')), 0)::text as light_count
-       from month_lessons ml where ml.framework_id = $1`,
-      [frameworkId]
-    );
-    if (Number(count.rows[0]?.light_count ?? 0) > 2) throw httpError(409, "MONTHLY_DAY_QUALITY_BLOCKED", "Khung tháng có quá hai cảnh báo. Hãy sửa bớt cảnh báo trước khi duyệt bài.");
+    if (day.quality_report.light.length > 2) throw httpError(409, "MONTHLY_DAY_QUALITY_BLOCKED", "Bài có quá hai cảnh báo. Hãy sửa bớt cảnh báo trước khi duyệt bài.");
     const expectedKeys = day.quality_report.light.map(qualityFindingKey);
     const acknowledged = new Set(day.quality_acknowledgement?.findingCodes ?? []);
     if (expectedKeys.some((key) => !acknowledged.has(key))) throw httpError(409, "MONTHLY_DAY_QUALITY_ACK_REQUIRED", "Hãy kiểm tra và xác nhận từng cảnh báo trước khi duyệt.");
