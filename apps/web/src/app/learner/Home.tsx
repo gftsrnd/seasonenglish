@@ -160,6 +160,11 @@ function PrimaryLesson({ view, next, actions }: { view: LearnerHomeView; next: L
 
 function lessonTimingLabel(view: LearnerHomeView, lesson: LearnerHomeView["lessons"][number]) {
   if (lesson.status === "completed" || lesson.lock) return "";
+  // Monthly lessons carry their own date: "học bù" only when it is before the learner's current
+  // (simulated) date. The weekday labels below assumed dayNumber = weekday, so on 01/12 the
+  // December lesson 1 (a Tuesday) was shown as a make-up lesson.
+  const today = view.month?.systemDate ?? view.schedule.days.find((day) => day.status === "today")?.date;
+  if (lesson.lessonDate && today) return lesson.lessonDate < today ? "học bù" : lesson.lessonDate === today && lesson.status === "in_progress" ? "hôm nay" : "";
   const todayLabel = view.schedule.days.find((day) => day.status === "today")?.label;
   if (lesson.status === "in_progress") return todayLabel === `T${lesson.dayNumber + 1}` ? "hôm nay" : "học bù";
   return view.schedule.days.find((day) => day.label === `T${lesson.dayNumber + 1}`)?.status === "missed" ? "học bù" : "";

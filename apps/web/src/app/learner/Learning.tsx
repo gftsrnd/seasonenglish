@@ -330,7 +330,9 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
       <AppLink className="lesson-back" href="/home" navigate={actions.navigate} ariaLabel="Về trang chủ" title="Về trang chủ" style={{ minWidth: 32, minHeight: 32 }}><ChevronLeft size={22} aria-hidden="true" /></AppLink>
       <PageTitle
         title={`${learnerLessonLabel(lesson)} · ${lesson.weekTopic}`}
-        detail={grammarAvailable ? <span className="badge lesson-structure-chip"><span>{language === "en" ? "Structure" : "Cấu trúc"}</span><span data-lesson-structure>{lesson.title}</span></span> : undefined}
+        // December 2026 (#15/N5): no "CẤU TRÚC" step label above a recognition-step lesson; like 5a9fbf0,
+        // the learner view shows the lesson's own title without roadmap step labels.
+        detail={grammarAvailable ? <span className="badge lesson-structure-chip"><span data-lesson-structure>{lesson.title}</span></span> : undefined}
         aside={<span className={`badge${completed ? " ok" : ""}`}>{completed ? (language === "en" ? "Completed" : "Đã hoàn thành") : lesson.progress.status === "in_progress" ? (language === "en" ? "In progress" : "Đang học") : (language === "en" ? "Not started" : "Chưa học")}</span>}
       />
     </div>
