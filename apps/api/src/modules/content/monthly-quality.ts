@@ -1,5 +1,5 @@
 import type { MonthlyCurriculumContract, MonthlyDaySpec } from "@e4s/domain";
-import { monthlyExerciseTranslationIssues, monthlyRelationMeaningIssue, answerIsUniqueLongestOption, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPronunciationExampleText, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
+import { monthlyCollocationTranslationIssues, monthlyExerciseTranslationIssues, monthlyRelationMeaningIssue, answerIsUniqueLongestOption, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPronunciationExampleText, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
 import type { LessonPart } from "@e4s/contracts";
 import { monthlyGrammarRoadmapDayIssues } from "./monthly-grammar-roadmap.js";
 import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
@@ -100,6 +100,8 @@ export function evaluateMonthlyLessonQuality(
     // Each vocabulary card shows three common phrases ("Cụm từ thường dùng"), as in the weekly lessons.
     const phrases = (Array.isArray(item.collocations) ? item.collocations : Array.isArray(item.examples) ? item.examples : []).filter((phrase) => typeof phrase === "string" && phrase.trim());
     if (phrases.length < 3) severe.push(finding("MONTHLY_VOCABULARY_PHRASES_MISSING", `${word} needs 3 common phrases (collocations) containing the word; it has ${phrases.length}`, dayNumber, "vocabulary"));
+    // 12/11: A1–A2 cards show a translate icon on each common phrase (B1+ lines are dropped by attachMonthlyExpandedTerms).
+    if (contract.cefr === "A1" || contract.cefr === "A2") for (const message of monthlyCollocationTranslationIssues(contract.cefr, Array.isArray(item.collocations) ? item.collocations : [], item.collocationTranslations)) severe.push(finding("MONTHLY_COLLOCATION_TRANSLATION", `${word}: ${message}`, dayNumber, "vocabulary"));
     if (hasNoLexicalRelation(item)) light.push({ severity: "light", code: "MONTHLY_SYNONYM_OR_ANTONYM_MISSING", message: `${word} is missing a synonym or antonym`, dayNumber, component: "vocabulary" });
     // 12/11: every synonym/antonym chip shows its meaning (A1–A2 Vietnamese note, B1–C1 English definition).
     // Planned entries take theirs from the approved plan (gated when the pool is built); the rest must carry one.

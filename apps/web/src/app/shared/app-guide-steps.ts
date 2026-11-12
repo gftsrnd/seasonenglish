@@ -54,7 +54,7 @@ const learnerSteps: Record<string, readonly GuideStep[]> = {
     [":not(:has(> .lesson-part .lesson-example-wrap)) > .lesson-part:not(:has(.lesson-answer))", "Phần học", "Mỗi thẻ là một phần học: **từ vựng**, **ngữ pháp** hoặc **phát âm**. Đọc hết và bấm biểu tượng loa để nghe mẫu."],
     // With translate icons (A1–A2 grammar examples, synonym/antonym chips with a meaning) the same step sits on the
     // first card that has them: the vocabulary card, else the grammar card.
-    [".lesson-part:is(.lesson-part--vocabulary:has(.lesson-example-wrap--chip), .lesson-part--grammar:has(.lesson-example-wrap:not(.lesson-example-wrap--chip)))", "Phần học", "Mỗi thẻ là **từ vựng**, **ngữ pháp** hoặc **phát âm**; bấm loa để nghe mẫu. Chạm **biểu tượng dịch** cạnh câu ví dụ hoặc từ đồng nghĩa, trái nghĩa để xem **nghĩa**."],
+    [".lesson-part:is(.lesson-part--vocabulary:has(.lesson-example-wrap--chip, .lesson-example-wrap--phrase), .lesson-part--grammar:has(.lesson-example-wrap:not(.lesson-example-wrap--chip)))", "Phần học", "Mỗi thẻ là **từ vựng**, **ngữ pháp** hoặc **phát âm**; bấm loa nghe mẫu. Chạm **biểu tượng dịch** trong câu ví dụ, cụm từ, từ đồng nghĩa, trái nghĩa để xem **nghĩa**."],
     [".lesson-part:has(.lesson-answer)", "Phần luyện tập", "Trả lời rồi bấm **Nộp bài** (**Submit**). Làm đúng hoặc hết lượt, **bản dịch** câu hỏi và đáp án hiện ra; câu sai đề, bấm **Báo lỗi câu này** (**Report an issue**)."],
     [".lesson-appeal-form", "Báo lỗi phần bài", "Ghi rõ câu hoặc nội dung bạn cho là sai, đính kèm ảnh nếu có, rồi gửi để **Vận hành** xem lại.", true],
     [".lesson-study-cta", "Xong phần Học", "Học hết các phần phía trên rồi bấm nút ở thẻ này để mở **Luyện tập**."],

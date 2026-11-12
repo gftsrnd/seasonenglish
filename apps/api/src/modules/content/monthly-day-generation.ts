@@ -1,4 +1,4 @@
-import { answerIsUniqueLongestOption, monthlyLessonDisplayTitle, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
+import { MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS, answerIsUniqueLongestOption, monthlyLessonDisplayTitle, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
 import { MONTHLY_LESSON_PART_CONTENT_CONTRACT, MONTHLY_REVIEW_CHOICE_SECTIONS, type AiTaskRunner, type MonthlyReviewChoiceSection } from "@e4s/ai";
 import { evaluateMonthlyLessonQuality, monthlyLockedPlanExpectations, normalizeFormula, type MonthlyLessonCandidate, type MonthlyLockedPlanExpectations, type MonthlyQualityReport, type MonthlyQualityFinding } from "./monthly-quality.js";
 import { rebalanceAnswerTextPositions, type AnswerTextChoice } from "../shared/answer-order.js";
@@ -54,7 +54,11 @@ export function monthlyVocabularyRelationContract(cefr: string): string {
   const shape = cefr === "A1" || cefr === "A2"
     ? "{ word, note } where note is its short Vietnamese meaning (e.g. { \"word\": \"finish\", \"note\": \"hoàn thành\" })"
     : "{ word, definition } where definition is a short simple-English definition of that word in this sense (2-14 words, no Vietnamese, never using the word itself; e.g. { \"word\": \"assist\", \"definition\": \"help someone do something\" })";
-  return `VOCABULARY SYNONYMS/ANTONYMS (${cefr}): the plan's synonyms and antonyms (lockedScope.supportTerms) are attached to each card automatically with their meaning; you may list them by word. Any other synonym or antonym you add must be a genuine one in the card's sense and written as ${shape}; a plain string or an entry without it is removed from the card.`;
+  const collocations = cefr === "A1" || cefr === "A2"
+    ? `VOCABULARY COLLOCATIONS (${cefr}): each vocabulary item also returns collocationTranslations = one short natural Vietnamese meaning (at most ${MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS} characters) per collocations phrase, in the same order (e.g. collocations ["meet a client","a new client","client feedback"] -> collocationTranslations ["gặp khách hàng","khách hàng mới","phản hồi của khách hàng"]). It is shown as a popup only; the English phrases are read aloud, so never put Vietnamese inside collocations.`
+    : `VOCABULARY COLLOCATIONS (${cefr}): collocations are English only; do not return collocationTranslations (no Vietnamese translations from B1).`;
+  return `VOCABULARY SYNONYMS/ANTONYMS (${cefr}): the plan's synonyms and antonyms (lockedScope.supportTerms) are attached to each card automatically with their meaning; you may list them by word. Any other synonym or antonym you add must be a genuine one in the card's sense and written as ${shape}; a plain string or an entry without it is removed from the card.
+${collocations}`;
 }
 
 /** daySpec.lessonNumber is the calendar slot (review days included); it is never the learner-facing lesson number. */

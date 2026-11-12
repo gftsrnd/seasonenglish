@@ -1,0 +1,105 @@
+/*
+ * Translate icon INSIDE a lesson control (grammar example card, collocation
+ * chip, synonym/antonym chip): one bordered control
+ * [speaker + text | 1px divider | translate icon]. The control keeps its own
+ * border, radius, colours and font; the icon is laid over its right end
+ * (full inner height, 44px wide) behind a thin divider in the control's line
+ * colour. The meaning opens in a floating popup (out of the layout flow).
+ *
+ * Imported by the component itself so every screen that renders it (learner
+ * lesson, operator preview, guide) gets the same look. Selectors repeat the
+ * class to outrank the global `button` pill (inset border shadow) and the
+ * per-screen chip/card padding rules.
+ */
+.lesson-example-wrap {
+  --meaning-icon-width: 44px;
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: top;
+}
+.lesson-example-wrap.lesson-example-wrap > :first-child {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding-right: calc(var(--meaning-icon-width) + 10px) !important;
+}
+/* Grammar example card keeps speaker + sentence on one row next to the icon, also on phones. */
+.lesson-example-wrap.lesson-example-wrap > .lesson-example-card { flex-direction: row; align-items: center; }
+
+.lesson-example-wrap.lesson-example-wrap > .lesson-example-translate.lesson-example-translate {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: var(--meaning-icon-width);
+  min-width: var(--meaning-icon-width);
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-left: 1px solid var(--meaning-divider, var(--line));
+  border-radius: 0 7px 7px 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  opacity: .72;
+  transform: none;
+  cursor: pointer;
+}
+.lesson-example-wrap.lesson-example-wrap > .lesson-example-translate.lesson-example-translate:hover,
+.lesson-example-wrap.lesson-example-wrap > .lesson-example-translate.lesson-example-translate[aria-expanded="true"] {
+  opacity: 1;
+  background: rgb(0 0 0 / .045);
+}
+.lesson-example-wrap.lesson-example-wrap > .lesson-example-translate.lesson-example-translate:focus-visible {
+  outline: 2px solid var(--primary, var(--text));
+  outline-offset: -2px;
+}
+
+/* Divider in the control's own border colour. */
+.lesson-example-wrap--example,
+.lesson-example-wrap--phrase { --meaning-divider: #e5e0da; }
+.lesson-example-wrap--chip:has(> .chip.synonym) { --meaning-divider: #b6cc82; }
+.lesson-example-wrap--chip:has(> .chip.antonym) { --meaning-divider: #e6b7ad; }
+
+/* Floating meaning popup: a small card under the control (above it near the viewport bottom). */
+.lesson-example-wrap.lesson-example-wrap > .lesson-example-translation {
+  position: absolute;
+  top: calc(100% + 6px);
+  bottom: auto;
+  left: 0;
+  z-index: 40;
+  display: block;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 0;
+  max-width: min(320px, calc(100vw - 32px));
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: var(--text);
+  box-shadow: 0 8px 22px rgb(0 0 0 / .15);
+  font-size: .88rem;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: auto;
+}
+.lesson-example-wrap.lesson-example-wrap > .lesson-example-translation[data-placement="top"] {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+.lesson-example-wrap.lesson-example-wrap > .lesson-example-translation[hidden] { display: none; }
+.lesson-example-wrap[data-open] { z-index: 41; }

@@ -161,10 +161,10 @@ function lesson(overrides: { parts?: Array<{ code: string; content: Record<strin
     if (code === "objective") return part(code, { text: "Identify three budget words." });
     if (code === "instruction") return part(code, { steps: ["Đọc ví dụ.", "Trả lời câu hỏi."] });
     if (code === "vocabulary") return part(code, { items: [
-      { word: "core-one", synonyms: [], antonyms: [], collocations: ["core-one plan", "a core-one", "core-one cost"] },
+      { word: "core-one", synonyms: [], antonyms: [], collocations: ["core-one plan", "a core-one", "core-one cost"], collocationTranslations: ["kế hoạch core-one", "một core-one", "chi phí core-one"] },
       // Unplanned synonyms carry both level meanings, so the fixture passes at A1 (note) and B1 (definition).
-      { word: "core-two", synonyms: [{ word: "second", note: "thứ hai", definition: "the one after the first" }], antonyms: [], collocations: ["core-two plan", "a core-two", "core-two cost"] },
-      { word: "core-three", synonyms: [{ word: "third", note: "thứ ba", definition: "the one after the second" }], antonyms: [], collocations: ["core-three plan", "a core-three", "core-three cost"] }
+      { word: "core-two", synonyms: [{ word: "second", note: "thứ hai", definition: "the one after the first" }], antonyms: [], collocations: ["core-two plan", "a core-two", "core-two cost"], collocationTranslations: ["kế hoạch core-two", "một core-two", "chi phí core-two"] },
+      { word: "core-three", synonyms: [{ word: "third", note: "thứ ba", definition: "the one after the second" }], antonyms: [], collocations: ["core-three plan", "a core-three", "core-three cost"], collocationTranslations: ["kế hoạch core-three", "một core-three", "chi phí core-three"] }
     ] });
     if (code === "grammar") return part(code, { formula: "Core formula" });
     if (code === "pronunciation") return part(code, { focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }] });
@@ -234,6 +234,8 @@ describe("monthly lesson quality – AI quality plan 11/11 (WP1, WP3, WP7, WP8)"
   };
   const englishB1 = (candidate: ReturnType<typeof lesson>) => ({ ...candidate, parts: candidate.parts.map((item) => {
     if (item.code === "instruction") return part("instruction", { steps: ["Read the example.", "Answer the question."] });
+    // B1+ cards carry no collocation translations (generation drops them).
+    if (item.code === "vocabulary") return part("vocabulary", { ...item.content, items: (item.content.items as Array<Record<string, unknown>>).map(({ collocationTranslations: _lines, ...card }) => card) });
     if (item.code === "grammar") return part("grammar", { ...item.content, items: (item.content.items as Array<Record<string, unknown>>).map((question) => ({ ...question, prompt: "Choose the correct form: They ____ the plan.", explanation: "A plural subject takes the base form." })) });
     if (typeof item.content.prompt === "string") return part(item.code, { ...item.content, prompt: "What is high?" });
     return item;

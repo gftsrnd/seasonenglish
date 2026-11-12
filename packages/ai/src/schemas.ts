@@ -1728,7 +1728,7 @@ export const weeklyLessonDayOutputJsonSchema = {
 export const MONTHLY_LESSON_PART_CONTENT_CONTRACT = [
   "This component's fields as a JSON object (never a JSON-encoded string). Use at least these keys per code; when a DAILY TEACHING PLAN / dailyTeachingPlan is supplied, also return the extra keys it lists (grammar dailyCode, objective, items; pronunciation stage, objective and, when asked, reviewTargets, passage, targetPositions), copying locked plan values verbatim:",
   "objective { text, items }; instruction { text, steps };",
-  "vocabulary { items: [{ word, type, ipa, meaning, collocations, synonyms, antonyms }] } - collocations is exactly 3 short, natural English phrases that each contain the word (e.g. client: \"meet a client\", \"a new client\", \"client feedback\"); never empty;",
+  "vocabulary { items: [{ word, type, ipa, meaning, collocations, collocationTranslations, synonyms, antonyms }] } - collocations is exactly 3 short, natural English phrases that each contain the word (e.g. client: \"meet a client\", \"a new client\", \"client feedback\"); never empty; collocationTranslations (A1-A2 only, omit from B1) is one short Vietnamese meaning per collocation, same order, shown as a popup and never read aloud;",
   "grammar { formula, text, examples } - formula copies the locked grammar step formula(s) verbatim; text is a concise usage note: 1-2 short sentences, at most 45 words, focused on the day's goal; do not repeat the formula or add a lecture. When lockedScope.grammarSteps has more than one step (review days), also return grammar.steps: [{ formula, text, examples }] with one entry per step in order, each with its own concise usage note and 1-2 examples;",
   "pronunciation { focus: \"/IPA/\", words: [{ word, ipa }] x3 } (+ stage, objective with a daily teaching plan);",
   "listening { script, prompt, options x4, answer, questionTranslation, answerTranslation } - script is the full spoken transcript, never empty;",
@@ -1759,7 +1759,7 @@ export const monthlyLessonDayOutputJsonSchema = {
             description: MONTHLY_LESSON_PART_CONTENT_CONTRACT,
             properties: {
               text: { type: "string", description: "objective/instruction text; for reading this is the reading passage (required for reading)." },
-              items: { type: "array", description: "objective items, or vocabulary items [{ word, type, ipa, meaning, collocations: exactly 3 short English phrases containing the word, synonyms, antonyms }] (vocabulary needs at least 3), or - in a Friday review exercise section - the complete list of review items with the exact count the review contract gives for that section (never a single item); every review item carries variants.",
+              items: { type: "array", description: "objective items, or vocabulary items [{ word, type, ipa, meaning, collocations: exactly 3 short English phrases containing the word, collocationTranslations: A1-A2 only, one short Vietnamese meaning per collocation in the same order (omit from B1), synonyms, antonyms }] (vocabulary needs at least 3), or - in a Friday review exercise section - the complete list of review items with the exact count the review contract gives for that section (never a single item); every review item carries variants.",
                 items: { anyOf: [
                   { type: "string" },
                   { type: "object", additionalProperties: true, properties: {

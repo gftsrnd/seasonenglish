@@ -52,3 +52,31 @@ describe("synonym/antonym chip meaning (12/11)", () => {
     expect(container.ownerDocument.querySelector(".lesson-example-wrap--chip")).toBeNull();
   });
 });
+
+describe("collocation translation (12/11)", () => {
+  const collocations = ["meet the manager", "our manager", "a project manager"];
+  it("A1–A2: each phrase chip carries the translate icon inside it; the phrase still plays, the icon opens the Vietnamese meaning", () => {
+    const speak = renderCard("A2", { collocations, collocationTranslations: ["gặp quản lý", "quản lý của chúng tôi", "một quản lý dự án"] });
+    fireEvent.click(screen.getByRole("button", { name: "Nghe cụm từ: meet the manager" }));
+    expect(speak).toHaveBeenCalledWith("meet the manager");
+    const icon = screen.getByRole("button", { name: "Xem nghĩa: our manager" });
+    expect(icon.parentElement).toHaveClass("lesson-example-wrap", "lesson-example-wrap--phrase");
+    expect(icon.parentElement?.firstElementChild).toHaveAccessibleName("Nghe cụm từ: our manager");
+    expect(screen.getByText("quản lý của chúng tôi")).not.toBeVisible();
+    fireEvent.click(icon);
+    expect(screen.getByText("quản lý của chúng tôi")).toBeVisible();
+    expect(screen.getByText("quản lý của chúng tôi")).toHaveAttribute("lang", "vi");
+    expect(speak).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByText("quản lý của chúng tôi")).not.toBeVisible();
+  });
+
+  it("B1+ and old content without translations keep the plain phrase buttons", () => {
+    renderCard("B2", { collocations, collocationTranslations: ["gặp quản lý", "quản lý của chúng tôi", "một quản lý dự án"] });
+    expect(screen.queryByRole("button", { name: /^View meaning|^Xem nghĩa/ })).not.toBeInTheDocument();
+    cleanup();
+    renderCard("A2", { collocations });
+    expect(screen.getAllByRole("button", { name: /^Nghe cụm từ/ })).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: /^Xem nghĩa/ })).not.toBeInTheDocument();
+  });
+});

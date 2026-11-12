@@ -140,6 +140,8 @@ export interface LessonVocabularyItem {
   collocations?: string[];
   /** Recorded audio aligned by index with collocations; browser TTS is the fallback. */
   collocationAudioUrls?: string[];
+  /** A1–A2 only: one short Vietnamese meaning per collocation (same order), shown in a popup and never spoken. */
+  collocationTranslations?: string[];
   /** Recorded audio aligned by index with examples; browser TTS is the fallback. */
   exampleAudioUrls?: string[];
   family?: LessonVocabularyFamilyWord[];

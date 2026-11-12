@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attachMonthlyExpandedTerms, monthlyRelationMeaningIssue } from "../src/monthly/lesson-vocabulary.js";
+import { attachMonthlyExpandedTerms, monthlyCollocationTranslationIssues, monthlyRelationMeaningIssue } from "../src/monthly/lesson-vocabulary.js";
 
 describe("attachMonthlyExpandedTerms", () => {
   const cores = [{ id: "c1", word: "client", type: "noun", ipa: "/ˈklaɪənt/" }];
@@ -132,5 +132,33 @@ describe("synonym/antonym meanings by level (12/11)", () => {
     expect(monthlyRelationMeaningIssue("B2", { word: "assist", relation: "synonym", definition: "to assist a person" })).toMatch(/itself/u);
     expect(monthlyRelationMeaningIssue("B2", { word: "assist", relation: "synonym", definition: "help" })).toMatch(/2–14 words/u);
     expect(monthlyRelationMeaningIssue("B2", { word: "helper", relation: "word_family" })).toBeUndefined();
+  });
+});
+
+describe("collocation translations (12/11)", () => {
+  const cores = [{ id: "c1", word: "client" }];
+  const supports = [{ id: "s1", word: "meet a client", meaning: "gặp khách hàng", relation: "collocation", relatedCoreTermId: "c1" }];
+  const model = { word: "client", collocations: ["a new client", "client feedback", "the client"], collocationTranslations: ["khách hàng mới", "phản hồi của khách hàng", "khách hàng"] };
+
+  it("A1–A2: aligns one Vietnamese line per merged phrase (planned phrases take the plan's meaning)", () => {
+    const [item] = attachMonthlyExpandedTerms([model], cores, supports, "A1");
+    expect(item!.collocations).toEqual(["meet a client", "a new client", "client feedback"]);
+    expect(item!.collocationTranslations).toEqual(["gặp khách hàng", "khách hàng mới", "phản hồi của khách hàng"]);
+  });
+
+  it("drops incomplete A1–A2 lines and every B1+ line", () => {
+    const [partial] = attachMonthlyExpandedTerms([{ ...model, collocationTranslations: ["khách hàng mới"] }], cores, supports, "A2");
+    expect(partial!.collocationTranslations).toBeUndefined();
+    const [b1] = attachMonthlyExpandedTerms([model], cores, supports, "B1");
+    expect(b1!.collocationTranslations).toBeUndefined();
+  });
+
+  it("gates them per level", () => {
+    const phrases = ["meet a client", "a new client", "client feedback"];
+    expect(monthlyCollocationTranslationIssues("A1", phrases, ["gặp khách hàng", "khách hàng mới", "phản hồi của khách hàng"])).toEqual([]);
+    expect(monthlyCollocationTranslationIssues("A2", phrases, undefined)[0]).toMatch(/one short Vietnamese meaning per collocation/u);
+    expect(monthlyCollocationTranslationIssues("A2", phrases, ["gặp khách hàng", "a new client", ""])).toHaveLength(2);
+    expect(monthlyCollocationTranslationIssues("B2", phrases, ["gặp khách hàng", "khách hàng mới", "phản hồi"])[0]).toMatch(/omitted at B2/u);
+    expect(monthlyCollocationTranslationIssues("C1", phrases, undefined)).toEqual([]);
   });
 });

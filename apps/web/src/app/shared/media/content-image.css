@@ -311,6 +311,11 @@ body > .vocabulary-relation-modal .vocabulary-relation-audio-item small {
     grid-row:1;
   }
   .vocabulary-card-main > .vocabulary-card-meaning { grid-column:1/-1; grid-row:2; margin-top:0; }
+  /* No image: word + speaker share the first row and the meaning spans it (a 1-column template made
+     the word/speaker implicit columns and squeezed the meaning into a 0px column, one letter per line). */
+  .vocabulary-card-heading.vocabulary-card-heading.vocabulary-card-heading:has(.content-image--hidden) { grid-template-columns:minmax(0,1fr) 36px; }
+  .vocabulary-card-heading:has(.content-image--hidden) .vocabulary-card-main > .vocabulary-card-word { grid-column:1; }
+  .vocabulary-card-heading:has(.content-image--hidden) .vocabulary-card-main > .vocabulary-card-sound--icon { grid-column:2; }
 }
 
 @keyframes content-image-spin { to { transform: rotate(360deg); } }

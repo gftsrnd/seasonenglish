@@ -673,6 +673,7 @@ function OperatorVocabularyCard({ item, index, media, hideUmbrella = false }: { 
     ...(typeof item.meaning === "string" && item.meaning.trim() ? { meaning: item.meaning.trim() } : {}),
     ...(phrases.length ? { collocations: phrases } : {}),
     ...(Array.isArray(item.collocationAudioUrls) ? { collocationAudioUrls: item.collocationAudioUrls.filter((value): value is string => typeof value === "string") } : {}),
+    ...(Array.isArray(item.collocationTranslations) && Array.isArray(item.collocations) ? { collocationTranslations: item.collocationTranslations.map((value) => typeof value === "string" ? value : "") } : {}),
     ...(Array.isArray(item.exampleAudioUrls) ? { exampleAudioUrls: item.exampleAudioUrls.filter((value): value is string => typeof value === "string") } : {}),
     ...(typeof item.audioUrl === "string" && item.audioUrl.trim() ? { audioUrl: item.audioUrl.trim() } : {})
   };

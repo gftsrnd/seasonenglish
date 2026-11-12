@@ -115,6 +115,38 @@ export function monthlyRelationMeaningIssue(
   return undefined;
 }
 
+/** "a quick check" and "quick check" are the same phrase. */
+function collocationKey(value: string): string {
+  return value.trim().toLocaleLowerCase().replace(/^(?:a|an|the)\s+/u, "").replace(/\s+/gu, " ");
+}
+
+/** Longest Vietnamese line for one collocation (A1–A2 popup). */
+export const MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS = 80;
+
+/**
+ * Gate for a vocabulary card's collocation translations (12/11): A1–A2 cards
+ * show a translate icon on each common phrase, so `collocationTranslations`
+ * holds one short Vietnamese line per `collocations` entry, same order; the
+ * phrases stay English (audio reads them). B1+ cards carry none. Returns the
+ * problems (empty when fine).
+ */
+export function monthlyCollocationTranslationIssues(cefr: string, collocations: readonly unknown[], translations: unknown): string[] {
+  const phrases = collocations.filter((phrase): phrase is string => typeof phrase === "string" && Boolean(phrase.trim()));
+  const list = Array.isArray(translations) ? translations : undefined;
+  if (cefr !== "A1" && cefr !== "A2") {
+    return list?.some((line) => typeof line === "string" && line.trim()) ? [`collocationTranslations must be omitted at ${cefr} (no Vietnamese translations from B1)`] : [];
+  }
+  if (!phrases.length) return [];
+  if (!list || list.length !== phrases.length) return [`collocationTranslations must give one short Vietnamese meaning per collocation, same order (${phrases.length} expected, received ${list?.length ?? 0})`];
+  const issues: string[] = [];
+  list.forEach((line, index) => {
+    const value = typeof line === "string" ? line.trim() : "";
+    if (!value || value.toLocaleLowerCase("en-US") === phrases[index]!.trim().toLocaleLowerCase("en-US")) issues.push(`collocationTranslations[${index}] must be the Vietnamese meaning of "${phrases[index]}"`);
+    else if (value.length > MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS) issues.push(`collocationTranslations[${index}] must be short (at most ${MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS} characters)`);
+  });
+  return issues;
+}
+
 export function attachMonthlyExpandedTerms(
   items: readonly unknown[],
   cores: readonly MonthlyVocabularyCore[],
@@ -152,7 +184,18 @@ function attachTerms(
     item.synonyms = mergeEntries(item.synonyms, linked("synonym").map((term) => relationEntry(term, cefr)), unplanned("synonym"));
     item.antonyms = mergeEntries(item.antonyms, linked("antonym").map((term) => relationEntry(term, cefr)), unplanned("antonym"));
     item.family = mergeEntries(item.family, linked("word_family").map((term) => ({ word: term.word, ...(term.type ? { type: term.type } : {}), ...(term.meaning ? { meaning: term.meaning } : {}) })));
-    const collocations = linked("collocation").map((term) => term.word);
+    const plannedCollocations = linked("collocation");
+    const collocations = plannedCollocations.map((term) => term.word);
+    // A1–A2: one Vietnamese line per phrase, aligned with collocations (planned phrases take the plan's meaning).
+    const modelTranslations = new Map<string, string>();
+    {
+      const modelPhrases = Array.isArray(item.collocations) ? item.collocations : [];
+      const modelLines = Array.isArray(item.collocationTranslations) ? item.collocationTranslations : [];
+      modelPhrases.forEach((phrase, index) => {
+        const line = modelLines[index];
+        if (typeof phrase === "string" && typeof line === "string" && line.trim()) modelTranslations.set(collocationKey(phrase), line.trim());
+      });
+    }
     if (collocations.length) {
       // Cards show exactly 3 phrases: planned collocations first, then the model's,
       // treating "a quick check" and "quick check" as the same phrase.
@@ -167,8 +210,16 @@ function attachTerms(
         merged.push(phrase.trim());
       }
       item.collocations = merged.slice(0, 3);
+      for (const term of plannedCollocations) if (term.meaning?.trim()) modelTranslations.set(collocationKey(term.word), term.meaning.trim());
       // Extra entries in `examples` render as separate "Ví dụ" rows; keep them aligned with the 3 phrases.
       if (!Array.isArray(item.examples) || !item.examples.length || item.examples.length <= 3) item.examples = item.collocations;
+    }
+    if (cefr && MONTHLY_CARD_LEVELS.has(cefr)) {
+      const phrases = Array.isArray(item.collocations) ? item.collocations.filter((value): value is string => typeof value === "string") : [];
+      const lines = phrases.map((phrase) => modelTranslations.get(collocationKey(phrase)) ?? "");
+      // Collocation translations are A1–A2 only and complete (one per phrase); otherwise the card shows none.
+      if ((cefr === "A1" || cefr === "A2") && phrases.length && lines.every(Boolean)) item.collocationTranslations = lines;
+      else delete item.collocationTranslations;
     }
     const umbrella = linked("umbrella")[0];
     if (umbrella && !(item.umbrella && typeof item.umbrella === "object")) item.umbrella = { word: umbrella.word, ...(umbrella.meaning ? { meaning: umbrella.meaning } : {}) };
