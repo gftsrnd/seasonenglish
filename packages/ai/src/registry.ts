@@ -36,6 +36,7 @@ import {
   microGradingInputSchema, microGradingOutputJsonSchema, microGradingOutputSchema,
   weeklyPracticeInputSchema, weeklyPracticeOutputJsonSchema, weeklyPracticeOutputSchema
 } from "./schemas.js";
+import { monthlyReviewExercisesOutputJsonSchema, monthlyReviewExercisesOutputSchema, monthlyReviewItemRepairOutputJsonSchema, monthlyReviewItemRepairOutputSchema } from "./monthly-review-schemas.js";
 import {
   monthlyFinalGenerationInputSchema,
   monthlyFinalProductiveOutputJsonSchema, monthlyFinalProductiveOutputSchema,
@@ -216,6 +217,14 @@ export const AI_TASKS = new AiTaskRegistry([
   {
     id: "monthly_lesson_day", promptKey: "monthly_lessons", inputSchema: z.record(z.string(), z.unknown()),
     outputSchema: monthlyLessonDayOutputSchema, outputJsonSchema: monthlyLessonDayOutputJsonSchema
+  },
+  {
+    id: "monthly_review_exercises", promptKey: "monthly_lessons", inputSchema: z.record(z.string(), z.unknown()),
+    outputSchema: monthlyReviewExercisesOutputSchema, outputJsonSchema: monthlyReviewExercisesOutputJsonSchema
+  },
+  {
+    id: "monthly_review_item_repair", promptKey: "monthly_lessons", inputSchema: z.record(z.string(), z.unknown()),
+    outputSchema: monthlyReviewItemRepairOutputSchema, outputJsonSchema: monthlyReviewItemRepairOutputJsonSchema
   },
   {
     id: "weekly_lesson_grammar_classifier", promptKey: "weekly_lessons", inputSchema: weeklyLessonDayInputSchema,

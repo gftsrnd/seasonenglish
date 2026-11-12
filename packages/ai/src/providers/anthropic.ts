@@ -8,6 +8,8 @@ import { stripLeakedToolMarkup } from "../tool-markup.js";
  */
 const NATIVE_JSON_FIELD_TASKS = new Set([
   "monthly_lesson_day",
+  "monthly_review_exercises",
+  "monthly_review_item_repair",
   "monthly_final_receptive_generation",
   "monthly_final_listening_generation",
   "monthly_final_listening_message_generation",

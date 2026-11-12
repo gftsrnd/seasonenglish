@@ -1,5 +1,5 @@
-import { monthlyLessonDisplayTitle, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
-import { MONTHLY_LESSON_PART_CONTENT_CONTRACT, type AiTaskRunner } from "@e4s/ai";
+import { answerIsUniqueLongestOption, monthlyLessonDisplayTitle, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
+import { MONTHLY_LESSON_PART_CONTENT_CONTRACT, MONTHLY_REVIEW_CHOICE_SECTIONS, type AiTaskRunner, type MonthlyReviewChoiceSection } from "@e4s/ai";
 import { evaluateMonthlyLessonQuality, monthlyLockedPlanExpectations, normalizeFormula, type MonthlyLessonCandidate, type MonthlyLockedPlanExpectations, type MonthlyQualityReport, type MonthlyQualityFinding } from "./monthly-quality.js";
 import { rebalanceAnswerTextPositions, type AnswerTextChoice } from "../shared/answer-order.js";
 import { monthlyGrammarRoadmapDayContract } from "./monthly-grammar-roadmap.js";
@@ -45,6 +45,18 @@ export function monthlyLearnerLanguageContract(cefr: string): string {
   ].join(" ");
 }
 
+/**
+ * Synonyms/antonyms on a vocabulary card (12/11): the plan's are attached with
+ * their meaning automatically; one the model adds must carry the level's meaning
+ * or it is removed (attachMonthlyExpandedTerms) and gated (MONTHLY_RELATION_MEANING_MISSING).
+ */
+export function monthlyVocabularyRelationContract(cefr: string): string {
+  const shape = cefr === "A1" || cefr === "A2"
+    ? "{ word, note } where note is its short Vietnamese meaning (e.g. { \"word\": \"finish\", \"note\": \"hoàn thành\" })"
+    : "{ word, definition } where definition is a short simple-English definition of that word in this sense (2-14 words, no Vietnamese, never using the word itself; e.g. { \"word\": \"assist\", \"definition\": \"help someone do something\" })";
+  return `VOCABULARY SYNONYMS/ANTONYMS (${cefr}): the plan's synonyms and antonyms (lockedScope.supportTerms) are attached to each card automatically with their meaning; you may list them by word. Any other synonym or antonym you add must be a genuine one in the card's sense and written as ${shape}; a plain string or an entry without it is removed from the card.`;
+}
+
 /** daySpec.lessonNumber is the calendar slot (review days included); it is never the learner-facing lesson number. */
 export const MONTHLY_LESSON_TITLE_RULE = "LESSON TITLE: name the lesson focus (grammar pattern or task). Do not put a lesson or day number in the title; daySpec.lessonNumber is an internal calendar slot that also counts review days. Lessons are numbered by daySpec.newLessonNumber and review days are labelled as review, never \"Bài N\".";
 
@@ -82,16 +94,21 @@ ${monthlyReviewExerciseContract(coreTerms.length, grammarSteps.length, contract.
 
 ${monthlyLearnerLanguageContract(contract.cefr)}
 
+${monthlyVocabularyRelationContract(contract.cefr)}
+
 ${MONTHLY_LESSON_TITLE_RULE}` : `${systemPrompt}
 
 Part content field contract: ${MONTHLY_LESSON_PART_CONTENT_CONTRACT}
 
 ${monthlyLearnerLanguageContract(contract.cefr)}
 
+${monthlyVocabularyRelationContract(contract.cefr)}
+
 ${MONTHLY_LESSON_TITLE_RULE}`;
-      const call = async (requested: readonly string[], note: string, maxOutputTokens: number) => {
+      // Review exercise sections have their own task: its schema requires a retry variant on every choice item.
+      const call = async (requested: readonly string[], note: string, maxOutputTokens: number, taskId: "monthly_lesson_day" | "monthly_review_exercises" = "monthly_lesson_day") => {
         let result;
-        try { result = await runner.runTask("monthly_lesson_day", {
+        try { result = await runner.runTask(taskId, {
           month: contract.month,
           cefr: contract.cefr,
           daySpec,
@@ -121,7 +138,7 @@ ${note}` : basePrompt}${contract.planSchemaVersion === 2 && kind === "new" ? `\n
         // One call for the study tab (12 cards) and ~30 exercise items is too large; split them like the monthly exam.
         const [study, exercises] = await Promise.all([
           call(studyCodes, "This request returns only the study-tab parts listed in components. For grammar return formula, text, examples and steps, without items.", 10_000),
-          call(exerciseCodes, "This request returns only the review exercise sections listed in components. For grammar return only { items } (the study formula is produced separately). Keep the title short.", 14_000)
+          call(exerciseCodes, "This request returns only the review exercise sections listed in components, as sections.<code>. For grammar return only { items } (the study formula is produced separately). Keep the title short.", 14_000, "monthly_review_exercises")
         ]);
         title = study.title;
         const byCode = new Map(study.parts.map((part) => [part.code, part]));
@@ -131,7 +148,10 @@ ${note}` : basePrompt}${contract.planSchemaVersion === 2 && kind === "new" ? `\n
         }
         rawParts = [...byCode.values()];
       } else {
-        const single = await call(components, "", kind === "review" ? 14_000 : 8_000);
+        const exercisesOnly = kind === "review" && !studyCodes.length;
+        const single = exercisesOnly
+          ? await call(components, "This request returns only the review exercise sections listed in components, as sections.<code>. Keep the title short.", 14_000, "monthly_review_exercises")
+          : await call(components, "", kind === "review" ? 14_000 : 8_000);
         title = single.title;
         rawParts = single.parts;
       }
@@ -141,10 +161,135 @@ ${note}` : basePrompt}${contract.planSchemaVersion === 2 && kind === "new" ? `\n
       const enriched = contract.planSchemaVersion === 2 && kind === "new" ? dailyParts : withMonthlyGrammarSteps(vocabularyParts, grammarSteps);
       const parts = kind === "review" ? normalizeMonthlyReviewParts(enriched) : enriched;
       return { title, parts: parts.map((part) => ({ code: part.code, ...(part.title ? { title: part.title } : {}), content: part.content })) };
-    }
+    },
+    ...(kind === "review" ? { repairLight: async ({ daySpec, coreTerms, grammarSteps, parts, report }: MonthlyLightRepairInput) => {
+      const requests = monthlyReviewLightRepairRequests(parts, report.light);
+      if (!requests.length) return null;
+      const daySupportTerms = contract.supportTerms.filter((term) => (daySpec.reviewExpandedTermIds ?? []).includes(term.id));
+      const prompt = `${systemPrompt}
+
+${monthlyReviewExerciseContract(coreTerms.length, grammarSteps.length, contract.cefr, monthlyReviewWordFormCandidates(coreTerms, daySupportTerms), monthlyReviewSpeakingContrastGuidance(contract, daySpec))}
+
+${monthlyLearnerLanguageContract(contract.cefr)}
+
+${MONTHLY_REVIEW_ITEM_REPAIR_RULE}`;
+      const result = await runner.runTask("monthly_review_item_repair", {
+        month: contract.month,
+        cefr: contract.cefr,
+        lockedScope: { coreTerms: coreTerms.map((term) => ({ word: term.word, meaning: term.meaning, type: term.type })), theme: contract.theme },
+        repairItems: requests.map(({ section, id, issues, item }) => ({ section, id, issues, item }))
+      }, { systemPrompt: prompt, maxOutputTokens: 8_000, temperature: 0.2, maxAttempts: 2 });
+      const output = result.output as { items?: Array<{ section: string; id: string; item: Record<string, unknown> }> };
+      return normalizeMonthlyReviewParts(mergeMonthlyReviewItemRepairs(parts, requests, output.items ?? []));
+    } } : {})
   });
   return generated;
 }
+
+export const MONTHLY_REVIEW_ITEM_REPAIR_RULE = [
+  "REVIEW ITEM REPAIR (only the items in repairItems; every other part of the review is accepted and unchanged):",
+  "Return items = one entry per repairItems entry: { section, id, item }, with section and id copied. item is the complete item: the same id, audioText (listening), prompt intent and answer text, plus exactly 1 entry in variants.",
+  "issue variant_missing: add variants = [one retry item with the same fields (prompt, options x4, answer, explanation, questionTranslation, answerTranslation)] that tests the same point in a different context and is never a copy. listening: the SAME audioText (the same core word) and the same correct meaning, with 3 different distractor meanings; word_use / grammar: the same word or grammar point in a new workplace sentence; word_class: the same week word in a new sentence; reading: a different question about the same passage.",
+  "issue answer_longest_option: keep the answer text exactly and rewrite the 3 wrong options (of the item and of its variant) so at least one wrong option is as long as or longer than the answer (count characters); they stay real, plausible options of the same kind, all 4 different, and the explanation still fits.",
+  "Follow the learner-language rule above for prompts and explanations."
+].join("\n");
+
+export interface MonthlyReviewItemRepairRequest {
+  section: MonthlyReviewChoiceSection;
+  id: string;
+  issues: Array<"variant_missing" | "answer_longest_option">;
+  item: Record<string, unknown>;
+}
+
+type ReviewPart = { code: string; title?: string; content: Record<string, unknown> };
+
+/**
+ * Items behind the repairable light findings: every choice item without a
+ * variant in a section flagged MONTHLY_REVIEW_VARIANT_MISSING, and every item
+ * (or its variant) whose answer is the only longest option in a section flagged
+ * MONTHLY_ANSWER_LONGEST_OPTION.
+ */
+export function monthlyReviewLightRepairRequests(parts: readonly ReviewPart[], light: readonly MonthlyQualityFinding[]): MonthlyReviewItemRepairRequest[] {
+  const flagged = (code: string) => new Set(light.filter((finding) => finding.code === code).map((finding) => finding.component));
+  const variantSections = flagged("MONTHLY_REVIEW_VARIANT_MISSING");
+  const longestSections = flagged("MONTHLY_ANSWER_LONGEST_OPTION");
+  const requests: MonthlyReviewItemRepairRequest[] = [];
+  for (const part of parts) {
+    const section = (MONTHLY_REVIEW_CHOICE_SECTIONS as readonly string[]).includes(part.code) ? part.code as MonthlyReviewChoiceSection : null;
+    if (!section || !Array.isArray(part.content.items)) continue;
+    for (const item of part.content.items) {
+      if (!isRecord(item) || typeof item.id !== "string" || !item.id.trim()) continue;
+      const variants = Array.isArray(item.variants) ? item.variants.filter(isRecord) : [];
+      const issues: MonthlyReviewItemRepairRequest["issues"] = [];
+      if (variantSections.has(section) && !variants.length) issues.push("variant_missing");
+      if (longestSections.has(section) && [item, ...variants].some(isLongestAnswerChoice)) issues.push("answer_longest_option");
+      if (issues.length) requests.push({ section, id: item.id, issues, item });
+    }
+  }
+  return requests;
+}
+
+/**
+ * Merges a targeted item repair into the accepted review: only the requested
+ * fix is taken from the response - a missing variant, or new options that still
+ * contain the unchanged answer and no longer make it the only longest one.
+ * Everything else in the accepted item stays; the quality gate re-checks the result.
+ */
+export function mergeMonthlyReviewItemRepairs<T extends ReviewPart>(parts: readonly T[], requests: readonly MonthlyReviewItemRepairRequest[], repaired: ReadonlyArray<{ section: string; id: string; item: unknown }>): T[] {
+  const bySlot = new Map(repaired.filter((entry) => isRecord(entry.item)).map((entry) => [`${entry.section}:${entry.id}`, entry.item as Record<string, unknown>]));
+  const wanted = new Map(requests.map((request) => [`${request.section}:${request.id}`, request]));
+  return parts.map((part) => {
+    if (!Array.isArray(part.content.items)) return part;
+    let changed = false;
+    const items = part.content.items.map((raw) => {
+      if (!isRecord(raw) || typeof raw.id !== "string") return raw;
+      const key = `${part.code}:${raw.id}`;
+      const request = wanted.get(key);
+      const returned = bySlot.get(key);
+      if (!request || !returned) return raw;
+      const item: Record<string, unknown> = { ...raw };
+      const ownVariants = Array.isArray(item.variants) ? item.variants.filter(isRecord) : [];
+      const newVariant = (Array.isArray(returned.variants) ? returned.variants.filter(isRecord) : [])[0];
+      if (request.issues.includes("variant_missing") && !ownVariants.length && newVariant) {
+        // The retry of a listening item plays the same word the learner missed.
+        item.variants = [part.code === "listening" && typeof item.audioText === "string" && !textOf(newVariant.audioText) ? { ...newVariant, audioText: item.audioText } : { ...newVariant }];
+        changed = true;
+      }
+      if (request.issues.includes("answer_longest_option")) {
+        const options = betterOptions(item, returned);
+        if (options) { item.options = options; changed = true; }
+        if (ownVariants.length && newVariant) {
+          const variants = ownVariants.map((variant, index) => {
+            const fixed = index === 0 ? betterOptions(variant, newVariant) : null;
+            return fixed ? { ...variant, options: fixed } : variant;
+          });
+          if (variants.some((variant, index) => variant !== ownVariants[index])) { item.variants = variants; changed = true; }
+        }
+      }
+      return item;
+    });
+    return changed ? { ...part, content: { ...part.content, items } } : part;
+  });
+}
+
+/** The repaired options, when they keep the same answer, stay 4 distinct strings and fix the longest-answer cue. */
+function betterOptions(current: Record<string, unknown>, returned: Record<string, unknown>): string[] | null {
+  if (!isLongestAnswerChoice(current)) return null;
+  const answer = textOf(current.answer);
+  const options = Array.isArray(returned.options) ? returned.options.filter((option): option is string => typeof option === "string" && Boolean(option.trim())).map((option) => option.trim()) : [];
+  const key = (value: string) => value.trim().toLocaleLowerCase("en-US");
+  if (options.length !== 4 || new Set(options.map(key)).size !== 4 || !options.some((option) => key(option) === key(answer))) return null;
+  if (textOf(returned.answer) && key(textOf(returned.answer)) !== key(answer)) return null;
+  const withAnswer = options.map((option) => key(option) === key(answer) ? answer : option);
+  return answerIsUniqueLongestOption(withAnswer, answer) ? null : withAnswer;
+}
+
+function isLongestAnswerChoice(choice: Record<string, unknown>): boolean {
+  const options = Array.isArray(choice.options) ? choice.options.filter((option): option is string => typeof option === "string") : [];
+  return options.length >= 3 && answerIsUniqueLongestOption(options, textOf(choice.answer));
+}
+
+function textOf(value: unknown): string { return typeof value === "string" ? value.trim() : ""; }
 
 /** A week word that can carry a Word form item, with the real family words the plan lists for it. */
 export interface MonthlyWordFormCandidate { word: string; type: string; family: string[] }
@@ -186,12 +331,13 @@ export function monthlyReviewExerciseContract(coreCount: number, grammarStepCoun
     "Friday review exercise contract (overrides the daily single-question shape for listening, word_use, word_class, grammar, reading, speaking; do not return a writing part):",
     `EXACT ITEM COUNTS (each section is { items: [...] } with all of its items in this one response; never a single question, never a partial list): listening ${target.listening}, word_use ${target.wordUse}, word_class ${target.wordForm}, grammar ${target.grammar} (+1 previous-week item when there is one), reading 3, speaking 4 (2 minimal pairs, 1 read-aloud, 1 free response).`,
     "Keep objective, instruction, vocabulary (every core word of the week as a card with collocations), grammar (formula, text, examples, steps) and pronunciation as the study tab.",
-    `Each exercise section's content has items: [{ id, prompt, options, answer, explanation, questionTranslation, answerTranslation, variants }]. explanation: at most 2 sentences in ${explain}, why the answer is right. variants: exactly 1 alternative item testing the same point in a different workplace context (same fields, different sentence, never a copy). Never copy daily-lesson sentences verbatim.`,
+    `Each exercise section's content has items: [{ id, prompt, options, answer, explanation, questionTranslation, answerTranslation, variants }]. explanation: at most 2 sentences in ${explain}, why the answer is right. Never copy daily-lesson sentences verbatim.`,
+    `VARIANTS ARE REQUIRED on every listening, word_use, word_class, grammar and reading item (an item without variants is incomplete and is sent back): variants = [exactly 1 retry item] with the item's fields { id, prompt, options (4), answer, explanation, questionTranslation, answerTranslation }, testing the same point in a different context, never a copy. listening: the SAME audioText (the same core word: the retry tests the word the learner missed) and the same correct meaning as answer, with 3 different distractor meanings; word_use / grammar: the same word or grammar point in a new workplace sentence; word_class: the same week word in a new sentence; reading: a different question about the same passage. Example listening item: {"id":"l1","audioText":"client","prompt":"${listeningPrompt}","options":["khách hàng","báo cáo","cuộc họp","hạn chót"],"answer":"khách hàng","explanation":"…","questionTranslation":"Nghe rồi chọn nghĩa của từ","answerTranslation":"khách hàng","variants":[{"id":"l1-v1","audioText":"client","prompt":"${listeningPrompt}","options":["đồng nghiệp","khách hàng","công ty","nhiệm vụ"],"answer":"khách hàng","explanation":"…","questionTranslation":"Nghe rồi chọn nghĩa của từ","answerTranslation":"khách hàng"}]}.`,
     "questionTranslation / answerTranslation (every level): on every item and variant that has an answer, a short natural Vietnamese translation of its prompt (the English sentence translated too, the blank kept as ____) and of its correct answer. They are shown only after the learner answers correctly and never read aloud; the read-aloud and free-response speaking items (no answer) take none.",
     vietnamese
       ? "Every prompt the learner reads is written in Vietnamese (e.g. \"Chọn dạng đúng của từ để điền vào chỗ trống: …\", \"Đọc tin nhắn và chọn đáp án đúng.\"); only the English target sentence, options and answers stay in English."
       : "Every prompt, question, instruction and explanation is written in English; only the listening options/answers (word meanings) are Vietnamese.",
-    "Distractors: every option is a real, correctly spelled English word or phrase of the same kind as the answer (never invented forms such as sended, maked, gived, feedbacked, accurating); options are similar in length so the correct answer is not simply the longest one.",
+    "Distractors: every option is a real, correctly spelled English word or phrase of the same kind as the answer (never invented forms such as sended, maked, gived, feedbacked, accurating); options are similar in length so the correct answer is not simply the longest one: in every item and variant at least one wrong option is as long as or longer than the answer (count characters).",
     `listening.items: exactly ${target.listening} items, one per core word: audioText = the English core word (spoken by the app, not shown), prompt "${listeningPrompt}", options = 4 Vietnamese meanings of week words of similar length, answer = the meaning of the spoken word.`,
     `word_use.items: exactly ${target.wordUse} items mixing: choose the synonym/antonym, choose the word that belongs under an umbrella word, fill a week word into a workplace sentence (blank as ____). 4 English options.`,
     `word_class.items (Word form): exactly ${target.wordForm} items: a workplace sentence with one blank (____, never dashes) where the learner chooses the correct form of a week word (e.g. decide / decision / decisive / decisively, or the right tense: send / sends / sent / sending). Choose only week words that really have several forms: a verb or a word with a real word family; a noun without a family (e.g. feedback, deadline, colleague) is never used, and never gets -ing, -ed, -ly or -ship added.${candidates} 4 English options, each a real English word that is a form of the same word or its family; the sentence must accept only one of them. Never ask for the word class or part of speech, never use labels such as noun/verb/adjective/adverb as options, and never give the answer word unchanged in brackets.`,
@@ -281,6 +427,13 @@ export async function generateMonthlyDay(input: {
   /** Defaults to `new` for backwards-compatible ordinary generation. */
   kind?: "new" | "review";
   generate: (input: MonthlyDayGenerationInput) => Promise<MonthlyLessonCandidate>;
+  /**
+   * Optional targeted repair after the severe gate passes: returns the parts with
+   * light findings fixed (or null). A repair is kept part by part, only when it
+   * adds no severe finding and lowers the light count (product rule: at most two
+   * light findings, each acknowledged by the Operator, before approval).
+   */
+  repairLight?: (input: MonthlyLightRepairInput) => Promise<MonthlyLessonCandidate["parts"] | null>;
   maxAttempts?: number;
   priorGrammarExamples?: readonly string[];
 }): Promise<MonthlyDayGenerationResult> {
@@ -313,16 +466,56 @@ export async function generateMonthlyDay(input: {
     // title must use the new-lesson ordinal, and a review day is never titled "Bài N".
     title = monthlyLessonDisplayTitle(generated.title, { kind: daySpec.kind, newLessonNumber: daySpec.newLessonNumber ?? input.contract.daySpecs.filter((day) => day.kind === "new" && day.lessonNumber <= daySpec.lessonNumber).length, reviewWeekNumber: daySpec.reviewWeekNumber }) || title;
     // D1 (approved 11/11): the plan, not the model, owns the locked fields; the gate below still verifies them.
-    parts = applyMonthlyLockedPlanFields(input.contract, daySpec, dropSupportTermVocabularyCards(input.contract, mergeParts(parts, generated.parts, requestedComponents, kind === "review")));
+    parts = applyMonthlyLockedPlanFields(input.contract, daySpec, keepMeaningfulVocabularyRelations(input.contract, dropSupportTermVocabularyCards(input.contract, mergeParts(parts, generated.parts, requestedComponents, kind === "review"))));
     const candidate = { title, parts };
     report = evaluateMonthlyLessonQuality(input.contract, input.dayNumber, candidate, input.priorGrammarExamples);
-    if (report.severe.length === 0) return { status: "ready", lesson: { title, parts: shuffleMonthlyAnswerOrder(parts, scopeHash, input.dayNumber) }, report, scopeHash, attempts: attempt };
+    if (report.severe.length === 0) {
+      if (input.repairLight) ({ parts, report } = await repairMonthlyLightFindings(input.contract, input.dayNumber, title, parts, report, input.priorGrammarExamples, (current) => input.repairLight!({ daySpec, coreTerms, grammarSteps, parts: current.parts, report: current.report })));
+      return { status: "ready", lesson: { title, parts: shuffleMonthlyAnswerOrder(parts, scopeHash, input.dayNumber) }, report, scopeHash, attempts: attempt };
+    }
     requestedComponents = componentsToRepair(report, daySpec.kind === "review");
   }
   return { status: "failed", lesson: null, report, scopeHash, attempts: maxAttempts };
 }
 
 type LessonPartRecord = MonthlyLessonCandidate["parts"][number];
+
+export interface MonthlyLightRepairInput {
+  daySpec: MonthlyDaySpec;
+  coreTerms: readonly CoreTerm[];
+  grammarSteps: readonly GrammarStep[];
+  parts: MonthlyLessonCandidate["parts"];
+  report: MonthlyQualityReport;
+}
+
+/** Up to two light-repair rounds; each changed part is kept only when it lowers the light count without a severe finding. */
+async function repairMonthlyLightFindings(
+  contract: MonthlyCurriculumContract,
+  dayNumber: number,
+  title: string,
+  parts: MonthlyLessonCandidate["parts"],
+  report: MonthlyQualityReport,
+  priorGrammarExamples: readonly string[] | undefined,
+  repair: (current: { parts: MonthlyLessonCandidate["parts"]; report: MonthlyQualityReport }) => Promise<MonthlyLessonCandidate["parts"] | null>
+): Promise<{ parts: MonthlyLessonCandidate["parts"]; report: MonthlyQualityReport }> {
+  let current = { parts, report };
+  for (let round = 0; round < 2 && current.report.light.length; round += 1) {
+    let repaired: MonthlyLessonCandidate["parts"] | null;
+    // A failed repair call never fails a lesson that already passed the gate.
+    try { repaired = await repair(current); } catch { break; }
+    if (!repaired) break;
+    const before = current.report.light.length;
+    for (const part of repaired) {
+      const index = current.parts.findIndex((candidate) => candidate.code === part.code);
+      if (index < 0 || JSON.stringify(current.parts[index]!.content) === JSON.stringify(part.content)) continue;
+      const trial = current.parts.map((candidate, position) => position === index ? part : candidate);
+      const trialReport = evaluateMonthlyLessonQuality(contract, dayNumber, { title, parts: trial }, priorGrammarExamples);
+      if (!trialReport.severe.length && trialReport.light.length < current.report.light.length) current = { parts: trial, report: trialReport };
+    }
+    if (current.report.light.length >= before) break;
+  }
+  return current;
+}
 
 /**
  * D1 / WP1: copies every plan-locked field into the generated parts before the
@@ -476,6 +669,40 @@ export function dropSupportTermVocabularyCards<T extends LessonPartRecord>(contr
     if (part.code !== "vocabulary" || !isRecord(part.content) || !Array.isArray(part.content.items)) return part;
     const items = part.content.items.filter((item) => !(isRecord(item) && support.has(key(item.word))));
     return items.length === part.content.items.length ? part : { ...part, content: { ...part.content, items } };
+  });
+}
+
+/**
+ * 12/11: a synonym/antonym the model put on a core card beyond the plan is kept
+ * only with the level's meaning (A1–A2 Vietnamese note, B1–C1 English
+ * definition); the gate (MONTHLY_RELATION_MEANING_MISSING) then checks the rest.
+ */
+export function keepMeaningfulVocabularyRelations<T extends LessonPartRecord>(contract: MonthlyCurriculumContract, parts: readonly T[]): T[] {
+  const key = (value: unknown) => typeof value === "string" ? value.trim().toLocaleLowerCase("en-US") : "";
+  const coreByWord = new Map(contract.coreTerms.map((term) => [key(term.word), term]));
+  return parts.map((part) => {
+    if (part.code !== "vocabulary" || !isRecord(part.content) || !Array.isArray(part.content.items)) return part;
+    let changed = false;
+    const items = part.content.items.map((item) => {
+      const core = isRecord(item) ? coreByWord.get(key(item.word)) : undefined;
+      if (!core || !isRecord(item)) return item;
+      const next: Record<string, unknown> = { ...item };
+      for (const relation of ["synonym", "antonym"] as const) {
+        const field = `${relation}s`;
+        if (!Array.isArray(item[field])) continue;
+        const planned = new Set(contract.supportTerms.filter((term) => term.relatedCoreTermId === core.id && term.relation === relation).map((term) => key(term.word)));
+        const kept = (item[field] as unknown[]).flatMap((raw) => {
+          const entry = typeof raw === "string" ? { word: raw } : isRecord(raw) ? raw : null;
+          if (!entry || !key(entry.word)) return [];
+          if (planned.has(key(entry.word))) return [raw];
+          const meaningful = monthlyModelRelationEntry(entry, relation, contract.cefr);
+          return meaningful ? [meaningful] : [];
+        });
+        if (kept.length !== (item[field] as unknown[]).length || kept.some((entry, index) => entry !== (item[field] as unknown[])[index])) { next[field] = kept; changed = true; }
+      }
+      return next;
+    });
+    return changed ? { ...part, content: { ...part.content, items } } : part;
   });
 }
 

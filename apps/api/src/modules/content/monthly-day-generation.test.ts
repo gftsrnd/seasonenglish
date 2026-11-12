@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MonthlyCurriculumContract } from "@e4s/domain";
-import { applyMonthlyLockedPlanFields, dropSupportTermVocabularyCards, generateMonthlyDay, generateMonthlyDayWithAi, generateMonthlyReviewWithAi, monthlyCheckpointKey, monthlyDailyTeachingContract, monthlyLearnerLanguageContract, monthlyReviewExerciseContract, monthlyReviewWordFormCandidates } from "./monthly-day-generation.js";
+import { applyMonthlyLockedPlanFields, dropSupportTermVocabularyCards, generateMonthlyDay, generateMonthlyDayWithAi, generateMonthlyReviewWithAi, keepMeaningfulVocabularyRelations, mergeMonthlyReviewItemRepairs, monthlyCheckpointKey, monthlyDailyTeachingContract, monthlyLearnerLanguageContract, monthlyReviewExerciseContract, monthlyReviewLightRepairRequests, monthlyReviewWordFormCandidates, monthlyVocabularyRelationContract } from "./monthly-day-generation.js";
+import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 
 const components = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"];
 
@@ -113,13 +114,18 @@ describe("monthly day generation", () => {
     const choice=(word:string)=>translated({id:word,prompt:vi?`Chọn ${word}`:`Choose ${word}`,options:[word,"other","different","unrelated"],answer:word,explanation:vi?"Vì đúng nghĩa.":"It fits.",audioText:word});
     candidate.parts=candidate.parts.map(part=>part.code==="vocabulary" ? {code:part.code,content:{items:scope.coreTerms.map(term=>({word:term.word,collocations:[`our ${term.word}`,`the ${term.word}`,`a ${term.word}`]}))}} : part.code==="listening" ? {code:part.code,content:{items:scope.coreTerms.map(term=>choice(term.word))}} : part.code==="word_use" ? {code:part.code,content:{items:scope.coreTerms.slice(0,4).map(term=>choice(term.word))}} : part.code==="word_class" ? {code:part.code,content:{items:scope.coreTerms.slice(0,3).map(term=>choice(term.word))}} : part.code==="reading" ? {code:part.code,content:{...part.content,passage:`Our team discusses ${scope.coreTerms.map(term=>term.word).join(", ")}.`}} : part.code==="pronunciation" ? {code:part.code,content:{focus:first.ipa,words:first.examples.slice(0,3),reviewTargets:scope.sounds.map(sound=>({soundId:sound.id,focus:sound.ipa,words:sound.examples}))}} : part);
     const calls:string[][]=[];
-    const runner={runTask:async (_task:string,input:Record<string,any>)=>{
+    const tasks:string[]=[];
+    const runner={runTask:async (task:string,input:Record<string,any>)=>{
+      tasks.push(task);
+      if (task==="monthly_review_item_repair") return {output:{items:[]},metadata:{}};
       calls.push(input.components);
       return {output:{lesson:{title:"Weekly review",parts:candidate.parts.filter(part=>input.components.includes(part.code)).map(part=>part.code==="grammar" ? {code:part.code,content:input.components.includes("listening") ? {items:part.content.items} : {formula:part.content.formula}} : part)}},metadata:{}};
     }} as unknown as import("@e4s/ai").AiTaskRunner;
     const result=await generateMonthlyReviewWithAi(scope,5,runner,"Review prompt");
     expect(result.status,JSON.stringify(result.report.severe)).toBe("ready");
     expect(calls).toHaveLength(2);
+    // Study tab on the lesson task; exercises on the review task whose schema requires variants.
+    expect(tasks.slice(0,2).sort()).toEqual(["monthly_lesson_day","monthly_review_exercises"]);
     const grammar=result.lesson!.parts.find(part=>part.code==="grammar")!;
     expect(grammar.content.items).toHaveLength(2);
     expect(grammar.content.steps).toHaveLength(2);
@@ -382,5 +388,177 @@ describe("monthly day generation - lesson numbering (12/11)", () => {
     await generateMonthlyDayWithAi(contract(), 1, runner, "Prompt");
     expect(prompts[0]).toContain("LESSON TITLE");
     expect(prompts[0]).toContain("daySpec.newLessonNumber");
+  });
+});
+
+/**
+ * 12/11 Friday review approval: December A1/B1/C1 reviews had 0 severe but 5–22
+ * light findings (mostly MONTHLY_REVIEW_VARIANT_MISSING on listening, word_use and
+ * word_class; plus MONTHLY_ANSWER_LONGEST_OPTION), over the two-finding cap.
+ */
+describe("Friday review light findings are repaired at the source (12/11)", () => {
+  /** The v2 review of the "assembles a full v2 review" test: listening/word_use/word_class items come back without variants, as observed. */
+  const fullReview = (cefr: "A1" | "B1" | "C1") => {
+    const scope = contract();
+    scope.planSchemaVersion = 2; scope.cefr = cefr;
+    for (const word of ["report", "client", "meeting", "team", "deadline", "email", "plan", "step", "update"]) scope.coreTerms.push({ ...scope.coreTerms[0]!, id: word, word });
+    const first = scope.sounds[0]!;
+    first.examples.push(...["cup", "car", "call", "come", "case", "cake"].map((word) => ({ id: word, word, ipa: "/k/" })));
+    scope.grammarTopics[0]!.steps.push({ id: "step-2", focus: "another focus", formula: "There is + adjective", usage: "Describe a fact", examples: ["There is a report."] });
+    scope.sounds.push({ id: "sound-2", ipa: "/s/", label: "S", examples: [{ id: "see", word: "see", ipa: "/siː/" }, { id: "soon", word: "soon", ipa: "/suːn/" }, { id: "sales", word: "sales", ipa: "/seɪlz/" }] });
+    scope.daySpecs.push({ ...scope.daySpecs[0]!, lessonNumber: 5, date: "2026-11-06", kind: "review", coreTermIds: [], expandedTermIds: [], reviewTermIds: scope.coreTerms.map((term) => term.id), reviewGrammarStepIds: ["step", "step-2"], reviewSoundIds: ["sound", "sound-2"], reviewPronunciationExampleIds: scope.sounds.flatMap((sound) => sound.examples.map((example) => example.id)) });
+    const vi = cefr === "A1";
+    const candidate = reviewLessonCandidate(vi);
+    const meaning = (word: string) => `nghĩa của ${word}`;
+    const listeningItem = (word: string, index: number) => translated({ id: `l${index + 1}`, audioText: word, prompt: vi ? "Nghe và chọn nghĩa đúng" : "Listen and choose the meaning", options: [meaning(word), ...scope.coreTerms.filter((term) => term.word !== word).slice(0, 3).map((term) => meaning(term.word))], answer: meaning(word), explanation: vi ? `Từ này nghĩa là ${meaning(word)}.` : `The word ${word} has this meaning.` });
+    const choice = (id: string, word: string) => translated({ id, prompt: vi ? `Chọn từ đúng: The ${word} is ready.` : `Choose the word: The ${word} is ready.`, options: [word, "others", "spares", "tables"], answer: word, explanation: vi ? "Vì đúng nghĩa." : "It fits." });
+    const passage = `Hi team, this is a short update before the meeting with our client on Friday. The budget for next month is small, and the cost of travel is still high. The forecast shows a small profit if we keep to the plan. Please send the report by email before the deadline, and add one step for each task in the plan so the team knows what to update next week. Thanks, Minh`;
+    const readingItem = (id: string, prompt: string, answer: string, options: string[]) => translated({ id, prompt: vi ? `Đọc tin nhắn và chọn đáp án đúng: ${prompt}` : prompt, options, answer, explanation: vi ? "Tin nhắn nói như vậy." : "The message says so.", passage });
+    const reading = [
+      readingItem("r1", "What is small?", "The budget", ["The budget", "The report", "The client", "The update"]),
+      readingItem("r2", "What is still high?", "The travel cost", ["The travel cost", "The budget plan", "The team email", "The new client"]),
+      readingItem("r3", "What does the forecast show?", "A small profit", ["A small profit", "A large loss", "No real change", "A new deadline"])
+    ].map((item) => ({ ...item, variants: [{ ...item, id: `${item.id}-v1`, prompt: `${item.prompt} (again)` }] }));
+    candidate.parts = candidate.parts.map((part) => part.code === "vocabulary" ? { code: part.code, content: { items: scope.coreTerms.map((term) => ({ word: term.word, collocations: [`our ${term.word}`, `the ${term.word}`, `a ${term.word}`], synonyms: [{ word: `${term.word}-like`, note: "từ gần nghĩa", definition: "a word with the same sense" }] })) } }
+      : part.code === "listening" ? { code: part.code, content: { items: scope.coreTerms.map((term, index) => index < 5 ? { ...listeningItem(term.word, index), variants: [translated({ ...listeningItem(term.word, index), id: `l${index + 1}-v1` })] } : listeningItem(term.word, index)) } }
+        : part.code === "word_use" ? { code: part.code, content: { items: scope.coreTerms.slice(0, 4).map((term, index) => choice(`u${index + 1}`, term.word)) } }
+          : part.code === "word_class" ? { code: part.code, content: { items: scope.coreTerms.slice(0, 3).map((term, index) => choice(`f${index + 1}`, term.word)) } }
+            : part.code === "reading" ? { code: part.code, content: { passage, items: reading } }
+              : part.code === "pronunciation" ? { code: part.code, content: { focus: first.ipa, words: first.examples.slice(0, 3), reviewTargets: scope.sounds.map((sound) => ({ soundId: sound.id, focus: sound.ipa, words: sound.examples })) } } : part);
+    return { scope, candidate };
+  };
+  type RepairRequest = { section: string; id: string; issues: string[]; item: Record<string, any> };
+  const repairRunner = (candidate: { parts: Array<{ code: string; content: Record<string, unknown> }> }, repair: (request: RepairRequest) => Record<string, unknown> | null, log: { tasks: string[]; repairItems: RepairRequest[] }) => ({
+    runTask: async (task: string, input: Record<string, any>) => {
+      log.tasks.push(task);
+      if (task === "monthly_review_item_repair") {
+        log.repairItems.push(...input.repairItems);
+        return { output: { items: (input.repairItems as RepairRequest[]).flatMap((request) => { const item = repair(request); return item ? [{ section: request.section, id: request.id, item }] : []; }) }, metadata: {} };
+      }
+      return { output: { lesson: { title: "Weekly review", parts: candidate.parts.filter((part) => input.components.includes(part.code)).map((part) => part.code === "grammar" ? { code: part.code, content: input.components.includes("listening") ? { items: part.content.items } : { formula: part.content.formula } } : part) } }, metadata: {} };
+    }
+  }) as unknown as import("@e4s/ai").AiTaskRunner;
+  /** A realistic repaired item: the same word/answer, a retry in a new context, distractors reordered. */
+  const withVariant = (request: RepairRequest) => ({
+    ...request.item,
+    variants: [{ ...request.item, id: `${request.id}-v1`, prompt: String(request.item.prompt).replace("ready", "late"), options: [...request.item.options].reverse() }]
+  });
+
+  it.each(["A1", "B1", "C1"] as const)("%s: the missing retry variants are generated per item and the review ends within the two-light-finding rule", async (cefr) => {
+    const { scope, candidate } = fullReview(cefr);
+    const before = evaluateMonthlyLessonQuality(scope, 5, { title: "Weekly review", parts: candidate.parts });
+    expect(before.severe).toEqual([]);
+    expect(before.light.filter((finding) => finding.code === "MONTHLY_REVIEW_VARIANT_MISSING").length).toBe(7 + 4 + 3);
+    const log = { tasks: [] as string[], repairItems: [] as RepairRequest[] };
+    const result = await generateMonthlyReviewWithAi(scope, 5, repairRunner(candidate, withVariant, log), "Review prompt");
+    expect(result.status, JSON.stringify(result.report.severe)).toBe("ready");
+    expect(log.tasks.filter((task) => task === "monthly_review_item_repair")).toHaveLength(1);
+    // Only the items without a variant are sent, each with its issue.
+    expect(log.repairItems.map((item) => `${item.section}:${item.id}`).sort()).toEqual([...[6, 7, 8, 9, 10, 11, 12].map((n) => `listening:l${n}`), "word_class:f1", "word_class:f2", "word_class:f3", "word_use:u1", "word_use:u2", "word_use:u3", "word_use:u4"].sort());
+    expect(log.repairItems.every((item) => item.issues.includes("variant_missing"))).toBe(true);
+    expect(result.report.light.map((finding) => finding.code)).not.toContain("MONTHLY_REVIEW_VARIANT_MISSING");
+    expect(result.report.light.length).toBeLessThanOrEqual(2);
+    const listening = result.lesson!.parts.find((part) => part.code === "listening")!.content.items as Array<Record<string, any>>;
+    // A listening retry plays the same word the learner missed.
+    for (const item of listening) expect(item.variants[0].audioText).toBe(item.audioText);
+  });
+
+  it("a repaired section that adds a severe finding is not taken; the others are", async () => {
+    const { scope, candidate } = fullReview("A1");
+    const log = { tasks: [] as string[], repairItems: [] as RepairRequest[] };
+    const result = await generateMonthlyReviewWithAi(scope, 5, repairRunner(candidate, (request) => request.section === "word_use"
+      ? { ...request.item, variants: [{ ...withVariant(request).variants[0], options: ["sended", "maked", "gived", request.item.answer] }] }
+      : withVariant(request), log), "Review prompt");
+    expect(result.status).toBe("ready");
+    expect(result.report.severe).toEqual([]);
+    const missing = result.report.light.filter((finding) => finding.code === "MONTHLY_REVIEW_VARIANT_MISSING");
+    expect(missing.map((finding) => finding.component)).toEqual(["word_use", "word_use", "word_use", "word_use"]);
+    // The second round asks again only for the word_use items, then stops when nothing improves.
+    expect(log.repairItems.slice(14).map((item) => item.section)).toEqual(["word_use", "word_use", "word_use", "word_use"]);
+  });
+
+  it("a failing repair call keeps the lesson that already passed the gate", async () => {
+    const { scope, candidate } = fullReview("B1");
+    const base = repairRunner(candidate, withVariant, { tasks: [], repairItems: [] });
+    const runner = { runTask: async (task: string, input: unknown, options: unknown) => {
+      if (task === "monthly_review_item_repair") throw new Error("AI_TIMEOUT");
+      return base.runTask(task, input, options as never);
+    } } as unknown as import("@e4s/ai").AiTaskRunner;
+    const result = await generateMonthlyReviewWithAi(scope, 5, runner, "Review prompt");
+    expect(result.status).toBe("ready");
+    expect(result.report.light.filter((finding) => finding.code === "MONTHLY_REVIEW_VARIANT_MISSING")).toHaveLength(14);
+  });
+
+  it("longest-option repair: takes only new distractors that keep the answer and remove the length cue", () => {
+    // Shape of the observed A1 W1 reading items: the answer is the one long, detailed sentence.
+    const reading = { code: "reading", content: { passage: "Subject: Progress update", items: [
+      { id: "r1", prompt: "Đọc tin nhắn và chọn đáp án đúng.", options: ["The client replied.", "The project team made three changes to the file.", "Minh is away.", "The meeting moved."], answer: "The project team made three changes to the file.", explanation: "Tin nhắn nói nhóm đã sửa ba chỗ.", variants: [{ id: "r1-v1", prompt: "Chọn đáp án đúng về tin nhắn.", options: ["No reply yet.", "The client gave a clear list of changes last week.", "It was cancelled.", "Minh left."], answer: "The client gave a clear list of changes last week.", explanation: "Khách hàng đã gửi danh sách." }] },
+      { id: "r2", prompt: "Đọc tin nhắn và chọn đáp án đúng.", options: ["Friday", "Monday morning at the office", "Sunday", "Today"], answer: "Monday morning at the office", explanation: "Tin nhắn nói sáng thứ Hai." }
+    ] } };
+    const light = [{ severity: "light" as const, code: "MONTHLY_ANSWER_LONGEST_OPTION", message: "In reading, the correct answer is the only longest option in 3/3 questions", dayNumber: 5, component: "reading" }];
+    const requests = monthlyReviewLightRepairRequests([reading], light);
+    expect(requests.map((request) => [request.id, request.issues])).toEqual([["r1", ["answer_longest_option"]], ["r2", ["answer_longest_option"]]]);
+    const merged = mergeMonthlyReviewItemRepairs([reading], requests, [
+      { section: "reading", id: "r1", item: { options: ["The client replied to the email yesterday.", "The project team made three changes to the file.", "Minh is away from the office until the end of next week.", "The meeting moved."], answer: "The project team made three changes to the file.", variants: [{ options: ["The client has not replied to us yet.", "The client gave a clear list of changes last week.", "The meeting with the client on Monday was cancelled by Minh.", "Minh left."], answer: "The client gave a clear list of changes last week." }] } },
+      // r2: the model changed the answer text, so its options are not taken.
+      { section: "reading", id: "r2", item: { options: ["On Friday afternoon at home", "Monday morning", "Sunday evening at the office", "Today"], answer: "Monday morning", variants: [] } }
+    ]);
+    const [r1, r2] = merged[0]!.content.items as Array<Record<string, any>>;
+    expect(r1!.options).toEqual(["The client replied to the email yesterday.", "The project team made three changes to the file.", "Minh is away from the office until the end of next week.", "The meeting moved."]);
+    expect(r1!.answer).toBe("The project team made three changes to the file.");
+    expect(r1!.explanation).toBe("Tin nhắn nói nhóm đã sửa ba chỗ.");
+    expect(r1!.variants[0].options).toContain("The meeting with the client on Monday was cancelled by Minh.");
+    expect(r1!.variants[0].explanation).toBe("Khách hàng đã gửi danh sách.");
+    expect(r2).toEqual(reading.content.items[1]);
+  });
+
+  it("the review prompt states the variant shape per section with an example", () => {
+    const contractText = monthlyReviewExerciseContract(12, 2, "A1");
+    expect(contractText).toContain("VARIANTS ARE REQUIRED on every listening, word_use, word_class, grammar and reading item");
+    expect(contractText).toContain("the SAME audioText");
+    expect(contractText).toContain("\"variants\":[{\"id\":\"l1-v1\",\"audioText\":\"client\"");
+  });
+});
+
+/** 12/11: A1–A2 cards show a Vietnamese meaning, B1–C1 an English definition, on every synonym and antonym. */
+describe("vocabulary synonyms/antonyms carry their meaning (12/11)", () => {
+  it("drops an unplanned synonym/antonym without the level meaning before the gate, and keeps one that has it", async () => {
+    // Observed model output: plain-string synonyms beyond the plan ("plan", "estimate") and an added antonym.
+    const scope = contract();
+    const result = await generateMonthlyDay({ contract: scope, dayNumber: 1, generate: async (input) => ({ title: "Budget", parts: input.components.map((code) => code === "vocabulary" ? { code, content: { items: [
+      { word: "budget", synonyms: ["plan"], antonyms: [{ word: "deficit", note: "thâm hụt" }], collocations: ["a small budget", "budget plan", "set a budget"] },
+      { word: "cost", synonyms: ["expense"], antonyms: ["profit"], collocations: ["high cost", "cost of travel", "cut the cost"] },
+      { word: "forecast", synonyms: ["estimate", "projection"], antonyms: [], collocations: ["sales forecast", "a weather forecast", "forecast growth"] }
+    ] } } : part(code)) }) });
+    expect(result.status, JSON.stringify(result.report.severe)).toBe("ready");
+    const cards = result.lesson!.parts.find((item) => item.code === "vocabulary")!.content.items as Array<Record<string, any>>;
+    expect(cards.map((card) => [card.synonyms, card.antonyms])).toEqual([
+      [[], [{ word: "deficit", note: "thâm hụt" }]],
+      [["expense"], []],
+      [["projection"], []]
+    ]);
+  });
+
+  it("gates an unplanned entry without its meaning (lessons saved outside generation) and keeps planned ones", () => {
+    const scope = contract();
+    scope.cefr = "B2";
+    scope.supportTerms[1]!.definition = "money spent on something";
+    const parts = lessonCandidate().parts.map((item) => item.code === "vocabulary" ? { code: item.code, content: { items: [
+      { word: "budget", synonyms: [], antonyms: [{ word: "deficit", note: "thâm hụt" }], collocations: ["a small budget", "budget plan", "set a budget"] },
+      { word: "cost", synonyms: [{ word: "expense", definition: "money spent on something" }], antonyms: [{ word: "income", definition: "money that you earn" }], collocations: ["high cost", "cost of travel", "cut the cost"] },
+      { word: "forecast", synonyms: ["projection"], antonyms: [], collocations: ["sales forecast", "a weather forecast", "forecast growth"] }
+    ] } } : item);
+    const findings = evaluateMonthlyLessonQuality(scope, 1, { title: "Budget", parts }).severe.filter((finding) => finding.code === "MONTHLY_RELATION_MEANING_MISSING");
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.message).toContain("budget: every synonym/antonym not in the plan needs a short simple-English definition");
+    expect(findings[0]!.message).toContain("antonym \"deficit\"");
+    const kept = keepMeaningfulVocabularyRelations(scope, parts).find((item) => item.code === "vocabulary")!.content.items as Array<Record<string, any>>;
+    expect(kept.map((card) => card.antonyms.map((entry: { word: string }) => entry.word))).toEqual([[], ["income"], []]);
+  });
+
+  it("states the entry shape per level in the lesson prompt", () => {
+    expect(monthlyVocabularyRelationContract("A2")).toContain("{ word, note }");
+    expect(monthlyVocabularyRelationContract("C1")).toContain("{ word, definition }");
+    expect(monthlyVocabularyRelationContract("C1")).not.toContain("note");
   });
 });
