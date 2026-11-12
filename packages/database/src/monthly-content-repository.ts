@@ -460,6 +460,33 @@ export class MonthlyContentRepository {
     }));
   }
 
+  /**
+   * Grammar topics of the same level in the months before `beforeMonth` (at
+   * most `windowMonths`), from the latest non-retired framework of each month,
+   * draft or approved: the memory used to pick the next roadmap pair.
+   */
+  async listGrammarHistory(actorId: string, cefr: MonthFrameworkView["cefr"], beforeMonth: string, windowMonths = 12): Promise<Array<{ month: string; topics: Array<{ title: string; catalogId?: string }> }>> {
+    const actor = await this.requireContentOperator(actorId);
+    const [year, monthNumber] = beforeMonth.split("-").map(Number) as [number, number];
+    const startIndex = year * 12 + (monthNumber - 1) - windowMonths;
+    const fromMonth = `${Math.floor(startIndex / 12)}-${String((startIndex % 12) + 1).padStart(2, "0")}`;
+    const result = await this.database.query<{ month: string; topics: unknown }>(
+      `select distinct on (pm.month) pm.month, mf.curriculum_contract->'grammarTopics' as topics
+       from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+       where pm.organization_id = $1 and mf.cefr = $2 and pm.month >= $3 and pm.month < $4 and mf.status <> 'retired'
+       order by pm.month, mf.version desc`,
+      [actor.organization_id, cefr, fromMonth, beforeMonth]
+    );
+    return result.rows.map((row) => ({
+      month: row.month,
+      topics: (Array.isArray(row.topics) ? row.topics : []).flatMap((topic: unknown) => {
+        if (!topic || typeof topic !== "object") return [];
+        const value = topic as { title?: unknown; catalogId?: unknown };
+        return [{ title: typeof value.title === "string" ? value.title : "", ...(typeof value.catalogId === "string" ? { catalogId: value.catalogId } : {}) }];
+      })
+    }));
+  }
+
   async getResourceGenerationCheckpoint(actorId: string, month: string, cefr: MonthFrameworkView["cefr"]): Promise<MonthlyResourceGenerationCheckpoint | null> {
     const actor = await this.requireContentOperator(actorId);
     await this.requireWritableMonth(actor.organization_id, month);

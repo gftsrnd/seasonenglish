@@ -282,7 +282,12 @@ export function applyMonthlyResourceEdit(existing: MonthlyResourcePoolContract, 
     grammarTopics: input.grammarTopics.map((topic) => ({
       id: topic.id,
       title: topic.title.trim(),
-      steps: topic.steps.map((step) => ({ id: step.id, focus: step.focus.trim(), formula: step.formula.trim(), usage: step.usage.trim(), examples: step.examples.map((example) => example.trim()), ...(step.dailyObjectives ? { dailyObjectives: step.dailyObjectives.map(value => value.trim()) } : {}) }))
+      steps: topic.steps.map((step) => ({ id: step.id, focus: step.focus.trim(), formula: step.formula.trim(), usage: step.usage.trim(), examples: step.examples.map((example) => example.trim()), ...(step.dailyObjectives ? { dailyObjectives: step.dailyObjectives.map(value => value.trim()) } : {}) })),
+      // The roadmap topic is a locked plan field: an edit keeps the stored catalogId.
+      ...(() => {
+        const catalogId = existing.grammarTopics.find((item) => item.id === topic.id)?.catalogId;
+        return catalogId ? { catalogId } : {};
+      })()
     })),
     sounds: input.sounds.map((sound) => ({
       id: sound.id,

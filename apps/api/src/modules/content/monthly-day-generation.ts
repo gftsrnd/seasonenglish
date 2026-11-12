@@ -2,6 +2,7 @@ import { monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, ty
 import { MONTHLY_LESSON_PART_CONTENT_CONTRACT, type AiTaskRunner } from "@e4s/ai";
 import { evaluateMonthlyLessonQuality, monthlyLockedPlanExpectations, normalizeFormula, type MonthlyLessonCandidate, type MonthlyLockedPlanExpectations, type MonthlyQualityReport, type MonthlyQualityFinding } from "./monthly-quality.js";
 import { rebalanceAnswerTextPositions, type AnswerTextChoice } from "../shared/answer-order.js";
+import { monthlyGrammarRoadmapDayContract } from "./monthly-grammar-roadmap.js";
 import { MONTHLY_REVIEW_COMPONENTS, monthlyReviewTargets } from "./monthly-review-quality.js";
 
 const REVIEW_STUDY_COMPONENTS = ["objective", "instruction", "vocabulary", "grammar", "pronunciation"] as const;
@@ -22,6 +23,7 @@ export function monthlyDailyTeachingContract(day: MonthlyDaySpec, cefr: string, 
     (day.pronunciationPlan?.targetIds.length ?? 0) > 1 ? "Also return pronunciation.reviewTargets: [{soundId,focus,words:[{word,ipa}]}], in dailyTeachingPlan.pronunciation.targetIds order, including exactly the assigned dailyTeachingPlan.pronunciation.exampleIds for each target. The UI and listening gates use this complete multi-target scope." : "",
     day.pronunciationPlan?.requiredPositions ? "For the read-aloud/mock task also return pronunciation.passage and pronunciation.targetPositions: [{soundId,exampleId}], exactly the eight requiredPositions from the plan, two per target; the passage must actually contain those eight example words." : "",
     day.pronunciationPlan?.stage === "personalize" ? "Use recorded learner error evidence when supplied. With no error evidence, explicitly present this as a diagnostic over the taught targets; do not invent personal mistakes." : "",
+    monthlyGrammarRoadmapDayContract(day, cefr),
     "The speaking task must apply the day's pronunciation stage and grammar objective, using at least two daily core words."
   ].filter(Boolean).join("\n");
 }

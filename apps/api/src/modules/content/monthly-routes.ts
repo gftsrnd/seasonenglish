@@ -1,4 +1,4 @@
-import { monthlyPronunciationCatalog, MONTHLY_PRONUNCIATION_MEMORY_MONTHS, selectMonthlyPronunciationItems, buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlyPhrasePlacements, maxMonthlySupportRepeats, monthlyDayKind, monthlyScopeHash, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, hasRequiredMonthlySupportRelations, requiredSupportRelationsFor, type MonthlyCurriculumContract } from "@e4s/domain";
+import { monthlyPronunciationCatalog, MONTHLY_PRONUNCIATION_MEMORY_MONTHS, selectMonthlyPronunciationItems, MONTHLY_GRAMMAR_MEMORY_MONTHS, selectMonthlyGrammarPair, buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlyPhrasePlacements, maxMonthlySupportRepeats, monthlyDayKind, monthlyScopeHash, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, hasRequiredMonthlySupportRelations, requiredSupportRelationsFor, type MonthlyCurriculumContract } from "@e4s/domain";
 import { monthlyResourcePlanOutputSchema, monthlyTopicSuggestionOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import { MonthlyResourceProgressStore } from "./monthly-resource-progress.js";
@@ -35,7 +35,7 @@ const frameworkInput = z.object({
     month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u), cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]), version: z.int().positive(),
     theme: z.object({ version: z.int().positive(), title: z.string(), brief: z.string(), context: z.string(), communicationGoal: z.string() }),
     coreTerms: z.array(coreTerm), supportTerms: z.array(supportTerm),
-    grammarTopics: z.array(z.object({ id: z.string().min(1), title: z.string().min(1), steps: z.array(z.object({ id: z.string().min(1), focus: z.string(), formula: z.string().min(1), usage: z.string(), examples: z.array(z.string()), dailyObjectives: z.array(z.string()).length(2).optional() })).min(1) })),
+    grammarTopics: z.array(z.object({ id: z.string().min(1), title: z.string().min(1), steps: z.array(z.object({ id: z.string().min(1), focus: z.string(), formula: z.string().min(1), usage: z.string(), examples: z.array(z.string()), dailyObjectives: z.array(z.string()).length(2).optional() })).min(1), catalogId: z.string().min(1).optional() })),
     sounds: z.array(z.object({ id: z.string().min(1), ipa: z.string().min(1), label: z.string().min(1), examples: z.array(z.object({ id: z.string().min(1), word: z.string().min(1), ipa: z.string().min(1) })) })),
     daySpecs: z.array(z.object({ lessonNumber: z.int().positive(), date: z.string().date(), kind: z.enum(["new", "review"]), coreTermIds: z.array(z.string()), expandedTermIds: z.array(z.string()), reviewTermIds: z.array(z.string()), reviewExpandedTermIds: z.array(z.string()), skillExercises: z.array(z.object({ exerciseCode: z.enum(["listening", "reading", "writing", "word_class", "word_use", "speaking"]), focus: z.string().min(1), resourceIds: z.array(z.string()).min(1) })).length(6), grammarStepId: z.string().min(1), grammarStepIds: z.array(z.string()).optional(), soundId: z.string().min(1), pronunciationSlot: z.string().optional(), pronunciationExampleIds: z.array(z.string()) }).passthrough())
   })
@@ -425,9 +425,18 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       // support target. The hard floor is three supports covering the relations
       // its part of speech requires, so an incomplete core is enriched again but
       // never fails for lacking extras.
+      // Roadmap grammar (docs/grammar-roadmap.md): the month's pair is picked
+      // deterministically from the level catalog with a 12-month memory of the
+      // same level; the AI only writes the steps inside the locked topics.
+      const grammarHistory = typeof repositories.monthlyContent.listGrammarHistory === "function"
+        ? await repositories.monthlyContent.listGrammarHistory(actorId, criteria.cefr, month.month, MONTHLY_GRAMMAR_MEMORY_MONTHS)
+        : [];
+      const grammarSelection = selectMonthlyGrammarPair({ cefr: criteria.cefr, month: month.month, history: grammarHistory });
+      const grammarPair = grammarSelection.pair;
+      request.log.info({ month: month.month, cefr: criteria.cefr, phase: "grammar-selection", pair: grammarPair.id, taught: grammarSelection.taughtPairIds, newCycle: grammarSelection.newCycle }, "Monthly grammar pair selected");
       const cachedGrammarTopics = readCheckpointCategory("grammarTopics", monthlyResourcePlanOutputSchema.shape.grammarTopics) ?? [];
       const cachedGrammarResult = { coreTerms: [], expandedTerms: [], grammarTopics: cachedGrammarTopics, pronunciationTargets: [] } as z.infer<typeof monthlyResourcePlanOutputSchema>;
-      const resumingAfterEnrichment = cachedCoreValid && getMonthlyGrammarPhaseIssues(cachedGrammarResult, criteria.cefr).length === 0;
+      const resumingAfterEnrichment = cachedCoreValid && getMonthlyGrammarPhaseIssues(cachedGrammarResult, criteria.cefr, grammarPair).length === 0;
       const isCompleteCoreSupportSet = (core: typeof coreTerms[number], coreIndex: number) => {
         const supports = expandedTerms.filter((term) => term.relatesToCoreId === core.id);
         const familyRequired = requiredSupportRelationsFor(core.type).includes("word_family");
@@ -738,13 +747,13 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
 
       const monthlyVocabularyForPronunciation = [...coreTerms, ...expandedTerms].map((term) => `${term.word} (${term.meaning})`).join("; ");
       updateProgress({phase:"grammarTopics",counts:{coreTerms:coreTerms.length,expandedTerms:expandedTerms.length}});
-      let grammarResult = getMonthlyGrammarPhaseIssues(cachedGrammarResult, criteria.cefr).length === 0 ? cachedGrammarResult : undefined;
+      let grammarResult = getMonthlyGrammarPhaseIssues(cachedGrammarResult, criteria.cefr, grammarPair).length === 0 ? cachedGrammarResult : undefined;
       if (!grammarResult) {
         grammarResult = await runMonthlyGrammarPhaseWithRetry((prompt) => runPhase(
           prompt,
           [],
           { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 2, pronunciationSoundCount: 0 }
-        ), criteria.cefr);
+        ), criteria.cefr, grammarPair);
         await saveCheckpointCategory("grammarTopics", grammarResult.grammarTopics);
       }
       updateProgress({phase:"pronunciationTargets",counts:{grammarTopics:grammarResult.grammarTopics.length}});
@@ -860,7 +869,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         grammarTopics: grammarResult.grammarTopics,
         pronunciationTargets
       });
-      const pool = buildMonthlyResourcesFromAiPlan(month.month, criteria.cefr, theme, criteria, plan, pronunciationItems.map((item) => item.id));
+      const pool = buildMonthlyResourcesFromAiPlan(month.month, criteria.cefr, theme, criteria, plan, pronunciationItems.map((item) => item.id), [grammarPair.topicA.id, grammarPair.topicB.id]);
       updateProgress({phase:"saving",counts:{coreTerms:pool.coreTerms.length,expandedTerms:pool.supportTerms.length,grammarTopics:pool.grammarTopics.length,pronunciationTargets:pool.sounds.length}});
       const framework = await repositories.monthlyContent.saveResourceDraft(actorId, pool);
       updateProgress({status:"completed"});

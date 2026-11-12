@@ -1,5 +1,5 @@
 import type { CefrLevel } from "@e4s/contracts";
-import { monthlyPronunciationExampleIssue, type MonthlyCurriculumContract } from "@e4s/domain";
+import { monthlyGrammarCoverageIssues, monthlyPronunciationExampleIssue, type MonthlyCurriculumContract } from "@e4s/domain";
 
 /**
  * Approval-time re-check of the WP9 resource rules, so a draft that bypassed
@@ -30,6 +30,8 @@ export function monthlyResourceApprovalIssues(
       if ((step.dailyObjectives ?? []).some((value) => VIETNAMESE_ONLY_LETTER.test(value))) issues.push(`Grammar topic ${topic.id} step ${step.id} dailyObjectives must be in simple English for ${contract.cefr}, not Vietnamese.`);
     }
   }
+  // Roadmap grammar topics must still cover every "Nội dung" item of their catalog topic.
+  issues.push(...monthlyGrammarCoverageIssues(contract.cefr, contract.grammarTopics).map((issue) => `${issue}.`));
   const pairedLevel = contract.cefr === "C1" ? "B1" : contract.cefr === "B1" ? "C1" : undefined;
   if (pairedLevel) {
     const paired = new Set(otherLevels.filter((level) => level.cefr === pairedLevel).flatMap((level) => level.coreWords.map(normalizeWord)));

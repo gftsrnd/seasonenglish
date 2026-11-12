@@ -1,6 +1,7 @@
 import type { MonthlyCurriculumContract, MonthlyDaySpec } from "@e4s/domain";
 import { answerIsUniqueLongestOption, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
 import type { LessonPart } from "@e4s/contracts";
+import { monthlyGrammarRoadmapDayIssues } from "./monthly-grammar-roadmap.js";
 import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
 
 const REQUIRED_COMPONENTS = [
@@ -145,6 +146,7 @@ export function evaluateMonthlyLessonQuality(
       if (!asString(question.prompt) || options.length !== 4 || new Set(options.map(normalize)).size !== 4 || !options.some(option => normalize(option) === normalize(asString(question.answer))) || !asString(question.explanation)) severe.push(finding("MONTHLY_DAILY_GRAMMAR_QUESTION", "Every grammar question needs a prompt, 4 distinct options, an answer copied from them, and an explanation", dayNumber, "grammar"));
     }
     if (day.grammarPlan?.recallMilestoneIds.length && !questions.some(question => day.grammarPlan!.recallMilestoneIds.includes(asString(question.milestoneId)))) severe.push(finding("MONTHLY_DAILY_GRAMMAR_RECALL", "Include the locked topic A recall question from N8", dayNumber, "grammar"));
+    for (const issue of monthlyGrammarRoadmapDayIssues(day, contract.cefr, grammar, dayWords)) severe.push(finding(issue.code, issue.message, dayNumber, "grammar"));
     if (pronunciation?.stage !== day.pronunciationPlan?.stage || pronunciation?.objective !== day.pronunciationPlan?.objective) severe.push(finding("MONTHLY_DAILY_PRONUNCIATION_STAGE", `Pronunciation must teach the locked daily stage and objective. Set pronunciation.stage to "${day.pronunciationPlan?.stage ?? ""}" and pronunciation.objective to exactly "${day.pronunciationPlan?.objective ?? ""}" (copy verbatim)`, dayNumber, "pronunciation"));
     const required = day.pronunciationPlan?.requiredPositions;
     if (required) {

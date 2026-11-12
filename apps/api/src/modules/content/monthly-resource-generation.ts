@@ -1,4 +1,4 @@
-import { allowedMonthlySupportLevels, describeRequiredSupportRelations, isMonthlyCoreLevelAllowed, isMonthlySupportLevelAllowed, maxMonthlyWordFamilyLevel, buildMonthlyCalendar, monthlyCorePartOfSpeech, monthlyDayKind, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, monthlyIpaExampleMatchesTarget, monthlyPronunciationPairSide, optionalStructuralSupportRelationsFor, type MonthlyPronunciationCatalogItem, requiredSupportRelationsFor, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
+import { allowedMonthlySupportLevels, describeRequiredSupportRelations, isMonthlyCoreLevelAllowed, isMonthlySupportLevelAllowed, maxMonthlyWordFamilyLevel, buildMonthlyCalendar, monthlyCorePartOfSpeech, monthlyDayKind, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, monthlyIpaExampleMatchesTarget, monthlyPronunciationPairSide, optionalStructuralSupportRelationsFor, type MonthlyPronunciationCatalogItem, requiredSupportRelationsFor, monthlyGrammarCoverageIssues, monthlyGrammarTopicTitle, MONTHLY_GRAMMAR_PAIR_TYPE_LABELS, type MonthlyGrammarCatalogPair, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
 import type { CefrLevel } from "@e4s/contracts";
 import { monthlyResourcePlanOutputSchema, type MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.js";
@@ -108,7 +108,8 @@ const CURRENT_MONTHLY_PRONUNCIATION_SCHEMA_VERSION = "monthly-resource-pronuncia
 export const CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS = {
   coreTerms: "monthly-resource-category-v19-core-relation-preflight",
   expandedTerms: "monthly-resource-category-v32-preflight-support-graph-and-partial-checkpoints",
-  grammarTopics: "monthly-resource-grammar-v2-six-daily-objectives",
+  /** v3: the two topics are the roadmap pair chosen with 12-month memory (docs/grammar-roadmap.md); older grammar checkpoints are regenerated. */
+  grammarTopics: "monthly-resource-grammar-v3-roadmap-pair",
   pronunciationTargets: CURRENT_MONTHLY_PRONUNCIATION_SCHEMA_VERSION
 } as const;
 
@@ -666,7 +667,7 @@ export function monthlyDailyObjectivesMustBeEnglish(cefr: string | undefined): b
   return cefr === "B1" || cefr === "B2" || cefr === "C1";
 }
 
-export function getMonthlyGrammarPhaseIssues(result: MonthlyResourcePlanTaskOutput, cefr?: string): string[] {
+export function getMonthlyGrammarPhaseIssues(result: MonthlyResourcePlanTaskOutput, cefr?: string, pair?: MonthlyGrammarCatalogPair): string[] {
   const issues: string[] = [];
   if (result.coreTerms.length) issues.push(`coreTerms must be empty (received ${result.coreTerms.length})`);
   if (result.expandedTerms.length) issues.push(`expandedTerms must be empty (received ${result.expandedTerms.length})`);
@@ -684,10 +685,30 @@ export function getMonthlyGrammarPhaseIssues(result: MonthlyResourcePlanTaskOutp
     const vietnamese = monthlyDailyObjectivesMustBeEnglish(cefr) ? objectives.filter(isVietnameseMonthlyText) : [];
     if (vietnamese.length) issues.push(`grammarTopics[${topicIndex}] dailyObjectives must be in simple English for ${cefr}, not Vietnamese (e.g. "${vietnamese[0]!.trim().slice(0, 80)}")`);
   }
+  if (pair && result.grammarTopics.length === 2) issues.push(...monthlyGrammarRoadmapPairIssues(result, pair));
   return issues;
 }
 
-export function buildMonthlyGrammarPhasePrompt(rejectedIssues: readonly string[] = [], cefr?: string): string {
+/** Roadmap pair gates: locked titles in A, B order and coverage of every "Nội dung" item. */
+export function monthlyGrammarRoadmapPairIssues(result: MonthlyResourcePlanTaskOutput, pair: MonthlyGrammarCatalogPair): string[] {
+  const issues: string[] = [];
+  const sides = [pair.topicA, pair.topicB] as const;
+  for (const [index, side] of sides.entries()) {
+    const expected = monthlyGrammarTopicTitle(pair.cefr, side);
+    if (result.grammarTopics[index]?.title.trim() !== expected) issues.push(`grammarTopics[${index}] must be the locked roadmap topic ${side.side} "${expected}"`);
+  }
+  issues.push(...monthlyGrammarCoverageIssues(pair.cefr, result.grammarTopics.map((topic, index) => ({ ...topic, id: `grammarTopics[${index}]`, catalogId: sides[index]?.id }))));
+  return issues;
+}
+
+/** Sets the two locked roadmap titles (A, B) on a grammar phase result. */
+export function withMonthlyGrammarRoadmapTitles(result: MonthlyResourcePlanTaskOutput, pair: MonthlyGrammarCatalogPair): MonthlyResourcePlanTaskOutput {
+  const sides = [pair.topicA, pair.topicB];
+  return { ...result, grammarTopics: result.grammarTopics.map((topic, index) => sides[index] ? { ...topic, title: monthlyGrammarTopicTitle(pair.cefr, sides[index]!) } : topic) };
+}
+
+export function buildMonthlyGrammarPhasePrompt(rejectedIssues: readonly string[] = [], cefr?: string, pair?: MonthlyGrammarCatalogPair): string {
+  if (pair) return buildMonthlyGrammarRoadmapPrompt(pair, rejectedIssues);
   const repair = rejectedIssues.length
     ? ` Previous response rejected: ${rejectedIssues.join("; ")}. Correct each listed issue in this response.`
     : "";
@@ -695,14 +716,41 @@ export function buildMonthlyGrammarPhasePrompt(rejectedIssues: readonly string[]
   return `PHASE 3 — GRAMMAR ONLY. Return exactly two grammarTopics; coreTerms, expandedTerms and pronunciationTargets must be empty arrays. Each grammar topic must have exactly three ordered progressive steps that build in complexity; use a distinct focus and teaching point at each step, with precise formula, usage in Vietnamese for A1/A2 or simple English for B1, B2 and C1, and three to six authentic workplace reference examples. Each step also has dailyObjectives: exactly two distinct objectives, first recognition/explanation and then contextual application, at the supplied CEFR, written in Vietnamese for A1/A2 and in simple English for B1, B2 and C1 (never Vietnamese from B1 upwards).${objectiveLanguage} Together they define A1–A6 or B1–B6; never copy one objective twice. Topic A steps are the progression for N1–N2, N3–N4, N5–N6. Topic B steps are the progression for N7–N8, N9–N10, N11–N12. N13–N15 combine the third step of both topics through contrast, read-aloud and voice note. N16–N18 are optional personalization, shadowing and speaking mock, without new grammar topics. Return JSON matching the schema only; do not include explanations or any other resource category.${repair}`;
 }
 
+/**
+ * Roadmap grammar phase prompt (docs/grammar-roadmap.md): the application has
+ * chosen the pair; the AI writes the three steps of each topic (two daily
+ * objectives each = the six scaffolding days) inside the locked "Nội dung" list.
+ */
+export function buildMonthlyGrammarRoadmapPrompt(pair: MonthlyGrammarCatalogPair, rejectedIssues: readonly string[] = []): string {
+  const english = monthlyDailyObjectivesMustBeEnglish(pair.cefr);
+  const language = english ? "simple English with short sentences and vocabulary one level below the month's level (no Vietnamese words)" : "Vietnamese";
+  const topicLine = (side: MonthlyGrammarCatalogPair["topicA"]) => `Topic ${side.side} title exactly "${monthlyGrammarTopicTitle(pair.cefr, side)}" (roadmap name: ${side.titleVi} / ${side.titleEn}); roadmap content it must cover, in roadmap wording: ${side.contents.map((item, index) => `${index + 1}) ${item}`).join("; ")}.`;
+  const k1 = pair.pairType === "contrast" ? "K1 asks learners to choose A or B for each situation" : "K1 asks learners to join A and B in one sentence";
+  const repair = rejectedIssues.length ? ` Previous response rejected: ${rejectedIssues.join("; ")}. Correct each listed issue in this response.` : "";
+  return [
+    `PHASE 3 — GRAMMAR ONLY, ROADMAP PAIR LOCKED BY THE APPLICATION. Return exactly two grammarTopics, topic A first, then topic B; coreTerms, expandedTerms and pronunciationTargets must be empty arrays. The application has ALREADY CHOSEN this month's pair from the product grammar roadmap of level ${pair.cefr}; do not choose, rename, merge, add or drop a topic, and teach nothing outside these two topics and grammar the level has already met.`,
+    `Pair type: ${MONTHLY_GRAMMAR_PAIR_TYPE_LABELS[pair.pairType].en}. Workplace situation for the whole month: ${pair.situationEn}.`,
+    topicLine(pair.topicA),
+    topicLine(pair.topicB),
+    "Each topic has exactly three ordered steps, and each step has exactly two dailyObjectives: six daily lessons per topic, one small idea per day (3–4 minutes of grammar), following the roadmap's six scaffolding steps with decreasing support. Step 1 = day 1 Identify (notice the structure in a real workplace message) + day 2 Basic structure (the main, usually affirmative, formula). Step 2 = day 3 Variations (negative, question, short form or the main variant; for a topic without negatives or questions, such as articles or prepositions, its second main variant) + day 4 Meaning and use (when to use it, signal words). Step 3 = day 5 Common errors (typical Vietnamese-influenced errors first: missing to be, missing -s/-ed, wrong tense because Vietnamese has no tense, articles, prepositions) + day 6 Application (learners write 1–2 sentences about their own work).",
+    "Spread the roadmap content items over the six days so that EVERY item is taught on some day, one idea per day, in a sensible easy-to-hard order. Name the English forms of each roadmap item (the words and patterns listed in it) in the step focus, formula, usage, examples or dailyObjectives: the application checks that every item is covered.",
+    "Step 1 formula is the core structure (it is also the main evidence scored in the monthly exam); step 2 formula is the variant or other use (the secondary exam evidence); step 3 formula is the complete productive pattern learners reuse on the combination days. Each step has a distinct focus, a precise formula, usage, and three to six authentic English workplace reference examples (office, sales, IT, marketing, HR, finance; fictional people and companies) with vocabulary at the month's level.",
+    `Write usage and dailyObjectives in ${language}; grammar terms use their common English names (present perfect, passive…). Each dailyObjective names its scaffolding step and its single idea from the roadmap content; never repeat an objective.`,
+    `After the two topics, N13–N15 combine A and B (${k1}; K2 is a 4–6 sentence email or message with gaps that need both A and B; K3 is a workplace task answered in 2–3 sentences with a model answer) and N16–N18 are M1 error review, M2 a longer dialogue or email, M3 a mock test, all without new grammar. Return JSON matching the schema only; do not include explanations or any other resource category.${repair}`
+  ].join(" ");
+}
+
 export async function runMonthlyGrammarPhaseWithRetry(
   generate: (prompt: string) => Promise<MonthlyResourcePlanTaskOutput>,
-  cefr?: string
+  cefr?: string,
+  pair?: MonthlyGrammarCatalogPair
 ): Promise<MonthlyResourcePlanTaskOutput> {
   let issues: string[] = [];
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const result = await generate(buildMonthlyGrammarPhasePrompt(issues, cefr));
-    issues = getMonthlyGrammarPhaseIssues(result, cefr);
+    const generated = await generate(buildMonthlyGrammarPhasePrompt(issues, cefr, pair));
+    // The titles are locked plan fields: the application writes them.
+    const result = pair ? withMonthlyGrammarRoadmapTitles(generated, pair) : generated;
+    issues = getMonthlyGrammarPhaseIssues(result, cefr, pair);
     if (!issues.length) return result;
   }
   throw new MonthlyResourcePlanError([`Grammar phase failed after 3 attempts: ${issues.join("; ")}.`]);
@@ -1047,7 +1095,9 @@ export function buildMonthlyResourcesFromAiPlan(
   criteria: MonthlyResourceCriteria,
   plan: MonthlyResourcePlanTaskOutput,
   /** Roadmap catalog item of each pronunciation target, stored on the sound for the 12-month memory. */
-  pronunciationCatalogIds: readonly (string | undefined)[] = []
+  pronunciationCatalogIds: readonly (string | undefined)[] = [],
+  /** Roadmap catalog topic of each grammar topic (A, B), stored on the topic for the 12-month memory. */
+  grammarCatalogIds: readonly (string | undefined)[] = []
 ): MonthlyResourcePoolContract {
   const calendar = buildMonthlyCalendar(month);
   const newLessonDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar) === "new" ? [index + 1] : []);
@@ -1088,7 +1138,8 @@ export function buildMonthlyResourcesFromAiPlan(
       usage: step.usage,
       examples: step.examples,
       ...(step.dailyObjectives ? { dailyObjectives: step.dailyObjectives } : {})
-    }))
+    })),
+    ...(grammarCatalogIds[index] ? { catalogId: grammarCatalogIds[index]! } : {})
   }));
   const sounds = plan.pronunciationTargets.map((target, targetIndex) => ({
     id: `${cefr.toLowerCase()}-sound-${targetIndex + 1}`,

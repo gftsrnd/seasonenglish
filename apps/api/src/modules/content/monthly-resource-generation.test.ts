@@ -834,6 +834,16 @@ describe("monthly AI resource generation", () => {
     expect(contract.sounds[0]!.catalogId).toBe("phoneme-m");
   });
 
+  it("stores the roadmap grammar catalog topic on each topic and plans roadmap day stages", () => {
+    const pool = buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, planFor(), [], ["a1-p2-a", "a1-p2-b"]);
+    expect(pool.grammarTopics.map((topic) => topic.catalogId)).toEqual(["a1-p2-a", "a1-p2-b"]);
+    const contract = planMonthlyResourcePool(pool);
+    expect(validateMonthlyCurriculum(contract)).toEqual([]);
+    const firstNew = contract.daySpecs.find((day) => day.kind === "new")!;
+    expect(firstNew.grammarPlan).toMatchObject({ code: "A1", stage: "identify" });
+    expect(buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, planFor()).grammarTopics.every((topic) => !("catalogId" in topic))).toBe(true);
+  });
+
   it("builds a two-grammar, four-pronunciation monthly contract from a valid AI plan", () => {
     const pool = buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, planFor());
     const contract = planMonthlyResourcePool(pool);
