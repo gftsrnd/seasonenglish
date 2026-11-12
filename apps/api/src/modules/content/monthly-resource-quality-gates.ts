@@ -69,6 +69,10 @@ export const MONTHLY_NON_WORD_FRAGMENTS: ReadonlySet<string> = new Set([
 /** Deterministic non-word screen shared by core and pronunciation gates. */
 export function monthlyNonWordIssue(rawWord: string): string | undefined {
   const word = rawWord.trim().toLocaleLowerCase("en");
+  // The model sometimes copies the IPA transcription into the word field ("ˈbɪt"); say so, or repairs repeat it.
+  if (/[ˈˌːɪʊəɛæɑɒɔʌɜθðʃʒŋɡɐɚɝ/]/u.test(word)) {
+    return `"${rawWord}" is an IPA transcription, not the word: put the normal English spelling in "word" (e.g. "bit") and the transcription only in "ipa"`;
+  }
   if (!/^\p{L}+(?:[-'’]\p{L}+)*$/u.test(word)) return `"${rawWord}" is not one standalone word`;
   const letters = word.replace(/[-'’]/gu, "");
   if (letters.length < 3) return `"${rawWord}" is too short to be a real headword (a fragment or abbreviation)`;
