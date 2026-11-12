@@ -24,3 +24,6 @@ services:
         VITE_E4S_STAFF_DIRECT_ENTRY: "1"
     ports: !override
       - "127.0.0.1:4300:80"
+    # Same entry routes as 4175 (staff sign-in at /season-english/staff).
+    volumes:
+      - ./docker/nginx-tunnel.conf:/etc/nginx/conf.d/default.conf:ro
