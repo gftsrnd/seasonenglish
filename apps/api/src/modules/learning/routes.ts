@@ -306,7 +306,7 @@ export function registerLearningRoutes(
       },
       ...(inactiveDays >= 3 ? { inactivityReminder: { inactiveDays } } : {}),
       schedule: monthlyContext
-        ? buildMonthlySchedule(summaries, monthlyContext.systemDate, Number(progress.learner.profile.durationMinutes ?? 10))
+        ? buildMonthlySchedule(summaries, monthlyContext.systemDate, Number(progress.learner.profile.durationMinutes ?? 10), monthlyAccess?.state === "active" ? monthlyAccess.startDate : undefined)
         : buildSchedule(Number(progress.learner.profile.durationMinutes ?? 10), []),
       coach: { turnsToday: monthlyContext ? progress.stats.coachTurnsToday ?? 0 : 0, turnsThisWeek: monthlyContext ? progress.stats.coachTurns : 0, targetTurns: coachTarget, href: "/coach" },
       practice: {
@@ -996,7 +996,7 @@ function skipWeekendBackwards(value: Date): void {
   while (value.getUTCDay() === 0 || value.getUTCDay() === 6) value.setUTCDate(value.getUTCDate() - 1);
 }
 
-function buildMonthlySchedule(lessons: LearnerHomeView["lessons"], systemDate: string, lessonMinutes: number): LearnerHomeView["schedule"] {
+function buildMonthlySchedule(lessons: LearnerHomeView["lessons"], systemDate: string, lessonMinutes: number, startDate?: string): LearnerHomeView["schedule"] {
   const today = /^\d{4}-\d{2}-\d{2}$/.test(systemDate) ? systemDate : new Date().toISOString().slice(0, 10);
   const current = new Date(`${today}T00:00:00Z`);
   const monday = new Date(current);
@@ -1013,7 +1013,8 @@ function buildMonthlySchedule(lessons: LearnerHomeView["lessons"], systemDate: s
       const lesson = byDate.get(key);
       const status = lesson?.status === "completed" ? "attended" as const
         : lesson && key === today ? "today" as const
-          : lesson && key < today ? "missed" as const
+          // Days before a mid-month learner's start are not absences (their lessons stay open as catch-up).
+          : lesson && key < today && !(startDate && key < startDate) ? "missed" as const
             : "upcoming" as const;
       return { label, date: key, status };
     })

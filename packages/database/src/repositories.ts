@@ -1328,12 +1328,18 @@ class LearningRepository {
          where (spec->>'lessonNumber')::int = ml.lesson_number limit 1
        ) day_spec on true
        left join progress_records pr on pr.lesson_id = l.id and pr.learner_id = e.learner_id
-       where e.learner_id = $1 and e.cefr = $3 and ml.lesson_date >= $4::date
+       where e.learner_id = $1 and e.cefr = $3
          and pm.month between to_char(organization_system_date(pm.organization_id) - interval '1 month', 'YYYY-MM')
                           and to_char(organization_system_date(pm.organization_id), 'YYYY-MM')
        order by ml.lesson_number`,
-      [learnerId, month, access.cefr, access.startDate]
+      [learnerId, month, access.cefr]
     );
+    // A learner who joins mid-month (≥ 75% window) still studies the whole month
+    // from lesson 1 in sequence (catch-up). The start date only bounds the
+    // attendance window; a Friday review dated before it never gates later lessons.
+    for (const row of result.rows) {
+      if (row.monthly_kind === "review" && row.lesson_date && row.lesson_date < access.startDate) row.review_gates_next_week = false;
+    }
     const first = result.rows[0];
     if (!first) return [];
     const holidays = await this.pool.query<{ holiday_date: string }>(
