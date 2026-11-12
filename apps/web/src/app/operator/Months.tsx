@@ -16,6 +16,7 @@ import { MonthlyResourceProgress } from "./MonthlyResourceProgress.js";
 import { isGatewayTimeout, monthlyGenerationMessage, monthlyFinalGenerationMessage } from "./monthly-generation-message.js";
 import { MonthlyResourceEditor } from "./MonthlyResourceEditor.js";
 import { MonthlyReviewPractice } from "./MonthlyReviewPractice.js";
+import { describeMonthlyFindings, MONTHLY_PART_TITLES } from "./monthly-failure-findings.js";
 import { MonthlyIllustrationPanel } from "./MonthlyIllustrationPanel.js";
 import type { MonthlyIllustrationsView } from "../../api/operator.js";
 import "./months.css";
@@ -504,7 +505,8 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
             if (!scheduledLessonNumber) return <article key={cell.date} role={agenda ? "listitem" : "gridcell"} aria-label={`${cell.dateLabel}, Nghỉ${holidayDescription}`} title={calendarDay?.holiday?.name} className={`monthly-day-cell weekend ${holidayClass}`}><b>{agenda ? <span>{WEEKDAYS[index % 7]}</span> : null}{cell.dateLabel}</b><strong>Nghỉ</strong></article>;
             const scheduledKind = lesson?.kind ?? monthlyDayKind(scheduledLessonNumber, calendar);
             const kind = scheduledKind === "review" ? "review" : "lesson";
-            const draft = lesson?.status === "draft";
+            // A manual save with severe findings is stored as "failed" but is still the day's draft to view and fix.
+            const draft = lesson?.status === "draft" || (lesson?.status === "failed" && Boolean(lesson.content?.parts?.length));
             const isReview = scheduledKind === "review";
             const newLessonOrdinal = isReview ? null : monthlyNewLessonOrdinal(scheduledLessonNumber, calendar);
             const planDay = framework?.resources?.roadmap?.days.find(day => day.lessonNumber === scheduledLessonNumber); const dayLabel = isReview ? "bài ôn" : newLessonOrdinal ? `bài ${newLessonOrdinal}` : "bài học"; const reviewWeekNumber = planDay?.reviewWeekNumber ?? overview.calendar?.find(day => day.date === cell.date)?.reviewWeekNumber; const composeTitle = isReview ? (reviewWeekNumber ? `Bài ôn tuần ${reviewWeekNumber}` : "Bài ôn tập") : newLessonOrdinal ? `Bài ${newLessonOrdinal}` : undefined; const dayText = formatMonthlyDayLabel({ kind: isReview ? "review" : "new", newLessonNumber: newLessonOrdinal ?? undefined, reviewWeekNumber, ...(planDay?.grammarPlan ? { grammarPlan: planDay.grammarPlan } : {}), ...(planDay?.pronunciationPlan ? { pronunciationPlan: planDay.pronunciationPlan } : {}) });
@@ -628,6 +630,15 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
   const failure = lesson.generationFailure;
   const failedParts = failure?.candidate?.parts?.length ? toPreviewParts(failure.candidate.parts) : [];
   const exercise = focusedPart ? reviewParts.find(part => part.code === focusedPart) : undefined;
+  // A day without a draft opens the manual editor prefilled with this candidate (OperatorRouteController.openDayEditor).
+  const editCandidate = Boolean(onEdit && !parts.length && failedParts.length);
+  const draftFindings = parts.length ? [...lesson.quality.severe, ...lesson.quality.light] : [];
+  const draftSevere = parts.length ? lesson.quality.severe.length : 0;
+  const draftNextStep = draftSevere
+    ? "Bấm Sửa tay, sửa các mục Nặng, lưu lại rồi duyệt."
+    : lesson.quality.light.length > 2
+      ? "Bài có quá hai cảnh báo: bấm Sửa tay, sửa bớt rồi lưu lại để duyệt."
+      : "Kiểm tra các cảnh báo; bấm Duyệt bài nghĩa là bạn đã xem và chấp nhận chúng.";
   const kindLabel = lesson.kind === "review" ? "Ôn tập" : "Bài mới";
   // Same shell as the weekly lesson-set page so the legacy lesson styles (.app-operator) apply.
   return <OperatorPage title={`${kindLabel} ${dateLabel}`} hideRouteBack><PageTitle actions={<div className="row operator-page-title-actions">
@@ -640,25 +651,32 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
     <h1 className="operator-lesson-set-title">{dateLabel} · {teachingLabel} · Mức {cefr} <Badge tone={isDraft ? "warn" : "ok"}>{isDraft ? "Bản nháp" : "Đã duyệt"}</Badge></h1>
     <div className="operator-lesson-set-meta"><strong>{title}</strong><span>{cefr === "A1" || cefr === "A2" ? "tiếng Việt" : "tiếng Anh"}</span></div>
   </PageTitle>
+    {isDraft && draftFindings.length > 0 && <section className="card operator-monthly-lesson" aria-label="Kiểm tra chất lượng bản nháp" data-testid={`monthly-draft-quality-${lesson.lessonNumber}`}>
+      <div className="row between operator-card-header"><h3>Kiểm tra chất lượng bản nháp</h3><Badge tone={draftSevere ? "danger" : "warn"}>{draftSevere ? "Chưa duyệt được" : "Có cảnh báo"}</Badge></div>
+      <p className="small"><strong>Bước tiếp theo:</strong> {draftNextStep}</p>
+      <MonthlyFindingList findings={draftFindings} kind={lesson.kind} parts={reviewParts} />
+    </section>}
     <div className={`card operator-monthly-lesson${lesson.kind === "review" ? " is-review" : ""}`} data-testid={`monthly-lesson-${lesson.lessonNumber}`}>
       <div className="row between operator-card-header"><h3>{title}</h3></div>
       {exercise && <section className="card operator-practice-review" aria-label="Câu hỏi cần kiểm tra"><OperatorPracticeReview sectionNumber={1} headingText="Câu hỏi cần kiểm tra" part={exercise as never} /></section>}
       {parts.length ? <OperatorLessonPreview cefr={cefr} lessonId={`monthly-${lesson.lessonNumber}`} parts={reviewParts as never} {...(lesson.kind === "review" ? { studyTabLabel: cefr === "A1" || cefr === "A2" ? "Ôn tập" : "Review", collapsibleVocabulary: true, practiceContent: <MonthlyReviewPractice parts={reviewParts} english={!(cefr === "A1" || cefr === "A2")} /> } : {})} /> : <p className="muted">{failure ? "Chưa có bản nháp đạt yêu cầu." : "Nội dung bài chưa tải được."}</p>}
     </div>
     {failure && <section className="card operator-monthly-lesson" aria-label="Lần sinh AI chưa đạt" data-testid={`monthly-generation-failure-${lesson.lessonNumber}`}>
-      <div className="row between operator-card-header"><h3>Lần sinh AI gần nhất chưa đạt</h3><Badge tone="danger">Không duyệt được</Badge></div>
-      <p className="small muted">Sinh lúc {new Date(failure.failedAt).toLocaleString("vi-VN")} sau {failure.attempts} vòng sửa. {parts.length ? "Bản nháp hiện có ở trên vẫn được giữ nguyên." : "Bản này chỉ để xem lý do, không được lưu thành bản nháp."}</p>
-      <div className="operator-level-validation"><ul className="small">{[...failure.report.severe, ...failure.report.light].map((finding, index) => <li key={`${finding.code}-${index}`}><Badge tone={finding.severity === "severe" ? "danger" : "warn"}>{finding.severity === "severe" ? "Nặng" : "Nhẹ"}</Badge> {finding.component ? `${MONTHLY_PART_TITLES[finding.component] ?? finding.component}: ` : ""}{finding.message}</li>)}</ul></div>
+      <div className="row between operator-card-header"><h3>Lần sinh AI gần nhất chưa đạt</h3><div className="row"><Badge tone="danger">Không duyệt được</Badge>{editCandidate && <Button className="operator-lesson-edit-button" disabled={busy} onClick={onEdit}><Pencil className="operator-button-icon" size={16} aria-hidden="true" />Sửa bản AI này</Button>}</div></div>
+      <p className="small muted">Sinh lúc {new Date(failure.failedAt).toLocaleString("vi-VN")} sau {failure.attempts} vòng sửa. {parts.length ? "Bản nháp hiện có ở trên vẫn được giữ nguyên." : "Bản AI này chưa phải bản nháp nên chưa duyệt được."}</p>
+      {editCandidate && <p className="small"><strong>Bước tiếp theo:</strong> Bấm Sửa bản AI này, sửa các mục được báo, lưu rồi duyệt.</p>}
+      <MonthlyFindingList findings={[...failure.report.severe, ...failure.report.light]} kind={lesson.kind} parts={failedParts} />
       {failedParts.length ? <OperatorLessonPreview cefr={cefr} lessonId={`monthly-failed-${lesson.lessonNumber}`} parts={failedParts as never} {...(lesson.kind === "review" ? { studyTabLabel: cefr === "A1" || cefr === "A2" ? "Ôn tập" : "Review", collapsibleVocabulary: true, practiceContent: <MonthlyReviewPractice parts={failedParts} english={!(cefr === "A1" || cefr === "A2")} /> } : {})} /> : null}
     </section>}
     {requestingReopen && <MonthlyReopenRequest label={lesson.kind === "review" ? "bài ôn" : dayOrdinal ? `bài ${dayOrdinal}` : "bài học"} onCancel={() => setRequestingReopen(false)} onSubmit={async (reason) => { await onRequestReopen?.(reason); setRequestingReopen(false); }} />}
   </OperatorPage>;
 }
 
-const MONTHLY_PART_TITLES: Record<string, string> = {
-  objective: "Mục tiêu bài học", instruction: "Hướng dẫn làm bài", vocabulary: "Từ vựng", grammar: "Ngữ pháp", pronunciation: "Phát âm",
-  listening: "Nghe", reading: "Đọc", writing: "Viết", word_class: "Từ loại", word_use: "Dùng từ", speaking: "Nói"
-};
+/** Quality findings in plain Vietnamese: severity chip, where (as the preview numbers it), what to fix. */
+function MonthlyFindingList({ findings, kind, parts }: { findings: MonthlyQualityFindingView[]; kind: "new" | "review"; parts: ReadonlyArray<{ code?: string; title?: string; content?: Record<string, unknown> }> }) {
+  const lines = describeMonthlyFindings(findings, { kind, parts });
+  return <div className="operator-level-validation"><ul className="small">{lines.map((line) => <li key={line.key}><Badge tone={line.severity === "severe" ? "danger" : "warn"}>{line.severity === "severe" ? "Nặng" : "Nhẹ"}</Badge> <strong>{line.where}</strong>: {line.what}</li>)}</ul></div>;
+}
 
 function MonthlyGenerationConfirmation({ dayNumber, kind, framework, busy, onCancel, onConfirm }: { dayNumber: number; kind: "new" | "review"; framework: MonthlyOperatorOverviewView["frameworks"][number]; busy: boolean; onCancel(): void; onConfirm(): void | Promise<void> }) {
   const carryover = framework.resources?.carryoverReviews?.find(item => item.lessonNumber === dayNumber);

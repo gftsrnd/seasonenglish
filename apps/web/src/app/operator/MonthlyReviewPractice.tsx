@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { OperatorPracticeReview, type OperatorLessonPart } from "./adapters.js";
 import { AudioSynthesisNotice } from "./AudioSynthesisNotice.js";
+import { MONTHLY_REVIEW_SECTIONS } from "./monthly-failure-findings.js";
 
 /**
  * Operator view of the Friday review exercises (e4s_cau_truc_bai_on_cuoi_tuan).
@@ -8,14 +9,7 @@ import { AudioSynthesisNotice } from "./AudioSynthesisNotice.js";
  * items), but every item is shown in the same exercise card as the daily
  * practice tab, followed by its explanation and retry version.
  */
-const SECTIONS: Array<{ code: string; title: string }> = [
-  { code: "listening", title: "Nghe & nhận biết từ" },
-  { code: "word_use", title: "Word use" },
-  { code: "word_class", title: "Word form" },
-  { code: "grammar", title: "Ngữ pháp" },
-  { code: "reading", title: "Nghe – Đọc hiểu" },
-  { code: "speaking", title: "Phát âm & Nói – Viết" }
-];
+const SECTIONS = MONTHLY_REVIEW_SECTIONS;
 
 type Item = Record<string, unknown>;
 type Part = { code?: string; content?: Record<string, unknown> };

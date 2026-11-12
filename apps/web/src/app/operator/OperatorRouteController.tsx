@@ -1,4 +1,5 @@
 import { monthlyManualSeed } from "./monthly-manual-seed.js";
+import { MONTHLY_PART_TITLES } from "./monthly-failure-findings.js";
 import { monthlyLessonDisplayTitle } from "@e4s/domain/monthly";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";
@@ -219,7 +220,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
   const [resourceGenerationActive,setResourceGenerationActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> }; kind?: "new" | "review"; date?: string; vocabularyCount?: number; defaultTitle?: string }>();
+  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> }; kind?: "new" | "review"; date?: string; vocabularyCount?: number; defaultTitle?: string; cefr?: CefrLevel }>();
   const systemMonthInitialized = useRef(false);
   useEffect(() => { if (linkedMonth) setMonth(linkedMonth); }, [linkedMonth]);
   const pendingScrollRestore = useRef<number | null>(null);
@@ -312,15 +313,31 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     const defaultTitle = cellSlot?.title ?? (kind === "review"
       ? (calendarDay?.reviewWeekNumber ? `Bài ôn tuần ${calendarDay.reviewWeekNumber}` : "Bài ôn tập")
       : calendarDay?.newLessonNumber ? `Bài ${calendarDay.newLessonNumber}` : undefined);
-    const meta = { ...(kind ? { kind } : {}), ...(date ? { date } : {}), ...(seed ? { vocabularyCount: seed.vocabularyCount } : {}), ...(defaultTitle ? { defaultTitle } : {}) };
+    // The day's own level: the preview route does not carry the months page's selected level (it starts at A1).
+    const meta = { ...(kind ? { kind } : {}), ...(date ? { date } : {}), ...(seed ? { vocabularyCount: seed.vocabularyCount } : {}), ...(defaultTitle ? { defaultTitle } : {}), ...(framework ? { cefr: framework.cefr } : {}) };
     // A saved title "Bài 8" taken from the raw slot is shown (and re-saved) with the calendar's number.
-    const savedTitle = saved?.title && kind ? monthlyLessonDisplayTitle(saved.title, { kind, newLessonNumber: calendarDay?.newLessonNumber, reviewWeekNumber: calendarDay?.reviewWeekNumber }) : saved?.title;
-    setEditor(saved?.parts?.length ? { frameworkId, dayNumber, initial: { ...saved, ...(savedTitle ? { title: savedTitle } : {}) }, ...meta } : seed ? { frameworkId, dayNumber, initial: { title: seed.title, parts: seed.parts }, ...meta } : { frameworkId, dayNumber, ...meta });
+    const displayTitle = (title?: string) => title && kind ? monthlyLessonDisplayTitle(title, { kind, newLessonNumber: calendarDay?.newLessonNumber, reviewWeekNumber: calendarDay?.reviewWeekNumber }) : title;
+    const savedTitle = displayTitle(saved?.title);
+    // No draft yet but a failed AI candidate: start from that candidate so the Operator only fixes the flagged items.
+    const candidate = savedLesson?.generationFailure?.candidate;
+    const candidateTitle = displayTitle(candidate?.title);
+    setEditor(saved?.parts?.length ? { frameworkId, dayNumber, initial: { ...saved, ...(savedTitle ? { title: savedTitle } : {}) }, ...meta }
+      : candidate?.parts?.length ? { frameworkId, dayNumber, initial: { ...(candidateTitle ? { title: candidateTitle } : {}), parts: candidate.parts.map((part) => ({ ...part, title: part.title || MONTHLY_PART_TITLES[part.code ?? ""] || part.code || "Nội dung" })) }, ...meta }
+      : seed ? { frameworkId, dayNumber, initial: { title: seed.title, parts: seed.parts }, ...meta } : { frameworkId, dayNumber, ...meta });
   };
-  const dayEditor = !readOnly && editor ? <LessonFormEditor weekNumber={0} cefr={cefr} initial={editor.initial?.parts?.length ? { dayNumber: editor.dayNumber - 1, title: editor.initial.title || editor.defaultTitle || `Bài ${editor.dayNumber}`, durationMinutes: 10, parts: editor.initial.parts.map((part) => ({ code: (part.code || "instruction") as import("@e4s/contracts").LessonPartCode, title: part.title || part.code || "Nội dung", content: part.content || {} })) } : { ...emptyLesson(editor.dayNumber - 1), ...(editor.defaultTitle ? { title: editor.defaultTitle } : {}) }} vocabularyCount={editor.vocabularyCount ?? 3} kind={editor.kind === "review" ? "review" : "lesson"} onSave={async (lesson) => {
-    const result = await run(() => client.saveContentMonthDay(editor.frameworkId, editor.dayNumber, { title: lesson.title, parts: lesson.parts }), `Đã lưu bản nháp ${monthDayLabel(editor.dayNumber)}.`);
-    if (result) setEditor(undefined);
-  }} headingOverride={`${editor.kind === "review" ? "Soạn bài ôn" : "Soạn bài"} ngày ${editor.date ? `${editor.date.slice(8, 10)}/${editor.date.slice(5, 7)}` : `#${editor.dayNumber}`} · ${cefr}`} onCancel={() => setEditor(undefined)} uploadMedia={client.uploadContentMedia} busy={busy} /> : null;
+  const editorCefr = editor?.cefr ?? cefr;
+  const dayEditor = !readOnly && editor ? <LessonFormEditor weekNumber={0} cefr={editorCefr} initial={editor.initial?.parts?.length ? { dayNumber: editor.dayNumber - 1, title: editor.initial.title || editor.defaultTitle || `Bài ${editor.dayNumber}`, durationMinutes: 10, parts: editor.initial.parts.map((part) => ({ code: (part.code || "instruction") as import("@e4s/contracts").LessonPartCode, title: part.title || part.code || "Nội dung", content: part.content || {} })) } : { ...emptyLesson(editor.dayNumber - 1), ...(editor.defaultTitle ? { title: editor.defaultTitle } : {}) }} vocabularyCount={editor.vocabularyCount ?? 3} kind={editor.kind === "review" ? "review" : "lesson"} onSave={async (lesson) => {
+    const label = monthDayLabel(editor.dayNumber);
+    const report = await run(() => client.saveContentMonthDay(editor.frameworkId, editor.dayNumber, { title: lesson.title, parts: lesson.parts }));
+    if (!report) return;
+    setEditor(undefined);
+    // The saved draft went through the same quality checks as an AI draft; open it so the Operator sees the result and can approve.
+    const severe = report.severe?.length ?? 0;
+    toast.show(severe
+      ? { message: `Đã lưu bản nháp ${label}, nhưng còn ${severe} lỗi nặng cần sửa trước khi duyệt.`, tone: "danger" }
+      : { message: `Đã lưu bản nháp ${label}. Kiểm tra rồi bấm Duyệt bài.`, tone: "ok" });
+    if (!preview || preview.frameworkId !== editor.frameworkId || preview.dayNumber !== editor.dayNumber) navigate(`${paths.months}/lesson/${editor.frameworkId}/${editor.dayNumber}?month=${month}`);
+  }} headingOverride={`${editor.kind === "review" ? "Soạn bài ôn" : "Soạn bài"} ngày ${editor.date ? `${editor.date.slice(8, 10)}/${editor.date.slice(5, 7)}` : `#${editor.dayNumber}`} · ${editorCefr}`} onCancel={() => setEditor(undefined)} uploadMedia={client.uploadContentMedia} busy={busy} /> : null;
   if (!overview && !error) return <Status>Đang tải khung tháng…</Status>;
   if (preview && overview) {
     const framework = overview.frameworks.find((item) => item.id === preview.frameworkId);
@@ -330,11 +347,20 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     return <><MonthlyLessonPreview date={lesson.lessonDate} cefr={framework.cefr} lesson={lesson} focusedPart={focusedPart} {...(framework.resources ? { resources: framework.resources } : {})} busy={busy} onClose={() => navigate(paths.months)}
       {...(isDraft && !readOnly ? {
         // A day with only a failed AI candidate (no saved draft) has nothing to approve.
-        ...(lesson.content?.parts?.length ? { onApprove: async () => {
+        // Same gate as the API: a saved draft with no severe finding and at most two light ones.
+        ...(lesson.content?.parts?.length && lesson.status === "draft" && !lesson.quality.severe.length && lesson.quality.light.length <= 2 ? { onApprove: async () => {
           const title = lesson.kind === "review" ? "Duyệt bài ôn" : "Duyệt bài học";
-          if (!await modal.confirm({ title, message: "Bài sẽ được khóa chỉnh sửa sau khi duyệt.", confirmLabel: "Duyệt bài" })) return;
+          const light = lesson.quality.light;
+          const message = light.length ? `Bài có ${light.length} cảnh báo nhẹ; duyệt nghĩa là bạn đã kiểm tra và chấp nhận chúng. Bài sẽ được khóa chỉnh sửa sau khi duyệt.` : "Bài sẽ được khóa chỉnh sửa sau khi duyệt.";
+          if (!await modal.confirm({ title, message, confirmLabel: "Duyệt bài" })) return;
+          const lightKeys = light.map((finding) => `${finding.code}:${finding.dayNumber ?? 0}:${finding.component ?? ""}`);
+          const acknowledged = new Set(lesson.quality.acknowledged?.findingCodes ?? []);
           let approved = false;
-          await run(async () => { await client.approveContentMonthDay(framework.id, lesson.lessonNumber); approved = true; }, `Đã duyệt ${monthDayLabel(lesson.lessonNumber)}.`);
+          await run(async () => {
+            if (lightKeys.some((key) => !acknowledged.has(key))) await client.acknowledgeContentMonthQuality(framework.id, lesson.lessonNumber, lightKeys);
+            await client.approveContentMonthDay(framework.id, lesson.lessonNumber);
+            approved = true;
+          }, `Đã duyệt ${monthDayLabel(lesson.lessonNumber)}.`);
           if (approved) navigate(paths.months);
         } } : {}),
         onEdit: () => openDayEditor(framework.id, lesson.lessonNumber),

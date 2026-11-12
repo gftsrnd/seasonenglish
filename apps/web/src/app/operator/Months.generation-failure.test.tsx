@@ -29,7 +29,7 @@ describe("Operator monthly day: failed AI generation (December 2026 N3)", () => 
     const section = screen.getByRole("region", { name: "Lần sinh AI chưa đạt" });
     expect(within(section).getByText("Không duyệt được")).toBeInTheDocument();
     expect(within(section).getByText(/team \/ teem là hai từ đồng âm/)).toBeInTheDocument();
-    expect(within(section).getByText(/Đáp án đúng thường dài nhất/)).toBeInTheDocument();
+    expect(within(section).getByText(/Đáp án đúng thường là lựa chọn dài nhất/)).toBeInTheDocument();
     expect(within(section).getByText(/Bản nháp hiện có ở trên vẫn được giữ nguyên/)).toBeInTheDocument();
     // The candidate renders with the ordinary lesson preview, below the kept draft's own preview.
     expect(section).toHaveTextContent(/hướng dẫn làm bài/i);
@@ -43,7 +43,36 @@ describe("Operator monthly day: failed AI generation (December 2026 N3)", () => 
       quality: { severe: [], light: [] }, generationFailure: failure
     }} />);
     expect(screen.getByText("Chưa có bản nháp đạt yêu cầu.")).toBeInTheDocument();
-    expect(screen.getByText(/không được lưu thành bản nháp/)).toBeInTheDocument();
+    expect(screen.getByText(/chưa phải bản nháp nên chưa duyệt được/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Duyệt bài/ })).not.toBeInTheDocument();
+    // Read-only (no editor): no edit button, no next-step line.
+    expect(screen.queryByRole("button", { name: "Sửa bản AI này" })).not.toBeInTheDocument();
+  });
+
+  it("offers to edit the failed candidate and tells the Operator the next step", async () => {
+    const onEdit = vi.fn();
+    render(<MonthlyLessonPreview date="2026-12-04" cefr="A1" onClose={vi.fn()} onEdit={onEdit} lesson={{
+      lessonNumber: 4, lessonDate: "2026-12-04", kind: "review", status: "pending", scopeHash: "scope", locked: false, correctionCount: 0,
+      quality: { severe: [], light: [] }, generationFailure: failure
+    }} />);
+    const section = screen.getByRole("region", { name: "Lần sinh AI chưa đạt" });
+    expect(section).toHaveTextContent("Bấm Sửa bản AI này, sửa các mục được báo, lưu rồi duyệt.");
+    // Findings name the place (review section) before the text; severity chips stay.
+    expect(section).toHaveTextContent("Nặng Phát âm: team / teem là hai từ đồng âm.");
+    expect(section).toHaveTextContent("Nhẹ Phần 1 · Nghe & nhận biết từ: Đáp án đúng thường là lựa chọn dài nhất");
+    within(section).getByRole("button", { name: "Sửa bản AI này" }).click();
+    expect(onEdit).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists a saved draft's own quality findings with the next step", () => {
+    render(<MonthlyLessonPreview date="2026-12-03" cefr="A2" onClose={vi.fn()} onEdit={vi.fn()} lesson={{
+      lessonNumber: 3, lessonDate: "2026-12-03", kind: "new", status: "failed", scopeHash: "scope", locked: false, correctionCount: 0,
+      quality: { severe: [{ severity: "severe", code: "MONTHLY_INVENTED_WORD_FORM", component: "word_use", message: "Every option must be real. Fix: word_use (colleagueing)" }], light: [] },
+      content: { title: "Bài 3", parts: [{ code: "word_use", title: "Dùng từ", content: { prompt: "Choose", options: ["a", "b", "He was colleagueing me."], answer: "a" } }] }
+    }} />);
+    const section = screen.getByRole("region", { name: "Kiểm tra chất lượng bản nháp" });
+    expect(section).toHaveTextContent("Chưa duyệt được");
+    expect(section).toHaveTextContent("Bấm Sửa tay, sửa các mục Nặng, lưu lại rồi duyệt.");
+    expect(section).toHaveTextContent("Câu 1 · Dùng từ: Lựa chọn C dùng từ không có thật “colleagueing”");
   });
 });
