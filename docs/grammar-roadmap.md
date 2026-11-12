@@ -193,7 +193,7 @@ Nếu tháng chỉ có 15 ngày học mới thì dừng ở N15 (K3) rồi thi. 
 | Giải thích | ≤ 60 từ, kèm công thức nếu có. A1–A2: tiếng Việt. B1–C1: tiếng Anh đơn giản, câu ngắn, từ vựng thấp hơn level hiện tại một bậc; thuật ngữ ngữ pháp dùng tên tiếng Anh phổ biến (present perfect, passive…) |
 | Ví dụ | 2 câu tiếng Anh ngữ cảnh công sở. Ưu tiên dùng 3 từ vựng cốt lõi của chính bài học đó. A1–A2 có bản dịch tiếng Việt; B1+ không cần dịch |
 | Bài tập | 3–5 câu theo dạng bài của bước. Mỗi câu có đáp án + giải thích 1 dòng (cùng ngôn ngữ với phần giải thích). Đưa từ vựng cốt lõi của bài vào ít nhất 1 câu |
-| Tái hiện | Từ N8 trở đi, 1 câu dùng lại chủ điểm A |
+| Tái hiện | Từ N8 trở đi, 1 câu dùng lại chủ điểm A (quyết định sản phẩm 12/11: app áp dụng cho mọi ngày của chủ điểm B, N7–N12, khớp bảng khung tháng) |
 | Thời lượng | Làm xong trong 3–4 phút |
 
 **Quy tắc chất lượng:**

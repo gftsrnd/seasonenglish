@@ -3,6 +3,8 @@ import { monthlyGrammarCatalog, type MonthlyDaySpec } from "@e4s/domain";
 import type { MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { buildMonthlyGrammarPhasePrompt, getMonthlyGrammarPhaseIssues, runMonthlyGrammarPhaseWithRetry } from "./monthly-resource-generation.js";
 import { monthlyGrammarRoadmapDayContract, monthlyGrammarRoadmapDayIssues } from "./monthly-grammar-roadmap.js";
+import { monthlyDailyTeachingContract } from "./monthly-day-generation.js";
+import { frameworkInput } from "./monthly-routes.js";
 
 const pair = monthlyGrammarCatalog("A2")[1]!; // Hiện tại hoàn thành 1 + 2 (extension)
 const b1Pair = monthlyGrammarCatalog("B1")[0]!; // Present simple vs continuous / past (contrast)
@@ -109,5 +111,21 @@ describe("roadmap daily lesson contract and gates", () => {
     const noCore = { ...ok, items: [item("Chọn: She has ___ the file.")] };
     expect(monthlyGrammarRoadmapDayIssues(day("common_errors"), "A2", noCore, coreWords).map((issue) => issue.code)).toEqual(["MONTHLY_GRAMMAR_ROADMAP_ITEM_CORE_WORD"]);
     expect(monthlyGrammarRoadmapDayIssues(day(), "A2", { ...long, items: noCore.items }, coreWords)).toEqual([]);
+  });
+});
+
+describe("roadmap A recall on N7 and manual framework save", () => {
+  it("asks for the topic A recall question on N7 of a roadmap month", () => {
+    const n7 = { kind: "new", newLessonNumber: 7, grammarPlan: { code: "B1", objective: "Bước 1", mode: "recognize", milestoneIds: ["b-s1"], recallMilestoneIds: ["a-s1"], stage: "identify" }, pronunciationPlan: { stage: "recognize", objective: "x", targetIds: ["p"], exampleIds: [] } } as unknown as MonthlyDaySpec;
+    expect(monthlyDailyTeachingContract(n7, "A2")).toContain("Include one recall question with milestoneId from a-s1 (previous topic A)");
+  });
+
+  it("keeps the grammar and pronunciation catalogId when an operator saves a framework contract", () => {
+    const base = { planSchemaVersion: 2, month: "2026-12", cefr: "A1", version: 1, theme: { version: 1, title: "t", brief: "b", context: "c", communicationGoal: "g" }, coreTerms: [], supportTerms: [], daySpecs: [] };
+    const parsed = frameworkInput.parse({ contract: { ...base,
+      grammarTopics: [{ id: "g1", title: "Động từ to be", catalogId: "a1-p1-a", steps: [{ id: "s1", focus: "f", formula: "S + am/is/are", usage: "u", examples: [] }] }],
+      sounds: [{ id: "p1", ipa: "/m/", label: "m", catalogId: "phoneme-m", examples: [{ id: "e1", word: "meet", ipa: "/miːt/" }] }] } });
+    expect(parsed.contract.grammarTopics[0]!.catalogId).toBe("a1-p1-a");
+    expect(parsed.contract.sounds[0]!.catalogId).toBe("phoneme-m");
   });
 });

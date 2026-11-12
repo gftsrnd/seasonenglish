@@ -155,7 +155,7 @@ describe("grammar roadmap day mapping", () => {
     expect(monthlyGrammarMonthCodes(18).slice(-3)).toEqual(["M1", "M2", "M3"]);
   });
 
-  it.each([15, 16, 17, 18])("plans a %i-new-day roadmap month: codes, stages, A recall from N8, M3 last", (count) => {
+  it.each([15, 16, 17, 18])("plans a %i-new-day roadmap month: codes, stages, A recall on N7–N12, M3 last", (count) => {
     const month = monthWithNewDays(count);
     const contract = planMonthlyResourcePool(roadmapPool("A2", month, 1));
     expect(validateMonthlyCurriculum(contract)).toEqual([]);
@@ -167,8 +167,10 @@ describe("grammar roadmap day mapping", () => {
     // Six scaffolding days per topic over its three stored steps (two daily objectives each).
     expect(days.slice(0, 6).map((day) => day.grammarStepId)).toEqual([0, 0, 1, 1, 2, 2].map((s) => a!.steps[s]!.id));
     expect(days.slice(6, 12).map((day) => day.grammarStepId)).toEqual([0, 0, 1, 1, 2, 2].map((s) => b!.steps[s]!.id));
-    expect(days.slice(0, 7).every((day) => day.grammarPlan?.recallMilestoneIds.length === 0)).toBe(true);
-    expect(days.slice(7, 12).every((day) => day.grammarPlan?.recallMilestoneIds.length === 1 && a!.steps.some((step) => step.id === day.grammarPlan!.recallMilestoneIds[0]))).toBe(true);
+    expect(days.slice(0, 6).every((day) => day.grammarPlan?.recallMilestoneIds.length === 0)).toBe(true);
+    // Every B day (N7–N12) recalls topic A, walking through A's steps.
+    expect(days.slice(6, 12).map((day) => day.grammarPlan?.recallMilestoneIds)).toEqual([0, 0, 1, 1, 2, 2].map((s) => [a!.steps[s]!.id]));
+    expect(days.slice(12).every((day) => day.grammarPlan?.recallMilestoneIds.length === 0)).toBe(true);
     expect(days.slice(12).every((day) => day.grammarStepIds?.length === 2)).toBe(true);
     if (count === 18) expect(days.at(-1)!.grammarPlan?.code).toBe("M3");
     // K1 of an extension pair joins A and B.
@@ -187,6 +189,8 @@ describe("grammar roadmap day mapping", () => {
     const plan = dailyTeachingPlan(13, pool.grammarTopics, pool.sounds, "A1");
     expect(plan.grammarPlan).not.toHaveProperty("stage");
     expect(plan.grammarPlan.mode).toBe("contrast");
+    expect(dailyTeachingPlan(7, pool.grammarTopics, pool.sounds, "A1").grammarPlan.recallMilestoneIds).toEqual([]);
+    expect(dailyTeachingPlan(8, pool.grammarTopics, pool.sounds, "A1").grammarPlan.recallMilestoneIds).toEqual(["g0s0"]);
     expect(monthlyGrammarPairOf("A1", pool.grammarTopics)).toBeUndefined();
     expect(validateMonthlyCurriculum(planMonthlyResourcePool(pool))).toEqual([]);
   });

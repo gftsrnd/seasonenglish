@@ -30,7 +30,10 @@ export function dailyTeachingPlan(n: number, topics: readonly GrammarTopic[], so
       ? roadmapCombinedObjective(grammarStage, pair, cefr, words)
       : explicitObjective || (grammarStage ? `${vi ? MONTHLY_GRAMMAR_STAGE_GUIDE[grammarStage].vi : MONTHLY_GRAMMAR_STAGE_GUIDE[grammarStage].en}: ${milestones[0]!.focus}${words ? ` (${words})` : ""}.` : `${activity}: ${milestones.map(step => step.focus).join(" · ")}${words ? ` (${words})` : ""}.`),
     milestoneIds: milestones.map(step => step.id),
-    recallMilestoneIds: n >= 8 && n <= 12 ? [topics[0]!.steps[Math.min(2, Math.floor((n - 8) / 2))]!.id] : [],
+    // Roadmap months recall topic A on every B day (N7–N12, product decision 12/11); older months keep N8–N12.
+    recallMilestoneIds: grammarStage
+      ? (n >= 7 && n <= 12 ? [topics[0]!.steps[Math.floor((n - 7) / 2)]!.id] : [])
+      : (n >= 8 && n <= 12 ? [topics[0]!.steps[Math.min(2, Math.floor((n - 8) / 2))]!.id] : []),
     ...(grammarStage ? { stage: grammarStage } : {})
   };
   const soundIndex = Math.floor((n - 1) / 3);
