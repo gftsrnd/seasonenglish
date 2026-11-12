@@ -72,6 +72,8 @@ export type GameKey = "scramble" | "crossword" | "eggs" | "mario" | "sort" | "ty
 export type GameTopicModeration =
   | { state: "empty" }
   | { state: "invalid"; message: string }
+  /** Unsuitable theme (identity, religion, politics, …) refused gently: no strike, no safety counter. */
+  | { state: "not_suitable"; message: string }
   | { state: "unsafe"; strike: 1 | 2 | 3; message: string }
   | { state: "reported"; strike: 3; message: string; reportId?: string }
   | { state: "ai_rejected"; message: string }

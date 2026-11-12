@@ -141,7 +141,7 @@ export function LearnerGames({ view, actions }: { view: GameHubView; actions: Le
   const [topic, setTopic] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [moderation, setModeration] = useState<GameTopicModeration>(view.topicModeration ?? { state: "empty" });
   const topicLoading = busy || moderation.state === "loading";
   const topicGenerationDisabled = view.aiAvailable !== true || topicLoading;
-  const submit = async (event: FormEvent) => { event.preventDefault(); if (!topic.trim() || topicGenerationDisabled || !await confirmWordSetChange()) return; setBusy(true); setError(""); setModeration({ state: "loading" }); try { await actions.generateGameSet(topic.trim()); setTopic(""); setModeration({ state: "success", topic: topic.trim() }); } catch (reason) { const details = reason && typeof reason === "object" && "details" in reason ? (reason as { details?: { moderation?: GameTopicModeration } }).details?.moderation : undefined; if (details) setModeration(details); else setModeration({ state: "error", message: "Không thể kiểm tra chủ đề." }); if (reason instanceof Error && reason.message === "GAME_TOPIC_NOT_ALLOWED") { setError(details?.state === "unsafe" ? "" : serverTopicMessage(reason)); return; } setError(reason instanceof Error && reason.message === "TOPIC_CREATION_TEMPORARILY_LOCKED" ? "Bạn đã nhập 3 chủ đề không hợp lệ. Tạo bộ từ được mở lại sau 30 phút; người vận hành đã nhận được báo cáo." : reason instanceof Error && reason.message === "VOCABULARY_TOPIC_REJECTED" ? "Chủ đề này không có nghĩa hoặc không phù hợp cho học tập." : "Không tạo được bộ từ. Vui lòng thử lại."); } finally { setBusy(false); } };
+  const submit = async (event: FormEvent) => { event.preventDefault(); if (!topic.trim() || topicGenerationDisabled || !await confirmWordSetChange()) return; setBusy(true); setError(""); setModeration({ state: "loading" }); try { await actions.generateGameSet(topic.trim()); setTopic(""); setModeration({ state: "success", topic: topic.trim() }); } catch (reason) { const details = reason && typeof reason === "object" && "details" in reason ? (reason as { details?: { moderation?: GameTopicModeration } }).details?.moderation : undefined; if (details) setModeration(details); else setModeration({ state: "error", message: "Không thể kiểm tra chủ đề." }); if (reason instanceof Error && reason.message === "GAME_TOPIC_NOT_SUITABLE") { if (!details) setModeration({ state: "not_suitable", message: serverTopicMessage(reason, UNSUITABLE_TOPIC_MESSAGE) }); return; } if (reason instanceof Error && reason.message === "GAME_TOPIC_NOT_ALLOWED") { setError(details?.state === "unsafe" ? "" : serverTopicMessage(reason)); return; } setError(reason instanceof Error && reason.message === "TOPIC_CREATION_TEMPORARILY_LOCKED" ? "Bạn đã nhập 3 chủ đề không hợp lệ. Tạo bộ từ được mở lại sau 30 phút; người vận hành đã nhận được báo cáo." : reason instanceof Error && reason.message === "VOCABULARY_TOPIC_REJECTED" ? "Chủ đề này không có nghĩa hoặc không phù hợp cho học tập." : "Không tạo được bộ từ. Vui lòng thử lại."); } finally { setBusy(false); } };
   const runTopicAction = async (action: () => void | Promise<void>, message: string) => { if (topicLoading) return; setBusy(true); setError(""); try { await action(); } catch (reason) { setError(reason instanceof Error && reason.message === "LEARNED_VOCABULARY_NOT_FOUND" ? "Bạn chưa học từ vựng nào trong lộ trình hiện tại. Hãy mở một bài học trước rồi thử lại." : message); } finally { setBusy(false); } };
   const useLearnedWords = async () => {
     if (await confirmWordSetChange()) await runTopicAction(async () => {
@@ -170,10 +170,12 @@ export function LearnerGames({ view, actions }: { view: GameHubView; actions: Le
   </div>;
 }
 
+const UNSUITABLE_TOPIC_MESSAGE = "Chủ đề này không phù hợp với Mini game. Hãy chọn một chủ đề công việc hoặc đời sống, ví dụ: coffee shop, meeting.";
+
 /** Server-provided learner message for an unsafe topic (falls back to the standard Vietnamese wording). */
-function serverTopicMessage(reason: unknown): string {
+function serverTopicMessage(reason: unknown, fallback = "Chủ đề này không phù hợp. Hãy chọn một chủ đề công việc hoặc đời sống, ví dụ: coffee shop, meeting."): string {
   const details = reason && typeof reason === "object" && "details" in reason ? (reason as { details?: { message?: unknown } }).details : undefined;
-  return typeof details?.message === "string" && details.message ? details.message : "Chủ đề này không phù hợp. Hãy chọn một chủ đề công việc hoặc đời sống, ví dụ: coffee shop, meeting.";
+  return typeof details?.message === "string" && details.message ? details.message : fallback;
 }
 
 function TopicModerationNotice({ moderation, usesLearnedVocabulary }: { moderation: GameTopicModeration; usesLearnedVocabulary: boolean }) {
@@ -182,6 +184,7 @@ function TopicModerationNotice({ moderation, usesLearnedVocabulary }: { moderati
   if (moderation.state === "empty") return <Notice>Nhập một chủ đề để tạo bộ từ.</Notice>;
   if (moderation.state === "loading") return <Notice>Đang kiểm tra và tạo bộ từ…</Notice>;
   if (moderation.state === "invalid") return <Notice tone="danger">{moderation.message}</Notice>;
+  if (moderation.state === "not_suitable") return <Notice tone="warn">{moderation.message}</Notice>;
   if (moderation.state === "unsafe") return <Notice tone="danger">Cảnh báo an toàn · {moderation.strike}/3 · {moderation.message}</Notice>;
   if (moderation.state === "reported") return <Notice tone="danger">Đã báo vận hành sau {moderation.strike}/3 lần vi phạm. {moderation.message}</Notice>;
   if (moderation.state === "ai_rejected") return <Notice tone="danger">AI từ chối chủ đề này. {moderation.message}</Notice>;

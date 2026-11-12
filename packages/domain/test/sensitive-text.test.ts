@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasSensitiveText, hasSensitiveTopicText, sensitiveTextIssue, sensitiveTopicIssue } from "../src/content/index.js";
+import { hasSensitiveText, hasSensitiveTopicText, sensitiveTextIssue, sensitiveTopicIssue, sensitiveTopicSeverity } from "../src/content/index.js";
 
 describe("sensitiveTextIssue", () => {
   it.each([
@@ -180,5 +180,22 @@ describe("sensitiveTopicIssue — topic-only categories", () => {
     expect(sensitiveTextIssue("assassin")).toBeNull();
     expect(sensitiveTextIssue("sexual harassment policy")).toBeNull();
     expect(sensitiveTopicIssue("sexual harassment policy")?.category).toBe("sexual");
+  });
+});
+
+describe("sensitiveTopicSeverity", () => {
+  it.each(["n1gger", "f*ck meeting", "porn", "khiêu dâm", "ma túy", "self-harm"])("treats %s as abusive (immediate strike)", (text) => {
+    expect(sensitiveTopicSeverity(text)?.severity).toBe("abusive");
+  });
+
+  it.each(["lesbian", "gay", "white people", "religion", "politics", "guns", "casino", "crime", "Hitler", "sexuality"])(
+    "treats the theme %s as unsuitable (soft refusal)", (text) => {
+      expect(sensitiveTopicSeverity(text)?.severity).toBe("unsuitable");
+    }
+  );
+
+  it("returns null for everyday topics", () => {
+    expect(sensitiveTopicSeverity("coffee shop")).toBeNull();
+    expect(sensitiveTopicSeverity("")).toBeNull();
   });
 });

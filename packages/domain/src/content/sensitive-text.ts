@@ -37,6 +37,10 @@ export interface SensitiveTextIssue {
 export const SENSITIVE_TOPIC_MESSAGE_VI =
   "Chủ đề này không phù hợp. Hãy chọn một chủ đề công việc hoặc đời sống, ví dụ: coffee shop, meeting.";
 
+/** Gentle Vietnamese refusal for a mini-game topic whose theme is unsuitable but not abusive (no strike). */
+export const UNSUITABLE_TOPIC_MESSAGE_VI =
+  "Chủ đề này không phù hợp với Mini game. Hãy chọn một chủ đề công việc hoặc đời sống, ví dụ: coffee shop, meeting.";
+
 /** Default Vietnamese learner-facing rejection for unsafe names shown to others. */
 export const SENSITIVE_NAME_MESSAGE_VI =
   "Tên này không phù hợp. Hãy dùng tên thật hoặc một tên lịch sự.";
@@ -487,6 +491,23 @@ export function sensitiveTextIssue(text: string | null | undefined): SensitiveTe
 export function sensitiveTopicIssue(text: string | null | undefined): SensitiveTextIssue | null {
   if (!text || !text.trim()) return null;
   return scan(text, GENERAL) ?? scan(text, TOPIC);
+}
+
+/**
+ * How serious a sensitive mini-game topic is:
+ *  - "abusive": slurs, profanity, explicit sexual content, hate, violence, self-harm, drugs — the
+ *    general `sensitiveTextIssue` categories, which count as a safety strike immediately;
+ *  - "unsuitable": only a topic-only theme (identity, race, religion, politics, weapons, gambling,
+ *    crime, death, wider drug / sexual words) — refused gently, without a strike.
+ */
+export type SensitiveTopicSeverity = "abusive" | "unsuitable";
+
+export function sensitiveTopicSeverity(text: string | null | undefined): (SensitiveTextIssue & { severity: SensitiveTopicSeverity }) | null {
+  if (!text || !text.trim()) return null;
+  const general = scan(text, GENERAL);
+  if (general) return { ...general, severity: "abusive" };
+  const topic = scan(text, TOPIC);
+  return topic ? { ...topic, severity: "unsuitable" } : null;
 }
 
 /** True when any of the given strings is sensitive (convenience for filtering generated items). */

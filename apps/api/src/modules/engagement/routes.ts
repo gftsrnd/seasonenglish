@@ -2,7 +2,7 @@ import type { AudioArtifactInput, AudioArtifactView, GameDescriptor, GameKey, Ga
 import { randomUUID } from "node:crypto";
 import { vocabularyOutputSchema, weeklyPracticeOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { arenaEligible, scoreGameAttempt } from "@e4s/domain/engagement";
-import { hasSensitiveTopicText, SENSITIVE_TOPIC_MESSAGE_VI, sensitiveTopicIssue } from "@e4s/domain/content";
+import { hasSensitiveTopicText, SENSITIVE_TOPIC_MESSAGE_VI, sensitiveTopicIssue, sensitiveTopicSeverity, UNSUITABLE_TOPIC_MESSAGE_VI } from "@e4s/domain/content";
 import { validateWeeklyPractice } from "@e4s/domain/progression";
 import { createRepositories } from "@e4s/database";
 import type { FastifyInstance } from "fastify";
@@ -134,17 +134,18 @@ export function registerEngagementRoutes(
     const learnerId = request.e4sSession!.user.id;
     if (await assessmentInProgress(pool, learnerId)) return reply.code(409).send({ code: "MINIGAME_LOCKED_DURING_ASSESSMENT" });
     const runner = await runnerFor(learnerId);
-    const recentStrikes = await pool.query<{ count: string; blocked_until: Date | null }>(
-      `select count(*)::text as count, max(created_at + interval '30 minutes') as blocked_until
+    const recentStrikes = await pool.query<{ count: string; soft: string }>(
+      `select count(*) filter (where kind = 'strike')::text as count, count(*) filter (where kind = 'soft')::text as soft
        from topic_strikes where learner_id = $1 and created_at > now() - interval '30 minutes'`,
       [learnerId]
     );
     const strikeCount = Number(recentStrikes.rows[0]?.count ?? 0);
+    const softAttempts = Number(recentStrikes.rows[0]?.soft ?? 0);
     if (strikeCount >= 3) return reply.code(429).send({
       code: "TOPIC_CREATION_TEMPORARILY_LOCKED",
       moderation: { state: "reported", strike: 3, message: "Tạo bộ từ được mở lại sau 30 phút; người vận hành đã nhận được báo cáo." } satisfies GameTopicModeration
     });
-    const topicValidation = validateVocabularyTopic(parsed.data.topic);
+    let topicValidation = validateVocabularyTopic(parsed.data.topic);
     if (topicValidation) {
       if (!topicValidation.strike) {
         return reply.code(422).send({
@@ -153,9 +154,23 @@ export function registerEngagementRoutes(
           moderation: { state: "invalid", message: topicValidation.message } satisfies GameTopicModeration
         });
       }
+      // An unsuitable (not abusive) theme is refused gently and only remembered; it becomes a
+      // safety strike once the learner keeps trying such themes within the 30-minute window.
+      if (topicValidation.unsuitable && softAttempts + 1 < UNSUITABLE_TOPIC_ATTEMPTS_BEFORE_STRIKE) {
+        await pool.query(
+          "insert into topic_strikes (id, learner_id, topic, reason, kind) values ($1, $2, $3, $4, 'soft')",
+          [randomUUID(), learnerId, parsed.data.topic, topicValidation.message]
+        );
+        return reply.code(422).send({
+          code: "GAME_TOPIC_NOT_SUITABLE",
+          message: topicValidation.message, strikes: strikeCount,
+          moderation: { state: "not_suitable", message: topicValidation.message } satisfies GameTopicModeration
+        });
+      }
+      if (topicValidation.unsuitable) topicValidation = { message: SENSITIVE_TOPIC_MESSAGE_VI, strike: true, unsafe: true };
       const nextStrike = strikeCount + 1;
       await pool.query(
-        "insert into topic_strikes (id, learner_id, topic, reason) values ($1, $2, $3, $4)",
+        "insert into topic_strikes (id, learner_id, topic, reason, kind) values ($1, $2, $3, $4, 'strike')",
         [randomUUID(), learnerId, parsed.data.topic, topicValidation.message]
       );
       let reportId: string | undefined;
@@ -402,13 +417,20 @@ function generatedWordIsSensitive(word: { english: string; vietnamese: string; d
   return hasSensitiveTopicText(word.english, word.vietnamese, word.definition, word.imageQuery);
 }
 
-function validateVocabularyTopic(topic: string): { message: string; strike: boolean; unsafe?: true } | null {
+/** The Nth unsuitable-theme topic within the 30-minute window (and every later one) counts as a safety strike. */
+const UNSUITABLE_TOPIC_ATTEMPTS_BEFORE_STRIKE = 3;
+
+function validateVocabularyTopic(topic: string): { message: string; strike: boolean; unsafe?: true; unsuitable?: true } | null {
   const normalized = topic.normalize("NFKC").trim();
   // Unsafe content is checked first so slurs hidden behind symbols, extra words or Vietnamese are not
   // mistaken for a mere format problem (and always count as a strike). The topic screen also refuses
   // themes that do not belong in a workplace mini-game (sexual orientation, race, religion, politics,
-  // weapons, gambling, crime, death, …) — see sensitiveTopicIssue.
-  if (sensitiveTopicIssue(normalized)) return { message: SENSITIVE_TOPIC_MESSAGE_VI, strike: true, unsafe: true };
+  // weapons, gambling, crime, death, …) — see sensitiveTopicIssue. Abusive content (slurs, profanity,
+  // explicit sexual content, hate, violence, self-harm) strikes at once; an unsuitable theme is refused
+  // gently first (see UNSUITABLE_TOPIC_ATTEMPTS_BEFORE_STRIKE).
+  const sensitive = sensitiveTopicSeverity(normalized);
+  if (sensitive?.severity === "abusive") return { message: SENSITIVE_TOPIC_MESSAGE_VI, strike: true, unsafe: true };
+  if (sensitive) return { message: UNSUITABLE_TOPIC_MESSAGE_VI, strike: true, unsafe: true, unsuitable: true };
   const letters = normalized.match(/\p{L}/gu)?.join("") ?? "";
   if (normalized.length > 70) return { message: "Chủ đề tối đa 70 ký tự.", strike: false };
   if (normalized.split(/\s+/u).filter(Boolean).length > 3) return { message: "Nhập chủ đề từ 1 đến 3 từ tiếng Anh.", strike: false };

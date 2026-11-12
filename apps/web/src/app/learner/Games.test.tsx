@@ -138,6 +138,21 @@ describe("app games affordances", () => {
     expect(screen.queryByText("Chủ đề này không có nghĩa hoặc không phù hợp cho học tập.")).not.toBeInTheDocument();
   });
 
+  it("shows an unsuitable theme as a gentle notice without the safety counter", async () => {
+    const message = "Chủ đề này không phù hợp với Mini game. Hãy chọn một chủ đề công việc hoặc đời sống, ví dụ: coffee shop, meeting.";
+    const rejection = Object.assign(new Error("GAME_TOPIC_NOT_SUITABLE"), { details: { code: "GAME_TOPIC_NOT_SUITABLE", message, strikes: 0, moderation: { state: "not_suitable", message } } });
+    const generateGameSet = vi.fn().mockRejectedValue(rejection);
+    renderGames(<LearnerGames view={{ ...view, wordSet: null, aiAvailable: true }} actions={{ ...actions, generateGameSet } as unknown as LearnerCallbacks} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Chủ đề bộ từ" }), { target: { value: "religion" } });
+    fireEvent.submit(screen.getByRole("textbox", { name: "Chủ đề bộ từ" }).closest("form")!);
+
+    const notice = await screen.findByText(message);
+    expect(notice.closest(".banner")).toHaveClass("warn");
+    expect(screen.queryByText(/Cảnh báo an toàn/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Không tạo được bộ từ. Vui lòng thử lại.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Đã tạo bộ từ theo chủ đề/)).not.toBeInTheDocument();
+  });
+
   it("renders weekly vocabulary as compact speakable cards", () => {
     const weeklyView: GameHubView = {
       ...view,

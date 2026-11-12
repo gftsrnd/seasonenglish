@@ -114,11 +114,60 @@ describe("game topic moderation API", () => {
     expect(strikes.rows[0]?.count).toBe(0);
   });
 
+  const unsuitableMessage = "Chủ đề này không phù hợp với Mini game. Hãy chọn một chủ đề công việc hoặc đời sống, ví dụ: coffee shop, meeting.";
+  const softCount = async (kind: "soft" | "strike") => (await pool.query<{ count: number }>(
+    "select count(*)::int as count from topic_strikes where learner_id = $1 and kind = $2", [DEMO_IDS.learner, kind]
+  )).rows[0]?.count;
+  const postTopic = (topic: string) => app.inject({
+    method: "POST", url: "/api/v1/engagement/games/word-set", headers: { cookie },
+    payload: { requestId: crypto.randomUUID(), topic }
+  });
+
   it.each([
-    "n1gger", "N I G G E R", "f*ck meeting", "ma túy", "khiêu dâm", "coffee $hit", "self-harm",
     // topic-only themes (tester list + evasions)
-    "lesbian", "gay", "bisexual", "transgender", "homosexual", "người đồng tính", "chingchong", "white people",
-    "blackk people", "nazii", "whitepeople", "casino", "guns", "politics", "Hitler", "religion", "sexuality", "crime"
+    "lesbian", "gay", "bisexual", "transgender", "homosexual", "người đồng tính", "white people",
+    "blackk people", "whitepeople", "casino", "guns", "politics", "Hitler", "religion", "sexuality", "crime"
+  ])("gently refuses the unsuitable theme %s with GAME_TOPIC_NOT_SUITABLE, no strike and no AI call", async (topic) => {
+    const response = await postTopic(topic);
+    expect(response.statusCode, response.body).toBe(422);
+    expect(response.json()).toMatchObject({
+      code: "GAME_TOPIC_NOT_SUITABLE", message: unsuitableMessage, strikes: 0,
+      moderation: { state: "not_suitable", message: unsuitableMessage }
+    });
+    expect(response.json().wordSet).toBeUndefined();
+    expect(response.json().moderation.strike).toBeUndefined();
+    expect(aiCalls).toBe(0);
+    expect(await softCount("soft")).toBe(1);
+    expect(await softCount("strike")).toBe(0);
+  });
+
+  it("turns the third unsuitable theme within 30 minutes into a strike, then the normal 3-strike report applies", async () => {
+    for (const topic of ["religion", "politics"]) {
+      expect((await postTopic(topic)).json()).toMatchObject({ code: "GAME_TOPIC_NOT_SUITABLE", strikes: 0 });
+    }
+    const third = await postTopic("casino");
+    expect(third.statusCode, third.body).toBe(422);
+    expect(third.json()).toMatchObject({ code: "GAME_TOPIC_NOT_ALLOWED", strikes: 1, moderation: { state: "unsafe", strike: 1 } });
+    expect((await postTopic("gay")).json()).toMatchObject({ code: "GAME_TOPIC_NOT_ALLOWED", moderation: { state: "unsafe", strike: 2 } });
+    expect((await postTopic("guns")).json()).toMatchObject({ code: "GAME_TOPIC_NOT_ALLOWED", moderation: { state: "reported", strike: 3 } });
+    expect((await postTopic("coffee shop")).json()).toMatchObject({ code: "TOPIC_CREATION_TEMPORARILY_LOCKED" });
+    expect(await softCount("soft")).toBe(2);
+    expect(await softCount("strike")).toBe(3);
+    const reports = await pool.query("select count(*)::int as count from topic_reports where learner_id = $1", [DEMO_IDS.learner]);
+    expect(reports.rows[0]?.count).toBe(1);
+    expect(aiCalls).toBe(0);
+  });
+
+  it("does not count soft attempts older than the 30-minute window and never reports them", async () => {
+    for (const topic of ["religion", "politics"]) await postTopic(topic);
+    await pool.query("update topic_strikes set created_at = now() - interval '31 minutes' where learner_id = $1", [DEMO_IDS.learner]);
+    expect((await postTopic("casino")).json()).toMatchObject({ code: "GAME_TOPIC_NOT_SUITABLE", strikes: 0 });
+    const reports = await pool.query("select count(*)::int as count from topic_reports where learner_id = $1", [DEMO_IDS.learner]);
+    expect(reports.rows[0]?.count).toBe(0);
+  });
+
+  it.each([
+    "n1gger", "N I G G E R", "f*ck meeting", "ma túy", "khiêu dâm", "coffee $hit", "self-harm", "chingchong", "nazii"
   ])(
     "refuses the unsafe topic %s with GAME_TOPIC_NOT_ALLOWED before any AI call", async (topic) => {
       const response = await app.inject({
