@@ -435,7 +435,8 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
       ...(client.removeMonthlyIllustration ? { onRemoveIllustration: (id: string, word: string) => client.removeMonthlyIllustration!(id, { word }) } : {}),
       onPeekMonthlyFinal: async (id) => { try { const draft = await client.getMonthlyFinal(id); return Boolean(draft && "blueprint" in draft); } catch { return false; } },
       onOpenMonthlyFinal: async (id) => {
-        const result = await run(() => client.getMonthlyFinal(id));
+        // Read-only: no shared busy state or overview reload (that made every calendar AI button flash).
+        const result = await client.getMonthlyFinal(id);
         if (!result || !("blueprint" in result)) throw new Error("Không tải được đề thi tháng.");
         return result;
       },
