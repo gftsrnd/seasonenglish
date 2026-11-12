@@ -264,6 +264,12 @@ export function registerMonthlyFinalRoutes(
         "update assessment_versions set status = 'published', published_at = now(), blueprint = $2::jsonb where id = $1 returning published_at",
         [params.data.versionId, JSON.stringify(evaluated)]
       );
+      // Attributes the publication to the Operator for the Manager's monthly performance view.
+      await client.query(
+        `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values (gen_random_uuid(), $1, $2, 'monthly_final.published', 'assessment_version', $3, $4::jsonb, gen_random_uuid()::text)`,
+        [context.organizationId, actorId, params.data.versionId, JSON.stringify({ frameworkId: exam.framework.id, month: context.month, cefr: context.contract.cefr })]
+      );
       await client.query("commit");
       return { versionId: params.data.versionId, publishedAt: published.rows[0]!.published_at.toISOString() };
     } catch (error) {

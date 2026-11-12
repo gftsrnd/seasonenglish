@@ -89,6 +89,8 @@ const learnerBaseNotificationInput = z.object({
 });
 const requestIdParams = z.object({ requestId: z.uuid() });
 const reportIdParams = z.object({ reportId: z.uuid() });
+const reminderIdParams = z.object({ reminderId: z.uuid() });
+const operationsQuery = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u).optional() });
 const managerMusicTestInput = z.object({ enabled: z.boolean(), url: z.string().max(1000), volume: z.number().int().min(0).max(100) });
 const managerWebhookTestInput = z.object({ url: z.string().trim().max(1000), template: z.string().max(4000) });
 const managerImportInput = z.object({
@@ -128,7 +130,9 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
   });
 
   app.get("/api/v1/manager/operations", { preHandler: managerOnly }, async (request, reply) => {
-    const view = await repositories.manager.operations(request.e4sSession!.user.id);
+    const query = operationsQuery.safeParse(request.query ?? {});
+    if (!query.success) return reply.code(400).send({ code: "MANAGER_OPERATIONS_MONTH_INVALID" });
+    const view = await repositories.manager.operations(request.e4sSession!.user.id, query.data.month ? { month: query.data.month } : {});
     return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
   });
 
@@ -563,6 +567,13 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
   app.get("/api/v1/manager/reminders", { preHandler: managerOnly }, async (request, reply) => {
     const view = await repositories.manager.reminders(request.e4sSession!.user.id);
     return view ? { ...view, emailConfigured: Boolean(reminderEmailSender) } : reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+  });
+
+  app.delete<{ Params: { reminderId: string } }>("/api/v1/manager/reminders/history/:reminderId", { preHandler: managerOnly }, async (request, reply) => {
+    const params = reminderIdParams.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "MANAGER_REMINDER_ID_INVALID" });
+    const deleted = await repositories.manager.deleteReminderHistory(request.e4sSession!.user.id, params.data.reminderId);
+    return deleted ? { deleted: true as const } : reply.code(404).send({ code: "MANAGER_REMINDER_NOT_FOUND" });
   });
 
   app.put<{ Params: { learnerId: string } }>("/api/v1/manager/learners/:learnerId/notifications/base", { preHandler: managerOnly }, async (request, reply) => {

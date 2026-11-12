@@ -144,25 +144,55 @@ export interface ManagerOperationsView {
     readonly action: string;
     readonly createdAt: string;
   }[];
-  readonly operators: readonly {
-    readonly operatorId: string;
-    readonly operatorName: string;
-    readonly byWeek: readonly { readonly week: number; readonly sets: number; readonly lessons: number; readonly approved: number }[];
-    readonly sets: number;
+  /** Month (YYYY-MM) the per-Operator monthly numbers below are scoped to. */
+  readonly month: string;
+  readonly currentMonth: string;
+  readonly availableMonths: readonly string[];
+  /** Organization-wide totals for the month (not attributed to an Operator). */
+  readonly monthSummary: {
+    readonly frameworks: number;
+    readonly approvedFrameworks: number;
+    readonly publishedFrameworks: number;
     readonly lessons: number;
-    readonly published: number;
-    readonly fullLessons: number | null;
-    readonly editedLessons: number | null;
-    readonly completions: number;
-    readonly averageScore: number | null;
-    readonly firstTryPercent: number | null;
-    readonly failedPercent: number | null;
-    readonly averageAttempts: number | null;
-    readonly approvals: number;
-    readonly averageApprovalHours: number | null;
-    readonly reviewedSubmissions: number;
-    readonly reviewedCoachTurns: number;
+    readonly approvedLessons: number;
+    readonly failedLessons: number;
+  };
+  readonly operators: readonly ManagerOperatorMonthlyPerformance[];
+}
+
+export interface ManagerOperatorMonthlyPerformance {
+  readonly operatorId: string;
+  readonly operatorName: string;
+  /** month_frameworks this Operator created (created_by) or approved (approved_by). */
+  readonly resourcePools: readonly {
+    readonly cefr: CefrLevel;
+    readonly status: string;
+    readonly createdByOperator: boolean;
+    readonly approvedByOperator: boolean;
+    readonly published: boolean;
   }[];
+  readonly poolsCreated: number;
+  readonly poolsApproved: number;
+  /** Month lessons whose current draft version was saved by this Operator. */
+  readonly lessonsDrafted: number;
+  /** Lesson days this Operator saved more than one draft version for (regenerated or edited). */
+  readonly lessonsResaved: number;
+  readonly lessonsApproved: number;
+  readonly lessonsPublished: number;
+  readonly correctionsRequested: number;
+  readonly averageDraftToApprovalHours: number | null;
+  readonly finalsGenerated: number;
+  readonly finalGenerationFailures: number;
+  readonly finalsPublished: number;
+  readonly completions: number;
+  readonly averageScore: number | null;
+  readonly firstTryPercent: number | null;
+  readonly failedPercent: number | null;
+  readonly averageAttempts: number | null;
+  readonly approvals: number;
+  readonly averageApprovalHours: number | null;
+  readonly reviewedSubmissions: number;
+  readonly reviewedCoachTurns: number;
 }
 
 export interface ManagerAccountView {

@@ -12363,7 +12363,7 @@ class ManagerRepository {
     };
   }
 
-  async operations(staffId: string): Promise<ManagerOperationsView | null> {
+  async operations(staffId: string, options: { month?: string } = {}): Promise<ManagerOperationsView | null> {
     const organization = await this.organizationFor(staffId);
     if (!organization) return null;
 
@@ -12459,67 +12459,103 @@ class ManagerRepository {
     const content = contentResult.rows[0] ?? { draft: "0", in_review: "0", published: "0" };
     const queues = queuesResult.rows[0] ?? { assessment_review: "0", practice_review: "0" };
     const automation = automationResult.rows[0] ?? { pending_jobs: "0", ai_failures: "0" };
+    // Monthly content model: everything below is scoped to one program month and
+    // attributed through persisted actor columns (month_frameworks.created_by /
+    // approved_by, lesson_set_versions.created_by, month_lessons.approved_by,
+    // month_lesson_corrections.requested_by, ai_runs.user_id, audit actor).
+    const monthResult = await this.pool.query<{ current_month: string; months: string[] | null }>(
+      `select to_char(organization_system_date($1), 'YYYY-MM') as current_month,
+              array(select month from program_months where organization_id = $1 order by month desc) as months`,
+      [organization.id]
+    );
+    const currentMonth = monthResult.rows[0]?.current_month ?? new Date().toISOString().slice(0, 7);
+    const selectedMonth = options.month ?? currentMonth;
+    const availableMonths = [...new Set([currentMonth, ...(monthResult.rows[0]?.months ?? [])])].sort().reverse();
+    const monthFrameworks = `month_fw as (
+         select mf.id, mf.cefr, mf.status, mf.created_by, mf.approved_by, mf.published_at
+         from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+         where pm.organization_id = $1 and pm.month = $2 and mf.status <> 'retired'
+       )`;
+    const summaryResult = await this.pool.query<{ frameworks: string; approved_frameworks: string; published_frameworks: string; lessons: string; approved_lessons: string; failed_lessons: string }>(
+      `with ${monthFrameworks}
+       select (select count(*) from month_fw)::text as frameworks,
+              (select count(*) from month_fw where status = 'approved')::text as approved_frameworks,
+              (select count(*) from month_fw where published_at is not null)::text as published_frameworks,
+              (select count(*) from month_lessons ml join month_fw mf on mf.id = ml.framework_id)::text as lessons,
+              (select count(*) from month_lessons ml join month_fw mf on mf.id = ml.framework_id where ml.status = 'approved')::text as approved_lessons,
+              (select count(*) from month_lessons ml join month_fw mf on mf.id = ml.framework_id where ml.status = 'failed')::text as failed_lessons`,
+      [organization.id, selectedMonth]
+    );
+    const summary = summaryResult.rows[0];
     const operators = await Promise.all(operatorResult.rows.map(async (operator) => {
-      const [byWeekResult, totalsResult, approvalResult, evidenceResult, reviewResult] = await Promise.all([
-        this.pool.query<{ week_number: number; sets: string; lessons: string; approved: string }>(
-          `select pw.week_number,
-             count(distinct ls.id)::text as sets,
-             count(distinct l.id)::text as lessons,
-             count(distinct ls.id) filter (where lsv.status = 'published')::text as approved
-           from programs p join program_weeks pw on pw.program_id = p.id
-           left join lesson_sets ls on ls.program_week_id = pw.id
-           left join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and (lsv.created_by = $2 or lsv.approved_by = $2)
-           left join lessons l on l.lesson_set_version_id = lsv.id
-           where p.organization_id = $1
-           group by pw.week_number order by pw.week_number`, [organization.id, operator.id]
+      const params = [organization.id, selectedMonth, operator.id];
+      const ownedLessons = `owned_lessons as (
+           select distinct l.id from lessons l
+           join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id
+           join lesson_sets ls on ls.id = lsv.lesson_set_id
+           join month_fw mf on mf.id = ls.month_framework_id
+           where lsv.created_by = $3 or exists (select 1 from month_lessons ml where ml.lesson_id = l.id and ml.approved_by = $3)
+         )`;
+      const [poolResult, lessonResult, finalResult, outcomeResult, approvalResult, evidenceResult, reviewResult] = await Promise.all([
+        this.pool.query<{ cefr: CefrLevel; status: string; created: boolean; approved: boolean; published: boolean }>(
+          `with ${monthFrameworks}
+           select cefr, status, coalesce(created_by = $3, false) as created,
+                  coalesce(status = 'approved' and approved_by = $3, false) as approved,
+                  coalesce(published_at is not null and approved_by = $3, false) as published
+           from month_fw where created_by = $3 or approved_by = $3 order by cefr`, params
         ),
-        this.pool.query<{ sets: string; lessons: string; published: string; full_lessons: string; edited_lessons: string; completions: string; average_score: string | null }>(
-          `with owned_versions as (
-             select distinct lsv.id, lsv.lesson_set_id, lsv.status from lesson_set_versions lsv
-             join lesson_sets ls on ls.id = lsv.lesson_set_id join program_weeks pw on pw.id = ls.program_week_id
-             join programs p on p.id = pw.program_id
-             where p.organization_id = $1 and (lsv.created_by = $2 or lsv.approved_by = $2)
-           ), owned_lessons as (select distinct l.id from lessons l join owned_versions ov on ov.id = l.lesson_set_version_id),
-           lesson_shape as (
-             select ol.id, latest.content,
-                    (select count(*) from lesson_versions lv2 where lv2.lesson_id = ol.id) as version_count
-             from owned_lessons ol
-             left join lateral (select lv.content from lesson_versions lv where lv.lesson_id = ol.id order by lv.version desc limit 1) latest on true
+        this.pool.query<{ drafted: string; resaved: string; approved: string; published: string; corrections: string; average_hours: string | null }>(
+          `with ${monthFrameworks},
+           current_lessons as (
+             select ml.status, ml.approved_by, ml.approved_at, mf.published_at, lsv.created_by as drafted_by, lsv.created_at as drafted_at
+             from month_fw mf join month_lessons ml on ml.framework_id = mf.id
+             left join lessons l on l.id = ml.lesson_id
+             left join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id
+           ), saves as (
+             select ls.month_framework_id, lsv.payload->>'dayNumber' as day_number, count(*) as versions
+             from lesson_set_versions lsv join lesson_sets ls on ls.id = lsv.lesson_set_id
+             join month_fw mf on mf.id = ls.month_framework_id
+             where lsv.created_by = $3 and lsv.payload->>'source' = 'monthly'
+             group by 1, 2
            )
-           select (select count(distinct lesson_set_id) from owned_versions)::text as sets,
-             (select count(*) from owned_lessons)::text as lessons,
-             (select count(distinct lesson_set_id) from owned_versions where status = 'published')::text as published,
-             (select count(*) from lesson_shape s where
-                jsonb_array_length(coalesce(s.content->'parts', '[]'::jsonb)) >= 7
-                and exists (select 1 from jsonb_array_elements(coalesce(s.content->'parts','[]'::jsonb)) p where p->>'code' = 'vocabulary')
-                and exists (select 1 from jsonb_array_elements(coalesce(s.content->'parts','[]'::jsonb)) p where p->>'code' = 'pronunciation')
-                and (select count(*) from jsonb_array_elements(coalesce(s.content->'parts','[]'::jsonb)) p where p->>'code' in ('listening','reading','writing','speaking')) = 4)::text as full_lessons,
-             (select count(*) from lesson_shape where version_count > 1)::text as edited_lessons,
-             (select count(*) from progress_records pr
-                join owned_lessons ol on ol.id = pr.lesson_id
-                join users learner on learner.id = pr.learner_id and learner.organization_id = $1 and learner.role = 'learner' and learner.status = 'active'
-               where pr.status = 'completed')::text as completions,
-             (select round(avg(pr.score), 1)::text from progress_records pr
-                join owned_lessons ol on ol.id = pr.lesson_id
-                join users learner on learner.id = pr.learner_id and learner.organization_id = $1 and learner.role = 'learner' and learner.status = 'active'
-               where pr.status = 'completed' and pr.score is not null) as average_score`,
-          [organization.id, operator.id]
+           select (select count(*) from current_lessons where drafted_by = $3)::text as drafted,
+                  (select count(*) from saves where versions > 1)::text as resaved,
+                  (select count(*) from current_lessons where approved_by = $3 and status = 'approved')::text as approved,
+                  (select count(*) from current_lessons where approved_by = $3 and status = 'approved' and published_at is not null)::text as published,
+                  (select count(*) from month_lesson_corrections mlc join month_lessons ml on ml.id = mlc.month_lesson_id
+                     join month_fw mf on mf.id = ml.framework_id where mlc.requested_by = $3)::text as corrections,
+                  (select round((avg(extract(epoch from (approved_at - drafted_at))) / 3600)::numeric, 1)::text from current_lessons
+                    where approved_by = $3 and status = 'approved' and drafted_at is not null and approved_at >= drafted_at) as average_hours`, params
+        ),
+        this.pool.query<{ generated: string; failed: string; published: string }>(
+          `with ${monthFrameworks}
+           select (select count(*) from ai_runs ar join ai_tasks t on t.id = ar.task_id and t.task_key = 'monthly_final_generation'
+                     join month_fw mf on mf.id::text = split_part(ar.request_key, ':', 2)
+                    where ar.user_id = $3 and ar.request_key like 'monthly-final:%' and ar.status = 'succeeded')::text as generated,
+                  (select count(*) from ai_runs ar join ai_tasks t on t.id = ar.task_id and t.task_key = 'monthly_final_generation'
+                     join month_fw mf on mf.id::text = split_part(ar.request_key, ':', 2)
+                    where ar.user_id = $3 and ar.request_key like 'monthly-final:%' and ar.status in ('failed', 'invalid_output'))::text as failed,
+                  (select count(distinct ae.entity_id) from audit_events ae
+                    where ae.organization_id = $1 and ae.actor_user_id = $3 and ae.action = 'monthly_final.published'
+                      and ae.payload->>'month' = $2)::text as published`, params
+        ),
+        this.pool.query<{ completions: string; average_score: string | null }>(
+          `with ${monthFrameworks}, ${ownedLessons}
+           select count(*)::text as completions, round(avg(pr.score) filter (where pr.score is not null), 1)::text as average_score
+           from progress_records pr join owned_lessons ol on ol.id = pr.lesson_id
+           join users learner on learner.id = pr.learner_id and learner.organization_id = $1 and learner.role = 'learner' and learner.status = 'active'
+           where pr.status = 'completed'`, params
         ),
         this.pool.query<{ approvals: string; average_approval_hours: string | null }>(
           `select count(*)::text as approvals,
              round(avg(extract(epoch from (ad.decided_at - aa.submitted_at)) / 3600), 1)::text as average_approval_hours
            from assessment_decisions ad join assessment_attempts aa on aa.id = ad.attempt_id
            join users u on u.id = aa.learner_id and u.role = 'learner' and u.status = 'active'
-           where u.organization_id = $1 and ad.decided_by = $2 and ad.decided_at is not null and aa.submitted_at is not null`,
-          [organization.id, operator.id]
+           where u.organization_id = $1 and ad.decided_by = $3 and ad.decided_at is not null and aa.submitted_at is not null
+             and to_char(ad.decided_at at time zone 'Asia/Ho_Chi_Minh', 'YYYY-MM') = $2`, params
         ),
         this.pool.query<{ parts: string; first_try: string; failed: string; attempts: string }>(
-          `with owned_lessons as (
-             select distinct l.id from lesson_set_versions lsv
-             join lesson_sets ls on ls.id = lsv.lesson_set_id join program_weeks pw on pw.id = ls.program_week_id
-             join programs p on p.id = pw.program_id join lessons l on l.lesson_set_version_id = lsv.id
-             where p.organization_id = $1 and (lsv.created_by = $2 or lsv.approved_by = $2)
-           ), part_results as (
+          `with ${monthFrameworks}, ${ownedLessons}, part_results as (
              select value as result from progress_records pr
              join owned_lessons ol on ol.id = pr.lesson_id
              join users learner on learner.id = pr.learner_id and learner.organization_id = $1 and learner.role = 'learner' and learner.status = 'active'
@@ -12528,7 +12564,7 @@ class ManagerRepository {
            ) select count(*)::text as parts,
              count(*) filter (where (result->>'attempts')::int = 1 and coalesce((result->>'score')::numeric, 100) >= 80)::text as first_try,
              count(*) filter (where (result->>'attempts')::int >= 3 and coalesce((result->>'score')::numeric, 0) < 80)::text as failed,
-             coalesce(sum((result->>'attempts')::int),0)::text as attempts from part_results`, [organization.id, operator.id]
+             coalesce(sum((result->>'attempts')::int),0)::text as attempts from part_results`, params
         ),
         this.pool.query<{ submissions: string; coach: string }>(
           `select
@@ -12536,17 +12572,25 @@ class ManagerRepository {
              (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id join users learner on learner.id = cs.learner_id and learner.role = 'learner' and learner.status = 'active' where learner.organization_id = $1 and ct.feedback->>'checkedBy' = $2::text)::text as coach`, [organization.id, operator.id]
         )
       ]);
-      const totals = totalsResult.rows[0] ?? { sets: "0", lessons: "0", published: "0", full_lessons: "0", edited_lessons: "0", completions: "0", average_score: null };
+      const lessons = lessonResult.rows[0] ?? { drafted: "0", resaved: "0", approved: "0", published: "0", corrections: "0", average_hours: null };
+      const finals = finalResult.rows[0] ?? { generated: "0", failed: "0", published: "0" };
+      const outcome = outcomeResult.rows[0] ?? { completions: "0", average_score: null };
       const approval = approvalResult.rows[0] ?? { approvals: "0", average_approval_hours: null };
       const evidence = evidenceResult.rows[0] ?? { parts: "0", first_try: "0", failed: "0", attempts: "0" };
       const reviews = reviewResult.rows[0] ?? { submissions: "0", coach: "0" };
       const partCount = Number(evidence.parts);
       return {
         operatorId: operator.id, operatorName: operator.display_name,
-        byWeek: byWeekResult.rows.map((row) => ({ week: row.week_number, sets: Number(row.sets), lessons: Number(row.lessons), approved: Number(row.approved) })),
-        sets: Number(totals.sets), lessons: Number(totals.lessons), published: Number(totals.published),
-        fullLessons: Number(totals.full_lessons), editedLessons: Number(totals.edited_lessons), completions: Number(totals.completions),
-        averageScore: totals.average_score === null ? null : Number(totals.average_score),
+        resourcePools: poolResult.rows.map((row) => ({ cefr: row.cefr, status: row.status, createdByOperator: row.created, approvedByOperator: row.approved, published: row.published })),
+        poolsCreated: poolResult.rows.filter((row) => row.created).length,
+        poolsApproved: poolResult.rows.filter((row) => row.approved).length,
+        lessonsDrafted: Number(lessons.drafted), lessonsResaved: Number(lessons.resaved),
+        lessonsApproved: Number(lessons.approved), lessonsPublished: Number(lessons.published),
+        correctionsRequested: Number(lessons.corrections),
+        averageDraftToApprovalHours: lessons.average_hours === null ? null : Number(lessons.average_hours),
+        finalsGenerated: Number(finals.generated), finalGenerationFailures: Number(finals.failed), finalsPublished: Number(finals.published),
+        completions: Number(outcome.completions),
+        averageScore: outcome.average_score === null ? null : Number(outcome.average_score),
         firstTryPercent: partCount ? Math.round(Number(evidence.first_try) / partCount * 100) : null,
         failedPercent: partCount ? Math.round(Number(evidence.failed) / partCount * 100) : null,
         averageAttempts: partCount ? Math.round(Number(evidence.attempts) / partCount * 10) / 10 : null,
@@ -12556,6 +12600,14 @@ class ManagerRepository {
     }));
     return {
       organizationName: organization.name,
+      month: selectedMonth,
+      currentMonth,
+      availableMonths,
+      monthSummary: {
+        frameworks: Number(summary?.frameworks ?? 0), approvedFrameworks: Number(summary?.approved_frameworks ?? 0),
+        publishedFrameworks: Number(summary?.published_frameworks ?? 0), lessons: Number(summary?.lessons ?? 0),
+        approvedLessons: Number(summary?.approved_lessons ?? 0), failedLessons: Number(summary?.failed_lessons ?? 0)
+      },
       currentWeek,
       pilotWeeks,
       content: { draft: Number(content.draft), inReview: Number(content.in_review), published: Number(content.published) },
@@ -12734,7 +12786,7 @@ class ManagerRepository {
            and a.payload->>'reminderId' = r.id::text
          order by a.created_at desc limit 1
        ) ae on true
-       where u.organization_id = $1
+       where u.organization_id = $1 and r.staff_deleted_at is null
        order by r.created_at desc
        limit 30`,
       [organization.id]
@@ -12769,6 +12821,29 @@ class ManagerRepository {
         attemptedAt: row.attempted_at?.toISOString() ?? null
       }))
     };
+  }
+
+  /**
+   * Hides one reminder from the Manager history. The reminder row, its
+   * deliveries and audit trail stay intact, so learner eligibility, delivery
+   * jobs and reports are unaffected; only the history log no longer lists it.
+   */
+  async deleteReminderHistory(managerId: string, reminderId: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `with removed as (
+         update reminders r set staff_deleted_at = now(), staff_deleted_by = manager.id
+           from users learner, users manager
+          where r.id = $1 and learner.id = r.learner_id and manager.id = $2 and manager.role = 'manager'
+            and learner.organization_id = manager.organization_id and r.staff_deleted_at is null
+         returning r.id, r.learner_id, manager.organization_id
+       )
+       insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+       select gen_random_uuid(), organization_id, $2, 'manager.reminder_history_deleted', 'reminder', id,
+              jsonb_build_object('reminderId', id, 'learnerId', learner_id), gen_random_uuid()::text
+       from removed returning id`,
+      [reminderId, managerId]
+    );
+    return Boolean(result.rowCount);
   }
 
   async queueReminder(managerId: string, learnerId: string, requestId: string, channel: ManagerReminderChannel): Promise<ManagerReminderSendView> {
