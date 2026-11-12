@@ -121,12 +121,13 @@ describe("learner notifications API", () => {
 
     const queue = await app.inject({ url: inbox, headers: { cookie: manager } });
     expect(queue.statusCode, queue.body).toBe(200);
-    expect(queue.json()).toMatchObject({ unreadCount: 1, items: [{ kind: "complaint_received", readAt: null }] });
-    const notificationId = queue.json().items[0].id;
+    // A test date is set (2026-11-10), so the Manager also sees the test-date notice.
+    expect(queue.json()).toMatchObject({ unreadCount: 2, items: [{ kind: "test_date_active" }, { kind: "complaint_received", readAt: null }] });
+    const notificationId = queue.json().items[1].id;
     const read = (cookie: string) => app.inject({ method: "PATCH", url: inbox + "/read", headers: { cookie }, payload: { ids: [notificationId] } });
     await read(learner);
-    expect((await app.inject({ url: inbox + "?limit=0", headers: { cookie: manager } })).json().unreadCount).toBe(1);
-    expect((await read(manager)).json().unreadCount).toBe(0);
+    expect((await app.inject({ url: inbox + "?limit=0", headers: { cookie: manager } })).json().unreadCount).toBe(2);
+    expect((await read(manager)).json().unreadCount).toBe(1);
 
     const decision = await app.inject({ method: "POST", url: "/api/v1/manager/complaints/" + complaintId + "/decision", headers: { cookie: manager }, payload: { decision: "approved", resolution: "Đã kiểm tra" } });
     expect(decision.statusCode, decision.body).toBe(200);

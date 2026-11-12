@@ -34,6 +34,12 @@ function notificationCategory(value: InboxNotificationView["kind"]): keyof typeo
   return "learning";
 }
 
+/** "2026-11-09" -> "09/11"; anything else is shown as given. */
+function dayMonth(date: string): string {
+  const match = /^\d{4}-(\d{2})-(\d{2})$/.exec(date);
+  return match ? `${match[2]}/${match[1]}` : date;
+}
+
 function notificationContent(item: InboxNotificationView): { title: string; description: string; path: string; action: string } {
   const exam = assessmentNames[item.context] ?? "bài thi";
   const examTab = assessmentTabs[item.context] ?? "placement";
@@ -119,6 +125,15 @@ function notificationContent(item: InboxNotificationView): { title: string; desc
       return { title: "Đã cấp chứng nhận hoàn thành E4S", description: "Quyết định đã được lưu cùng kết quả thi đầu ra.", path: "/op/tests", action: "Xem kết quả" };
     case "challenge_received":
       return { title: "Có thử thách Season chờ duyệt mức", description: "Học viên đã hoàn thành thử thách.", path: "/op", action: "Mở hàng duyệt" };
+    case "lesson_window_unapproved":
+    case "lesson_window_unapproved_manager": {
+      const [lessonDate = "", level = ""] = (item.context ?? "").split(":");
+      return { title: `Bài ngày ${dayMonth(lessonDate)} của ${level} chưa được duyệt`, description: "Học viên sẽ không có bài ngày đó cho tới khi bài được duyệt.", path: item.kind === "lesson_window_unapproved" ? "/op/months" : "/mgr/ops/months", action: "Mở lịch tháng" };
+    }
+    case "test_date_active": {
+      const [testDate = "", realDate = ""] = (item.context ?? "").split(":");
+      return { title: `Ngày thử đang là ${dayMonth(testDate)} (ngày thật ${dayMonth(realDate)})`, description: "Nhớ trả về ngày thật sau khi thử.", path: "/settings", action: "Mở Cài đặt" };
+    }
     case "challenge_passed":
     case "challenge_retry":
       return { title: item.kind === "challenge_passed" ? "Đã hoàn thành thử thách lên mức" : "Có kết quả thử thách lên mức", description: "Xem kết quả và bước tiếp theo trong hồ sơ.", path: "/profile", action: "Xem hồ sơ" };

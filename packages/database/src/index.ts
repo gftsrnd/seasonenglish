@@ -8,4 +8,5 @@ export * from "./monthly-content-repository.js";
 export * from "./repositories.js";
 export * from "./schema.js";
 export * from "./seed.js";
+export * from "./staff-date-notices.js";
 export * from "./sync-canonical-assessments.js";

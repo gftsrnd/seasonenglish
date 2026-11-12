@@ -1077,7 +1077,9 @@ export async function monthlyExamEligibility(pool: Pool, learnerId: string, opti
        from dates d
      )
      select f.system_date::text, f.month, f.exam_date::text, f.late_opened_at,
-            to_char(now() at time zone 'Asia/Ho_Chi_Minh', 'HH24:MI:SS') as local_time,
+            -- A test date is a whole simulated day: the real time of day does not close its entry window.
+            case when f.system_date <> (now() at time zone 'Asia/Ho_Chi_Minh')::date then '00:00:00'
+                 else to_char(now() at time zone 'Asia/Ho_Chi_Minh', 'HH24:MI:SS') end as local_time,
             max(f.scheduled_lessons)::text as scheduled_lessons, max(f.completed_lessons)::text as completed_lessons,
             max(f.season_turns)::text as season_turns, bool_or(f.framework_approved) as framework_approved,
             bool_or(f.form_published) as form_published, bool_or(f.attendance_appeal_approved) as attendance_appeal_approved

@@ -1,5 +1,5 @@
 import { AI_TASKS, createAiService, createAnthropicProvider } from "@e4s/ai";
-import { autoApproveExpiredEligibilityComplaints, createMediaRepository, createRepositories } from "@e4s/database";
+import { autoApproveExpiredEligibilityComplaints, createMediaRepository, createRepositories, syncStaffDateNotices } from "@e4s/database";
 import { createS3Storage, type ObjectStorage } from "@e4s/storage";
 import { Pool } from "pg";
 import { loadEnvFile } from "node:process";
@@ -73,6 +73,7 @@ const reportMaintenanceError = (error: unknown) => {
   process.stderr.write(`[monthly-maintenance-sweep] ${error instanceof Error ? error.message : String(error)}\n`);
 };
 const lockLearners = () => createRepositories(pool).manager.lockInactiveLearners().catch(reportMaintenanceError);
+const syncDateNotices = () => syncStaffDateNotices(pool).catch(reportMaintenanceError);
 const approveComplaints = () => autoApproveExpiredEligibilityComplaints(pool).catch(reportMaintenanceError);
 const dayMs = 24 * 60 * 60 * 1_000;
 const untilVietnamMidnight = () => dayMs - (Date.now() + 7 * 60 * 60 * 1_000) % dayMs;
@@ -80,11 +81,13 @@ let inactivitySweep: ReturnType<typeof setTimeout>;
 function scheduleInactivitySweep() {
   inactivitySweep = setTimeout(() => {
     void lockLearners();
+    void syncDateNotices();
     scheduleInactivitySweep();
   }, untilVietnamMidnight());
   inactivitySweep.unref();
 }
 void lockLearners();
+void syncDateNotices();
 void approveComplaints();
 scheduleInactivitySweep();
 const complaintSweep = setInterval(approveComplaints, 60 * 1_000);

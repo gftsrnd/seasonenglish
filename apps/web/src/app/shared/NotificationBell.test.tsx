@@ -58,6 +58,24 @@ describe("NotificationBell", () => {
     expect(api.markInboxRead).toHaveBeenCalledWith({ ids: ["unknown-kind"] });
   });
 
+  it("shows the test-date and unapproved upcoming-lesson notices with their dates", async () => {
+    const items = [
+      { ...notification, id: "test-date", kind: "test_date_active", context: "2026-11-09:2026-11-12" },
+      { ...notification, id: "lesson-window", kind: "lesson_window_unapproved", context: "2026-11-11:A2" }
+    ];
+    api.getNotificationInbox.mockImplementation(async (limit) => ({ items: limit ? items : [], unreadCount: 2, nextCursor: null }));
+    api.markInboxRead.mockResolvedValue({ unreadCount: 1 });
+    const user = userEvent.setup();
+    render(<MemoryRouter><NotificationBell /><Routes><Route path="/" element={<span />} /><Route path="/op/months" element={<h1>Lịch tháng</h1>} /></Routes></MemoryRouter>);
+    await user.click(await screen.findByRole("button", { name: /2 chưa đọc/ }));
+    const dialog = screen.getByRole("dialog", { name: "Thông báo" });
+    expect(await within(dialog).findByText("Ngày thử đang là 09/11 (ngày thật 12/11)")).toBeInTheDocument();
+    expect(within(dialog).getByText("Nhớ trả về ngày thật sau khi thử.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Bài ngày 11/11 của A2 chưa được duyệt")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Mở lịch tháng" }));
+    expect(await screen.findByRole("heading", { name: "Lịch tháng" })).toBeInTheDocument();
+  });
+
   it("opens the matching appeal in the operator request hub", async () => {
     const relatedId = "dd8828fc-27c5-4321-8876-515725d2569a";
     api.getNotificationInbox.mockImplementation(async (limit) => ({ items: limit ? [{ ...notification, kind: "appeal_received", context: "assessment", relatedId }] : [], unreadCount: 1, nextCursor: null }));

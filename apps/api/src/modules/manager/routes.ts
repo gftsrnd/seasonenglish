@@ -22,6 +22,10 @@ const accountCreateInput = z.object({
     context.addIssue({ code: "custom", path: ["password"], message: "Staff password must contain at least 8 characters" });
   }
 });
+function isCalendarDate(value: string): boolean {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
 const accountStatusInput = z.object({ status: z.enum(["active", "disabled", "deleted"]) });
 const resetPasswordInput = z.object({ password: z.string().min(6).max(128) });
 const managerSettingsInput = z.object({
@@ -30,14 +34,15 @@ const managerSettingsInput = z.object({
   aiTestDisabled: z.boolean().default(false),
   reminderInactiveDays: z.number().int().min(1).max(30), weeklyReportEnabled: z.boolean(),
   pilotStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  simulatedSystemDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // "" or null returns to the real date; a value must be a real calendar day.
+  simulatedSystemDate: z.union([z.literal(""), z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isCalendarDate)]).nullable().optional(),
   pilotWeeks: z.number().int().min(2).max(4),
   weekOverride: z.number().int().min(0).max(4), minMinutesPerDay: z.number().int().min(5).max(60),
   courseTheme: z.string().max(160), coachDailyLimit: z.number().int().min(1).max(200),
   testTimed: z.boolean(), testTimes: z.object({ listening: z.number().int().min(1).max(60), reading: z.number().int().min(1).max(60), writing: z.number().int().min(1).max(60), speaking: z.number().int().min(1).max(60) }),
   testWarnLimit: z.number().int().min(1).max(10),
   levelUp: z.object({ days: z.number().int().min(1).max(60), lessons: z.number().min(1).max(100), firstTry: z.number().min(1).max(100), submission: z.number().min(1).max(100), coach: z.number().min(0).max(5), coachTurns: z.number().int().min(0).max(100), wrong: z.number().min(1).max(100), minParts: z.number().int().min(1).max(50) }),
-  backgroundMusic: z.object({ enabled: z.boolean(), url: z.string().max(1000), volume: z.number().int().min(0).max(100) }),
+  backgroundMusic: z.object({ enabled: z.boolean(), url: z.string().max(1000), volume: z.number().int().min(0).max(100), customUrl: z.string().max(1000).optional(), playlistId: z.string().max(200).optional() }),
   baseWebhookUrl: z.string().max(1000), baseWebhookTemplate: z.string().max(4000)
 }).refine(input => new Date(`${input.pilotStartDate}T00:00:00Z`).getUTCDay() === 1, { path: ["pilotStartDate"], message: "Pilot must start on Monday" });
 const managerProviderSettingsInput = z.object({

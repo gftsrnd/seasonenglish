@@ -1910,7 +1910,7 @@ class LearningRepository {
                 coalesce(jsonb_agg(jsonb_build_object(
                   'dayNumber', l.day_number,
                   'status', pr.status,
-                  'completedAt', pr.completed_at
+                  'completedAt', pr.completed_on
                 ) order by l.day_number) filter (where l.id is not null), '[]'::jsonb) as lesson_days
          from enrollments e
          join programs p on p.id = e.program_id
@@ -2618,13 +2618,14 @@ export async function learnerMonthlyAttendanceDates(pool: Pool | PoolClient, lea
   if (!months.length) return result;
   const [completions, context] = await Promise.all([
     pool.query<{ completed_date: string; kind: "new" | "review" }>(
-      `select ((pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date)::text as completed_date,
+      // completed_on is the organisation (test) date of the completion, matching the system date used below.
+      `select pr.completed_on::text as completed_date,
               case when ml.id is not null and ${MONTH_LESSON_IS_REVIEW_SQL} then 'review' else 'new' end as kind
          from progress_records pr
          left join month_lessons ml on ml.lesson_id = pr.lesson_id
          left join month_frameworks mf on mf.id = ml.framework_id
-        where pr.learner_id = $1 and pr.status = 'completed' and pr.completed_at is not null
-          and to_char((pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date, 'YYYY-MM') = any($2::text[])
+        where pr.learner_id = $1 and pr.status = 'completed' and pr.completed_on is not null
+          and to_char(pr.completed_on, 'YYYY-MM') = any($2::text[])
           and ($3::text is null or mf.cefr = $3)
           and ($4::timestamptz is null or pr.completed_at >= $4)`,
       [learnerId, months, scope?.cefr ?? null, scope?.from ?? null]
@@ -11066,9 +11067,11 @@ class ManagerRepository {
     try {
       await client.query("begin");
       const candidates = await client.query<{ id: string; organization_id: string }>(
+        // A test date ahead of the real Vietnam date never locks anyone: those absences have not happened.
         `select u.id, u.organization_id from users u
          where u.role = 'learner' and u.status = 'active'
            and exists (select 1 from enrollments e where e.learner_id = u.id and e.cefr_approved)
+           and organization_system_date(u.organization_id) <= (now() at time zone 'Asia/Ho_Chi_Minh')::date
          order by u.id for update of u`
       );
       let locked = 0;
@@ -11193,7 +11196,8 @@ class ManagerRepository {
       aiTestDisabled: false,
       reminderInactiveDays: 3, weeklyReportEnabled: true,
       pilotStartDate: activeProgram?.start_date ?? currentMonday,
-      simulatedSystemDate: currentMonday,
+      // Empty means no test date: the organisation follows the real Vietnam date.
+      simulatedSystemDate: "",
       pilotWeeks: activeProgram?.week_count ?? 2,
       weekOverride: activeProgram?.current_week_override ?? 0,
       minMinutesPerDay: 15,
@@ -13309,7 +13313,11 @@ class ManagerRepository {
         ...cleanInput,
         ...coachLimitChange,
         coachDailyLimit,
-        simulatedSystemDate: cleanInput.simulatedSystemDate ?? currentSettings?.simulatedSystemDate ?? currentProgram?.today,
+        // Only an explicit test date is stored; empty/null returns to the real date (undefined is dropped
+        // by JSON.stringify, removing the key), omitted keeps the current one.
+        simulatedSystemDate: (cleanInput.simulatedSystemDate === undefined ? currentSettings?.simulatedSystemDate : cleanInput.simulatedSystemDate) || undefined,
+        // Merge so fields the settings form does not send (customUrl, playlistId) survive a save.
+        backgroundMusic: { ...currentSettings?.backgroundMusic, ...cleanInput.backgroundMusic },
         pilotStartDate: effectiveStartDate, pilotWeeks: effectiveWeeks, weekOverride: 0
       };
       await client.query(
@@ -13329,6 +13337,8 @@ class ManagerRepository {
          values ($1, $2, $3, 'organisation.settings.updated', 'organization', $2, $4::jsonb, $5)`,
         [randomUUID(), organization.id, managerId, JSON.stringify({ ...savedInput, baseWebhookUrl: undefined, baseWebhookTemplate: undefined }), randomUUID()]
       );
+      // Test-date and upcoming-lesson notices follow the (possibly new) organisation date at once.
+      await client.query("select sync_staff_date_notices($1)", [organization.id]);
       const program = await client.query<{ id: string }>(
         `update programs
          set name = $1,
@@ -13416,7 +13426,9 @@ class ManagerRepository {
     if (!organization) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
     const settings = await this.settingsForOrganization(organization.id);
     const backgroundMusic = { enabled: true, url: "", volume: 22 };
-    await this.saveSettings(managerId, { ...settings, backgroundMusic });
+    // saveSettings merges music fields, so a reset clears the experience fields explicitly.
+    const resetMusic = { ...backgroundMusic, customUrl: "", playlistId: "auto" };
+    await this.saveSettings(managerId, { ...settings, backgroundMusic: resetMusic });
     return backgroundMusic;
   }
 

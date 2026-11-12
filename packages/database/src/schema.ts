@@ -236,7 +236,7 @@ export const progressRecords = pgTable("progress_records", {
   id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id),
   lessonId: uuid("lesson_id").notNull().references(() => lessons.id), status: text("status").notNull().default("not_started"),
   score: numeric("score", { precision: 6, scale: 2 }), evidence: jsonb("evidence").notNull().default(emptyObject),
-  startedAt: timestamp("started_at", { withTimezone: true }), completedAt: timestamp("completed_at", { withTimezone: true }),
+  startedAt: timestamp("started_at", { withTimezone: true }), completedAt: timestamp("completed_at", { withTimezone: true }), completedOn: date("completed_on"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
 

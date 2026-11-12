@@ -1,5 +1,5 @@
 import type { LearnerNotificationsView } from "@e4s/contracts";
-import { createRepositories, InboxNotificationRepository } from "@e4s/database";
+import { createRepositories, InboxNotificationRepository, syncStaffDateNotices } from "@e4s/database";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
@@ -44,6 +44,13 @@ export function registerNotificationRoutes(app: FastifyInstance, pool: Pool): vo
         await syncMonthlySurveyNotice(pool, session.user.id);
       } catch (error) {
         request.log.warn({ err: error }, "Unable to sync monthly survey notification");
+      }
+    }
+    if (session.role !== "learner" && !cursor) {
+      try {
+        await syncStaffDateNotices(pool, { userId: session.user.id });
+      } catch (error) {
+        request.log.warn({ err: error }, "Unable to sync staff date notifications");
       }
     }
     return inbox.list(session.user.id, limit, unreadOnly === "true", cursor);

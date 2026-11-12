@@ -510,7 +510,8 @@ export interface LearnerComplaintView extends RequestEvidenceView {
 }
 
 export type ManagerSettingsInput = Omit<ManagerSettingsView, "organizationName" | "pilotCycle" | "simulatedSystemDate" | "coachDailyLimitStartsMonth"> & {
-  readonly simulatedSystemDate?: string | undefined;
+  /** Empty string or null clears the test date (back to the real date); omitted keeps it. */
+  readonly simulatedSystemDate?: string | null | undefined;
   /** Present only when the user explicitly saves the pilot-cycle section. */
   readonly pilotCycleAction?: "save";
 };
