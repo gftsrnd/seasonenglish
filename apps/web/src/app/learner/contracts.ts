@@ -148,6 +148,8 @@ export interface LearnerCallbacks {
   recordPronunciationListen?: (word: string) => void | Promise<void>;
   saveLessonProgress: (progress: LessonProgressView) => void | Promise<void>;
   submitLessonPartAttempt?: (partCode: LessonPartCode, evidence: LessonPartAttemptEvidenceInput) => Promise<LessonPartAttemptView>;
+  /** Reloads the lesson from the server (used while a Speaking/Writing AI grade is on its way). */
+  refreshLesson?: () => Promise<void>;
   appealLessonPart?: (partCode: LessonPartCode, reason: string, evidence?: RequestEvidenceInput, exerciseVersionId?: string) => Promise<LessonPartAppealView>;
   resolveLessonVocabularyImage?: (itemIndex: number) => Promise<ContentImageView>;
   /** Friday review session (resume, review-until-correct, optional warm-up). */

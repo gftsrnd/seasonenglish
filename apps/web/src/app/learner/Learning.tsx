@@ -148,7 +148,8 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
     setLocalProgress(lesson.progress);
     setMediaArtifacts(Object.fromEntries(
       Object.entries(lesson.progress.evidence)
-      .filter(([, evidence]) => Boolean(evidence?.artifactKey))
+      // A recording graded "try again" (or unclear) is used; the learner records a new one.
+      .filter(([code, evidence]) => Boolean(evidence?.artifactKey) && !(code === "speaking" && evidence?.status === "wrong_retry"))
       .map(([code, evidence]) => [code, evidence!.artifactKey!])
     ));
     setAnswers((current) => isNewLesson ? serverAnswers : { ...serverAnswers, ...current });
@@ -164,6 +165,22 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
       setBusyAction(null);
     }
   }, [lesson.id, lesson.progress]);
+  // Speaking/Writing are AI-graded in the background: refresh until the result arrives.
+  const gradingPending = Object.values(localProgress.evidence).some((item) => item?.aiGrading === "pending");
+  useEffect(() => {
+    const refresh = actions.refreshLesson;
+    if (!gradingPending || !refresh) return;
+    let polls = 0;
+    const timer = setInterval(() => {
+      polls += 1;
+      if (polls > 60) {
+        clearInterval(timer);
+        return;
+      }
+      void refresh().catch(() => undefined);
+    }, 3_000);
+    return () => clearInterval(timer);
+  }, [gradingPending, lesson.id, actions.refreshLesson]);
   const markPronunciationListened = async (word: string) => {
     if (pronunciationListened.has(word)) return;
     try {
@@ -337,7 +354,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
         return <li className={`card lesson-part lesson-part--${part.code}`} data-part={part.code} data-testid="app-lesson-part" key={part.code} style={{ boxSizing: "border-box", minWidth: 0, display: "grid", gap: 12, padding: 18 }}>
           <SharedLessonPartContent cefr={lesson.cefr} language={language} copy={copy} grammarAvailable={grammarAvailable} sectionNumber={visible.slice(0, index).filter((candidate) => practiceCodes.includes(candidate.code)).length + 1} part={displayPart} speak={actions.speak} openVocabularyModal={setVocabularyModal} resolveVocabularyImage={actions.resolveLessonVocabularyImage} onPronunciationListened={markPronunciationListened} />
           {practiceCodes.includes(part.code) ? <div className="stack lesson-answer" aria-busy={busyAction === part.code || undefined} style={{ gap: 12, minWidth: 0 }}>
-            {part.code === "speaking" && !speakingUnlocked ? <Notice tone="info"><SpeakingGateNotice copy={copy} words={requiredPronunciationWords} heard={pronunciationListened} /></Notice> : part.code === "speaking" ? <section className="stack lesson-speaking-answer" aria-label={copy.answerLabel}><strong>{copy.answerLabel}</strong><SpeakingEvidenceControls language={language} copy={copy} submitted={done || partEvidence?.status === "submitted"} artifactKey={mediaArtifacts[part.code]} onUploaded={(artifactKey) => setMediaArtifacts((current) => ({ ...current, [part.code]: artifactKey }))} uploadAudio={actions.uploadAssessmentAudio} getAudioReadUrl={actions.getAssessmentAudioReadUrl} />{partEvidence?.answer?.trim() ? <section className="stack lesson-speaking-transcript" aria-label={language === "en" ? "Automatic Speaking transcript" : "Bản chép tự động phần Nói"}><strong>{language === "en" ? "Automatic transcript" : "Bản chép tự động"}</strong><output>{partEvidence.answer.trim()}</output></section> : null}</section> : <LessonAnswerControl language={language} copy={copy} part={part} value={answers[part.code] ?? ""} evidence={partEvidence} disabled={done || Boolean(busyAction)} onChange={(value) => setAnswers((current) => ({ ...current, [part.code]: value }))} />}
+            {part.code === "speaking" && !speakingUnlocked ? <Notice tone="info"><SpeakingGateNotice copy={copy} words={requiredPronunciationWords} heard={pronunciationListened} /></Notice> : part.code === "speaking" ? <section className="stack lesson-speaking-answer" aria-label={copy.answerLabel}><strong>{copy.answerLabel}</strong><SpeakingEvidenceControls key={`speaking-${partEvidence?.attempts ?? 0}-${partEvidence?.status ?? "new"}`} language={language} copy={copy} submitted={done || partEvidence?.status === "submitted"} artifactKey={mediaArtifacts[part.code]} onUploaded={(artifactKey) => setMediaArtifacts((current) => ({ ...current, [part.code]: artifactKey }))} uploadAudio={actions.uploadAssessmentAudio} getAudioReadUrl={actions.getAssessmentAudioReadUrl} />{partEvidence?.answer?.trim() ? <section className="stack lesson-speaking-transcript" aria-label={language === "en" ? "Automatic Speaking transcript" : "Bản chép tự động phần Nói"}><strong>{language === "en" ? "Automatic transcript" : "Bản chép tự động"}</strong><output>{partEvidence.answer.trim()}</output></section> : null}</section> : <LessonAnswerControl language={language} copy={copy} part={part} value={answers[part.code] ?? ""} evidence={partEvidence} disabled={done || Boolean(busyAction)} onChange={(value) => setAnswers((current) => ({ ...current, [part.code]: value }))} />}
             {isSelfWritingPart(part) ? <small>{language === "en" ? "Write at least two words." : "Tự viết tối thiểu 2 từ."}</small> : null}
             {part.code !== "speaking" || speakingUnlocked ? <button className="btn-primary" type="button" aria-busy={busyAction === part.code || undefined} disabled={done || Boolean(busyAction) || !hasLessonAnswer(part, answers[part.code], mediaArtifacts[part.code])} style={{ alignSelf: "flex-start", minHeight: 44 }} onClick={() => void save(part)}>{busyAction === part.code ? copy.buttons.checking : done ? copy.buttons.completed : part.code === "speaking" ? (language === "en" ? "Check speaking" : "Kiểm tra nói") : copy.buttons.submit}</button> : null}
             {statusNotice ? <Notice tone={statusNotice.tone}>{statusNotice.text}</Notice> : null}

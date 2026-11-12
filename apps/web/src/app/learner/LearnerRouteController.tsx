@@ -443,6 +443,11 @@ function LearnerContent({ courseCompleted }: { courseCompleted: boolean }) {
       setContracts((current) => current.lesson ? { lesson: { ...current.lesson, progress: result.progress } } : current);
       return result;
     },
+    refreshLesson: async () => {
+      if (route.name !== "lesson") throw new Error("LESSON_ROUTE_NOT_ACTIVE");
+      const lesson = await apiClient.getLesson(route.params.id);
+      setContracts((current) => current.lesson?.id === lesson.id ? { lesson } : current);
+    },
     appealLessonPart: async (partCode, reason, ...evidence) => {
       if (route.name !== "lesson") throw new Error("LESSON_ROUTE_NOT_ACTIVE");
       const result = await apiClient.appealLessonPart(route.params.id, partCode, reason, ...evidence);
