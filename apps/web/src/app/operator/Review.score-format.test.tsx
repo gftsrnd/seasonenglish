@@ -25,8 +25,8 @@ function monthlyFinalDetail(): ContentReviewAssessmentDetailView {
     totalScore: 18.766666666666666,
     taskPrompts: [],
     answers: [
-      { section: "reading", taskKey: "R1", value: "A" },
-      { section: "reading", taskKey: "R2", value: "B" }
+      { section: "reading", taskKey: "R1", value: "A", evidenceType: "choice" },
+      { section: "reading", taskKey: "R2", value: "B", evidenceType: "choice" }
     ],
     scores: [],
     sections: [
