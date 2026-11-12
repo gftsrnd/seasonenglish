@@ -31,6 +31,15 @@ describe("engagement policy", () => {
     expect(result).toMatchObject({ score: 3, maxScore: 6, correct: 2 });
   });
 
+  it("scores a skipped Scramble word as unsolved and caps a hinted word at one point (B8-008)", () => {
+    const result = scoreGameAttempt("scramble", words, [
+      { wordId: "w1", answer: "", attempts: 1, usedHint: true },
+      { wordId: "w2", answer: "prepare", attempts: 1, usedHint: true },
+      { wordId: "w3", answer: "", attempts: 2, usedHint: false }
+    ]);
+    expect(result).toMatchObject({ score: 1, maxScore: 6, correct: 1, total: 3 });
+  });
+
   it("does not award the same game round more than once when a client repeats it", () => {
     const repeated = Array.from({ length: 3 }, () => ({
       wordId: "w1", answer: "colleague", attempts: 1, usedHint: false

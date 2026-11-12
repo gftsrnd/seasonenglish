@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearnerChallenge, LearnerCoach, LearnerPractice } from "./CoachPractice.js";
 import type { LearnerCallbacks, PracticeView } from "./contracts.js";
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   Reflect.deleteProperty(window, "SpeechRecognition");
   Reflect.deleteProperty(window, "webkitSpeechRecognition");
@@ -14,6 +15,10 @@ afterEach(() => {
   Reflect.deleteProperty(globalThis, "MediaRecorder");
   vi.restoreAllMocks();
 });
+
+async function finishClearChatCountdown() {
+  for (let second = 0; second < 5; second += 1) await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+}
 
 const actions = () => ({
   sendCoachMessage: vi.fn(),
@@ -180,13 +185,15 @@ describe("app coach and weekly practice speech input", () => {
   });
 
   it("keeps clear-chat focus inside the confirmation dialog", async () => {
-    const user = userEvent.setup();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const callback = actions();
     render(<LearnerCoach view={coach} actions={callback} />);
 
     await user.click(screen.getByRole("button", { name: "Xoá chat" }));
     const dialog = screen.getByRole("dialog", { name: "Xoá đoạn chat này?" });
     const cancel = within(dialog).getByRole("button", { name: "Huỷ" });
+    await finishClearChatCountdown();
     const confirm = within(dialog).getByRole("button", { name: "Xoá chat" });
     expect(cancel).toHaveFocus();
 
@@ -198,9 +205,48 @@ describe("app coach and weekly practice speech input", () => {
     expect(confirm).toHaveFocus();
   });
 
-  it("matches the canonical Coach header, counters, cap state, and clear-chat confirmation", async () => {
+  it("counts down five seconds before the clear-chat button can delete (B8-009)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const callback = actions();
-    const user = userEvent.setup();
+    render(<LearnerCoach view={coach} actions={callback} />);
+
+    await user.click(screen.getByRole("button", { name: "Xoá chat" }));
+    const dialog = screen.getByRole("dialog", { name: "Xoá đoạn chat này?" });
+    expect(dialog).toHaveTextContent(/không khôi phục lại được/i);
+    const confirm = within(dialog).getByRole("button", { name: "Xoá chat (5)" });
+    expect(confirm).toBeDisabled();
+    expect(confirm).toHaveClass("btn-danger");
+    fireEvent.click(confirm);
+    expect(callback.startNewCoachChat).not.toHaveBeenCalled();
+
+    for (const second of [4, 3, 2, 1]) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      expect(within(dialog).getByRole("button", { name: `Xoá chat (${second})` })).toBeDisabled();
+    }
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    const ready = within(dialog).getByRole("button", { name: "Xoá chat" });
+    expect(ready).toBeEnabled();
+    await user.click(ready);
+    expect(callback.startNewCoachChat).toHaveBeenCalledTimes(1);
+  });
+
+  it("restarts the clear-chat countdown each time the dialog opens", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<LearnerCoach view={coach} actions={actions()} />);
+
+    await user.click(screen.getByRole("button", { name: "Xoá chat" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    await user.click(screen.getByRole("button", { name: "Huỷ" }));
+    await user.click(screen.getByRole("button", { name: "Xoá chat" }));
+    expect(within(screen.getByRole("dialog", { name: "Xoá đoạn chat này?" })).getByRole("button", { name: "Xoá chat (5)" })).toBeDisabled();
+  });
+
+  it("matches the canonical Coach header, counters, cap state, and clear-chat confirmation", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const callback = actions();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { rerender } = render(<LearnerCoach view={{ ...coach, monthly: { label: "Tháng 2026-11", turns: 1, target: 100 } }} actions={callback} />);
 
     expect(screen.getByRole("heading", { name: "Luyện với Season" })).toBeInTheDocument();
@@ -221,6 +267,7 @@ describe("app coach and weekly practice speech input", () => {
     const dialog = screen.getByRole("dialog", { name: "Xoá đoạn chat này?" });
     expect(dialog).toHaveTextContent(/không khôi phục lại được/i);
     expect(dialog).not.toHaveTextContent(/ô từ đã mở sẽ biến mất/i);
+    await finishClearChatCountdown();
     await user.click(within(dialog).getByRole("button", { name: "Xoá chat" }));
     expect(callback.startNewCoachChat).toHaveBeenCalledTimes(1);
 

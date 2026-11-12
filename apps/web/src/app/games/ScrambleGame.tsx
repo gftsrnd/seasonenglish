@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameAnswerInput } from "@e4s/contracts";
-import { Delete, Lightbulb } from "lucide-react";
+import { Delete, Lightbulb, SkipForward } from "lucide-react";
 import { letters, prepareGameAttempt, SCRAMBLE_ROUND_SIZE, seededShuffle, type FinishGame, type GameWord } from "./types.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import { GameFeedback } from "./GameFeedback.js";
@@ -103,14 +103,30 @@ export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { wor
     if (next.length === target.length) void completeWord(next.map((item) => tiles[item]?.character ?? "").join(""), hintWasUsed);
   };
   const backspace = () => { if (!busy && !locked) setPicked((value) => value.slice(0, -1)); };
+  // B8-008: exactly one hint per word. The hint keeps the correct prefix the
+  // learner already built, drops anything after the first wrong letter and adds
+  // the next correct letter, so it can never be chained to reveal a whole word.
   const hint = () => {
-    if (busy || locked) return;
-    const nextCharacter = target[picked.length];
-    const tileIndex = tiles.findIndex((tile, tileIndex) => tile.character === nextCharacter && !picked.includes(tileIndex));
-    if (tileIndex >= 0) {
-      setUsedHint(true);
-      pick(tileIndex, true);
-    }
+    if (busy || locked || usedHint) return;
+    let prefix = 0;
+    while (prefix < picked.length && tiles[picked[prefix]!]?.character === target[prefix]) prefix += 1;
+    const kept = picked.slice(0, prefix);
+    const nextCharacter = target[prefix];
+    const tileIndex = tiles.findIndex((tile, tileIndex) => tile.character === nextCharacter && !kept.includes(tileIndex));
+    if (tileIndex < 0) return;
+    setUsedHint(true);
+    const next = [...kept, tileIndex];
+    setPicked(next);
+    if (next.length === target.length) void completeWord(next.map((item) => tiles[item]?.character ?? "").join(""), true);
+  };
+  // Skipping records the word as not solved (empty answer → 0 points on the server).
+  const skip = () => {
+    if (!word || busy || locked) return;
+    const nextAnswers = [...answers, { wordId: word.id, answer: "", attempts: wrong + 1, usedHint, combo: 1 } satisfies GameAnswerInput];
+    play("error");
+    setRevealed(target);
+    setNotice(`Đã bỏ qua · Từ đúng: ${word.english}`);
+    scheduleNext(nextAnswers, 1_800);
   };
 
   useEffect(() => {
@@ -136,7 +152,7 @@ export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { wor
       <p><span className="eyebrow">Gợi ý</span><strong>{word.vietnamese}</strong><small>{word.definition} · {target.length} chữ cái</small></p>
       <div className="answer-slots" aria-label="Từ đang xếp">{target.split("").map((_, slot) => <span key={slot}>{assembled[slot]?.toUpperCase() ?? ""}</span>)}</div>
       <div ref={bankRef} className="letter-bank" role="group" aria-label="Chữ cái bị xáo trộn">{tiles.map((tile, tileIndex) => <button type="button" aria-label={`Chữ ${tile.character} vị trí ${tileIndex + 1}`} className={picked.includes(tileIndex) ? "is-used" : ""} disabled={busy || locked || picked.includes(tileIndex)} key={`${tile.character}-${tileIndex}`} onClick={() => pick(tileIndex)}>{tile.character}</button>)}</div>
-      <div className="mini-actions"><button type="button" disabled={busy || locked} onClick={backspace}><Delete className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" />Bỏ chữ cuối</button><button type="button" disabled={busy || locked} onClick={hint}><Lightbulb className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" />Gợi ý</button></div>
+      <div className="mini-actions"><button type="button" disabled={busy || locked} onClick={backspace}><Delete className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" />Bỏ chữ cuối</button><button type="button" disabled={busy || locked || usedHint} onClick={hint} title={usedHint ? "Mỗi từ chỉ có 1 gợi ý" : "Gợi ý 1 chữ cái"}><Lightbulb className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" />Gợi ý</button><button type="button" disabled={busy || locked} onClick={skip}><SkipForward className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" />Bỏ qua</button></div>
        {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
        <GameFeedback message={notice} tone={noticeTone === "is-success" ? "success" : noticeTone === "is-error" ? "error" : "info"} />
     </div>

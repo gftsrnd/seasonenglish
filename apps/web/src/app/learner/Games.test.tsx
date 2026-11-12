@@ -253,6 +253,62 @@ describe("app games affordances", () => {
     expect(within(bank).getAllByRole("button")[0]).toHaveFocus();
   });
 
+  it("allows exactly one Scramble hint per word and re-enables it on the next word (B8-008)", async () => {
+    vi.useFakeTimers();
+    const onFinish = vi.fn();
+    render(<ScrambleGame words={[
+      { id: "cat", english: "cat", vietnamese: "con mèo", definition: "a small pet", partOfSpeech: "noun" },
+      { id: "dog", english: "dog", vietnamese: "con chó", definition: "a loyal pet", partOfSpeech: "noun" }
+    ]} onFinish={onFinish} />);
+    const slots = () => within(screen.getByLabelText("Từ đang xếp")).getAllByText(/./).map((slot) => slot.textContent);
+    const hint = screen.getByRole("button", { name: "Gợi ý" });
+
+    fireEvent.click(hint);
+    expect(slots()).toHaveLength(1);
+    expect(hint).toBeDisabled();
+    fireEvent.click(hint);
+    fireEvent.click(hint);
+    expect(slots()).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Bỏ qua" }));
+    expect(screen.getByText(/Đã bỏ qua · Từ đúng:/)).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_800); });
+
+    expect(screen.getByText("Từ 2/2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gợi ý" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Bỏ qua" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_800); });
+
+    expect(onFinish).toHaveBeenCalledTimes(1);
+    const answers = (onFinish.mock.calls[0]![0] as { answers: Array<{ answer: string; usedHint?: boolean; attempts?: number }> }).answers;
+    expect(answers.map(({ answer, usedHint, attempts }) => ({ answer, usedHint, attempts }))).toEqual([
+      { answer: "", usedHint: true, attempts: 1 },
+      { answer: "", usedHint: false, attempts: 1 }
+    ]);
+    expect(screen.getByText("0")).toBeInTheDocument();
+  });
+
+  it("keeps the correct prefix and adds one letter when the Scramble hint is used after a wrong pick", async () => {
+    vi.useFakeTimers();
+    const onFinish = vi.fn();
+    render(<ScrambleGame words={[
+      { id: "cat", english: "cat", vietnamese: "con mèo", definition: "a small pet", partOfSpeech: "noun" }
+    ]} onFinish={onFinish} />);
+    const bank = screen.getByRole("group", { name: "Chữ cái bị xáo trộn" });
+    const tileFor = (character: string) => within(bank).getAllByRole("button").find((button) => button.textContent === character && !button.hasAttribute("disabled"))!;
+
+    fireEvent.click(tileFor("t"));
+    fireEvent.click(screen.getByRole("button", { name: "Gợi ý" }));
+    expect(within(screen.getByLabelText("Từ đang xếp")).getAllByText(/./).map((slot) => slot.textContent)).toEqual(["C"]);
+
+    fireEvent.click(tileFor("a"));
+    fireEvent.click(tileFor("t"));
+    expect(screen.getByText("Đúng · cat +1")).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_200); });
+    const answers = (onFinish.mock.calls[0]![0] as { answers: Array<{ answer: string; usedHint?: boolean }> }).answers;
+    expect(answers).toEqual([expect.objectContaining({ answer: "cat", usedHint: true, attempts: 1 })]);
+  });
+
   it("shows both used attempts after the final wrong Scramble answer", async () => {
     vi.useFakeTimers();
     render(<ScrambleGame words={[
