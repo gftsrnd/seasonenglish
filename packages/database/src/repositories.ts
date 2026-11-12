@@ -2816,6 +2816,9 @@ export async function learnerMonthlyAttendanceDates(pool: Pool | PoolClient, lea
       result.set(month, []);
     }
   }
+  return result;
+}
+
 /**
  * Dates per month on which an approved lesson of the learner's level was
  * available (approved month lesson in an approved, published framework). Only
@@ -2835,9 +2838,6 @@ export async function learnerMonthlyLessonDates(pool: Pool | PoolClient, learner
     [learnerId, months, cefr]
   );
   for (const row of rows) result.get(row.month)?.add(row.lesson_date);
-  return result;
-}
-
   return result;
 }
 
