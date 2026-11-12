@@ -9452,11 +9452,13 @@ class EngagementRepository {
       ? storedWords.map(word => word.imageUrl || !learnedImages.has(word.english.toLocaleLowerCase("en")) ? word : { ...word, imageUrl: learnedImages.get(word.english.toLocaleLowerCase("en"))! })
       : storedWords;
     const distractors = Array.isArray(payload.distractors) ? payload.distractors as GameWordSetView["words"] : undefined;
+    // The record belongs to the learner and the game, not to one word set: learning new words retires the
+    // set and creates a new one, and the record must survive that (same rule as the leaderboard).
     const bestRows = await this.pool.query<{ game_key: GameKey; score: number; max_score: number }>(
       `select distinct on (game_key) game_key, score, max_score
-       from game_results where learner_id = $1 and game_set_id = $2 and game_key is not null
-       order by game_key, (score::numeric / greatest(max_score, 1)) desc, completed_at asc`,
-      [learnerId, row.id]
+       from game_results where learner_id = $1 and game_key is not null
+       order by game_key, (score::numeric / greatest(max_score, 1)) desc, score desc, completed_at asc`,
+      [learnerId]
     );
     return {
       cefr: context.cefr,

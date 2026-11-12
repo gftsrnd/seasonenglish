@@ -525,6 +525,8 @@ function LearnerContent({ courseCompleted }: { courseCompleted: boolean }) {
       gamePending.current = pending;
       const result = await apiClient.submitGameResult(route.params.game, { requestId: pending.requestId, answers: input.answers, ...(input.attemptSeed === undefined ? {} : { attemptSeed: input.attemptSeed }), ...(input.hintsUsed === undefined ? {} : { hintsUsed: input.hintsUsed }), ...(input.events?.length ? { events: input.events } : {}) });
       gamePending.current = undefined; setUiState((current) => ({ ...current, gameResult: result }));
+      // Refresh the record shown on the next round ("Chơi lại") and on the game list.
+      try { setContracts({ games: await apiClient.getGames() }); } catch { /* the saved result stays shown; the list refreshes on the next visit */ }
     },
     resetGameResult: () => { gamePending.current = undefined; setUiState((current) => ({ ...current, gameResult: null })); },
     resolveGameWordImage: (setId, wordId) => apiClient.resolveGameWordImage(setId, wordId),
