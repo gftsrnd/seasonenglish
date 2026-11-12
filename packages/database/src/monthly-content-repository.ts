@@ -1226,7 +1226,7 @@ export class MonthlyContentRepository {
            and monthly_framework_ready_for_publication(mf.id)`,
         [frameworkId, row.today]
       );
-      if (!published.rowCount) throw httpError(409, "MONTHLY_PUBLICATION_INCOMPLETE", "Chỉ công bố tháng đang soạn khi đã duyệt tài nguyên, tất cả bài ngày và bài ôn.");
+      if (!published.rowCount) throw httpError(409, "MONTHLY_PUBLICATION_INCOMPLETE", "Chỉ công bố tháng khi đã duyệt tài nguyên và 3 bài liên tiếp tính từ hôm nay.");
       await client.query(
         `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
          values ($1, $2, $3, 'monthly.framework_published', 'monthly_framework', $4, $5::jsonb, $6)`,
