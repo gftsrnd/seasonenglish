@@ -18,7 +18,6 @@ beforeEach(() => {
   vi.spyOn(apiClient, "getManagerProgress").mockResolvedValue(progressView);
   vi.spyOn(apiClient, "getOrganisationExperience").mockResolvedValue(organisationExperience);
   vi.spyOn(apiClient, "saveOrganisationExperience").mockImplementation(async (input) => input);
-  vi.spyOn(apiClient, "getManagerPinReports").mockResolvedValue({ reports: [] });
   vi.spyOn(apiClient, "getManagerComplaints").mockResolvedValue({ complaints: [] });
 });
 
@@ -27,58 +26,19 @@ function renderManager(element: ReactElement) {
 }
 
 describe("ManagerRouteController", () => {
-  it("renders security activity as a compact notice instead of a raw bullet list", async () => {
-    vi.mocked(apiClient.getManagerPinReports).mockResolvedValue({ reports: [{ id: "pin-1", subjectUserId: "learner-1", subjectName: "Media GFT", note: "Người học đã tự đổi PIN qua xác minh email.", status: "open", createdAt: "2026-10-23T08:39:09.000Z", resolvedAt: null }] });
+  it("leaves security activity to the notification bell instead of a Settings card", async () => {
     vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
     vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
     vi.spyOn(apiClient, "getManagerSettings").mockResolvedValue(managerSettings);
     vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
     vi.spyOn(apiClient, "getManagerAccounts").mockResolvedValue({ organizationName: "GFT", accounts: [] });
 
-    renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    const { container } = renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
 
-    const notice = await screen.findByRole("region", { name: "Thông báo bảo mật" });
-    expect(notice).toHaveClass("manager-security-notices");
-    expect(within(notice).getByRole("listitem")).toHaveClass("manager-security-notice");
-    expect(within(notice).getByText("Media GFT")).toBeInTheDocument();
-    expect(within(notice).getByText("Người học đã tự đổi PIN qua xác minh email.")).toBeInTheDocument();
-    expect(within(notice).getByRole("time")).toHaveAttribute("dateTime", "2026-10-23T08:39:09.000Z");
-  });
-
-  it("shows two newest security notices by default and preserves grouped history when expanded", async () => {
-    const user = userEvent.setup();
-    vi.mocked(apiClient.getManagerPinReports).mockResolvedValue({ reports: [
-      { id: "pin-oldest", subjectUserId: "learner-4", subjectName: "Học viên Cũ", note: "Người học đã tự đổi PIN qua xác minh email.", status: "open", createdAt: "2026-10-23T08:00:00.000Z", resolvedAt: null },
-      { id: "pin-third", subjectUserId: "learner-3", subjectName: "Học viên Ba", note: "Người học đã tự đổi PIN qua xác minh email.", status: "open", createdAt: "2026-10-28T08:18:00.000Z", resolvedAt: null },
-      { id: "pin-second", subjectUserId: "learner-2", subjectName: "Học viên Hai", note: "Người học đã tự đổi PIN qua xác minh email.", status: "open", createdAt: "2026-10-28T08:19:00.000Z", resolvedAt: null },
-      { id: "pin-latest-older-copy", subjectUserId: "learner-1", subjectName: "Học viên Một", note: "Người học đã tự đổi PIN qua xác minh email.", status: "open", createdAt: "2026-10-28T08:20:00.000Z", resolvedAt: null },
-      { id: "pin-latest", subjectUserId: "learner-1", subjectName: "Học viên Một", note: "Người học đã tự đổi PIN qua xác minh email.", status: "open", createdAt: "2026-10-28T08:21:00.000Z", resolvedAt: null }
-    ] });
-    vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
-    vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
-    vi.spyOn(apiClient, "getManagerSettings").mockResolvedValue(managerSettings);
-    vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
-    vi.spyOn(apiClient, "getManagerAccounts").mockResolvedValue({ organizationName: "GFT", accounts: [] });
-
-    renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
-
-    const notice = await screen.findByRole("region", { name: "Thông báo bảo mật" });
-    expect(within(notice).getByText("5 thông báo")).toBeInTheDocument();
-    expect(within(notice).getAllByRole("listitem")).toHaveLength(2);
-    expect(within(notice).getByText("Học viên Một")).toBeInTheDocument();
-    expect(within(notice).getByText("2 lần")).toBeInTheDocument();
-    expect(within(notice).getByText("Học viên Hai")).toBeInTheDocument();
-    expect(within(notice).queryByText("Học viên Ba")).not.toBeInTheDocument();
-
-    await user.click(within(notice).getByRole("button", { name: "Xem toàn bộ 5 thông báo" }));
-
-    expect(within(notice).getAllByRole("listitem")).toHaveLength(4);
-    expect(within(notice).getByText("Học viên Ba")).toBeInTheDocument();
-    expect(within(notice).getByText("Học viên Cũ")).toBeInTheDocument();
-    expect(within(notice).getByRole("button", { name: "Thu gọn thông báo bảo mật" })).toHaveAttribute("aria-expanded", "true");
-
-    await user.click(within(notice).getByRole("button", { name: "Thu gọn thông báo bảo mật" }));
-    expect(within(notice).getAllByRole("listitem")).toHaveLength(2);
+    await waitFor(() => expect(container.querySelector("#setting-accounts")).not.toBeNull());
+    expect(screen.queryByRole("region", { name: "Thông báo bảo mật" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Thông báo bảo mật")).not.toBeInTheDocument();
+    expect(container.querySelector("#setting-security, .manager-security-notices")).toBeNull();
   });
 
   it("reports an experience save failure and lets Settings restore the committed draft", async () => {

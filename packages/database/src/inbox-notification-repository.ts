@@ -12,7 +12,13 @@ export class InboxNotificationRepository {
       `with owned as not materialized (${inboxScope}),
        page as (
          select id, kind, context, created_at as "createdAt", read_at as "readAt",
-                substring(event_key from '^(?:complaint:|appeal:[a-z]+:|reopen:[a-z]+:|audit:|assessment:)([0-9a-fA-F-]{36}):') as "relatedId"
+                substring(event_key from '^(?:complaint:|appeal:[a-z]+:|reopen:[a-z]+:|audit:|assessment:)([0-9a-fA-F-]{36}):') as "relatedId",
+                case when kind = 'security_report' then (
+                  select jsonb_build_object('subjectName', subject.display_name, 'note', report.note)
+                  from manager_pin_reports report join users subject on subject.id = report.subject_user_id
+                  where report.organization_id = owned.organization_id
+                    and report.id = substring(owned.event_key from '^security:([0-9a-fA-F-]{36})$')::uuid
+                ) end as "securityReport"
          from owned
          where $2 > 0 and (not $3::boolean or read_at is null)
            and ($4::uuid is null or (created_at, id) < (select created_at, id from owned where id = $4))

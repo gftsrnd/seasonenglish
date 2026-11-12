@@ -244,4 +244,43 @@ describe("learner notifications API", () => {
     expect(items.some((item: { kind: string }) => item.kind === "monthly_exam_ready")).toBe(false);
   });
 
+  it("turns PIN activity into grouped, read-tracked Manager notifications", async () => {
+    const login = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" } });
+    expect(login.statusCode, login.body).toBe(200);
+    const manager = String(login.headers["set-cookie"]).split(";")[0]!;
+    const selfReset = "Người học đã tự đổi PIN qua xác minh email.";
+    const report = (note: string, status: "open" | "done") => pool.query(
+      `insert into manager_pin_reports (id, organization_id, subject_user_id, note, status, created_by)
+       values (gen_random_uuid(), $1, $2, $3, $4, $2)`,
+      [DEMO_IDS.organization, DEMO_IDS.learner, note, status]
+    );
+    const security = async () => {
+      const response = await app.inject({ url: "/api/v1/me/notifications?limit=50", headers: { cookie: manager } });
+      expect(response.statusCode, response.body).toBe(200);
+      return (response.json().items as { id: string; kind: string; context: string; readAt: string | null; securityReport?: { subjectName: string; note: string } }[])
+        .filter((item) => item.kind === "security_report");
+    };
+    const { rows: [learner] } = await pool.query<{ display_name: string }>("select display_name from users where id = $1", [DEMO_IDS.learner]);
+
+    await report(selfReset, "done");
+    await report(selfReset, "done");
+    await report("Cần Quản lý hỗ trợ mã PIN.", "open");
+    const grouped = await security();
+    expect(grouped).toHaveLength(2);
+    expect(grouped).toEqual(expect.arrayContaining([
+      expect.objectContaining({ context: "2", readAt: null, securityReport: { subjectName: learner!.display_name, note: selfReset } }),
+      expect.objectContaining({ context: "1", readAt: null, securityReport: { subjectName: learner!.display_name, note: "Cần Quản lý hỗ trợ mã PIN." } })
+    ]));
+
+    const pinChange = grouped.find((item) => item.securityReport?.note === selfReset)!;
+    const read = await app.inject({ method: "PATCH", url: "/api/v1/me/notifications/read", headers: { cookie: manager }, payload: { ids: [pinChange.id] } });
+    expect(read.statusCode, read.body).toBe(200);
+    await report(selfReset, "done");
+    const afterRead = (await security()).filter((item) => item.securityReport?.note === selfReset);
+    expect(afterRead).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: pinChange.id, context: "2" }),
+      expect.objectContaining({ context: "1", readAt: null })
+    ]));
+    expect(afterRead.find((item) => item.id === pinChange.id)?.readAt).not.toBeNull();
+  });
 });

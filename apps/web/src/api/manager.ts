@@ -6,7 +6,7 @@ import type {
   ManagerMonthlyFilter, ManagerMonthlyOverviewView, ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsTestInput,
   ManagerProviderSettingsView, ManagerProviderTestView, ManagerPurgeConfirmationInput,
   ManagerPurgeConfirmationView, ManagerReminderCopyView, ManagerReminderDismissView,
-  ManagerBaseNotificationInput, ManagerBaseNotificationView, ManagerReminderChannel, ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, ManagerPinReportsView,
+  ManagerBaseNotificationInput, ManagerBaseNotificationView, ManagerReminderChannel, ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView,
   OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView,
   ManagerWebhookTestView, ProductPreferencesView, ReopenRequestView, SystemCapabilitiesView, WeeklyPracticeAssignmentView,
   LearnerComplaintKind, ManagerComplaintView
@@ -50,7 +50,6 @@ export interface ManagerApiClient {
   saveManagerProviderSettings(input: ManagerProviderSettingsInput): Promise<ManagerProviderSettingsView>;
   testManagerProviderSettings(input?: ManagerProviderSettingsTestInput): Promise<ManagerProviderTestView>;
   getManagerAccounts(): Promise<ManagerAccountsView>;
-  getManagerPinReports(): Promise<ManagerPinReportsView>;
   createManagerAccount(input: { displayName: string; email: string; role: ManagerAccountView["role"]; password: string }): Promise<ManagerAccountView>;
   updateManagerAccountRole(accountId: string, role: ManagerAccountView["role"]): Promise<ManagerAccountView>;
   updateManagerAccountStatus(accountId: string, status: "active" | "disabled" | "deleted"): Promise<ManagerAccountView>;
@@ -118,7 +117,6 @@ export const managerApiClient: ManagerApiClient = {
   saveManagerProviderSettings: (input) => request("/api/v1/manager/provider-settings", { method: "PUT", body: JSON.stringify(input) }),
   testManagerProviderSettings: (input) => request("/api/v1/manager/provider-settings/test", { method: "POST", body: JSON.stringify(input ?? {}) }),
   getManagerAccounts: () => request("/api/v1/manager/accounts"),
-  getManagerPinReports: () => request("/api/v1/manager/pin-reports"),
   createManagerAccount: (input) => request("/api/v1/manager/accounts", { method: "POST", body: JSON.stringify(input) }),
   updateManagerAccountRole: (accountId, role) => request(`/api/v1/manager/accounts/${encodeURIComponent(accountId)}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
   updateManagerAccountStatus: (accountId, status) => request(`/api/v1/manager/accounts/${encodeURIComponent(accountId)}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),

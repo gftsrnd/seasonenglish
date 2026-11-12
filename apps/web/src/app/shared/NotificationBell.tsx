@@ -40,6 +40,34 @@ function dayMonth(date: string): string {
   return match ? `${match[2]}/${match[1]}` : date;
 }
 
+const securityClock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", hourCycle: "h23", timeZone: "Asia/Ho_Chi_Minh" });
+/** "18:28 12/11" in Vietnam time. */
+function securityMoment(date: Date): string {
+  const part = (type: Intl.DateTimeFormatPartTypes) => securityClock.formatToParts(date).find((item) => item.type === type)?.value ?? "";
+  return `${part("hour")}:${part("minute")} ${part("day")}/${part("month")}`;
+}
+
+/** PIN and password activity of a user, shown to Managers. Context counts repeats of the same activity. */
+function securityReportContent(item: InboxNotificationView): { title: string; description: string; path: string; action: string } {
+  const report = item.securityReport;
+  const target = { path: "/settings", action: "Mở Người dùng" };
+  if (!report) return { title: "Có báo cáo bảo mật tài khoản", description: "Xem tài khoản người dùng trong Cài đặt.", ...target };
+  const repeats = /^\d+$/.test(item.context) ? Number(item.context) : 1;
+  const created = new Date(item.createdAt);
+  const at = Number.isNaN(created.getTime()) ? "" : ` lúc ${securityMoment(created)}`;
+  const note = report.note.toLocaleLowerCase("vi-VN");
+  const changedPin = note.includes("đổi pin") || note.includes("đổi mã pin");
+  const activity = changedPin ? "Đổi mã PIN"
+    : note.includes("pin") ? "Hỗ trợ mã PIN"
+    : note.includes("mật khẩu") ? "Hỗ trợ mật khẩu"
+    : "Báo cáo bảo mật";
+  const title = `${activity} · ${report.subjectName}${repeats > 1 ? ` · ${repeats} lần` : ""}`;
+  const description = changedPin
+    ? `${report.subjectName} vừa đổi mã PIN${at}.`
+    : `${report.note.replace(/[.\s]+$/, "")}${at ? ` (${at.trim()})` : ""}.`;
+  return { title, description, ...target };
+}
+
 function notificationContent(item: InboxNotificationView): { title: string; description: string; path: string; action: string } {
   const exam = assessmentNames[item.context] ?? "bài thi";
   const examTab = assessmentTabs[item.context] ?? "placement";
@@ -84,7 +112,7 @@ function notificationContent(item: InboxNotificationView): { title: string; desc
     case "learning_reminder":
       return { title: "Nhắc bạn tiếp tục học", description: "Quản lý đã nhắc bạn quay lại mục tiêu học tập.", path: "/home", action: "Về Trang chủ" };
     case "security_report":
-      return { title: "Có báo cáo bảo mật tài khoản", description: "Quản lý có thể xem chi tiết trong Cài đặt.", path: "/settings", action: "Mở Cài đặt" };
+      return securityReportContent(item);
     case "deletion_received":
       return { title: "Có yêu cầu xóa tài khoản", description: "Vận hành đang chờ quyết định của Quản lý.", path: "/mgr/ops", action: "Mở Vận hành" };
     case "deletion_resolved":

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import "./manager.css";
 import { Navigate, Route, Routes, useLocation } from "react-router";
-import type { ManagerAccountView, ManagerAccountsView, ManagerDeleteRequestsView, ManagerLearnerProfileView, ManagerMaintenanceAction, ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerOperationsView, ManagerPinReportsView, ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerPurgeConfirmationView, ManagerRemindersView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
+import type { ManagerAccountView, ManagerAccountsView, ManagerDeleteRequestsView, ManagerLearnerProfileView, ManagerMaintenanceAction, ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerOperationsView, ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerPurgeConfirmationView, ManagerRemindersView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { managerApiClient as apiClient } from "../../api/manager.js";
 import { AccountStatusBadge, providerTestLabel, SettingsPage, webhookTestLabel } from "../settings/index.js";
 import { ManagerOperations } from "./Operations.js";
@@ -19,7 +19,7 @@ import { useDialog, useModal } from "../shared/ModalProvider.js";
 import { autoSeasonTheme } from "../games/season-visual.js";
 import { useTheme } from "../shared/ThemeProvider.js";
 import { useToast } from "../shared/design-system.js";
-import { ArchiveRestore, ChevronDown, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { ArchiveRestore, ChevronDown, Eye, EyeOff } from "lucide-react";
 import { formatScoreOutOf } from "../shared/format-score.js";
 
 export type ManagerRouteControllerProps = { role: "manager" | "operator"; currentUserId: string; onSessionRevoked?: (() => void) | undefined };
@@ -277,14 +277,14 @@ function SettingsRoute({ role, currentUserId, onSessionRevoked }: ManagerRouteCo
   const modal = useModal();
   const { setTheme } = useTheme();
   const toast = useToast();
-  const [manager, setManager] = useState<ManagerSettingsView>(); const [provider, setProvider] = useState<ManagerProviderSettingsView>(); const [operatorOverview, setOperatorOverview] = useState<OperatorSettingsOverviewView>(); const [product, setProduct] = useState<ProductPreferencesView>(); const [experience, setExperience] = useState<OrganisationExperienceView>(); const [capabilities, setCapabilities] = useState<SystemCapabilitiesView>(); const [accounts, setAccounts] = useState<ManagerAccountsView>(); const [pinReports, setPinReports] = useState<ManagerPinReportsView>(); const [loadError, setLoadError] = useState(""); const [maintenanceDialog, setMaintenanceDialog] = useState<{ action: ManagerMaintenanceAction; confirmation: ManagerMaintenanceConfirmationView }>(); const [maintenanceBusy, setMaintenanceBusy] = useState(false);
+  const [manager, setManager] = useState<ManagerSettingsView>(); const [provider, setProvider] = useState<ManagerProviderSettingsView>(); const [operatorOverview, setOperatorOverview] = useState<OperatorSettingsOverviewView>(); const [product, setProduct] = useState<ProductPreferencesView>(); const [experience, setExperience] = useState<OrganisationExperienceView>(); const [capabilities, setCapabilities] = useState<SystemCapabilitiesView>(); const [accounts, setAccounts] = useState<ManagerAccountsView>(); const [loadError, setLoadError] = useState(""); const [maintenanceDialog, setMaintenanceDialog] = useState<{ action: ManagerMaintenanceAction; confirmation: ManagerMaintenanceConfirmationView }>(); const [maintenanceBusy, setMaintenanceBusy] = useState(false);
   const loadAccounts = () => apiClient.getManagerAccounts().then(setAccounts);
   const notify = (message: string, tone: "ok" | "danger" = "ok") => { toast.show({ message, tone }); };
   const providerClientAvailable = role === "manager" && typeof apiClient.getManagerProviderSettings === "function";
   useEffect(() => {
     const requests: Promise<unknown>[] = [apiClient.getProductPreferences().then(setProduct), apiClient.getOrganisationExperience().then(setExperience).catch(() => undefined), apiClient.getSystemCapabilities().then(setCapabilities)];
     if (role === "manager") {
-      requests.push(apiClient.getManagerSettings().then(setManager), loadAccounts(), apiClient.getManagerPinReports().then(setPinReports));
+      requests.push(apiClient.getManagerSettings().then(setManager), loadAccounts());
     } else requests.push(apiClient.getOperatorSettingsOverview().then(setOperatorOverview));
     if (providerClientAvailable) requests.push(apiClient.getManagerProviderSettings().then(setProvider));
     void Promise.all(requests).catch(() => setLoadError("Không tải được cấu hình hệ thống."));
@@ -374,49 +374,11 @@ function SettingsRoute({ role, currentUserId, onSessionRevoked }: ManagerRouteCo
     onExportCsv: async () => { try { exportManagerMonthlyCsv(await apiClient.getManagerMonthlyOverview()); notify("Đã xuất CSV tiến độ tháng."); } catch { notify("Không xuất được CSV tiến độ.", "danger"); } }
   } : {};
   const maintenanceActions = role === "manager" && capabilities.maintenance === true ? { onSeedData: () => requestMaintenance("seed_demo"), onWipeData: () => requestMaintenance("wipe_data") } : {};
-  const securityNotices = role === "manager" && pinReports ? <SecurityNotices reports={pinReports.reports} /> : null;
   return <>
     {loadError ? <div className="banner danger" role="alert"><div className="body small">{loadError}</div></div> : null}
-    <SettingsPage role={role} {...(manager ? { manager } : {})} {...(operatorOverview ? { operatorOverview } : {})} {...(provider ? { ai: provider } : {})} product={product} experience={experience} capabilities={capabilities} actions={{ onSaveManager: saveManager, onSaveProduct: saveProduct, onSaveExperience: saveExperience, ...(role === "operator" ? { onRequestPlacementTestChange: async (developerEmail: string, note: string) => { try { await apiClient.requestPlacementTestChange({ developerEmail, note }); notify("Đã gửi yêu cầu đổi đề đầu vào tới đội phát triển."); } catch { notify("Không gửi được yêu cầu đổi đề đầu vào.", "danger"); throw new Error("PLACEMENT_CHANGE_REQUEST_FAILED"); } }, onRequestFinalTestChange: async (developerEmail: string, note: string) => { try { await apiClient.requestFinalTestChange({ developerEmail, note }); notify("Đã gửi yêu cầu đổi đề đầu ra tới đội phát triển."); } catch { notify("Không gửi được yêu cầu đổi đề đầu ra.", "danger"); throw new Error("FINAL_CHANGE_REQUEST_FAILED"); } } } : {}), ...(saveAi ? { onSaveAi: saveAi } : {}), ...(testAi ? { onTestAi: testAi } : {}), ...managerActions, ...maintenanceActions }} {...(securityNotices ? { securityNotices } : {})} {...(accounts ? { accounts: <AccountsPanel view={accounts} currentUserId={currentUserId} reload={loadAccounts} notify={notify} onSessionRevoked={onSessionRevoked} /> } : {})} />
+    <SettingsPage role={role} {...(manager ? { manager } : {})} {...(operatorOverview ? { operatorOverview } : {})} {...(provider ? { ai: provider } : {})} product={product} experience={experience} capabilities={capabilities} actions={{ onSaveManager: saveManager, onSaveProduct: saveProduct, onSaveExperience: saveExperience, ...(role === "operator" ? { onRequestPlacementTestChange: async (developerEmail: string, note: string) => { try { await apiClient.requestPlacementTestChange({ developerEmail, note }); notify("Đã gửi yêu cầu đổi đề đầu vào tới đội phát triển."); } catch { notify("Không gửi được yêu cầu đổi đề đầu vào.", "danger"); throw new Error("PLACEMENT_CHANGE_REQUEST_FAILED"); } }, onRequestFinalTestChange: async (developerEmail: string, note: string) => { try { await apiClient.requestFinalTestChange({ developerEmail, note }); notify("Đã gửi yêu cầu đổi đề đầu ra tới đội phát triển."); } catch { notify("Không gửi được yêu cầu đổi đề đầu ra.", "danger"); throw new Error("FINAL_CHANGE_REQUEST_FAILED"); } } } : {}), ...(saveAi ? { onSaveAi: saveAi } : {}), ...(testAi ? { onTestAi: testAi } : {}), ...managerActions, ...maintenanceActions }} {...(accounts ? { accounts: <AccountsPanel view={accounts} currentUserId={currentUserId} reload={loadAccounts} notify={notify} onSessionRevoked={onSessionRevoked} /> } : {})} />
     {maintenanceDialog ? <MaintenanceConfirmationDialog confirmation={maintenanceDialog.confirmation} busy={maintenanceBusy} onCancel={() => setMaintenanceDialog(undefined)} onConfirm={(phrase) => confirmMaintenance({ confirmationToken: maintenanceDialog.confirmation.token, confirmationPhrase: phrase })} /> : null}
   </>;
-}
-
-type SecurityReport = ManagerPinReportsView["reports"][number];
-type SecurityReportGroup = { report: SecurityReport; count: number };
-
-function SecurityNotices({ reports }: { reports: readonly SecurityReport[] }) {
-  const [expanded, setExpanded] = useState(false);
-  const groups = groupSecurityReports(reports);
-  const visibleGroups = expanded ? groups : groups.slice(0, 2);
-  const canExpand = groups.length > 2;
-  return <section className="card manager-security-notices" aria-label="Thông báo bảo mật">
-    <div className="manager-security-notices__heading">
-      <span className="manager-security-notices__icon" aria-hidden="true"><ShieldCheck /></span>
-      <div className="manager-security-notices__title"><h3>Thông báo bảo mật</h3><p className="small muted">Theo dõi các thay đổi xác thực gần đây của người dùng.</p></div>
-      <span className="badge manager-security-notices__total">{reports.length} thông báo</span>
-    </div>
-    {reports.length ? <>
-      <ul className="manager-security-notices__list">{visibleGroups.map(({ report, count }) => <li className="manager-security-notice" key={report.id}>
-        <div className="manager-security-notice__copy"><b>{report.subjectName}</b><span>{report.note}</span>{count > 1 ? <span className="badge manager-security-notice__count">{count} lần</span> : null}</div>
-        <time className="small muted" dateTime={report.createdAt}>{new Date(report.createdAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" })}</time>
-      </li>)}</ul>
-      {canExpand ? <button className="manager-security-notices__toggle" type="button" aria-expanded={expanded} aria-label={expanded ? "Thu gọn thông báo bảo mật" : `Xem toàn bộ ${reports.length} thông báo`} onClick={() => setExpanded((current) => !current)}>{expanded ? "Thu gọn" : `Xem tất cả (${reports.length})`}<ChevronDown aria-hidden="true" /></button> : null}
-    </> : <p className="manager-security-notices__empty small muted">Chưa có hoạt động đổi PIN mới.</p>}
-  </section>;
-}
-
-function groupSecurityReports(reports: readonly SecurityReport[]): SecurityReportGroup[] {
-  const sorted = [...reports].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
-  return sorted.reduce<SecurityReportGroup[]>((groups, report) => {
-    const previous = groups.at(-1);
-    if (previous && previous.report.subjectUserId === report.subjectUserId && previous.report.note === report.note) {
-      previous.count += 1;
-      return groups;
-    }
-    groups.push({ report, count: 1 });
-    return groups;
-  }, []);
 }
 
 function AccountsPanel({ view, currentUserId, reload, notify, onSessionRevoked }: { onSessionRevoked?: (() => void) | undefined; view: ManagerAccountsView; currentUserId: string; reload: () => Promise<void>; notify: (message: string, tone?: "ok" | "danger") => void }) {

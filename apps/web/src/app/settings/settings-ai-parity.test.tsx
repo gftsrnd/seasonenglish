@@ -9,7 +9,7 @@ const client = vi.hoisted(() => ({
   getOrganisationExperience: vi.fn(), saveOrganisationExperience: vi.fn(),
   saveProductPreferences: vi.fn(),
   saveSessionAvatar: vi.fn(),
-  getManagerSettings: vi.fn(), getManagerAccounts: vi.fn(), getManagerPinReports: vi.fn(), getManagerProviderSettings: vi.fn(),
+  getManagerSettings: vi.fn(), getManagerAccounts: vi.fn(), getManagerProviderSettings: vi.fn(),
   saveManagerProviderSettings: vi.fn(), testManagerProviderSettings: vi.fn(),
   testManagerImage: vi.fn(), clearManagerImageCache: vi.fn(), testManagerMusic: vi.fn(), resetManagerMusic: vi.fn(),
   testManagerWebhook: vi.fn(), exportManagerData: vi.fn(), importManagerData: vi.fn()
@@ -45,7 +45,6 @@ beforeEach(() => {
     backgroundMusic: { enabled: true, url: "", volume: 22 }, baseWebhookUrl: "", baseWebhookTemplate: "{\"base_content\":\"{message}\"}"
   });
   client.getManagerAccounts.mockResolvedValue({ organizationName: "GFT Demo", accounts: [] });
-  client.getManagerPinReports.mockResolvedValue({ reports: [] });
   client.getManagerProviderSettings.mockResolvedValue({
     provider: "openai", configured: true, baseUrl: "https://api.example.test/v1", model: "example-model",
     speechToTextModel: "example-transcribe", capabilities: { chat: true, structuredOutput: true, speechToText: true },

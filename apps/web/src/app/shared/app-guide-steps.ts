@@ -204,7 +204,6 @@ const musicGuide = settingsStep("music", "Nhạc nền", "Bật nhạc nền, ch
 const learningGuide = settingsStep("monthly", "Học theo tháng", "Thời lượng học khuyến nghị mỗi ngày và **giới hạn lượt chat** với Season. Bấm **Lưu** để áp dụng.");
 
 const managerSettings: readonly GuideStep[] = [
-  [".manager-security-notices", "Thông báo bảo mật", "Các lần **đổi hoặc đặt lại PIN, mật khẩu** và báo cáo xác thực gần đây của người dùng. Mở toàn bộ danh sách khi có nhiều thông báo."],
   settingsStep("ai", "Kết nối AI", "Chọn **nhà cung cấp**, địa chỉ, khóa và mô hình AI cho Season và sinh bài. Bấm **Kiểm tra kết nối** trước khi **Lưu**."),
   settingsStep("test-date", "Ngày hệ thống thử", "Ngày giả lập điều khiển **lịch học**, quyền vào bài, điểm danh và thông báo của **cả tổ chức**."),
   learningGuide,

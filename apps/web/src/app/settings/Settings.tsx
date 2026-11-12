@@ -72,12 +72,11 @@ export type SettingsProps = {
   operatorOverview?: OperatorSettingsOverviewView;
   actions: Partial<SettingsActions>;
   accounts?: ReactNode;
-  securityNotices?: ReactNode;
 };
 
 type SettingsPanel = { id: string; label: string; content: ReactNode };
 
-export function SettingsPage({ role, manager, product, experience, capabilities, ai, operatorOverview, actions, accounts, securityNotices }: SettingsProps) {
+export function SettingsPage({ role, manager, product, experience, capabilities, ai, operatorOverview, actions, accounts }: SettingsProps) {
   const compact = useMediaQuery("(max-width: 1180px)");
   const [openPanels, setOpenPanels] = useState<Readonly<Record<string, boolean>>>({});
   const [aiDraft, setAiDraft] = useState<AiConfigurationInput | null>(ai ? { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model, speechToTextModel: ai.speechToTextModel } : null);
@@ -100,7 +99,6 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
   const musicPanel: SettingsPanel = { id: "music", label: "Nhạc nền của Season", content: <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} /> };
   const learningPanel: SettingsPanel = { id: "monthly", label: "Học theo tháng", content: managerDraft && <MonthlyLearningSection value={managerDraft} onChange={setManagerDraft} coachLimitReadOnly={role === "operator"} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> };
   const panels: SettingsPanel[] = role === "manager" ? [
-    { id: "security", label: "Thông báo bảo mật", content: securityNotices },
     { id: "prompts", label: "Prompt & rubric", content: <section className="card" aria-label="Cấu hình Prompt & rubric"><h3>Prompt & rubric</h3><p className="small muted">Quản lý hướng dẫn AI và rubric chấm trong khu vực Cài đặt, tách khỏi các thao tác vận hành hằng ngày.</p><a className="btn" href="/settings/prompts">Mở Prompt & rubric</a></section> },
     { id: "ai", label: "Kết nối AI", content: aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} aiTestDisabled={managerDraft?.aiTestDisabled ?? false} onAiTestDisabledChange={(aiTestDisabled) => setManagerDraft((current) => current ? { ...current, aiTestDisabled } : current)} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} {...(actions.onSaveManager && managerDraft ? { onSaveAiTestMode: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} /> },
     ...(managerDraft ? [
@@ -126,11 +124,12 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
     ] satisfies SettingsPanel[] : [])
   ];
   const availablePanels = panels.filter(panel => panel.content);
+  const defaultPanel = availablePanels[0]?.id;
 
   return <div className="settings-page" data-settings-role={role} data-compact={compact || undefined}>
     <div className="page-title"><h1>Cài đặt</h1></div>
     {availablePanels.map(panel => {
-      const expanded = openPanels[panel.id] ?? (panel.id === (role === "manager" ? "security" : "theme"));
+      const expanded = openPanels[panel.id] ?? (panel.id === defaultPanel);
       const contentId = `setting-${panel.id}`;
       return <div className="settings-panel" key={panel.id} data-expanded={compact && expanded || undefined}>
         {compact && <button className="settings-panel-toggle" type="button" aria-expanded={expanded} aria-controls={contentId}

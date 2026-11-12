@@ -791,7 +791,7 @@
   line-height: 1.45;
 }
 .settings-page[data-compact] .settings-panel-content > .card > h3:first-child,
-.settings-page[data-compact] :is(.manager-security-notices__title, .manager-accounts-heading) > h3 {
+.settings-page[data-compact] .manager-accounts-heading > h3 {
   position: absolute;
   width: 1px;
   height: 1px;

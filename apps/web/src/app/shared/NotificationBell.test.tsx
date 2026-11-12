@@ -125,4 +125,26 @@ describe("NotificationBell", () => {
     await waitFor(() => expect(screen.getByText("Bạn đã đọc hết thông báo.")).toBeInTheDocument());
     expect(api.markInboxRead).toHaveBeenLastCalledWith({ all: true });
   });
+
+  it("shows a user's PIN activity to Managers as an unread security notification", async () => {
+    const items = [
+      { id: "security-pin", kind: "security_report", context: "1", createdAt: "2026-11-12T11:28:00.000Z", readAt: null,
+        securityReport: { subjectName: "Minh Anh", note: "Người học đã tự đổi PIN qua xác minh email." } },
+      { id: "security-help", kind: "security_report", context: "3", createdAt: "2026-11-12T09:05:00.000Z", readAt: "2026-11-12T10:00:00.000Z",
+        securityReport: { subjectName: "Lan Vận hành", note: "Người vận hành báo quên mã PIN và cần Quản lý hỗ trợ." } }
+    ];
+    api.getNotificationInbox.mockImplementation(async (limit) => ({ items: limit ? items : [], unreadCount: 1, nextCursor: null }));
+    api.markInboxRead.mockResolvedValue({ unreadCount: 0 });
+    const user = userEvent.setup();
+    render(<MemoryRouter><NotificationBell /><Routes><Route path="/" element={<span />} /><Route path="/settings" element={<h1>Cài đặt</h1>} /></Routes></MemoryRouter>);
+    await user.click(await screen.findByRole("button", { name: /1 chưa đọc/ }));
+    const dialog = screen.getByRole("dialog", { name: "Thông báo" });
+    expect(await within(dialog).findByText("Đổi mã PIN · Minh Anh")).toBeInTheDocument();
+    expect(within(dialog).getByText("Minh Anh vừa đổi mã PIN lúc 18:28 12/11.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Hỗ trợ mã PIN · Lan Vận hành · 3 lần")).toBeInTheDocument();
+    expect(within(dialog).getByText("Người vận hành báo quên mã PIN và cần Quản lý hỗ trợ (lúc 16:05 12/11).")).toBeInTheDocument();
+    await user.click(within(dialog).getAllByRole("button", { name: "Mở Người dùng" })[0]!);
+    expect(await screen.findByRole("heading", { name: "Cài đặt" })).toBeInTheDocument();
+    expect(api.markInboxRead).toHaveBeenCalledWith({ ids: ["security-pin"] });
+  });
 });
