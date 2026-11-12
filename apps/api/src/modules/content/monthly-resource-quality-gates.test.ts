@@ -126,7 +126,7 @@ describe("core phase repair loop feeds level rejections back to the AI", () => {
     core: { id, word, meaning: `nghĩa ${word}`, type: "noun", ipa: "/x/", cefr },
     edges: [
       { id: `${id}-u`, word: `umb${word}`, meaning: "nghĩa", type: "noun", relation: "umbrella" as const, relatesToCoreId: id },
-      { id: `${id}-s`, word: `syn${word}`, meaning: "nghĩa", type: "noun", relation: "synonym" as const, relatesToCoreId: id },
+      { id: `${id}-s`, word: `syn${word}`, meaning: "nghĩa", type: "noun", relation: "synonym" as const, relatesToCoreId: id, definition: "a word with the same sense" },
       { id: `${id}-f`, word: `${word}ness`, meaning: "nghĩa", type: "noun", relation: "word_family" as const, relatesToCoreId: id }
     ] satisfies SupportTerm[]
   });

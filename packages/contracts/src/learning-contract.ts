@@ -49,7 +49,6 @@ export interface LearnerProfileData {
   situations?: string;
   learningStyles: string[];
   explanationLanguage?: "auto" | "vi" | "en";
-  persona: "informal" | "formal";
   durationMinutes: 5 | 10 | 15 | 20;
   device: "phone" | "computer" | "both";
   selfLevel: CefrLevel | "unknown";
@@ -100,7 +99,10 @@ export interface LessonVocabularyFamilyWord {
 export interface LessonVocabularySynonym {
   word: string;
   level: CefrLevel;
+  /** Vietnamese meaning (A1–A2; older lessons at every level). */
   note?: string;
+  /** B1–C1: short simple-English definition shown instead of the Vietnamese meaning. */
+  definition?: string;
   pronunciation?: string;
   audioUrl?: string;
 }
@@ -193,11 +195,22 @@ export interface LessonPartAttemptEvidenceInput {
   translated?: boolean;
 }
 
+/** Vietnamese translation of a finished exercise question and its correct answer. */
+export interface LessonExerciseTranslationView {
+  question: string;
+  answer: string;
+}
+
 export interface LessonPartAttemptView {
   lessonId: string;
   partCode: LessonPartCode;
   evidence: PartEvidence;
   progress: LessonProgressView;
+  /**
+   * Vietnamese translation of the question and its correct answer, sent only
+   * once the part is finished (correct or attempts used); never before.
+   */
+  translation?: LessonExerciseTranslationView;
 }
 
 export interface LessonPartAppealView {

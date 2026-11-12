@@ -135,6 +135,7 @@ export function registerWeeklyReviewRoutes(app: FastifyInstance, pool: Pool, lea
       correct: outcome.correct,
       feedback: outcome.feedback,
       willRetry: outcome.willRetry,
+      ...(outcome.translation ? { translation: outcome.translation } : {}),
       session: buildWeeklyReviewSessionView(loaded.lesson.id, loaded.lesson.content.parts, loaded.sections, outcome.state)
     };
     return result;

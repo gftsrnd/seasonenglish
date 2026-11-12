@@ -1,5 +1,5 @@
 import type { MonthlyCurriculumContract, MonthlyDaySpec } from "@e4s/domain";
-import { answerIsUniqueLongestOption, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPronunciationExampleText, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
+import { monthlyExerciseTranslationIssues, answerIsUniqueLongestOption, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPronunciationExampleText, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
 import type { LessonPart } from "@e4s/contracts";
 import { monthlyGrammarRoadmapDayIssues } from "./monthly-grammar-roadmap.js";
 import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
@@ -162,6 +162,12 @@ export function evaluateMonthlyLessonQuality(
     }
   }
   evaluateChoiceAndWording(contract, dayNumber, lesson.parts, lockedPlanValues, severe, light);
+  // 12/11: every exercise question with a correct answer carries a short Vietnamese
+  // question and answer translation (all levels), shown only after it is finished.
+  for (const part of lesson.parts) {
+    const issues = monthlyExerciseTranslationIssues(review ? "review" : "new", part.code, part.content);
+    if (issues.length) severe.push(finding("MONTHLY_EXERCISE_TRANSLATION", `Add questionTranslation and answerTranslation (short natural Vietnamese, at every level) to every exercise question that has an answer: ${issues.slice(0, 4).join("; ")}${issues.length > 4 ? `; and ${issues.length - 4} more` : ""}`, dayNumber, part.code));
+  }
   if (review) {
     const sections = evaluateMonthlyReviewSections(contract, day, dayNumber, parts);
     severe.push(...sections.severe);

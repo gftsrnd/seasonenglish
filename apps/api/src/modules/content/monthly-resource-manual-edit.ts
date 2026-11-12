@@ -277,7 +277,12 @@ export function applyMonthlyResourceEdit(existing: MonthlyResourcePoolContract, 
       source: supportById.get(support.id)?.source ?? "manual",
       component: "expanded",
       relatedCoreTermId: support.relatedCoreTermId,
-      ...(support.cefr ? { cefr: support.cefr } : {})
+      ...(support.cefr ? { cefr: support.cefr } : {}),
+      // The generated B1+ synonym/antonym definition stays while the word and relation are unchanged.
+      ...(() => {
+        const previous = supportById.get(support.id);
+        return previous?.definition && previous.relation === support.relation && previous.word.trim().toLocaleLowerCase("en-US") === support.word.trim().toLocaleLowerCase("en-US") ? { definition: previous.definition } : {};
+      })()
     })),
     grammarTopics: input.grammarTopics.map((topic) => ({
       id: topic.id,

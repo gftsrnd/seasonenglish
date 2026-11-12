@@ -308,7 +308,12 @@ function learnerFacingPartContainsVietnamese(part: LessonPart, locked?: Readonly
     // Vocabulary meanings may be Vietnamese. The plan attaches synonym/antonym
     // meanings as `note` and illustration credits as `imageAttribution`; both
     // are meaning/metadata, not learner instructions.
+    // `note` is the Vietnamese meaning older/A1–A2 lessons attach; a B1+
+    // synonym/antonym `definition` is English and stays checked.
     if (part.code === "vocabulary" && (/meaning$/i.test(parentKey) || parentKey === "note" || parentKey === "imageAttribution")) return false;
+    // Exercise question/answer translations are Vietnamese at every level and
+    // are shown only after the question is finished (12/11).
+    if (parentKey === "questionTranslation" || parentKey === "answerTranslation") return false;
     if (containsVietnameseLearnerText(value)) return true;
     if (Array.isArray(value)) return value.some((item) => visit(item, parentKey));
     if (!value || typeof value !== "object") return false;

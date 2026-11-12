@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attachMonthlyExpandedTerms } from "../src/monthly/lesson-vocabulary.js";
+import { attachMonthlyExpandedTerms, monthlyRelationMeaningIssue } from "../src/monthly/lesson-vocabulary.js";
 
 describe("attachMonthlyExpandedTerms", () => {
   const cores = [{ id: "c1", word: "client", type: "noun", ipa: "/ˈklaɪənt/" }];
@@ -13,7 +13,8 @@ describe("attachMonthlyExpandedTerms", () => {
 
   it("turns string synonyms into card entries and adds the plan's expanded terms once", () => {
     const [item] = attachMonthlyExpandedTerms([{ word: "client", meaning: "khách hàng", synonyms: ["customer"], antonyms: [] }], cores, supports);
-    expect(item!.synonyms).toEqual([{ word: "customer" }]);
+    // The model listed "customer" itself; the plan still adds its meaning.
+    expect(item!.synonyms).toEqual([{ word: "customer", note: "khách hàng" }]);
     expect(item!.family).toEqual([{ word: "clientele", type: "noun", meaning: "khách hàng (nói chung)" }]);
     expect(item!.umbrella).toEqual({ word: "person", meaning: "người", siblings: [] });
     expect(item!.collocations).toEqual(["meet a client"]);
@@ -86,5 +87,37 @@ describe("attachMonthlyExpandedTerms illustrations", () => {
     expect(withImage).toMatchObject({ imageUrl: "/api/v1/files/content-media/read?artifactKey=content-media%2Fx.png", imageAttribution: { licence: "Nội dung nội bộ" } });
     expect(withoutImage!.imageUrl).toBeUndefined();
     expect(withoutImage!.imageAttribution).toBeUndefined();
+  });
+});
+
+describe("synonym/antonym meanings by level (12/11)", () => {
+  const cores = [{ id: "c1", word: "help", type: "verb" }];
+  const supports = [
+    { id: "s1", word: "assist", meaning: "hỗ trợ", relation: "synonym", relatedCoreTermId: "c1", definition: "help someone do something" },
+    { id: "s2", word: "hinder", meaning: "cản trở", relation: "antonym", relatedCoreTermId: "c1" }
+  ];
+
+  it("A1–A2 cards carry the Vietnamese meaning as note", () => {
+    const [item] = attachMonthlyExpandedTerms([{ word: "help" }], cores, supports, "A2");
+    expect(item!.synonyms).toEqual([{ word: "assist", note: "hỗ trợ" }]);
+    expect(item!.antonyms).toEqual([{ word: "hinder", note: "cản trở" }]);
+  });
+
+  it("B1–C1 cards carry only the English definition and never the Vietnamese meaning", () => {
+    const [item] = attachMonthlyExpandedTerms([{ word: "help", synonyms: ["assist"] }], cores, supports, "B2");
+    expect(item!.synonyms).toEqual([{ word: "assist", definition: "help someone do something" }]);
+    // Older pools without a definition: the word shows as today, without a meaning.
+    expect(item!.antonyms).toEqual([{ word: "hinder" }]);
+  });
+
+  it("gates the meaning form per level", () => {
+    expect(monthlyRelationMeaningIssue("A1", { word: "assist", relation: "synonym", meaning: "hỗ trợ" })).toBeUndefined();
+    expect(monthlyRelationMeaningIssue("A1", { word: "assist", relation: "synonym", meaning: " " })).toMatch(/Vietnamese meaning/u);
+    expect(monthlyRelationMeaningIssue("B1", { word: "assist", relation: "synonym", meaning: "hỗ trợ", definition: "help someone do something" })).toBeUndefined();
+    expect(monthlyRelationMeaningIssue("B1", { word: "assist", relation: "synonym", meaning: "hỗ trợ" })).toMatch(/simple-English definition/u);
+    expect(monthlyRelationMeaningIssue("C1", { word: "assist", relation: "antonym", definition: "giúp đỡ ai đó" })).toMatch(/no Vietnamese/u);
+    expect(monthlyRelationMeaningIssue("B2", { word: "assist", relation: "synonym", definition: "to assist a person" })).toMatch(/itself/u);
+    expect(monthlyRelationMeaningIssue("B2", { word: "assist", relation: "synonym", definition: "help" })).toMatch(/2–14 words/u);
+    expect(monthlyRelationMeaningIssue("B2", { word: "helper", relation: "word_family" })).toBeUndefined();
   });
 });

@@ -325,6 +325,22 @@ describe("content publishing policy", () => {
     ]);
   });
 
+  it("B1+: synonym/antonym definitions must be English; exercise translations may be Vietnamese (12/11)", () => {
+    const withContent = (code: string, extra: Record<string, unknown>, nested = false) => {
+      const lesson = englishLesson(1);
+      const part = lesson.parts.find((candidate: any) => candidate.code === code);
+      if (nested) part.content.items = part.content.items.map((item: any) => ({ ...item, ...extra }));
+      else Object.assign(part.content, extra);
+      return lesson;
+    };
+    const issues = (lesson: any, code: string) => validateLessonPublication([lesson], undefined, "B2").issues.filter((issue) => issue.code === code);
+    expect(issues(withContent("vocabulary", { synonyms: [{ word: "verify", definition: "check that something is true" }] }, true), "vocabulary")).toEqual([]);
+    expect(issues(withContent("vocabulary", { synonyms: [{ word: "verify", definition: "kiểm tra xem điều gì đó có đúng không" }] }, true), "vocabulary")).toEqual([
+      expect.objectContaining({ code: "vocabulary", message: expect.stringContaining("English") })
+    ]);
+    expect(issues(withContent("reading", { questionTranslation: "Lan kiểm tra gì mỗi sáng?", answerTranslation: "Một báo cáo" }), "reading")).toEqual([]);
+  });
+
   it("retires a publication without changing its content payload", () => {
     const payload = { lessons: [completeLesson] };
     expect(retirePublishedContent({ status: "published", payload })).toEqual({ status: "retired", payload });

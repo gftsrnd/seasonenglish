@@ -5,6 +5,7 @@ import type { LearnerLessonRecord } from "@e4s/database";
 import {
   buildMicroLessonSystemPrompt,
   calculateInactiveDays,
+  finishedAttemptTranslation,
   learnerLessonDisplayTitle,
   learnerLessonView,
   registerLearningRoutes,
@@ -351,5 +352,42 @@ describe("micro-lesson generation language policy", () => {
         systemPrompt: expect.stringContaining("B1-C1 must use English-only explanations/instructions except Vietnamese vocabulary meanings")
       })
     );
+  });
+});
+
+describe("exercise translations stay hidden until the question is finished (12/11)", () => {
+  const reading = { text: "Lan checks one report.", prompt: "What does Lan check?", options: ["A report", "An email", "A call", "A file"], answer: "A report", questionTranslation: "Lan kiểm tra gì?", answerTranslation: "Một báo cáo" };
+  const monthly = (status?: string, kind: "new" | "review" = "new") => ({
+    ...lesson("I have attached the receipt", "I have attached the receipt."),
+    monthlyKind: kind,
+    content: { parts: [{ code: "reading", title: "Reading", content: kind === "review" ? { items: [{ id: "r1", ...reading, variants: [{ id: "r1-v1", ...reading }] }] } : reading }] },
+    progress: { status: "in_progress", completedPartCodes: [], evidence: status ? { reading: { attempts: 1, status } } : {} }
+  }) as unknown as LearnerLessonRecord;
+  const readingContent = (record: LearnerLessonRecord) => JSON.stringify(learnerLessonView(record).content.parts.find((part) => part.code === "reading")?.content);
+
+  it("never sends the translation before the question is finished", () => {
+    for (const status of [undefined, "wrong_retry", "translated"]) {
+      const json = readingContent(monthly(status));
+      expect(json).not.toContain("Lan kiểm tra gì?");
+      expect(json).not.toContain("Một báo cáo");
+      expect(json).toContain("What does Lan check?");
+    }
+  });
+
+  it("sends it after a correct answer or once every attempt is used", () => {
+    expect(readingContent(monthly("correct"))).toContain("Lan kiểm tra gì?");
+    expect(readingContent(monthly("wrong_exhausted"))).toContain("Một báo cáo");
+  });
+
+  it("never puts Friday review translations in the lesson view", () => {
+    expect(readingContent(monthly("correct", "review"))).not.toMatch(/Translation/u);
+  });
+
+  it("hands the translation to a finished attempt only", () => {
+    const part = { content: reading as Record<string, unknown> };
+    expect(finishedAttemptTranslation(part, "correct")).toEqual({ question: "Lan kiểm tra gì?", answer: "Một báo cáo" });
+    expect(finishedAttemptTranslation(part, "wrong_exhausted")).toEqual({ question: "Lan kiểm tra gì?", answer: "Một báo cáo" });
+    expect(finishedAttemptTranslation(part, "wrong_retry")).toBeUndefined();
+    expect(finishedAttemptTranslation({ content: { prompt: "Old question", answer: "x" } }, "correct")).toBeUndefined();
   });
 });

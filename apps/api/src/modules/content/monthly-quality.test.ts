@@ -6,6 +6,21 @@ import { evaluateMonthlyReviewSections } from "./monthly-review-quality.js";
 const requiredCodes = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"];
 
 describe("monthly lesson quality", () => {
+  it("gates the Vietnamese question/answer translation of every exercise, daily and review (12/11)", () => {
+    const untranslate = (content: Record<string, unknown>): Record<string, unknown> => JSON.parse(JSON.stringify(content, (key, value) => key === "questionTranslation" || key === "answerTranslation" ? undefined : value));
+    const daily = lesson();
+    daily.parts = daily.parts.map((item) => item.code === "reading" ? { code: item.code, content: untranslate(item.content) } : item);
+    const dailyFindings = evaluateMonthlyLessonQuality(contract(), 1, daily).severe.filter((row) => row.code === "MONTHLY_EXERCISE_TRANSLATION");
+    expect(dailyFindings.map((row) => row.component)).toEqual(["reading"]);
+    expect(dailyFindings[0]!.message).toContain("reading.questionTranslation");
+    expect(evaluateMonthlyLessonQuality(contract(), 1, lesson()).severe.map((row) => row.code)).not.toContain("MONTHLY_EXERCISE_TRANSLATION");
+    const plan = contract(); plan.planSchemaVersion = 2;
+    const day = plan.daySpecs[1]!; day.reviewSoundIds = ["sound-1"];
+    const review = lesson({ parts: reviewParts().map((item) => item.code === "word_use" ? { code: item.code, content: untranslate(item.content) } : item) });
+    const reviewFindings = evaluateMonthlyLessonQuality(plan, 2, review).severe.filter((row) => row.code === "MONTHLY_EXERCISE_TRANSLATION");
+    expect(reviewFindings.map((row) => row.component)).toEqual(["word_use"]);
+    expect(reviewFindings[0]!.message).toContain("word_use.items[0].variants[0]");
+  });
   it("supports a v2 combined review whose first target has only two assigned examples", () => {
     const plan = contract(); plan.planSchemaVersion = 2;
     const day = plan.daySpecs[1]!;
@@ -162,7 +177,19 @@ function lesson(overrides: { parts?: Array<{ code: string; content: Record<strin
   }) };
 }
 
-function part(code: string, content: Record<string, unknown> = {}) { return { code, content }; }
+function part(code: string, content: Record<string, unknown> = {}) { return { code, content: translated(content) }; }
+
+/** Adds the 12/11 Vietnamese question/answer translations to every question that has a prompt and an answer (items and variants too). */
+function translated<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(translated) as T;
+  if (!value || typeof value !== "object") return value;
+  const record = Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, key === "items" || key === "variants" ? translated(item) : item]));
+  if (typeof record.prompt === "string" && (typeof record.answer === "string" || Array.isArray(record.answer))) {
+    return { questionTranslation: "Câu hỏi đã dịch sang tiếng Việt.", answerTranslation: "Đáp án đúng bằng tiếng Việt.", ...record } as T;
+  }
+  return record as T;
+}
+
 
 /** A valid Friday review: study parts plus the six item sections (3 core words, 1 grammar step). */
 function reviewParts() {

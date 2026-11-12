@@ -48,6 +48,12 @@ export interface SupportTerm {
    * pools stored before this field existed keep validating unchanged.
    */
   cefr?: CefrLevel;
+  /**
+   * B1–C1 synonym/antonym only (12/11): a short simple-English definition the
+   * learner card shows instead of the Vietnamese `meaning`. Absent on A1–A2,
+   * on other relations and on pools generated before the field existed.
+   */
+  definition?: string;
 }
 
 export const MONTHLY_SUPPORT_RELATIONS = ["umbrella", "synonym", "antonym", "word_family", "collocation"] as const;

@@ -914,7 +914,11 @@ const monthlyResourceExpandedTermSchema = z.object({
   relatesToCoreId: z.string().trim().min(1).max(100),
   // VH-R33: the support word's own CEFR level (month level or ±1). Optional so
   // older checkpoints validate; an unusable label is dropped, not fatal.
-  cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]).optional().catch(undefined)
+  cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]).optional().catch(undefined),
+  // 12/11: B1–C1 synonym/antonym only, a short simple-English definition shown
+  // to learners instead of the Vietnamese meaning. Optional for other relations,
+  // A1–A2 and older checkpoints; the API gate requires it where it applies.
+  definition: z.string().trim().max(200).optional()
 }).strict();
 const monthlyResourceGrammarStepSchema = z.object({
   id: z.string().trim().min(1).max(100), focus: z.string().trim().min(1).max(200),
@@ -953,7 +957,7 @@ export const monthlyResourcePlanOutputJsonSchema = {
   type: "object", additionalProperties: false, required: ["coreTerms", "expandedTerms", "grammarTopics", "pronunciationTargets"],
   properties: {
     coreTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "ipa"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, ipa: { type: "string" }, cefr: { type: "string", enum: ["A1", "A2", "B1", "B2", "C1"] } } } },
-    expandedTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "relation", "relatesToCoreId"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, relation: { type: "string", enum: ["umbrella", "synonym", "antonym", "word_family", "collocation"] }, relatesToCoreId: { type: "string" }, cefr: { type: "string", enum: ["A1", "A2", "B1", "B2", "C1"] } } } },
+    expandedTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "relation", "relatesToCoreId"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, relation: { type: "string", enum: ["umbrella", "synonym", "antonym", "word_family", "collocation"] }, relatesToCoreId: { type: "string" }, cefr: { type: "string", enum: ["A1", "A2", "B1", "B2", "C1"] }, definition: { type: "string", description: "B1-C1 synonym/antonym only: a short simple-English definition (2-14 words, easier than the month level, no Vietnamese, not using the word itself). Omit at A1-A2 and for other relations." } } } },
     grammarTopics: { type: "array", maxItems: 2, items: { type: "object", additionalProperties: false, required: ["id", "title", "steps"], properties: { id: { type: "string" }, title: { type: "string" }, steps: { type: "array", minItems: 3, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["id", "focus", "formula", "usage", "examples", "dailyObjectives"], properties: { dailyObjectives: { type: "array", minItems: 2, maxItems: 2, items: { type: "string" } }, id: { type: "string" }, focus: { type: "string" }, formula: { type: "string" }, usage: { type: "string" }, examples: { type: "array", minItems: 3, items: { type: "string" } } } } } } } },
     pronunciationTargets: { type: "array", maxItems: 4, items: { type: "object", additionalProperties: false, required: ["id", "ipa", "label", "explanation", "words"], properties: { id: { type: "string" }, ipa: { type: "string" }, label: { type: "string" }, explanation: { type: "string" }, words: { type: "array", minItems: 9, items: { type: "object", additionalProperties: false, required: ["word", "ipa"], properties: { word: { type: "string" }, ipa: { type: "string" } } } } } } }
   }
@@ -1719,11 +1723,12 @@ export const MONTHLY_LESSON_PART_CONTENT_CONTRACT = [
   "vocabulary { items: [{ word, type, ipa, meaning, collocations, synonyms, antonyms }] } - collocations is exactly 3 short, natural English phrases that each contain the word (e.g. client: \"meet a client\", \"a new client\", \"client feedback\"); never empty;",
   "grammar { formula, text, examples } - formula copies the locked grammar step formula(s) verbatim; text is a concise usage note: 1-2 short sentences, at most 45 words, focused on the day's goal; do not repeat the formula or add a lecture. When lockedScope.grammarSteps has more than one step (review days), also return grammar.steps: [{ formula, text, examples }] with one entry per step in order, each with its own concise usage note and 1-2 examples;",
   "pronunciation { focus: \"/IPA/\", words: [{ word, ipa }] x3 } (+ stage, objective with a daily teaching plan);",
-  "listening { script, prompt, options x4, answer } - script is the full spoken transcript, never empty;",
-  "reading { text, prompt, options x4, answer } - text is the reading passage, never empty;",
-  "writing { type, prompt, answer } - answer is the correct answer or model sentence, never empty;",
-  "word_class (Word form) { prompt, options x4, answer } - a workplace sentence with one blank (____) where the learner chooses the correct form of a core word (e.g. decide / decision / decisive / decisively, or the right tense/plural); never ask for the word class or part of speech, never use labels such as noun/verb/adjective/adverb as options, and never give the answer word unchanged in brackets;",
-  "word_use { prompt, options x4, answer };",
+  "listening { script, prompt, options x4, answer, questionTranslation, answerTranslation } - script is the full spoken transcript, never empty;",
+  "reading { text, prompt, options x4, answer, questionTranslation, answerTranslation } - text is the reading passage, never empty;",
+  "writing { type, prompt, answer, questionTranslation, answerTranslation } - answer is the correct answer or model sentence, never empty;",
+  "word_class (Word form) { prompt, options x4, answer, questionTranslation, answerTranslation } - a workplace sentence with one blank (____) where the learner chooses the correct form of a core word (e.g. decide / decision / decisive / decisively, or the right tense/plural); never ask for the word class or part of speech, never use labels such as noun/verb/adjective/adverb as options, and never give the answer word unchanged in brackets;",
+  "word_use { prompt, options x4, answer, questionTranslation, answerTranslation };",
+  "TRANSLATIONS (every level A1-C1): every exercise question that has an answer (listening, reading, writing, word_class, word_use, and every Friday review item and variant with an answer) also returns questionTranslation = a short natural Vietnamese translation of the question or prompt (the English target sentence translated too, the blank kept as ____) and answerTranslation = a short natural Vietnamese translation of the correct answer (a name, number or acronym may stay as it is). Each at most one or two short lines. They are hidden until the learner finishes the question and are never read aloud, so never put Vietnamese or a translation inside prompt, options, answer, script or text, and these two fields are the only Vietnamese allowed from B1;",
   "speaking { prompt, sample } - sample is a model answer, never empty.",
   "In every choice task each option is a real, correctly spelled English word or phrase of the same kind as the answer (never invented forms such as sended, maked, feedbacked), and options are similar in length so the answer is not simply the longest one.",
   "Learner-facing text never mentions internal planning terms (core term, expanded term, người học) and never pastes the theme's communication goal; for A1/A2 every prompt and instruction is written in Vietnamese."
@@ -1753,12 +1758,15 @@ export const monthlyLessonDayOutputJsonSchema = {
                     id: { type: "string" }, prompt: { type: "string" },
                     options: { type: "array", items: { type: "string" }, description: "4 options in a choice item; EXACTLY 2 in a speaking minimal-pair item (the taught example and its partner)." },
                     answer: { type: "string" }, explanation: { type: "string" },
+                    questionTranslation: { type: "string", description: "short Vietnamese translation of the item prompt (every level); hidden until answered." },
+                    answerTranslation: { type: "string", description: "short Vietnamese translation of the correct answer (every level); hidden until answered." },
                     variants: {
                       type: "array", minItems: 1, maxItems: 1,
-                      description: "Friday review exercise items: exactly 1 alternative item testing the same point in a different workplace context, with the same fields as the item (prompt, options, answer, explanation; never a copy). Shown when the learner retries.",
+                      description: "Friday review exercise items: exactly 1 alternative item testing the same point in a different workplace context, with the same fields as the item (prompt, options, answer, explanation, questionTranslation, answerTranslation; never a copy). Shown when the learner retries.",
                       items: { type: "object", additionalProperties: true, properties: {
                         id: { type: "string" }, prompt: { type: "string" }, options: { type: "array", items: { type: "string" } },
-                        answer: { type: "string" }, explanation: { type: "string" }
+                        answer: { type: "string" }, explanation: { type: "string" },
+                        questionTranslation: { type: "string" }, answerTranslation: { type: "string" }
                       } }
                     }
                   } }
@@ -1779,7 +1787,9 @@ export const monthlyLessonDayOutputJsonSchema = {
               prompt: { type: "string", description: "the learner question or task (required for listening, reading, writing, word_class, word_use, speaking)." },
               options: { type: "array", items: { type: "string" }, description: "choice tasks: exactly 4 different English options." },
               answer: { type: "string", description: "choice tasks: copied verbatim from options; writing: the correct answer or model sentence (required for writing)." },
-              sample: { type: "string", description: "speaking: a model answer the learner can study and be scored against (required for speaking)." }
+              sample: { type: "string", description: "speaking: a model answer the learner can study and be scored against (required for speaking)." },
+              questionTranslation: { type: "string", description: "listening, reading, writing, word_class, word_use (every level): short natural Vietnamese translation of the question/prompt; shown only after the learner finishes the question, never read aloud." },
+              answerTranslation: { type: "string", description: "listening, reading, writing, word_class, word_use (every level): short natural Vietnamese translation of the correct answer; shown only after the learner finishes the question, never read aloud." }
             }
           }
         }

@@ -28,7 +28,7 @@ const briefInput = z.object({
   communicationGoal: z.string().trim().min(1).max(2_000)
 });
 const coreTerm = z.object({ id: z.string().min(1), word: z.string().min(1), meaning: z.string(), type: z.string().min(1), ipa: z.string().min(1), source: z.literal("core_registry"), component: z.literal("core"), dayNumber: z.int().positive() });
-const supportTerm = z.object({ id: z.string().min(1), word: z.string().min(1), meaning: z.string(), type: z.string().min(1), relation: z.enum(["umbrella", "synonym", "antonym", "word_family", "collocation"]), source: z.enum(["example", "family", "synonym", "antonym", "group", "manual"]), component: z.literal("expanded"), dayNumber: z.int().positive(), relatedCoreTermId: z.string().min(1), cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]).optional() });
+const supportTerm = z.object({ id: z.string().min(1), word: z.string().min(1), meaning: z.string(), type: z.string().min(1), relation: z.enum(["umbrella", "synonym", "antonym", "word_family", "collocation"]), source: z.enum(["example", "family", "synonym", "antonym", "group", "manual"]), component: z.literal("expanded"), dayNumber: z.int().positive(), relatedCoreTermId: z.string().min(1), cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]).optional(), definition: z.string().max(200).optional() });
 export const frameworkInput = z.object({
   contract: z.object({
     planSchemaVersion: z.literal(2).optional(),

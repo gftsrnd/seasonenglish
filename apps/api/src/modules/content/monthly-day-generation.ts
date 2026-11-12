@@ -37,10 +37,10 @@ export function monthlyLearnerLanguageContract(cefr: string): string {
   if (cefr === "A1" || cefr === "A2") return [
     `LEARNER LANGUAGE (${cefr}): every prompt, question and instruction string the learner reads - in every part, item and variant, including grammar.items, word_class, word_use, reading and speaking - must start with a Vietnamese instruction. A prompt that is only an English sentence or an English question is rejected.`,
     "Put the English target sentence after the Vietnamese instruction in the same prompt string, e.g. word_class prompt \"Chọn dạng đúng của từ để điền vào chỗ trống: Our ____ meets every Monday.\"; grammar item prompt \"Chọn từ đúng để hoàn thành câu: The client ____ feedback every week.\"; reading prompt \"Đọc email và chọn đáp án đúng: Nhóm đang làm gì?\"; word_use prompt \"Chọn cụm từ đúng nghĩa với 'take a photo':\"; speaking prompt \"Hãy nói 30–45 giây về tiến độ dự án, dùng các từ: meeting, project, task.\".",
-    "Options, answers, scripts, passages, sample answers and example sentences stay in English."
+    "Options, answers, scripts, passages, sample answers and example sentences stay in English; the Vietnamese translation of a question and its answer goes only in questionTranslation / answerTranslation."
   ].join(" ");
   return [
-    `LEARNER LANGUAGE (${cefr}): write every learner-facing string in English - lesson title, objective, instruction, prompts, questions, explanations, scripts, passages, samples and grammar/pronunciation notes. Only vocabulary meanings may be Vietnamese.`,
+    `LEARNER LANGUAGE (${cefr}): write every learner-facing string in English - lesson title, objective, instruction, prompts, questions, explanations, scripts, passages, samples and grammar/pronunciation notes. Only vocabulary meanings and the exercise questionTranslation / answerTranslation fields (shown after the question is finished) may be Vietnamese.`,
     "Plan notes you receive (daySpec.skillExercises[].focus, the grammar and pronunciation objectives, the theme's communication goal) may be written in Vietnamese: they are guidance for you, never copy or translate them into learner text. The only exception is the locked grammar.objective / pronunciation.objective fields, copied verbatim."
   ].join(" ");
 }
@@ -129,7 +129,7 @@ ${note}` : basePrompt}${contract.planSchemaVersion === 2 && kind === "new" ? `\n
         rawParts = single.parts;
       }
       // The plan, not the model, decides each core word's expanded terms: attach them deterministically.
-      const vocabularyParts = withMonthlyExpandedTerms(rawParts, coreTerms, daySupportTerms);
+      const vocabularyParts = withMonthlyExpandedTerms(rawParts, coreTerms, daySupportTerms, contract.cefr);
       const dailyParts = vocabularyParts.map(part => part.code === "grammar" && daySpec.grammarPlan ? { ...part, content: { ...part.content, milestoneIds: daySpec.grammarPlan.milestoneIds, recallMilestoneIds: daySpec.grammarPlan.recallMilestoneIds } } : part);
       const enriched = contract.planSchemaVersion === 2 && kind === "new" ? dailyParts : withMonthlyGrammarSteps(vocabularyParts, grammarSteps);
       const parts = kind === "review" ? normalizeMonthlyReviewParts(enriched) : enriched;
@@ -179,7 +179,8 @@ export function monthlyReviewExerciseContract(coreCount: number, grammarStepCoun
     "Friday review exercise contract (overrides the daily single-question shape for listening, word_use, word_class, grammar, reading, speaking; do not return a writing part):",
     `EXACT ITEM COUNTS (each section is { items: [...] } with all of its items in this one response; never a single question, never a partial list): listening ${target.listening}, word_use ${target.wordUse}, word_class ${target.wordForm}, grammar ${target.grammar} (+1 previous-week item when there is one), reading 3, speaking 4 (2 minimal pairs, 1 read-aloud, 1 free response).`,
     "Keep objective, instruction, vocabulary (every core word of the week as a card with collocations), grammar (formula, text, examples, steps) and pronunciation as the study tab.",
-    `Each exercise section's content has items: [{ id, prompt, options, answer, explanation, variants }]. explanation: at most 2 sentences in ${explain}, why the answer is right. variants: exactly 1 alternative item testing the same point in a different workplace context (same fields, different sentence, never a copy). Never copy daily-lesson sentences verbatim.`,
+    `Each exercise section's content has items: [{ id, prompt, options, answer, explanation, questionTranslation, answerTranslation, variants }]. explanation: at most 2 sentences in ${explain}, why the answer is right. variants: exactly 1 alternative item testing the same point in a different workplace context (same fields, different sentence, never a copy). Never copy daily-lesson sentences verbatim.`,
+    "questionTranslation / answerTranslation (every level): on every item and variant that has an answer, a short natural Vietnamese translation of its prompt (the English sentence translated too, the blank kept as ____) and of its correct answer. They are shown only after the learner answers correctly and never read aloud; the read-aloud and free-response speaking items (no answer) take none.",
     vietnamese
       ? "Every prompt the learner reads is written in Vietnamese (e.g. \"Chọn dạng đúng của từ để điền vào chỗ trống: …\", \"Đọc tin nhắn và chọn đáp án đúng.\"); only the English target sentence, options and answers stay in English."
       : "Every prompt, question, instruction and explanation is written in English; only the listening options/answers (word meanings) are Vietnamese.",

@@ -16,6 +16,7 @@ import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerCon
 import { gradeLessonAnswer, validateGeneratedFeedback } from "@e4s/domain/content";
 import { evaluateMonthlyExamEligibility, learnerMonthlySeasonTarget, MONTHLY_EXAM_ENTRY_CUTOFF, monthlyExamEntryState } from "@e4s/domain/progression";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
+import { exerciseTranslationRevealed, readExerciseTranslation, withoutExerciseTranslations } from "@e4s/domain/monthly";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
@@ -44,7 +45,6 @@ const profileInput = z.object({
   situations: z.string().optional(),
   learningStyles: z.array(z.string()).min(1),
   explanationLanguage: z.enum(["auto", "vi", "en"]).optional(),
-  persona: z.enum(["informal", "formal"]),
   durationMinutes: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20)]),
   device: z.enum(["phone", "computer", "both"]),
   selfLevel: z.enum(["unknown", "A1", "A2", "B1", "B2", "C1"]),
@@ -539,7 +539,8 @@ export function registerLearningRoutes(
         return reply.code(409).send({ code: "PRONUNCIATION_LISTENING_REQUIRED" });
       }
     }
-    if (evidence.translated && !["wrong_retry", "wrong_exhausted"].includes(lesson.progress.evidence[params.data.partCode]?.status ?? "")) {
+    // Monthly lessons show the translation automatically once the question is finished; it is never opened early.
+    if (evidence.translated && (lesson.monthlyKind || !["wrong_retry", "wrong_exhausted"].includes(lesson.progress.evidence[params.data.partCode]?.status ?? ""))) {
       return reply.code(409).send({ code: "LESSON_TRANSLATION_NOT_AVAILABLE" });
     }
     if (!evidence.translated && part?.code === "writing" && isSelfWritingContent(part.content) && lessonAnswerWordCount(evidence.answer) < 2) {
@@ -555,7 +556,9 @@ export function registerLearningRoutes(
       requestId: direct.requestId,
       evidence
     });
-    return result ?? reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
+    if (!result) return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
+    const translation = finishedAttemptTranslation(part, result.evidence.status);
+    return translation ? { ...result, translation } : result;
   });
 
   app.post("/api/v1/lessons/:lessonId/parts/:partCode/appeals", { preHandler: learnerOnly }, async (request, reply) => {
@@ -813,8 +816,11 @@ function profileView(record: {
   completedAt: Date | null;
   updatedAt: Date;
 }): LearnerProfileView {
+  // Profiles saved before the Season-style field was removed may still carry a
+  // legacy `persona` key. It is ignored and never echoed back to clients.
+  const { persona: _legacyPersona, ...profile } = record.profile as Partial<LearnerProfileData> & { persona?: unknown };
   return {
-    profile: record.profile as LearnerProfileData,
+    profile: profile as LearnerProfileData,
     completed: Boolean(record.completedAt) && isLearnerProfileComplete(record.completedProfile ?? record.profile),
     draftAvailable: Boolean(record.draftAvailable),
     version: record.version,
@@ -856,8 +862,32 @@ function canonicalPartOfSpeech(value: string | undefined): string | undefined {
   return normalized || undefined;
 }
 
+/**
+ * Exercise translations (12/11) leave the server only once the question is
+ * finished: a correct answer or the attempt limit reached (wrong_exhausted).
+ * Friday reviews never send them in the lesson view (the review answer result
+ * carries them). Legacy weekly lessons keep the explicit "view translation" step.
+ */
+function learnerSafeTranslations(lesson: LearnerLessonRecord, part: LearnerLessonRecord["content"]["parts"][number]): LearnerLessonRecord["content"]["parts"][number] {
+  const content = part.content as Record<string, unknown>;
+  const hasTranslation = JSON.stringify(content).includes("Translation\"");
+  if (!hasTranslation) return part;
+  const evidence = lesson.progress.evidence[part.code];
+  const revealed = lesson.monthlyKind === "review" ? false
+    : exerciseTranslationRevealed(evidence?.status) || (!lesson.monthlyKind && (evidence?.status === "translated" || Boolean(evidence?.translationViewed)));
+  if (revealed && lesson.monthlyKind !== "review") return part;
+  return { ...part, content: withoutExerciseTranslations(content) };
+}
+
+/** The translation a finished attempt hands to the learner, or undefined before the question is finished. */
+export function finishedAttemptTranslation(part: { content: Record<string, unknown> } | undefined, status: string | undefined): { question: string; answer: string } | undefined {
+  if (!part || !exerciseTranslationRevealed(status)) return undefined;
+  return readExerciseTranslation(part.content) ?? undefined;
+}
+
 export function learnerLessonView(lesson: LearnerLessonRecord): LessonView {
-  const parts = lesson.content.parts.map((part) => {
+  const parts = lesson.content.parts.map((rawPart) => {
+    const part = learnerSafeTranslations(lesson, rawPart);
     if (part.code !== "pronunciation") return part;
     const content = part.content as Record<string, unknown>;
     const { phonemeAudioId: _legacyPhonemeAudioId, phonemeAudioUrl: _legacyPhonemeAudioUrl, ...safeContent } = content;

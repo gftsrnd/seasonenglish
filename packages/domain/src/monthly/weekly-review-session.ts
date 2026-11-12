@@ -129,7 +129,7 @@ export function variantFor(item: WeeklyReviewItem, variant: number): WeeklyRevie
 }
 
 export type WeeklyReviewAnswerOutcome =
-  | { ok: true; correct: boolean; feedback: string; willRetry: boolean; state: WeeklyReviewSessionState }
+  | { ok: true; correct: boolean; feedback: string; willRetry: boolean; state: WeeklyReviewSessionState; translation?: { question: string; answer: string } }
   | { ok: false; code: "REVIEW_SECTION_NOT_CURRENT" | "REVIEW_ITEM_NOT_CURRENT" | "REVIEW_ALREADY_COMPLETE" | "REVIEW_ITEM_NOT_FOUND" };
 
 /**
@@ -171,7 +171,9 @@ export function answerWeeklyReviewItem(input: {
   const feedback = correct
     ? (english ? "Correct." : "Đúng rồi.")
     : variant.explanation?.trim() || (english ? "Not quite. Read the explanation and try this point again at the end of the section." : "Chưa đúng. Câu này sẽ quay lại ở cuối phần để bạn làm lại.");
-  return { ok: true, correct, feedback, willRetry: !correct, state };
+  // A finished (correct) item reveals its Vietnamese question/answer translation; a wrong one never does.
+  const translation = correct && variant.questionTranslation && variant.answerTranslation ? { question: variant.questionTranslation, answer: variant.answerTranslation } : undefined;
+  return { ok: true, correct, feedback, willRetry: !correct, state, ...(translation ? { translation } : {}) };
 }
 
 /** Deterministic grading. Free responses pass when valid English that uses enough weekly words. */
@@ -237,7 +239,10 @@ function toVariant(raw: Record<string, unknown>, fallbackId: string, code: Weekl
     ...(typeof raw.explanation === "string" && raw.explanation.trim() ? { explanation: raw.explanation } : {}),
     ...(requiredWords?.length ? { requiredWords } : {}),
     ...(typeof raw.minRequiredWords === "number" ? { minRequiredWords: raw.minRequiredWords } : {}),
-    ...(code === "speaking" || raw.acceptsAudio === true ? { acceptsAudio: true } : {})
+    ...(code === "speaking" || raw.acceptsAudio === true ? { acceptsAudio: true } : {}),
+    // Server-side only: handed to the learner with a correct answer, never in the question view.
+    ...(typeof raw.questionTranslation === "string" && raw.questionTranslation.trim() ? { questionTranslation: raw.questionTranslation.trim() } : {}),
+    ...(typeof raw.answerTranslation === "string" && raw.answerTranslation.trim() ? { answerTranslation: raw.answerTranslation.trim() } : {})
   };
 }
 

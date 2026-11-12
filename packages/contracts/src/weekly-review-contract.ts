@@ -38,6 +38,10 @@ export interface WeeklyReviewItemVariant {
   minRequiredWords?: number;
   /** Free responses may be submitted as audio (6b/6c). */
   acceptsAudio?: boolean;
+  /** Vietnamese translation of the prompt; server-side only until the item is answered correctly. */
+  questionTranslation?: string;
+  /** Vietnamese translation of the correct answer; server-side only until the item is answered correctly. */
+  answerTranslation?: string;
 }
 
 /**
@@ -110,5 +114,7 @@ export interface WeeklyReviewAnswerResult {
   feedback: string;
   /** For a wrong answer: the item returns at the end of the section. */
   willRetry: boolean;
+  /** Correct answers only: Vietnamese translation of the finished question and its answer. */
+  translation?: { question: string; answer: string };
   session: WeeklyReviewSessionView;
 }

@@ -6,7 +6,11 @@
  * them. AI output also uses plain strings for synonyms; cards need { word }.
  */
 export interface MonthlyVocabularyCore { id: string; word: string; meaning?: string; type?: string; ipa?: string; imageUrl?: string }
-export interface MonthlyVocabularySupport { id: string; word: string; meaning?: string; type?: string; relation: string; relatedCoreTermId?: string }
+export interface MonthlyVocabularySupport {
+  id: string; word: string; meaning?: string; type?: string; relation: string; relatedCoreTermId?: string;
+  /** B1–C1 synonym/antonym only: a short simple-English definition shown on the card instead of the Vietnamese meaning. */
+  definition?: string;
+}
 
 type Item = Record<string, unknown>;
 
@@ -18,21 +22,71 @@ function asWordEntries(value: unknown): Array<Record<string, unknown>> {
 }
 
 function mergeEntries(existing: unknown, planned: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
-  const result = asWordEntries(existing);
-  const seen = new Set(result.map((entry) => String(entry.word).toLocaleLowerCase()));
+  const result = asWordEntries(existing).map((entry) => ({ ...entry }));
+  const byKey = new Map(result.map((entry) => [String(entry.word).toLocaleLowerCase(), entry]));
   for (const entry of planned) {
     const key = String(entry.word).toLocaleLowerCase();
-    if (!seen.has(key)) { seen.add(key); result.push(entry); }
+    const current = byKey.get(key);
+    if (!current) { byKey.set(key, entry); result.push(entry); continue; }
+    // The model may list a planned word itself (as a plain string): keep its
+    // entry but add the plan's meaning/definition it lacks.
+    for (const [field, value] of Object.entries(entry)) if (current[field] === undefined) current[field] = value;
   }
   return result;
+}
+
+/**
+ * The meaning a synonym/antonym card entry carries (product decision 12/11):
+ * A1–A2 the plan's Vietnamese meaning as `note`; B1–C1 only the plan's short
+ * English `definition` (no Vietnamese from B1). Without a level (older callers)
+ * the Vietnamese meaning is kept as before.
+ */
+function relationEntry(term: MonthlyVocabularySupport, cefr: string | undefined): Record<string, unknown> {
+  const englishOnly = cefr === "B1" || cefr === "B2" || cefr === "C1";
+  const definition = term.definition?.trim();
+  if (englishOnly) return { word: term.word, ...(definition ? { definition } : {}) };
+  return { word: term.word, ...(term.meaning ? { note: term.meaning } : {}) };
+}
+
+/** Longest synonym/antonym definition (B1–C1), in words and characters. */
+export const MONTHLY_RELATION_DEFINITION_MAX_WORDS = 14;
+export const MONTHLY_RELATION_DEFINITION_MAX_CHARS = 100;
+const VIETNAMESE_MEANING_LETTER = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉĩịọỏốồổỗộớờởỡợụủũứừửữựỳỵỷỹàáèéìíòóùúý]/iu;
+
+/**
+ * Gate for the meaning a synonym/antonym support carries (12/11). A1–A2: the
+ * `meaning` is a Vietnamese gloss. B1–C1: a short `definition` in simple
+ * English (no Vietnamese) is required as well; the Vietnamese `meaning` stays
+ * for staff screens only. Other relations are not checked. Returns the
+ * problem, or undefined when the support is fine.
+ */
+export function monthlyRelationMeaningIssue(
+  cefr: string,
+  support: { word: string; relation: string; meaning?: string | undefined; definition?: string | undefined }
+): string | undefined {
+  if (support.relation !== "synonym" && support.relation !== "antonym") return undefined;
+  if (cefr === "A1" || cefr === "A2") {
+    // Some Vietnamese glosses carry no diacritic (nhanh, tin), so only a missing meaning fails here.
+    return support.meaning?.trim() ? undefined : `the ${support.relation} needs a short Vietnamese meaning at ${cefr}`;
+  }
+  const definition = support.definition?.trim() ?? "";
+  if (!definition) return `the ${support.relation} needs a short simple-English definition at ${cefr}`;
+  if (VIETNAMESE_MEANING_LETTER.test(definition)) return `the ${support.relation} definition must be simple English with no Vietnamese at ${cefr}`;
+  const words = definition.split(/\s+/u).filter(Boolean).length;
+  if (words < 2 || words > MONTHLY_RELATION_DEFINITION_MAX_WORDS || definition.length > MONTHLY_RELATION_DEFINITION_MAX_CHARS) return `the ${support.relation} definition must be 2–${MONTHLY_RELATION_DEFINITION_MAX_WORDS} words (at most ${MONTHLY_RELATION_DEFINITION_MAX_CHARS} characters)`;
+  const own = support.word.trim().toLocaleLowerCase("en-US");
+  if (own && ` ${definition.toLocaleLowerCase("en-US").replace(/[^\p{L}\s'-]/gu, " ")} `.includes(` ${own} `)) return `the ${support.relation} definition must not use the word "${support.word}" itself`;
+  return undefined;
 }
 
 export function attachMonthlyExpandedTerms(
   items: readonly unknown[],
   cores: readonly MonthlyVocabularyCore[],
-  supports: readonly MonthlyVocabularySupport[]
+  supports: readonly MonthlyVocabularySupport[],
+  /** Month level: decides whether synonym/antonym entries carry the Vietnamese meaning (A1–A2) or the English definition (B1+). */
+  cefr?: string
 ): Item[] {
-  const enriched = attachTerms(items, cores, supports);
+  const enriched = attachTerms(items, cores, supports, cefr);
   // Umbrella cards list the other words under the same umbrella; the modal needs a siblings array.
   return enriched.map((item) => {
     const umbrella = item && typeof item.umbrella === "object" && item.umbrella ? item.umbrella as Item : null;
@@ -48,7 +102,8 @@ export function attachMonthlyExpandedTerms(
 function attachTerms(
   items: readonly unknown[],
   cores: readonly MonthlyVocabularyCore[],
-  supports: readonly MonthlyVocabularySupport[]
+  supports: readonly MonthlyVocabularySupport[],
+  cefr: string | undefined
 ): Item[] {
   return items.map((raw) => {
     if (!raw || typeof raw !== "object") return raw as Item;
@@ -56,8 +111,8 @@ function attachTerms(
     const word = String(item.word ?? "").trim().toLocaleLowerCase();
     const core = cores.find((candidate) => candidate.word.trim().toLocaleLowerCase() === word);
     const linked = (relation: string) => core ? supports.filter((term) => term.relatedCoreTermId === core.id && term.relation === relation) : [];
-    item.synonyms = mergeEntries(item.synonyms, linked("synonym").map((term) => ({ word: term.word, ...(term.meaning ? { note: term.meaning } : {}) })));
-    item.antonyms = mergeEntries(item.antonyms, linked("antonym").map((term) => ({ word: term.word, ...(term.meaning ? { note: term.meaning } : {}) })));
+    item.synonyms = mergeEntries(item.synonyms, linked("synonym").map((term) => relationEntry(term, cefr)));
+    item.antonyms = mergeEntries(item.antonyms, linked("antonym").map((term) => relationEntry(term, cefr)));
     item.family = mergeEntries(item.family, linked("word_family").map((term) => ({ word: term.word, ...(term.type ? { type: term.type } : {}), ...(term.meaning ? { meaning: term.meaning } : {}) })));
     const collocations = linked("collocation").map((term) => term.word);
     if (collocations.length) {
@@ -96,10 +151,11 @@ function attachTerms(
 export function withMonthlyExpandedTerms<T extends { code?: string; content?: Record<string, unknown> }>(
   parts: readonly T[],
   cores: readonly MonthlyVocabularyCore[],
-  supports: readonly MonthlyVocabularySupport[]
+  supports: readonly MonthlyVocabularySupport[],
+  cefr?: string
 ): T[] {
   return parts.map((part) => part.code === "vocabulary" && Array.isArray(part.content?.items)
-    ? { ...part, content: { ...part.content, items: attachMonthlyExpandedTerms(part.content.items as unknown[], cores, supports) } }
+    ? { ...part, content: { ...part.content, items: attachMonthlyExpandedTerms(part.content.items as unknown[], cores, supports, cefr) } }
     : part);
 }
 

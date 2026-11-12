@@ -1162,6 +1162,22 @@ describe("monthly support pool rules (VH-R33: 3-9 per core, 35% repeats, CEFR ±
     expect(result.rejected.join(" ")).toContain("CEFR C1 is more than one level from A2");
   });
 
+  it("12/11: B1+ synonym/antonym candidates need a short English definition; A1–A2 read the Vietnamese meaning", () => {
+    const select = (cefr: "A2" | "B2", candidates: Parameters<typeof selectMonthlySupportCandidates>[0]["candidates"]) => selectMonthlySupportCandidates({
+      candidates, coreId: "core-q", coreWord: "quick", coreType: "adjective", coreWords: new Set(), sameCoreWords: new Set(), sameCoreRelations: new Set(),
+      existingSupportWords: [], maxRepeatedPlacements: 10, maxPhrasePlacements: 10, needed: 2, cefr
+    });
+    const fast = { id: "s1", word: "fast", meaning: "nhanh", type: "adjective", relation: "synonym" as const, relatesToCoreId: "core-q", cefr: "B2" as const };
+    const slow = { id: "s2", word: "slow", meaning: "chậm", type: "adjective", relation: "antonym" as const, relatesToCoreId: "core-q", cefr: "B2" as const };
+    const b2 = select("B2", [fast, { ...slow, definition: "taking a long time" }]);
+    expect(b2.selected.map((term) => term.word)).toEqual(["slow"]);
+    expect(b2.rejected.join(" ")).toContain("fast -> fast (the synonym needs a short simple-English definition at B2)");
+    expect(select("B2", [{ ...fast, definition: "nhanh chóng và gọn" }]).rejected.join(" ")).toContain("no Vietnamese");
+    expect(select("A2", [{ ...fast, cefr: "A2" }]).selected.map((term) => term.word)).toEqual(["fast"]);
+    expect(buildMonthlySupportLevelGuidance("B1")).toContain("also carries definition: a short simple-English definition");
+    expect(buildMonthlySupportLevelGuidance("A2")).toContain("meaning is its own short Vietnamese meaning");
+  });
+
   it("allows a word-family support up to two levels above the month and rejects three", () => {
     const family = (word: string, cefr: "A1" | "A2" | "B1" | "B2" | "C1") => ({ id: `f-${word}`, word, meaning: "quản lý", type: "noun", relation: "word_family" as const, relatesToCoreId: "core-m", cefr });
     const result = selectMonthlySupportCandidates({

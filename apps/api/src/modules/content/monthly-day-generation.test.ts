@@ -110,7 +110,7 @@ describe("monthly day generation", () => {
     scope.daySpecs.push({...scope.daySpecs[0]!,lessonNumber:5,date:"2026-11-06",kind:"review",coreTermIds:[],expandedTermIds:[],reviewTermIds:scope.coreTerms.map(term=>term.id),reviewGrammarStepIds:["step","step-2"],reviewSoundIds:["sound","sound-2"],reviewPronunciationExampleIds:scope.sounds.flatMap(sound=>sound.examples.map(example=>example.id))});
     const vi=cefr==="A1"||cefr==="A2";
     const candidate=reviewLessonCandidate(vi);
-    const choice=(word:string)=>({id:word,prompt:vi?`Chọn ${word}`:`Choose ${word}`,options:[word,"other","different","unrelated"],answer:word,explanation:vi?"Vì đúng nghĩa.":"It fits.",audioText:word});
+    const choice=(word:string)=>translated({id:word,prompt:vi?`Chọn ${word}`:`Choose ${word}`,options:[word,"other","different","unrelated"],answer:word,explanation:vi?"Vì đúng nghĩa.":"It fits.",audioText:word});
     candidate.parts=candidate.parts.map(part=>part.code==="vocabulary" ? {code:part.code,content:{items:scope.coreTerms.map(term=>({word:term.word,collocations:[`our ${term.word}`,`the ${term.word}`,`a ${term.word}`]}))}} : part.code==="listening" ? {code:part.code,content:{items:scope.coreTerms.map(term=>choice(term.word))}} : part.code==="word_use" ? {code:part.code,content:{items:scope.coreTerms.slice(0,4).map(term=>choice(term.word))}} : part.code==="word_class" ? {code:part.code,content:{items:scope.coreTerms.slice(0,3).map(term=>choice(term.word))}} : part.code==="reading" ? {code:part.code,content:{...part.content,passage:`Our team discusses ${scope.coreTerms.map(term=>term.word).join(", ")}.`}} : part.code==="pronunciation" ? {code:part.code,content:{focus:first.ipa,words:first.examples.slice(0,3),reviewTargets:scope.sounds.map(sound=>({soundId:sound.id,focus:sound.ipa,words:sound.examples}))}} : part);
     const calls:string[][]=[];
     const runner={runTask:async (_task:string,input:Record<string,any>)=>{
@@ -133,18 +133,18 @@ function lessonCandidate() {
 function reviewLessonCandidate(vi = true) {
   const q = (prompt: string) => vi ? `Chọn đáp án đúng: ${prompt}` : prompt;
   const why = vi ? "Vì đúng nghĩa." : "It fits the meaning.";
-  const choice = (id: string, prompt: string, answer: string, others: string[]) => ({ id, prompt: q(prompt), options: [answer, ...others], answer, explanation: why, variants: [{ prompt: q(`${prompt}?`), options: [answer, ...others], answer, explanation: vi ? "Giải thích." : "Short reason." }] });
+  const choice = (id: string, prompt: string, answer: string, others: string[]) => translated({ id, prompt: q(prompt), options: [answer, ...others], answer, explanation: why, variants: [{ prompt: q(`${prompt}?`), options: [answer, ...others], answer, explanation: vi ? "Giải thích." : "Short reason." }] });
   const sections: Record<string, Record<string, unknown>> = {
     listening: { items: [["budget", "ngân sách"], ["cost", "chi phí"], ["forecast", "dự báo"]].map(([word, meaning], index) => ({ ...choice(`l${index}`, vi ? "Nghe và chọn nghĩa đúng" : "Listen and choose the meaning", meaning!, ["phòng", "ngày", "kế hoạch"]), audioText: word })) },
     word_use: { items: [choice("u1", "Pick the synonym of cost", "expense", ["room", "date", "plan"]), choice("u2", "Our ____ is small.", "budget", ["cost", "forecast", "room"])] },
     word_class: { items: [choice("f1", "We ____ sales every month.", "forecast", ["forecasts", "forecasting", "forecaster"]), choice("f2", "The ____ are high.", "costs", ["cost", "costing", "costed"])] },
     reading: { passage: "Hi team, the budget for next month is small. The cost of travel is high, so the forecast shows a small profit.", items: [choice("r1", "What is small?", "The budget", ["The cost", "The team", "The trip"]), choice("r2", "What is high?", "The cost of travel", ["The budget", "The profit", "The team"]), choice("r3", "What does the forecast show?", "A small profit", ["A big loss", "No change", "A new team"])] },
-    speaking: { items: [
+    speaking: { items: translated([
       { prompt: vi ? "Nghe và chọn từ" : "Listen and choose the word", audioText: "cost", options: ["cost", "coast"], answer: "cost", explanation: vi ? "Âm /ɒ/ ngắn." : "Short /ɒ/." },
       { prompt: vi ? "Nghe và chọn từ" : "Listen and choose the word", audioText: "see", options: ["see", "she"], answer: "see", explanation: vi ? "Âm /s/." : "The /s/ sound." },
       { prompt: vi ? "Đọc to câu sau" : "Read this sentence aloud", passage: "The key cost is in the sales plan." },
       { prompt: vi ? "Hãy nói với quản lý về tháng sau." : "Tell your manager about next month.", requiredWords: ["budget", "cost", "forecast"], minRequiredWords: 2 }
-    ] }
+    ]) }
   };
   return { parts: components.filter((code) => code !== "writing").map((code) => code === "grammar"
     ? { code, content: { formula: "The cost is + adjective; There is + adjective", items: [choice("g1", "The cost ____ high.", "is", ["are", "be", "am"]), choice("g2", "There ____ a report.", "is", ["are", "be", "am"])] } }
@@ -158,6 +158,22 @@ function reviewLessonCandidate(vi = true) {
 }
 
 function part(code: string, vi = true) {
+  const built = untranslatedPart(code, vi);
+  return { code: built.code, content: translated(built.content as Record<string, unknown>) };
+}
+
+/** Adds the 12/11 Vietnamese question/answer translations to every question that has a prompt and an answer (items and variants too). */
+function translated<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(translated) as T;
+  if (!value || typeof value !== "object") return value;
+  const record = Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, key === "items" || key === "variants" ? translated(item) : item]));
+  if (typeof record.prompt === "string" && (typeof record.answer === "string" || Array.isArray(record.answer))) {
+    return { questionTranslation: "Câu hỏi đã dịch sang tiếng Việt.", answerTranslation: "Đáp án đúng bằng tiếng Việt.", ...record } as T;
+  }
+  return record as T;
+}
+
+function untranslatedPart(code: string, vi = true) {
   if (code === "objective") return { code, content: { text: "Identify three budget words." } };
   if (code === "instruction") return { code, content: { steps: vi ? ["Đọc ví dụ.", "Trả lời câu hỏi."] : ["Read the example.", "Answer the question."] } };
   if (code === "vocabulary") return { code, content: { items: [
@@ -187,6 +203,15 @@ function contract(): MonthlyCurriculumContract {
 function monthlyExercises(resourceIds: string[]) {
   return ["listening", "reading", "writing", "word_class", "word_use", "speaking"].map((exerciseCode) => ({ exerciseCode: exerciseCode as "listening" | "reading" | "writing" | "word_class" | "word_use" | "speaking", focus: "Use the monthly resources in this exercise.", resourceIds }));
 }
+
+describe("exercise translations in the generation prompts (12/11)", () => {
+  it("asks every level for questionTranslation/answerTranslation and allows them as the only extra Vietnamese from B1", () => {
+    expect(monthlyReviewExerciseContract(3, 1, "B2")).toContain("questionTranslation / answerTranslation (every level)");
+    expect(monthlyReviewExerciseContract(3, 1, "A1")).toContain("items: [{ id, prompt, options, answer, explanation, questionTranslation, answerTranslation, variants }]");
+    expect(monthlyLearnerLanguageContract("C1")).toContain("questionTranslation / answerTranslation fields");
+    expect(monthlyLearnerLanguageContract("A2")).toContain("goes only in questionTranslation / answerTranslation");
+  });
+});
 
 describe("monthly day generation – AI quality plan 11/11 (WP1/D1, WP2)", () => {
   const v2 = () => {
@@ -251,7 +276,7 @@ describe("monthly day generation – AI quality plan 11/11 (WP1/D1, WP2)", () =>
     scope.sounds.push({ id: "sound-2", ipa: "/s/", label: "S", examples: [{ id: "see", word: "see", ipa: "/siː/" }, { id: "soon", word: "soon", ipa: "/suːn/" }, { id: "sales", word: "sales", ipa: "/seɪlz/" }] });
     scope.daySpecs.push({ ...scope.daySpecs[0]!, lessonNumber: 5, date: "2026-11-06", kind: "review", coreTermIds: [], expandedTermIds: [], reviewTermIds: scope.coreTerms.map((term) => term.id), reviewGrammarStepIds: ["step", "step-2"], reviewSoundIds: ["sound", "sound-2"], reviewPronunciationExampleIds: ["cost", "can", "key", "see", "soon", "sales"] });
     const candidate = reviewLessonCandidate();
-    const choice = (word: string) => ({ id: word, prompt: `Chọn ${word}`, options: [word, "other", "different", "unrelated"], answer: word, explanation: "Vì đúng nghĩa.", audioText: word, variants: [{ id: `${word}-v`, prompt: `Chọn lại ${word}`, options: [word, "other", "different", "unrelated"], answer: word, explanation: "Vì đúng." }] });
+    const choice = (word: string) => translated({ id: word, prompt: `Chọn ${word}`, options: [word, "other", "different", "unrelated"], answer: word, explanation: "Vì đúng nghĩa.", audioText: word, variants: [{ id: `${word}-v`, prompt: `Chọn lại ${word}`, options: [word, "other", "different", "unrelated"], answer: word, explanation: "Vì đúng." }] });
     candidate.parts = candidate.parts.map((item) => item.code === "vocabulary" ? { code: item.code, content: { items: scope.coreTerms.map((term) => ({ word: term.word, collocations: [`our ${term.word}`, `the ${term.word}`, `a ${term.word}`] })) } } : item.code === "listening" ? { code: item.code, content: { items: scope.coreTerms.map((term) => choice(term.word)) } } : item.code === "word_use" ? { code: item.code, content: { items: scope.coreTerms.slice(0, 4).map((term) => choice(term.word)) } } : item.code === "word_class" ? { code: item.code, content: { items: scope.coreTerms.slice(0, 3).map((term) => choice(term.word)) } } : item.code === "reading" ? { code: item.code, content: { ...item.content, passage: `Our team discusses ${scope.coreTerms.map((term) => term.word).join(", ")}.` } } : item);
     const run = () => generateMonthlyDay({ contract: scope, dayNumber: 5, kind: "review", generate: async (input) => ({ title: "Review", parts: candidate.parts.filter((item) => input.components.includes(item.code as never)) }) });
     const first = await run();
