@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { CefrLevel, MonthFrameworkView, MonthlyResourceEditInput, MonthlyResourceEditIssue } from "@e4s/contracts";
+import type { MonthlyIllustrationsView } from "../../api/operator.js";
+import { IllustrationTile, illustrationsEditable } from "./MonthlyIllustrationPanel.js";
 
 type Resources = NonNullable<MonthFrameworkView["resources"]>;
 type SupportRow = MonthlyResourceEditInput["supportTerms"][number];
@@ -23,6 +25,13 @@ export interface MonthlyResourceEditorProps {
   busy?: boolean;
   onSave(input: MonthlyResourceEditInput): Promise<void>;
   onClose(): void;
+  /** Core-word pictures of this draft; editable here until approval freezes them. */
+  illustrations?: {
+    view: MonthlyIllustrationsView;
+    onGenerate(input: { words?: string[]; hint?: string }): Promise<void> | void;
+    onUpload(word: string, file: File): Promise<void> | void;
+    onRemove?(word: string): Promise<void> | void;
+  };
 }
 
 /** Builds the editable copy of a draft pool; IDs are kept so the roadmap stays keyed. */
@@ -42,7 +51,7 @@ export function toMonthlyResourceEditInput(version: number, resources: Resources
  * removed per core. The server validates the whole pool and answers with
  * per-row issues that are shown on the matching line.
  */
-export function MonthlyResourceEditor({ cefr, version, resources, busy = false, onSave, onClose }: MonthlyResourceEditorProps) {
+export function MonthlyResourceEditor({ cefr, version, resources, busy = false, onSave, onClose, illustrations }: MonthlyResourceEditorProps) {
   const [draft, setDraft] = useState(() => toMonthlyResourceEditInput(version, resources));
   const [issues, setIssues] = useState<MonthlyResourceEditIssue[]>([]);
   // Large sections start folded; a section with save issues opens so its rows are visible.
@@ -135,6 +144,8 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
     : null;
   const invalid = (rowId: string, field: string) => issuesByRow.get(rowId)?.some((issue) => issue.field === field) ? true : undefined;
   const disabled = busy || saving;
+  const imageEditable = illustrations ? illustrationsEditable(illustrations.view, disabled) : false;
+  const illustrationFor = (coreId: string) => illustrations?.view.images.find((image) => image.coreTermId === coreId);
 
   return <div className="monthly-lesson-preview-backdrop" role="presentation">
     <section className="monthly-resource-editor card" role="dialog" aria-modal="true" aria-label={`Sửa tay tài nguyên ${cefr}`}>
@@ -165,6 +176,15 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
               <label>IPA<input aria-label={`IPA từ cốt lõi ${index + 1}`} aria-invalid={invalid(core.id, "ipa")} value={core.ipa} disabled={disabled} onChange={(event) => updateCore(core.id, { ipa: event.target.value })} /></label>
             </div>
             {rowErrors(core.id)}
+            {open && illustrations && (() => {
+              const image = illustrationFor(core.id);
+              if (!image) return null;
+              const renamed = core.word.trim().toLocaleLowerCase("en-US") !== image.word.trim().toLocaleLowerCase("en-US");
+              return <div className="monthly-resource-editor-illustration">
+                <IllustrationTile as="div" image={image} canEdit={imageEditable} canGenerate={illustrations.view.available} onGenerate={illustrations.onGenerate} onUpload={illustrations.onUpload} {...(illustrations.onRemove ? { onRemove: illustrations.onRemove } : {})} />
+                <p className="small muted">{image.locked ? "Ảnh đã khóa cùng tài nguyên." : renamed ? `Ảnh đang gắn với từ đã lưu “${image.word}”. Lưu bản nháp rồi sinh lại hoặc tải ảnh cho từ mới.` : "Đổi ảnh được lưu ngay, không cần bấm Lưu bản nháp. Sau khi duyệt tài nguyên, ảnh sẽ bị khóa."}</p>
+              </div>;
+            })()}
             {open && <div className="monthly-resource-editor-supports" role="group" aria-label={`Từ mở rộng của ${core.word || `từ ${index + 1}`}`}>
               {supports.map((support, supportIndex) => <div key={support.id} className="monthly-resource-editor-support">
                 <div className="monthly-resource-editor-row support">

@@ -231,6 +231,7 @@ const generateInput = z.object({
   hint: z.string().trim().max(300).optional()
 });
 const uploadInput = z.object({ word: z.string().trim().min(1).max(80), artifactKey: z.string().trim().startsWith("content-media/").max(512) });
+const removeInput = z.object({ word: z.string().trim().min(1).max(80) });
 
 export function registerMonthlyIllustrationRoutes(app: FastifyInstance, pool: Pool, storage?: ObjectStorage, provider?: IllustrationProvider): void {
   const repositories = createRepositories(pool);
@@ -280,6 +281,20 @@ export function registerMonthlyIllustrationRoutes(app: FastifyInstance, pool: Po
     if (!context.coreTerms.some((term) => term.word.trim().toLocaleLowerCase("en-US") === body.data.word.toLocaleLowerCase("en-US"))) return reply.code(404).send({ code: "CORE_WORD_NOT_FOUND" });
     if (!(await repositories.files.ownedBy(actorId, "content_media", body.data.artifactKey))) return reply.code(400).send({ code: "ILLUSTRATION_FILE_NOT_OWNED" });
     await repositories.monthlyContent.saveFrameworkIllustration({ frameworkId: id, word: body.data.word, status: "ready", source: "upload", artifactKey: body.data.artifactKey, actorId });
+    return { images: await repositories.monthlyContent.listFrameworkIllustrations(actorId, id) };
+  });
+
+  /** Remove one word's picture (draft only); the word then shows text only unless a new picture is added. */
+  app.delete("/api/v1/content/month-frameworks/:id/illustrations", { preHandler: contentOperator }, async (request, reply) => {
+    const { id } = frameworkParams.parse(request.params);
+    const body = removeInput.safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ code: "ILLUSTRATION_INPUT_INVALID" });
+    const actorId = request.e4sSession!.user.id;
+    const context = await repositories.monthlyContent.frameworkIllustrationContext(actorId, id);
+    if (context.locked) return reply.code(409).send({ code: "MONTHLY_RESOURCES_LOCKED" });
+    if (running.has(id)) return reply.code(409).send({ code: "ILLUSTRATION_JOB_RUNNING" });
+    if (!context.coreTerms.some((term) => term.word.trim().toLocaleLowerCase("en-US") === body.data.word.toLocaleLowerCase("en-US"))) return reply.code(404).send({ code: "CORE_WORD_NOT_FOUND" });
+    await repositories.monthlyContent.removeFrameworkIllustration({ frameworkId: id, word: body.data.word });
     return { images: await repositories.monthlyContent.listFrameworkIllustrations(actorId, id) };
   });
 }

@@ -431,6 +431,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         const uploaded = await client.uploadContentMedia("image", file, file.name);
         return client.setMonthlyIllustration!(id, { word, artifactKey: uploaded.artifactKey });
       } } : {}),
+      ...(client.removeMonthlyIllustration ? { onRemoveIllustration: (id: string, word: string) => client.removeMonthlyIllustration!(id, { word }) } : {}),
       onPeekMonthlyFinal: async (id) => { try { const draft = await client.getMonthlyFinal(id); return Boolean(draft && "blueprint" in draft); } catch { return false; } },
       onOpenMonthlyFinal: async (id) => {
         const result = await run(() => client.getMonthlyFinal(id));

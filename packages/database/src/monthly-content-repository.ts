@@ -579,7 +579,9 @@ export class MonthlyContentRepository {
           "select word, artifact_key from month_framework_images where framework_id = $1 and status = 'ready' and artifact_key is not null", [frameworkId]
         );
         const imageByWord = new Map(images.rows.map((image) => [image.word, monthlyIllustrationUrl(image.artifact_key)]));
-        const pool = { ...row.curriculum_contract, coreTerms: row.curriculum_contract.coreTerms.map((term) => {
+        // The working rows are the draft's pictures: a URL frozen by an earlier approval is
+        // replaced (or dropped when the Operator removed the picture) before freezing again.
+        const pool = { ...row.curriculum_contract, coreTerms: row.curriculum_contract.coreTerms.map(({ imageUrl: _previous, ...term }) => {
           const imageUrl = imageByWord.get(normalizeIllustrationWord(term.word));
           return imageUrl ? { ...term, imageUrl } : term;
         }) };
@@ -1442,7 +1444,10 @@ export class MonthlyContentRepository {
     return coreTerms.map((term) => {
       const image = byWord.get(normalizeIllustrationWord(term.word));
       // Approved contracts carry the frozen URL even if the working row changed.
-      const url = term.imageUrl ?? (image?.status === "ready" && image.artifact_key ? monthlyIllustrationUrl(image.artifact_key) : undefined);
+      // A draft (also one reopened by a Manager) is edited through its working rows, so a
+      // stale frozen URL left in the pool must not hide an upload, a redraw or a removal.
+      const working = image?.status === "ready" && image.artifact_key ? monthlyIllustrationUrl(image.artifact_key) : undefined;
+      const url = row.status === "draft" ? working : term.imageUrl ?? working;
       return {
         coreTermId: term.id, word: term.word, meaning: term.meaning,
         status: url ? "ready" as const : image?.status ?? "missing" as const,
@@ -1466,6 +1471,17 @@ export class MonthlyContentRepository {
          prompt_hint = coalesce(excluded.prompt_hint, month_framework_images.prompt_hint),
          error = excluded.error, updated_by = coalesce(excluded.updated_by, month_framework_images.updated_by), updated_at = now()`,
       [input.frameworkId, normalizeIllustrationWord(input.word), input.status, input.source ?? "ai", input.artifactKey ?? null, input.mimeType ?? null, input.hint ?? null, input.error ?? null, input.actorId ?? null]
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /** Removes one word's working picture (manual edit, draft only); approval then freezes the word without an image. */
+  async removeFrameworkIllustration(input: { frameworkId: string; word: string }): Promise<boolean> {
+    const result = await this.database.query(
+      `delete from month_framework_images
+       where framework_id = $1 and word = $2
+         and exists (select 1 from month_frameworks where id = $1 and status = 'draft')`,
+      [input.frameworkId, normalizeIllustrationWord(input.word)]
     );
     return (result.rowCount ?? 0) > 0;
   }

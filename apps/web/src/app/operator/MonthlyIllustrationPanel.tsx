@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ImageUp, RefreshCw, Sparkles } from "lucide-react";
+import { ImageUp, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import type { MonthlyIllustrationsView, MonthlyIllustrationView } from "../../api/operator.js";
 
 /**
@@ -7,17 +7,18 @@ import type { MonthlyIllustrationsView, MonthlyIllustrationView } from "../../ap
  * While resources are a draft the Operator can (re)generate with an optional note
  * or upload a picture; once resources are approved the pictures are frozen.
  */
-export function MonthlyIllustrationPanel({ view, busy, onGenerate, onUpload }: {
+export function MonthlyIllustrationPanel({ view, busy, onGenerate, onUpload, onRemove }: {
   view: MonthlyIllustrationsView;
   busy: boolean;
   onGenerate(input: { words?: string[]; hint?: string }): Promise<void> | void;
   onUpload(word: string, file: File): Promise<void> | void;
+  onRemove?(word: string): Promise<void> | void;
 }) {
   const locked = view.images.some((image) => image.locked);
   const ready = view.images.filter((image) => image.status === "ready").length;
   const working = view.running || view.images.some((image) => image.status === "pending" || image.status === "generating");
   const missing = view.images.filter((image) => image.status === "missing" || image.status === "failed").length;
-  const canEdit = !locked && !busy && !working;
+  const canEdit = illustrationsEditable(view, busy);
   return <div className="monthly-illustrations">
     <div className="monthly-illustrations-summary">
       <p className="small">
@@ -27,24 +28,31 @@ export function MonthlyIllustrationPanel({ view, busy, onGenerate, onUpload }: {
       {!locked ? <button type="button" className="btn btn-primary" disabled={!canEdit || !view.available || !missing} title={!view.available ? "Chưa cấu hình OPENAI_API_KEY và OPENAI_IMAGE_MODEL" : undefined} onClick={() => void onGenerate({})}><Sparkles size={16} aria-hidden="true" /> Sinh ảnh còn thiếu ({missing})</button> : null}
     </div>
     {!view.available && !locked ? <p className="small monthly-error" role="note">Chưa cấu hình API ảnh (OPENAI_API_KEY, OPENAI_IMAGE_MODEL). Vẫn có thể tải ảnh lên tay.</p> : null}
-    <ul className="monthly-illustration-grid">{view.images.map((image) => <IllustrationTile key={image.coreTermId} image={image} canEdit={canEdit} canGenerate={view.available} onGenerate={onGenerate} onUpload={onUpload} />)}</ul>
+    <ul className="monthly-illustration-grid">{view.images.map((image) => <IllustrationTile key={image.coreTermId} image={image} canEdit={canEdit} canGenerate={view.available} onGenerate={onGenerate} onUpload={onUpload} {...(onRemove ? { onRemove } : {})} />)}</ul>
   </div>;
 }
 
-function IllustrationTile({ image, canEdit, canGenerate, onGenerate, onUpload }: { image: MonthlyIllustrationView; canEdit: boolean; canGenerate: boolean; onGenerate(input: { words?: string[]; hint?: string }): Promise<void> | void; onUpload(word: string, file: File): Promise<void> | void }) {
+/** Whether a word's picture can still be changed: never once locked by approval, nor while a job runs. */
+export function illustrationsEditable(view: MonthlyIllustrationsView, busy: boolean): boolean {
+  return !busy && !view.running && !view.images.some((image) => image.locked || image.status === "pending" || image.status === "generating");
+}
+
+/** One core word's picture with its draft-only actions: redraw (optional note), upload a file, remove. */
+export function IllustrationTile({ image, canEdit, canGenerate, onGenerate, onUpload, onRemove, as: Tag = "li" }: { image: MonthlyIllustrationView; canEdit: boolean; canGenerate: boolean; onGenerate(input: { words?: string[]; hint?: string }): Promise<void> | void; onUpload(word: string, file: File): Promise<void> | void; onRemove?(word: string): Promise<void> | void; as?: "li" | "div" }) {
   const [hintOpen, setHintOpen] = useState(false);
   const [hint, setHint] = useState("");
   const statusLabel = { missing: "Chưa có ảnh", pending: "Đang chờ", generating: "Đang sinh…", ready: image.source === "upload" ? "Ảnh tải lên" : "Ảnh AI", failed: "Lỗi" }[image.status];
-  return <li className={`monthly-illustration-tile is-${image.status}`}>
+  return <Tag className={`monthly-illustration-tile is-${image.status}`} {...(Tag === "div" ? { role: "group", "aria-label": `Ảnh minh họa của ${image.word}` } : {})}>
     <div className="monthly-illustration-frame">{image.url ? <img src={image.url} alt={`Minh họa: ${image.word}`} width={128} height={128} loading="lazy" /> : <span className="small muted">{image.status === "generating" || image.status === "pending" ? "Đang sinh…" : "—"}</span>}</div>
     <div className="monthly-illustration-meta"><b>{image.word}</b><span className="small muted">{image.meaning}</span><span className={`badge${image.status === "failed" ? " danger" : image.status === "ready" ? " ok" : ""}`} title={image.error}>{statusLabel}</span></div>
     {canEdit ? <div className="monthly-illustration-actions">
       {canGenerate ? <button type="button" className="monthly-illustration-action" onClick={() => setHintOpen((value) => !value)} aria-expanded={hintOpen}><RefreshCw size={14} aria-hidden="true" /> Sinh lại</button> : null}
       <label className="monthly-illustration-action"><ImageUp size={14} aria-hidden="true" /> Tải ảnh<input hidden type="file" accept="image/png,image/jpeg,image/webp" aria-label={`Tải ảnh cho ${image.word}`} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void onUpload(image.word, file); }} /></label>
+      {onRemove && image.url ? <button type="button" className="monthly-illustration-action" aria-label={`Xóa ảnh của ${image.word}`} title="Xóa ảnh (từ này sẽ chỉ hiện chữ)" onClick={() => void onRemove(image.word)}><Trash2 size={14} aria-hidden="true" /> Xóa ảnh</button> : null}
     </div> : null}
     {hintOpen && canEdit ? <form className="monthly-illustration-hint" onSubmit={(event) => { event.preventDefault(); setHintOpen(false); void onGenerate({ words: [image.word], ...(hint.trim() ? { hint: hint.trim() } : {}) }); }}>
       <input value={hint} maxLength={300} placeholder="Gợi ý thêm (không bắt buộc), vd: vẽ cảnh họp" aria-label={`Gợi ý vẽ lại ${image.word}`} onChange={(event) => setHint(event.target.value)} />
       <button type="submit" className="btn-sm btn-primary">Vẽ lại</button>
     </form> : null}
-  </li>;
+  </Tag>;
 }

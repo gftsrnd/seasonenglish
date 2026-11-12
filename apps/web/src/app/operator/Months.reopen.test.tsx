@@ -6,7 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MonthFrameworkView, MonthlyOperatorOverviewView } from "@e4s/contracts";
 import { OperatorMonths, type OperatorMonthsActions } from "./Months.js";
 import { ToastProvider } from "../shared/design-system.js";
+import { ModalProvider } from "../shared/ModalProvider.js";
 
+const REOPEN = "Báo Quản lý: yêu cầu mở lại tài nguyên";
 const monthWindow = { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true };
 const baseFramework: MonthFrameworkView = {
   id: "framework-a2", cefr: "A2", version: 1, status: "approved", scopeHash: "monthly-abc", lessons: [],
@@ -23,7 +25,7 @@ function actions(extra: Partial<OperatorMonthsActions> = {}): OperatorMonthsActi
 
 function renderMonths(framework: MonthFrameworkView, extra: Partial<OperatorMonthsActions> = {}, overrides: Partial<MonthlyOperatorOverviewView> = {}) {
   const overview: MonthlyOperatorOverviewView = { systemDate: "2026-11-05", monthWindow, brief: null, frameworks: [framework], ...overrides };
-  const view = render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="A2" busy={false} overview={overview} actions={actions(extra)} /></ToastProvider>);
+  const view = render(<ModalProvider><ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="A2" busy={false} overview={overview} actions={actions(extra)} /></ToastProvider></ModalProvider>);
   return within(view.container.querySelector<HTMLElement>(".monthly-resources")!);
 }
 
@@ -36,7 +38,7 @@ describe("Operator request to reopen approved monthly resources", () => {
     const panel = renderMonths(baseFramework, { onRequestResourcesReopen });
 
     expect(panel.queryByRole("button", { name: "Sinh lại tài nguyên" })).not.toBeInTheDocument();
-    await user.click(panel.getByRole("button", { name: "Yêu cầu Quản lý mở lại" }));
+    await user.click(panel.getByRole("button", { name: REOPEN }));
     const dialog = screen.getByRole("dialog", { name: "Yêu cầu mở lại tài nguyên tháng A2" });
     await user.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu Manager" }));
     expect(onRequestResourcesReopen).not.toHaveBeenCalled();
@@ -49,28 +51,32 @@ describe("Operator request to reopen approved monthly resources", () => {
 
   it("does not offer the request for a draft level", () => {
     const panel = renderMonths({ ...baseFramework, status: "draft" }, { onRequestResourcesReopen: vi.fn() });
-    expect(panel.queryByRole("button", { name: "Yêu cầu Quản lý mở lại" })).not.toBeInTheDocument();
+    expect(panel.queryByRole("button", { name: REOPEN })).not.toBeInTheDocument();
     expect(panel.getByRole("button", { name: "Duyệt tài nguyên" })).toBeInTheDocument();
   });
 
   it("shows the pending state instead of the button while the Manager decides", () => {
     const panel = renderMonths({ ...baseFramework, reopenRequest: { id: "request-1", frameworkVersion: 1, reason: "Thiếu bài tập", status: "pending", decisionReason: null, createdAt: "2026-11-05T01:00:00.000Z", decidedAt: null } });
     expect(panel.getByRole("status")).toHaveTextContent("Đang chờ Quản lý duyệt");
-    const button = panel.getByRole("button", { name: "Yêu cầu Quản lý mở lại" });
+    const button = panel.getByRole("button", { name: REOPEN });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("title", "Đang chờ Quản lý duyệt");
   });
 
-  it("shows the request as a compact red square icon on the plan button row", () => {
+  it("shows the request as a labelled secondary \"Báo Quản lý\" button on the plan row, not a red stop-like square", () => {
     const allocated: MonthFrameworkView = { ...baseFramework, resources: { ...baseFramework.resources!, roadmap: { allocated: true, grammarSteps: [], sounds: [], days: [] } } };
     const panel = renderMonths(allocated, { onRequestResourcesReopen: vi.fn() });
     const plan = panel.getByRole("button", { name: "Phân bổ tài nguyên & bài tập" });
-    const request = panel.getByRole("button", { name: "Yêu cầu Quản lý mở lại" });
-    expect(request).toHaveAttribute("title", "Yêu cầu Quản lý mở lại");
-    expect(request).toHaveClass("monthly-reopen-icon-button");
-    expect(request).not.toHaveClass("btn");
-    expect(request).toHaveTextContent("");
-    expect(request.querySelector("svg")).not.toBeNull();
+    const request = panel.getByRole("button", { name: REOPEN });
+    expect(request).toHaveTextContent("Báo Quản lý");
+    expect(request).toHaveAccessibleName("Báo Quản lý: yêu cầu mở lại tài nguyên");
+    expect(request).toHaveAttribute("title", "Báo Quản lý để mở lại tài nguyên đã chốt");
+    expect(request).toHaveClass("btn", "monthly-reopen-request-button");
+    expect(request).not.toHaveClass("btn-danger");
+    expect(request).not.toHaveClass("monthly-reopen-icon-button");
+    // lucide's Square (stop glyph) renders class "lucide-square"; the report action uses a message-warning icon.
+    expect(request.querySelector("svg.lucide-square")).toBeNull();
+    expect(request.querySelector("svg.lucide-message-square-warning")).not.toBeNull();
     expect(request.parentElement).toBe(plan.parentElement);
     expect(request.parentElement).toHaveClass("monthly-plan-row");
     expect(plan.nextElementSibling).toBe(request);
@@ -79,7 +85,7 @@ describe("Operator request to reopen approved monthly resources", () => {
   it("shows the Manager rejection reason and lets the Operator ask again", () => {
     const panel = renderMonths({ ...baseFramework, reopenRequest: { id: "request-1", frameworkVersion: 1, reason: "Thiếu bài tập", status: "rejected", decisionReason: "Đã có học viên học bài này", createdAt: "2026-11-05T01:00:00.000Z", decidedAt: "2026-11-05T02:00:00.000Z" } });
     expect(panel.getByRole("note")).toHaveTextContent("Quản lý đã từ chối mở lại: Đã có học viên học bài này");
-    expect(panel.getByRole("button", { name: "Yêu cầu Quản lý mở lại" })).toBeEnabled();
+    expect(panel.getByRole("button", { name: REOPEN })).toBeEnabled();
   });
 
   it("explains a Manager-approved reopen on the returned draft", () => {
@@ -90,7 +96,7 @@ describe("Operator request to reopen approved monthly resources", () => {
 
   it("disables the request for a read-only month", () => {
     const panel = renderMonths(baseFramework, { onRequestResourcesReopen: vi.fn() }, { monthWindow: { ...monthWindow, writable: false } });
-    expect(panel.getByRole("button", { name: "Yêu cầu Quản lý mở lại" })).toBeDisabled();
+    expect(panel.getByRole("button", { name: REOPEN })).toBeDisabled();
   });
 });
 
@@ -99,7 +105,7 @@ describe("Operator monthly calendar day actions", () => {
 
   function renderCalendar(framework: MonthFrameworkView) {
     const overview: MonthlyOperatorOverviewView = { systemDate: "2026-11-05", monthWindow, brief: null, frameworks: [framework] };
-    const view = render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="A2" busy={false} overview={overview} actions={actions()} /></ToastProvider>);
+    const view = render(<ModalProvider><ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="A2" busy={false} overview={overview} actions={actions()} /></ToastProvider></ModalProvider>);
     return within(view.container.querySelector<HTMLElement>(".monthly-calendar")!);
   }
   const dayButtons = (calendar: ReturnType<typeof renderCalendar>) => [

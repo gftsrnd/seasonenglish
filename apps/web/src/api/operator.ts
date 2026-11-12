@@ -104,6 +104,8 @@ export interface OperatorApiClient {
   getMonthlyIllustrations?(id: string): Promise<MonthlyIllustrationsView>;
   generateMonthlyIllustrations?(id: string, input?: { words?: string[]; hint?: string }): Promise<{ started: boolean; count: number }>;
   setMonthlyIllustration?(id: string, input: { word: string; artifactKey: string }): Promise<{ images: MonthlyIllustrationView[] }>;
+  /** Removes one core word's picture while the resources are still a draft. */
+  removeMonthlyIllustration?(id: string, input: { word: string }): Promise<{ images: MonthlyIllustrationView[] }>;
   generateMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
   composeMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
   updateMonthlyFinal(versionId: string, input: MonthlyFinalUpdateInput): Promise<MonthlyFinalDraftView>;
@@ -222,6 +224,7 @@ export const operatorApiClient: OperatorApiClient = {
   getMonthlyIllustrations: (id) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/illustrations`),
   generateMonthlyIllustrations: (id, input = {}) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/illustrations/generate`, { method: "POST", body: JSON.stringify(input) }),
   setMonthlyIllustration: (id, input) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/illustrations`, { method: "PUT", body: JSON.stringify(input) }),
+  removeMonthlyIllustration: (id, input) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/illustrations`, { method: "DELETE", body: JSON.stringify(input) }),
   generateMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final`, { method: "POST", body: "{}" }),
   composeMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final/manual`, { method: "POST", body: "{}" }),
   updateMonthlyFinal: (versionId, input) => request(`/api/v1/monthly-final-forms/${encodeURIComponent(versionId)}`, { method: "PUT", body: JSON.stringify(input) }),

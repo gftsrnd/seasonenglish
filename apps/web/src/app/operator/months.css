@@ -76,10 +76,12 @@
 /* Plan button and the compact Manager reopen request share one row. */
 .monthly-plan-row{display:flex;flex:1 1 100%;align-items:stretch;gap:8px;min-width:0}
 .monthly-plan-row .monthly-plan-open-button{flex:1 1 auto;width:auto;min-width:0}
-.monthly-reopen-icon-button{display:inline-grid;flex:0 0 32px;place-items:center;width:32px;height:32px;min-height:32px;padding:0;border:1px solid var(--danger,#c0392b);border-radius:8px;background:var(--danger,#c0392b);color:#fff;cursor:pointer}
-.monthly-reopen-icon-button svg{width:14px;height:14px;fill:currentColor;stroke:currentColor}
-.monthly-reopen-icon-button:hover:not(:disabled){filter:brightness(1.08)}
-.monthly-reopen-icon-button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+/* "Báo Quản lý" (ask a Manager to reopen approved resources): a labelled secondary action, not a red stop-like square. */
+.monthly-reopen-request-button{display:inline-flex;flex:0 0 auto;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:6px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface-3);color:var(--text);font-size:.72rem;font-weight:750;line-height:1.2;white-space:nowrap;cursor:pointer}
+.monthly-reopen-request-button svg{flex:0 0 auto;width:15px;height:15px}
+.monthly-reopen-request-button:hover:not(:disabled){border-color:var(--primary);background:var(--surface)}
+.monthly-reopen-request-button:disabled{opacity:.55;cursor:not-allowed}
+.monthly-reopen-request-button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 .monthly-resource-actions .monthly-reopen-status.pending{padding:3px 8px;font-size:11px}
 
 /* Manual editor for a draft resource pool (VH-R30/VH-R35). */
@@ -120,10 +122,7 @@
 .monthly-resource-actions .monthly-resource-edit-button{flex:1 1 100%;text-align:center}
 /* Reopen request: always a red square, same height as the plan button next to it. */
 .monthly-plan-row{align-items:center}
-.monthly-resource-actions .monthly-plan-row .monthly-reopen-icon-button{flex:0 0 34px;width:34px;height:34px;min-height:34px;border:1px solid #c62828!important;background:#d32f2f!important;color:#fff!important;box-shadow:none}
-.monthly-resource-actions .monthly-plan-row .monthly-reopen-icon-button:hover:not(:disabled){background:#b71c1c!important;border-color:#b71c1c!important}
-.monthly-resource-actions .monthly-plan-row .monthly-reopen-icon-button:disabled{opacity:.55;cursor:not-allowed}
-.monthly-resource-actions .monthly-plan-row .monthly-reopen-icon-button svg{width:13px;height:13px;fill:#fff;stroke:#fff}
+.monthly-resource-actions .monthly-plan-row .monthly-reopen-request-button{min-height:34px;box-shadow:none}
 /* Collapsed core rows in the manual editor: word, part of speech, meaning and a clear expand cue. */
 .monthly-resource-editor-core>summary{list-style:none}
 .monthly-resource-editor-core>summary::-webkit-details-marker{display:none}
@@ -470,3 +469,10 @@ details.monthly-resource-editor-section>:not(summary)+:not(summary){margin-top:1
 .monthly-resource-editor-actions>:is(button,a){flex:0 0 auto;white-space:nowrap}
 @media(max-width:760px){.monthly-resource-editor-row.sound{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
 @media(max-width:420px){.monthly-resource-editor-row.sound{grid-template-columns:minmax(0,1fr)}}
+/* Picture of a core word inside the manual resource editor (draft only). */
+.monthly-resource-editor-illustration{display:grid;grid-template-columns:minmax(150px,180px) minmax(0,1fr);align-items:start;gap:10px;margin:8px 0}
+.monthly-resource-editor-illustration>p{margin:0}
+.monthly-resource-editor-illustration .monthly-illustration-tile{max-width:220px}
+.monthly-resource-editor .monthly-illustration-action{display:inline-flex;flex-direction:row;gap:4px;color:var(--text);font-size:.78rem;font-weight:600}
+.monthly-illustration-actions>.monthly-illustration-action:nth-child(3){grid-column:1/-1}
+@media (max-width:560px){.monthly-resource-editor-illustration{grid-template-columns:1fr}.monthly-resource-editor-illustration .monthly-illustration-tile{max-width:200px}}

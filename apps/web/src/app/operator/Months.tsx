@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Eye, Pencil, Sparkles, Square } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Eye, MessageSquareWarning, Pencil, Sparkles } from "lucide-react";
 import type { CefrLevel, MonthlyResourceEditInput, MonthlyFinalDraftView, MonthlyFinalUpdateInput, MonthlyOperatorOverviewView, MonthlyQualityFindingView } from "@e4s/contracts";
 import { buildMonthlyCalendar, monthlyDayKind, monthlyNewLessonOrdinal, recommendedMonthlyResourceCriteria, formatMonthlyDayLabel, monthlyLessonDisplayTitle, withMonthlyExpandedTerms, withMonthlyGrammarSteps, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { useToast } from "../shared/design-system.js";
@@ -30,6 +30,7 @@ export interface OperatorMonthsActions {
   onLoadIllustrations?(id: string): Promise<MonthlyIllustrationsView>;
   onGenerateIllustrations?(id: string, input: { words?: string[]; hint?: string }): Promise<unknown>;
   onUploadIllustration?(id: string, word: string, file: File): Promise<unknown>;
+  onRemoveIllustration?(id: string, word: string): Promise<unknown>;
   onSelectMonth(month: string): void;
   onSelectLevel(level: CefrLevel): void;
   onSuggestBrief(month: string): Promise<MonthlyBriefInput>;
@@ -255,6 +256,15 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
     try { await actions.onUploadIllustration(framework.id, word, file); await loadIllustrations(); toast.show({ message: `Đã thay ảnh cho “${word}”.`, tone: "ok" }); }
     catch { showUnavailable("Không tải ảnh lên được."); }
   };
+  const removeIllustration = async (word: string) => {
+    if (!framework || !actions.onRemoveIllustration) return;
+    if (!await modal.confirm({ title: `Xóa ảnh của “${word}”?`, message: "Từ này sẽ chỉ hiện chữ cho đến khi bạn sinh lại hoặc tải ảnh mới.", confirmLabel: "Xóa ảnh", tone: "danger", countdownSeconds: 0 })) return;
+    try { await actions.onRemoveIllustration(framework.id, word); await loadIllustrations(); toast.show({ message: `Đã xóa ảnh của “${word}”.`, tone: "ok" }); }
+    catch { showUnavailable("Không xóa được ảnh."); }
+  };
+  const illustrationEditing = illustrations && framework?.status === "draft" && canEdit && actions.onGenerateIllustrations && actions.onUploadIllustration
+    ? { view: illustrations, onGenerate: generateIllustrations, onUpload: uploadIllustration, ...(actions.onRemoveIllustration ? { onRemove: removeIllustration } : {}) }
+    : undefined;
   const generateFramework = async () => {
     if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
     if (!briefLocked) return showUnavailable("Hãy chốt chủ đề tháng trước khi sinh tài nguyên.");
@@ -438,7 +448,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
           {!framework && canEdit && briefLocked && actions.onLoadManualResources && <button type="button" className="btn monthly-resource-edit-button" disabled={busy || openingManualResources} onClick={() => void openManualResources()}>Soạn tay tài nguyên</button>}
           {(framework?.resources?.roadmap?.allocated || framework?.status === "approved") && <div className="monthly-plan-row">
             {framework?.resources?.roadmap?.allocated && <button type="button" className="btn monthly-plan-open-button" onClick={() => setResourcePanel("plan")}>Phân bổ tài nguyên &amp; bài tập</button>}
-            {framework?.status === "approved" && <button type="button" className="monthly-reopen-icon-button" aria-label="Yêu cầu Quản lý mở lại" title={resourcesReopenPending ? "Đang chờ Quản lý duyệt" : "Yêu cầu Quản lý mở lại"} disabled={busy || !canEdit || resourcesReopenPending} onClick={() => setRequestingResourcesReopen(true)}><Square aria-hidden="true" /></button>}
+            {framework?.status === "approved" && <button type="button" className="btn monthly-reopen-request-button" aria-label="Báo Quản lý: yêu cầu mở lại tài nguyên" title={resourcesReopenPending ? "Đang chờ Quản lý duyệt" : "Báo Quản lý để mở lại tài nguyên đã chốt"} disabled={busy || !canEdit || resourcesReopenPending} onClick={() => setRequestingResourcesReopen(true)}><MessageSquareWarning aria-hidden="true" /><span>Báo Quản lý</span></button>}
           </div>}
           {resourcesReopenPending && <span className="monthly-reopen-status pending" role="status">Đang chờ Quản lý duyệt</span>}
         </div>
@@ -538,7 +548,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
         {resourcePanel === "core" && <VocabularyPanel items={framework.resources.coreTerms} variant="core" />}
         {resourcePanel === "expanded" && <VocabularyPanel items={framework.resources.supportTerms} variant="expanded" />}
         {resourcePanel === "grammar" && <GrammarResourcePanel topics={framework.resources.grammarTopics} {...(framework.resources.roadmap ? { roadmap: framework.resources.roadmap } : {})} />}
-        {resourcePanel === "images" && illustrations && <MonthlyIllustrationPanel view={illustrations} busy={busy || !canEdit} onGenerate={generateIllustrations} onUpload={uploadIllustration} />}
+        {resourcePanel === "images" && illustrations && <MonthlyIllustrationPanel view={illustrations} busy={busy || !canEdit} onGenerate={generateIllustrations} onUpload={uploadIllustration} {...(actions.onRemoveIllustration ? { onRemove: removeIllustration } : {})} />}
         {resourcePanel === "sounds" && <PronunciationResourcePanel sounds={framework.resources.sounds} {...(framework.resources.roadmap ? { roadmap: framework.resources.roadmap } : {})} />}
         {resourcePanel === "plan" && framework.resources.roadmap?.allocated && <div className="monthly-plan-inspector" aria-label="Phân bổ tài nguyên và bài tập"><p className="small muted">Kế hoạch đã chốt. Đây là sơ đồ phân bổ; nội dung bài học chưa được sinh.</p><div className="monthly-plan-days">{framework.resources.roadmap.days.map((day) => {
           const coreTerms = framework.resources!.coreTerms.filter((term) => day.kind === "new" ? day.coreTermIds.includes(term.id) : day.reviewTermIds.includes(term.id));
@@ -563,6 +573,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       version={framework.version}
       resources={framework.resources}
       busy={busy}
+      {...(illustrationEditing ? { illustrations: illustrationEditing } : {})}
       onClose={() => setEditingResources(false)}
       onSave={async (input) => { await actions.onSaveResources!(framework.id, input); setEditingResources(false); }}
     />}
