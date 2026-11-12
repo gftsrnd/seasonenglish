@@ -30,7 +30,10 @@ export const monthlyFinalGenerationInputSchema = z.object({
   targets: z.object({ listening: z.array(termSchema).min(1), reading: z.array(termSchema).min(1), writing: z.array(termSchema).min(1), speaking: z.array(termSchema).min(1) }),
   grammar: z.array(z.object({
     code: grammarCode, topicId: z.string().min(1), topicTitle: z.string().min(1),
-    taughtSteps: z.array(z.object({ stepId: z.string().min(1), focus: z.string(), formula: z.string(), usage: z.string(), examples: z.array(z.string()) })).min(2)
+    taughtSteps: z.array(z.object({ stepId: z.string().min(1), focus: z.string(), formula: z.string(), usage: z.string(), examples: z.array(z.string()) })).min(2),
+    /** Grammar roadmap months: the application fixes main = step 1 (core structure) and secondary = step 2 (variant / use). */
+    lockedMainStepId: z.string().min(1).optional(),
+    lockedSecondaryStepId: z.string().min(1).optional()
   })).length(2),
   pronunciation: z.array(z.object({
     code: pronunciationCode, soundId: z.string().min(1), ipa: z.string(), label: z.string(),
@@ -432,6 +435,8 @@ export function validateMonthlyFinalProductiveOutput(output: MonthlyFinalProduct
     const taught = new Set(topic.taughtSteps.map((step) => step.stepId));
     if (!taught.has(component.mainStepId) || !taught.has(component.secondaryStepId)) issues.push({ path: `grammarComponents.${topic.code}`, message: "Main and secondary must be taught step IDs of this topic." });
     if (component.mainStepId === component.secondaryStepId) issues.push({ path: `grammarComponents.${topic.code}`, message: "Main and secondary must be different steps." });
+    if (topic.lockedMainStepId && component.mainStepId !== topic.lockedMainStepId) issues.push({ path: `grammarComponents.${topic.code}.mainStepId`, message: `This month follows the grammar roadmap: ${topic.code} main must be the locked step ${topic.lockedMainStepId} (step 1, core structure).` });
+    if (topic.lockedSecondaryStepId && component.secondaryStepId !== topic.lockedSecondaryStepId) issues.push({ path: `grammarComponents.${topic.code}.secondaryStepId`, message: `This month follows the grammar roadmap: ${topic.code} secondary must be the locked step ${topic.lockedSecondaryStepId} (step 2, variant or other use).` });
   }
   for (const target of input.pronunciation) {
     const positions = output.speakingA.positions.filter((position) => position.code === target.code);

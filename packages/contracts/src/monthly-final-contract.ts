@@ -46,6 +46,8 @@ export interface MonthlyFinalGrammarTarget {
   secondary: MonthlyFinalGrammarComponent;
   /** Steps of this topic that were taught this month; main/secondary are chosen from these. */
   taughtSteps: Array<{ stepId: string; focus: string; formula: string }>;
+  /** Grammar roadmap month: main is fixed to step 1 and secondary to step 2 (docs/grammar-roadmap.md); absent on older exams. */
+  roadmapLocked?: true;
 }
 
 export interface MonthlyFinalPronunciationTarget {

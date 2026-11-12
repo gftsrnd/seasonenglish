@@ -112,7 +112,7 @@ export function registerMonthlyFinalRoutes(
       const [listening, reading, productiveResult] = await Promise.all([
         generateMonthlyFinalListening(runner,input,task.prompt),
         generateMonthlyFinalReading(runner, input, task.prompt),
-        generateMonthlyFinalProductive(runner, input, `${task.prompt}\nGenerate ONLY the productive part now: title, GA/GB main and secondary components, the Writing task, Speaking A read-aloud with its 8 positions, and Speaking B voice note, with sample answers. First choose two different taught words per P1–P4, then write a natural passage containing ALL eight selected words within levelProfile.speakingA.maxWords. Check every selected word is present in the passage. Grammar evidence fields are exact quotes from the actual corresponding sample, without commentary or instructions to add a sentence later. Writing and Speaking B samples must use all their own assigned target words naturally. Keep Writing sample within the levelProfile writing word range. Write learner facts as short notes in the instruction language. Paraphrase those notes in the model answers. The learner task and facts must not copy taught grammar examples.`)
+        generateMonthlyFinalProductive(runner, input, `${task.prompt}\nGenerate ONLY the productive part now: title, GA/GB main and secondary components (when a grammar topic has lockedMainStepId/lockedSecondaryStepId, use exactly those step IDs), the Writing task, Speaking A read-aloud with its 8 positions, and Speaking B voice note, with sample answers. First choose two different taught words per P1–P4, then write a natural passage containing ALL eight selected words within levelProfile.speakingA.maxWords. Check every selected word is present in the passage. Grammar evidence fields are exact quotes from the actual corresponding sample, without commentary or instructions to add a sentence later. Writing and Speaking B samples must use all their own assigned target words naturally. Keep Writing sample within the levelProfile writing word range. Write learner facts as short notes in the instruction language. Paraphrase those notes in the model answers. The learner task and facts must not copy taught grammar examples.`)
       ]);
       receptive = {
         output: { listening: (listening.output as Pick<MonthlyFinalReceptiveOutput, "listening">).listening, reading },
@@ -279,6 +279,8 @@ export function applyMonthlyFinalUpdate(stored: StoredAssessmentDefinition, inpu
     const main = taught.get(choice.mainStepId);
     const secondary = taught.get(choice.secondaryStepId);
     if (!main || !secondary || main.stepId === secondary.stepId) throw new Error("MONTHLY_FINAL_GRAMMAR_COMPONENT_INVALID");
+    // Grammar roadmap months: the operator may edit labels and patterns, never which steps are main/secondary.
+    if (target.roadmapLocked && (main.stepId !== target.main.stepId || secondary.stepId !== target.secondary.stepId)) throw new Error("MONTHLY_FINAL_GRAMMAR_COMPONENT_LOCKED");
     return {
       ...target,
       main: { stepId: main.stepId, label: main.stepId === target.main.stepId ? target.main.label : main.focus, acceptedPatterns: choice.mainPatterns ?? (main.stepId === target.main.stepId ? target.main.acceptedPatterns : [main.formula]) },

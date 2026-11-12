@@ -1,5 +1,6 @@
 import type { MonthlyFinalCheckStatus, MonthlyFinalCheckView, MonthlyFinalExamMeta, MonthlyFinalExamStatus, MonthlyFinalGenCode } from "@e4s/contracts";
 import type { MonthlyCurriculumContract } from "@e4s/domain/monthly";
+import { monthlyFinalLockedGrammarSteps } from "./monthly-final-builder.js";
 import { publicAssessmentDefinition, type StoredAssessmentDefinition, type StoredAssessmentTask } from "@e4s/database";
 import {monthlyFinalContainsTerm as containsTerm,monthlyFinalWordCount as wordCount,monthlyFinalIsWordList,monthlyFinalWritingOpening,monthlyFinalReadingItemIssues} from "@e4s/ai";
 import {
@@ -143,6 +144,14 @@ function gen01(context: Context): Result {
     if (!taught.has(target.main.stepId) || !topicSteps.has(target.main.stepId)) problems.push(`${target.code} chính không thuộc bước đã dạy`);
     if (!taught.has(target.secondary.stepId) || !topicSteps.has(target.secondary.stepId)) problems.push(`${target.code} phụ không thuộc bước đã dạy`);
     if (target.main.stepId === target.secondary.stepId) problems.push(`${target.code} chính và phụ trùng nhau`);
+  }
+  // Grammar roadmap months: main = step 1 (Nhận diện + Cấu trúc), secondary = step 2 (Biến thể + Ý nghĩa & cách dùng).
+  const locked = monthlyFinalLockedGrammarSteps(contract);
+  if (locked) for (const [index, target] of exam.grammar.entries()) {
+    const lock = locked[index];
+    if (!lock) continue;
+    if (target.main.stepId !== lock.mainStepId) problems.push(`${target.code} chính phải là bước 1 (Nhận diện + Cấu trúc) theo lộ trình ngữ pháp`);
+    if (target.secondary.stepId !== lock.secondaryStepId) problems.push(`${target.code} phụ phải là bước 2 (Biến thể + Ý nghĩa & cách dùng) theo lộ trình ngữ pháp`);
   }
   if (exam.pronunciation.length !== 4 || exam.pronunciation.some((target, index) => target.soundId !== contract.sounds[index]?.id)) problems.push("P1–P4 không khớp 4 mục phát âm của khung");
   const scope = context.blueprint.monthlyScope;

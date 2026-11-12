@@ -1,6 +1,6 @@
 import type { MonthlyFinalExamMeta, MonthlyFinalGrammarTarget, MonthlyFinalMappingRow, MonthlyFinalPronunciationTarget } from "@e4s/contracts";
 import type { MonthlyFinalGenerationInput, MonthlyFinalProductiveOutput, MonthlyFinalReceptiveOutput } from "@e4s/ai";
-import { ipaMatchesTaughtSound } from "@e4s/domain";
+import { ipaMatchesTaughtSound, monthlyGrammarPairOf } from "@e4s/domain";
 import type { CoreTerm, GrammarStep, MonthlyCurriculumContract, PronunciationExample } from "@e4s/domain/monthly";
 import { buildMonthlyExamScope } from "@e4s/domain/monthly";
 import type { StoredAssessmentDefinition, StoredAssessmentTask } from "@e4s/database";
@@ -37,6 +37,18 @@ export function taughtGrammarSteps(contract: MonthlyCurriculumContract, topicInd
   if (!topic) return [];
   const taught = new Set(contract.daySpecs.filter((day) => day.kind === "new").flatMap((day) => day.grammarStepIds ?? [day.grammarStepId]));
   return topic.steps.filter((step) => taught.has(step.id));
+}
+
+/**
+ * Grammar roadmap months (topics carry roadmap catalog IDs): the exam evidence
+ * is fixed by the roadmap — main = step 1 (Nhận diện + Cấu trúc), secondary =
+ * step 2 (Biến thể + Ý nghĩa & cách dùng) of each topic. Older months return
+ * undefined and keep the free choice among taught steps.
+ */
+export function monthlyFinalLockedGrammarSteps(contract: MonthlyCurriculumContract): Array<{ mainStepId: string; secondaryStepId: string }> | undefined {
+  if (!monthlyGrammarPairOf(contract.cefr, contract.grammarTopics)) return undefined;
+  const locked = contract.grammarTopics.map((topic) => ({ mainStepId: topic.steps[0]?.id ?? "", secondaryStepId: topic.steps[1]?.id ?? "" }));
+  return locked.every((item) => item.mainStepId && item.secondaryStepId) ? locked : undefined;
 }
 
 /** The month's pronunciation example sets for one sound (words learners heard and practised). */
@@ -106,6 +118,7 @@ export function buildMonthlyFinalGenerationInput(contract: MonthlyCurriculumCont
   const missing = monthlyFinalInputErrors(contract);
   if (missing.length) throw new MonthlyFinalInputError(missing);
   const allocated = allocateMonthlyFinalTerms(contract);
+  const locked = monthlyFinalLockedGrammarSteps(contract);
   const term = (item: CoreTerm) => ({ id: item.id, code: allocated.codeById.get(item.id)!, word: item.word, type: item.type, meaning: item.meaning });
   return {
     month: contract.month,
@@ -118,7 +131,8 @@ export function buildMonthlyFinalGenerationInput(contract: MonthlyCurriculumCont
     targets: { listening: allocated.listening.map(term), reading: allocated.reading.map(term), writing: allocated.writing.map(term), speaking: allocated.speaking.map(term) },
     grammar: G_CODES.map((code, index) => ({
       code, topicId: contract.grammarTopics[index]!.id, topicTitle: contract.grammarTopics[index]!.title,
-      taughtSteps: taughtGrammarSteps(contract, index).map((step) => ({ stepId: step.id, focus: step.focus, formula: step.formula, usage: step.usage, examples: step.examples.slice(0, 3) }))
+      taughtSteps: taughtGrammarSteps(contract, index).map((step) => ({ stepId: step.id, focus: step.focus, formula: step.formula, usage: step.usage, examples: step.examples.slice(0, 3) })),
+      ...(locked?.[index] ? { lockedMainStepId: locked[index]!.mainStepId, lockedSecondaryStepId: locked[index]!.secondaryStepId } : {})
     })),
     pronunciation: P_CODES.map((code, index) => ({
       code, soundId: contract.sounds[index]!.id, ipa: contract.sounds[index]!.ipa, label: contract.sounds[index]!.label,
@@ -208,18 +222,27 @@ function assemble(contract: MonthlyCurriculumContract, framework: MonthlyFinalFr
   for (const term of allocated.writing) mapRow(term.id, "writing", "W2", "W");
   for (const term of allocated.speaking) mapRow(term.id, "speaking", "S3", "SB");
 
+  const lockedSteps = monthlyFinalLockedGrammarSteps(contract);
   const grammar: MonthlyFinalGrammarTarget[] = G_CODES.map((code, index) => {
     const topic = contract.grammarTopics[index]!;
     const taught = taughtGrammarSteps(contract, index);
-    const chosen = parts.grammar.find((item) => item.code === code);
-    const step = (id: string | undefined, fallback: number) => taught.find((item) => item.id === id) ?? taught[fallback] ?? topic.steps[fallback]!;
+    const lock = lockedSteps?.[index];
+    const picked = parts.grammar.find((item) => item.code === code);
+    // Roadmap months: the step IDs are locked; the AI's label/patterns are kept only for the locked step.
+    const chosen = picked && lock ? {
+      ...picked,
+      ...(picked.mainStepId !== lock.mainStepId ? { mainStepId: lock.mainStepId, mainLabel: undefined, mainPatterns: undefined } : {}),
+      ...(picked.secondaryStepId !== lock.secondaryStepId ? { secondaryStepId: lock.secondaryStepId, secondaryLabel: undefined, secondaryPatterns: undefined } : {})
+    } : picked ?? (lock ? { mainStepId: lock.mainStepId, secondaryStepId: lock.secondaryStepId, mainLabel: undefined, mainPatterns: undefined, secondaryLabel: undefined, secondaryPatterns: undefined } : undefined);
+    const step = (id: string | undefined, fallback: number) => (lock ? topic.steps.find((item) => item.id === id) : undefined) ?? taught.find((item) => item.id === id) ?? taught[fallback] ?? topic.steps[fallback]!;
     const main = step(chosen?.mainStepId, 0);
     const secondary = step(chosen?.secondaryStepId, 1);
     return {
       code, topicId: topic.id, topicTitle: topic.title,
       main: { stepId: main.id, label: chosen?.mainLabel ?? main.focus, acceptedPatterns: chosen?.mainPatterns?.length ? chosen.mainPatterns : [main.formula] },
       secondary: { stepId: secondary.id, label: chosen?.secondaryLabel ?? secondary.focus, acceptedPatterns: chosen?.secondaryPatterns?.length ? chosen.secondaryPatterns : [secondary.formula] },
-      taughtSteps: taught.map((item) => ({ stepId: item.id, focus: item.focus, formula: item.formula }))
+      taughtSteps: taught.map((item) => ({ stepId: item.id, focus: item.focus, formula: item.formula })),
+      ...(lock ? { roadmapLocked: true as const } : {})
     };
   });
   const pronunciation: MonthlyFinalPronunciationTarget[] = P_CODES.map((code, index) => {
