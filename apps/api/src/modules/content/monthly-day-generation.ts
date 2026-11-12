@@ -1,4 +1,4 @@
-import { MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS, answerIsUniqueLongestOption, monthlyLessonDisplayTitle, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
+import { MONTHLY_ANSWER_TRANSLATION_RULE, MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS, answerIsUniqueLongestOption, monthlyLessonDisplayTitle, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
 import { MONTHLY_LESSON_PART_CONTENT_CONTRACT, MONTHLY_REVIEW_CHOICE_SECTIONS, type AiTaskRunner, type MonthlyReviewChoiceSection } from "@e4s/ai";
 import { evaluateMonthlyLessonQuality, monthlyLockedPlanExpectations, normalizeFormula, type MonthlyLessonCandidate, type MonthlyLockedPlanExpectations, type MonthlyQualityReport, type MonthlyQualityFinding } from "./monthly-quality.js";
 import { rebalanceAnswerTextPositions, type AnswerTextChoice } from "../shared/answer-order.js";
@@ -106,7 +106,9 @@ ${monthlyVocabularyRelationContract(contract.cefr)}
 
 ${MONTHLY_LESSON_TITLE_RULE}
 
-${MONTHLY_SINGLE_ANSWER_RULE}` : `${systemPrompt}
+${MONTHLY_SINGLE_ANSWER_RULE}
+
+${MONTHLY_ANSWER_TRANSLATION_RULE}` : `${systemPrompt}
 
 Part content field contract: ${MONTHLY_LESSON_PART_CONTENT_CONTRACT}
 
@@ -117,6 +119,8 @@ ${monthlyVocabularyRelationContract(contract.cefr)}
 ${MONTHLY_LESSON_TITLE_RULE}
 
 ${MONTHLY_SINGLE_ANSWER_RULE}
+
+${MONTHLY_ANSWER_TRANSLATION_RULE}
 
 ${MONTHLY_WORD_FORM_SCOPE_RULE}`;
       // Review exercise sections have their own task: its schema requires a retry variant on every choice item.
@@ -380,7 +384,7 @@ export function monthlyReviewExerciseContract(coreCount: number, grammarStepCoun
     "Keep objective, instruction, vocabulary (every core word of the week as a card with collocations), grammar (formula, text, examples, steps) and pronunciation as the study tab.",
     `Each exercise section's content has items: [{ id, prompt, options, answer, explanation, questionTranslation, answerTranslation, variants }]. explanation: at most 2 sentences in ${explain}, why the answer is right. Never copy daily-lesson sentences verbatim.`,
     `VARIANTS ARE REQUIRED on every listening, word_use, word_class, grammar and reading item (an item without variants is incomplete and is sent back): variants = [exactly 1 retry item] with the item's fields { id, prompt, options (4), answer, explanation, questionTranslation, answerTranslation }, testing the same point in a different context, never a copy. listening: the SAME audioText (the same core word: the retry tests the word the learner missed) and the same correct meaning as answer, with 3 different distractor meanings; word_use / grammar: the same word or grammar point in a new workplace sentence; word_class: the same week word in a new sentence; reading: a different question about the same passage. Example listening item: {"id":"l1","audioText":"client","prompt":"${listeningPrompt}","options":["khách hàng","báo cáo","cuộc họp","hạn chót"],"answer":"khách hàng","explanation":"…","questionTranslation":"Nghe rồi chọn nghĩa của từ","answerTranslation":"khách hàng","variants":[{"id":"l1-v1","audioText":"client","prompt":"${listeningPrompt}","options":["đồng nghiệp","khách hàng","công ty","nhiệm vụ"],"answer":"khách hàng","explanation":"…","questionTranslation":"Nghe rồi chọn nghĩa của từ","answerTranslation":"khách hàng"}]}.`,
-    "questionTranslation / answerTranslation (every level): on every item and variant that has an answer, a short natural Vietnamese translation of its prompt (the English sentence translated too, the blank kept as ____) and of its correct answer. They are shown only after the learner answers correctly and never read aloud; the read-aloud and free-response speaking items (no answer) take none.",
+    "questionTranslation / answerTranslation (every level): on every item and variant that has an answer, a short natural Vietnamese translation of its prompt (the English sentence translated too, the blank kept as ____) and of its correct answer (${MONTHLY_ANSWER_TRANSLATION_RULE}) They are shown only after the learner answers correctly and never read aloud; the read-aloud and free-response speaking items (no answer) take none.",
     vietnamese
       ? "Every prompt the learner reads is written in Vietnamese (e.g. \"Chọn dạng đúng của từ để điền vào chỗ trống: …\", \"Đọc tin nhắn và chọn đáp án đúng.\"); only the English target sentence, options and answers stay in English."
       : "Every prompt, question, instruction and explanation is written in English; only the listening options/answers (word meanings) are Vietnamese.",

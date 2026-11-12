@@ -69,6 +69,22 @@ export function withoutExerciseTranslations(content: Content): Content {
   return strip(content) as Content;
 }
 
+/**
+ * December 2026 rule: an answer that is one token (no space) - a grammar word
+ * or contraction (am, is, isn't, don't), a hyphenated word (co-worker), a
+ * name, number or acronym (AI, 9:30) - needs no Vietnamese: its
+ * answerTranslation may repeat the answer as it is or give a short gloss. An
+ * answer of two or more words is always translated. ("isn't" used to count as
+ * two words through the apostrophe, so the gate demanded a Vietnamese gloss the
+ * model kept refusing to give.)
+ */
+export function isSingleTokenAnswer(answer: string): boolean {
+  return /^\S+$/u.test(answer.trim());
+}
+
+/** Prompt rule stating the answerTranslation requirement exactly as the gate checks it. */
+export const MONTHLY_ANSWER_TRANSLATION_RULE = "answerTranslation: an answer of two or more words (are preparing, a short report) always gets a short natural Vietnamese translation; a one-word answer with no space (am, is, isn't, don't, co-worker, a name, a number, an acronym) keeps answerTranslation equal to the answer itself, e.g. answer \"isn't\" -> answerTranslation \"isn't\".";
+
 /** Problems with one question's translation pair (empty when fine). */
 function questionTranslationIssues(label: string, question: Content): string[] {
   const issues: string[] = [];
@@ -79,9 +95,8 @@ function questionTranslationIssues(label: string, question: Content): string[] {
   const answerTranslation = text(question.answerTranslation);
   if (!questionTranslation || !VIETNAMESE_LETTER.test(questionTranslation)) issues.push(`${label}.questionTranslation must be a short Vietnamese translation of the question`);
   else if (questionTranslation.length > MONTHLY_QUESTION_TRANSLATION_MAX_CHARS) issues.push(`${label}.questionTranslation must be short (at most ${MONTHLY_QUESTION_TRANSLATION_MAX_CHARS} characters)`);
-  // A one-word answer such as a name, number or acronym ("AI", "9:30") may stay as it is.
-  const needsVietnamese = (answer.match(/\p{L}+/gu) ?? []).length >= 2;
-  if (!answerTranslation || (needsVietnamese && !VIETNAMESE_LETTER.test(answerTranslation))) issues.push(`${label}.answerTranslation must be a short Vietnamese translation of the correct answer "${answer.slice(0, 60)}"`);
+  if (!answerTranslation && isSingleTokenAnswer(answer)) issues.push(`${label}.answerTranslation is missing: for the one-word answer "${answer.slice(0, 60)}" repeat the answer itself`);
+  else if (!answerTranslation || (!isSingleTokenAnswer(answer) && !VIETNAMESE_LETTER.test(answerTranslation))) issues.push(`${label}.answerTranslation must be a short Vietnamese translation of the correct answer "${answer.slice(0, 60)}"`);
   else if (answerTranslation.length > MONTHLY_ANSWER_TRANSLATION_MAX_CHARS) issues.push(`${label}.answerTranslation must be short (at most ${MONTHLY_ANSWER_TRANSLATION_MAX_CHARS} characters)`);
   return issues;
 }

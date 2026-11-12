@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LessonPart } from "@e4s/contracts";
-import { exerciseTranslationRevealed, monthlyExerciseTranslationIssues, readExerciseTranslation, withoutExerciseTranslations } from "../src/monthly/exercise-translation.js";
+import { MONTHLY_ANSWER_TRANSLATION_RULE, exerciseTranslationRevealed, isSingleTokenAnswer, monthlyExerciseTranslationIssues, readExerciseTranslation, withoutExerciseTranslations } from "../src/monthly/exercise-translation.js";
 import { answerWeeklyReviewItem, currentWeeklyReviewSection, resumeWeeklyReviewSession, weeklyReviewSectionsFromParts } from "../src/monthly/weekly-review-session.js";
 
 const question = { prompt: "What does Lan check?", options: ["A report", "An email", "A meeting", "A call"], answer: "A report" };
@@ -20,6 +20,21 @@ describe("exercise question/answer translations (12/11)", () => {
     // Speaking (no answer) and study parts are not exercises with an answer.
     expect(monthlyExerciseTranslationIssues("new", "speaking", { prompt: "Say a sentence.", sample: "The cost is high." })).toEqual([]);
     expect(monthlyExerciseTranslationIssues("new", "grammar", { formula: "x", items: [question] })).toEqual([]);
+  });
+
+  it("treats a one-token answer (contraction, hyphenated word) as one word: no Vietnamese gloss needed (December 2026 A1 L4)", () => {
+    // Logged A1 week-1 review: grammar.items[0] key "isn't" kept answerTranslation "isn't" through six repair rounds.
+    const grammarItem = { id: "g1", prompt: "Chọn từ đúng để hoàn thành câu: The report ____ ready.", options: ["isn't", "aren't", "am not", "not"], answer: "isn't", questionTranslation: "Báo cáo ____ sẵn sàng.", answerTranslation: "isn't" };
+    expect(monthlyExerciseTranslationIssues("review", "grammar", { items: [{ ...grammarItem, variants: [{ ...grammarItem, id: "g1-v1", prompt: "Chọn từ đúng: The file ____ here.", questionTranslation: "Tệp ____ ở đây." }] }] })).toEqual([]);
+    expect(monthlyExerciseTranslationIssues("new", "word_use", { prompt: "Choose the word.", answer: "co-worker", questionTranslation: "Chọn từ.", answerTranslation: "co-worker" })).toEqual([]);
+    // Still present (the field is required), and two or more words are always translated.
+    expect(monthlyExerciseTranslationIssues("new", "word_class", { prompt: "Choose.", answer: "isn't", questionTranslation: "Chọn." })).toEqual([
+      "word_class.answerTranslation is missing: for the one-word answer \"isn't\" repeat the answer itself"
+    ]);
+    expect(monthlyExerciseTranslationIssues("new", "word_class", { prompt: "Choose.", answer: "are preparing", questionTranslation: "Chọn.", answerTranslation: "are preparing" })[0]).toMatch(/must be a short Vietnamese translation/u);
+    expect(isSingleTokenAnswer(" isn't ")).toBe(true);
+    expect(isSingleTokenAnswer("am not")).toBe(false);
+    expect(MONTHLY_ANSWER_TRANSLATION_RULE).toContain("isn't");
   });
 
   it("checks every Friday review item and variant with an answer, not free responses", () => {
