@@ -485,9 +485,8 @@ details.monthly-resource-editor-section>:not(summary)+:not(summary){margin-top:1
 .monthly-illustration-actions>.monthly-illustration-action:nth-child(3){grid-column:1/-1}
 @media (max-width:560px){.monthly-resource-editor-illustration{grid-template-columns:1fr}.monthly-resource-editor-illustration .monthly-illustration-tile{max-width:200px}}
 
-/* Failed-generation button: icon only in the narrow day cell (the label overflowed next to AI). */
-.monthly-day-cell .monthly-day-actions>button.monthly-view-day{padding:0;width:28px;border-color:var(--danger);background:var(--danger-soft,#fdecea);color:var(--danger)}
-.monthly-day-cell .monthly-day-actions>button.monthly-view-day span{display:none}
+/* Failed generation: a red "Lỗi" button takes the AI button's place (same shape as "Xem"). */
+.monthly-day-cell .monthly-day-actions>button.monthly-failure-action{border-color:var(--danger);background:var(--danger-soft,#fdecea);color:var(--danger)}
 
 /* Slang / formal alternatives continue the expanded list in their own colour. */
 .monthly-resource-collection li.register{border-color:#cdbfe6;background:#f1ecfa}
