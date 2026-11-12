@@ -1272,8 +1272,9 @@ function validEvidence(task: StoredAssessmentTask, evidence: AssessmentEvidenceT
     return evidence === "choice" && Boolean(task.options?.some((option) => option.value === value));
   }
   if (task.responseType === "long_text") return evidence === "text" && value.trim().length > 0;
-  return ["audio", "transcript", "typed_proxy", "technical_failure"].includes(evidence)
-    && (evidence === "technical_failure" || value.trim().length > 0);
+  // Speaking accepts a real recording only: typed answers ("Nói bằng chữ") belonged to the old system and the
+  // learner app has no way to send them. Older stored transcript/typed_proxy rows stay readable for review.
+  return evidence === "audio" && value.trim().length > 0;
 }
 
 function assessmentView(definition: PublishedAssessmentRecord, attempt: AssessmentAttemptRecord | null): AssessmentView {
