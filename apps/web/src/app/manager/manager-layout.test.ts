@@ -5,6 +5,27 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync(new URL("./manager.css", import.meta.url), "utf8");
 const controller = readFileSync(new URL("./ManagerRouteController.tsx", import.meta.url), "utf8");
 
+const globalCss = readFileSync(new URL("../../styles.css", import.meta.url), "utf8");
+const monthlyReport = readFileSync(new URL("./MonthlyOverview.tsx", import.meta.url), "utf8");
+const pilotReport = readFileSync(new URL("./Report.tsx", import.meta.url), "utf8");
+const reminders = readFileSync(new URL("./Reminders.tsx", import.meta.url), "utf8");
+
+describe("Manager long-table scroll and print contract", () => {
+  it("bounds report learner tables and reminder history on screen", () => {
+    for (const source of [monthlyReport, pilotReport]) expect(source).toMatch(/manager-report-learner-table-wrap bounded-scroll-region sticky-table-head report-scroll-region/);
+    expect(reminders).toMatch(/table-wrap bounded-scroll-region sticky-table-head manager-reminder-history-scroll/);
+    expect(globalCss).toMatch(/\.sticky-table-head thead th\s*\{[^}]*position:\s*sticky[^}]*top:\s*0/);
+    expect(globalCss).toMatch(/\.report-scroll-region\s*\{[^}]*max-height:/);
+  });
+
+  it("prints every bounded table in full with no height cap or inner scroll", () => {
+    const print = globalCss.match(/@media print \{\s*\.bounded-scroll-region,\s*\.report-scroll-region\s*\{([^}]*)\}([^}]*\{[^}]*\})?/);
+    expect(print?.[1]).toMatch(/max-height:\s*none !important/);
+    expect(print?.[1]).toMatch(/overflow:\s*visible !important/);
+    expect(print?.[2]).toMatch(/\.sticky-table-head thead th\s*\{\s*position:\s*static/);
+  });
+});
+
 describe("Manager layout rhythm contract", () => {
   it("loads Manager-only CSS through the lazy route controller", () => {
     expect(controller).toMatch(/import ["']\.\/manager\.css["']/);

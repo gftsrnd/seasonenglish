@@ -463,6 +463,26 @@ dd { margin: 0; font-weight: 650; }
 .bounded-scroll-region::-webkit-scrollbar { width: 10px; height: 10px; }
 .bounded-scroll-region::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background: color-mix(in srgb, var(--muted) 55%, transparent); background-clip: padding-box; }
 .bounded-scroll-region::-webkit-scrollbar-track { background: transparent; }
+/* Long tables inside a bounded region keep their header row visible while scrolling. */
+.sticky-table-head thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); box-shadow: inset 0 -1px 0 var(--line); }
+.manager-reminder-history-scroll { max-height: min(60vh, 32rem); }
+.manager-reminder-history-action { width: 1%; text-align: right; white-space: nowrap; }
+.manager-reminder-history-list .manager-reminder-history-delete { justify-self: start; margin-top: 6px; }
+.report-scroll-region { max-height: min(70vh, 40rem); }
+.manager-operations-month { display: grid; gap: 2px; justify-items: end; }
+.manager-operations-month select { width: auto; min-width: 0; }
+.manager-operations-month-summary { margin: 6px 0 0; }
+/* On paper every bounded list and report table prints in full: no height cap, no inner scroll. */
+@media print {
+  .bounded-scroll-region,
+  .report-scroll-region {
+    max-height: none !important;
+    overflow: visible !important;
+    overscroll-behavior: auto;
+    padding-right: 0;
+  }
+  .sticky-table-head thead th { position: static; box-shadow: none; }
+}
 .manager-progress-table { min-width: 1060px; }
 .manager-progress-table td { white-space: nowrap; }
 .manager-readiness { background: var(--primary-soft); }

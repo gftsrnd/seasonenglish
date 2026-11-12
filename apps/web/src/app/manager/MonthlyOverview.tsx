@@ -158,7 +158,7 @@ export function ManagerMonthlyReport({ view, filter, selectFilter, loading, erro
         </div>
         <h3>{sectionTitles[2]}</h3>
         {view.learners.length ? <>
-          <div className="table-wrap manager-report-learner-table-wrap"><MonthlyLearnerTable learners={view.learners} /></div>
+          <div className="table-wrap manager-report-learner-table-wrap bounded-scroll-region sticky-table-head report-scroll-region" role="region" aria-label="Bảng từng học viên" tabIndex={0}><MonthlyLearnerTable learners={view.learners} /></div>
           {compact ? <MonthlyLearnerList key={`${view.month}:${view.cefr ?? ""}`} learners={view.learners} /> : null}
         </> : <p className="muted">Chưa có học viên trong bộ lọc này.</p>}
         <h3>{sectionTitles[3]}</h3>

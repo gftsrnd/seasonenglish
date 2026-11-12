@@ -35,7 +35,18 @@ const operations: ManagerOperationsView = {
   organizationName: "GFT Demo", currentWeek: 1, pilotWeeks: 2,
   content: { draft: 1, inReview: 0, published: 1 }, queues: { assessmentReview: 0, practiceReview: 0 }, automation: { pendingJobs: 0, aiFailures: 0 }, recentActivity: [],
   readiness: { requiredSets: 2, readySets: 1, missing: [{ week: 1, cefr: "B1", state: "missing" }], orphanLegacySets: 1 },
-  operators: [{ operatorId: "op-1", operatorName: "Thư Demo", byWeek: [{ week: 1, sets: 1, lessons: 5, approved: 1 }], sets: 1, lessons: 5, published: 1, fullLessons: 5, editedLessons: 1, completions: 1, averageScore: 80, firstTryPercent: 75, failedPercent: 0, averageAttempts: 1.2, approvals: 1, averageApprovalHours: 2, reviewedSubmissions: 1, reviewedCoachTurns: 2 }]
+  month: "2026-11", currentMonth: "2026-11", availableMonths: ["2026-11", "2026-10"],
+  monthSummary: { frameworks: 3, approvedFrameworks: 2, publishedFrameworks: 1, lessons: 40, approvedLessons: 15, failedLessons: 1 },
+  operators: [{
+    operatorId: "op-1", operatorName: "Thư Demo",
+    resourcePools: [
+      { cefr: "A2", status: "approved", createdByOperator: true, approvedByOperator: true, published: true },
+      { cefr: "B1", status: "draft", createdByOperator: true, approvedByOperator: false, published: false }
+    ],
+    poolsCreated: 2, poolsApproved: 1, lessonsDrafted: 18, lessonsResaved: 3, lessonsApproved: 15, lessonsPublished: 12, correctionsRequested: 1,
+    averageDraftToApprovalHours: 5.5, finalsGenerated: 2, finalGenerationFailures: 1, finalsPublished: 1,
+    completions: 1, averageScore: 80, firstTryPercent: 75, failedPercent: 0, averageAttempts: 1.2, approvals: 1, averageApprovalHours: 2, reviewedSubmissions: 1, reviewedCoachTurns: 2
+  }]
 };
 
 function renderRewards() {
@@ -134,25 +145,37 @@ describe("new Manager app branch", () => {
     expect(screen.queryByText(/PIN trong hệ thống/)).not.toBeInTheDocument();
   });
 
-  it("uses backend readiness instead of deriving fake set counts", () => {
+  it("shows each Operator's monthly content output instead of the retired weekly table", () => {
     render(<ManagerOperations view={operations} deleteRequestCounts={{ "op-1": 2 }} />);
-    expect(screen.getByRole("heading", { name: "Người vận hành" })).toBeInTheDocument();
-    expect(screen.getByText("Theo dõi nhanh người soạn/duyệt và chất lượng đầu ra. Danh sách này chỉ gồm tài khoản vận hành, không trộn vào bảng học viên.")).toBeInTheDocument();
-    expect(screen.getByText("Thư Demo")).toBeInTheDocument();
-    expect(screen.getByText("Thư Demo").closest("summary")).toHaveTextContent("1 bộ · 5 bài");
-    expect(screen.getByText("Thư Demo").closest("summary")).toHaveTextContent("1 duyệt · 1 bài đọc · 1 hoàn thành");
-    expect(screen.queryByRole("navigation", { name: "Màn hình vận hành" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Bộ bài cần xử lý" })).toBeInTheDocument();
-    expect(screen.getByText("1 bộ")).toBeInTheDocument();
-    expect(screen.getByText(/Tuần 1 · B1: chưa sinh/)).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Thao tác vận hành của Quản lý" })).not.toBeInTheDocument();
-    expect(screen.getByText(/1 bộ bài cũ chưa có thông tin người soạn/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Người vận hành · Tháng 11/2026" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Tổng quan tháng")).toHaveTextContent("2/3 bộ tài nguyên đã duyệt · 1 đã phát hành · 15/40 bài đã duyệt · 1 bài đang sinh lỗi");
+    const summary = screen.getByText("Thư Demo").closest("summary")!;
+    expect(summary).toHaveTextContent("2 bộ tài nguyên · 18 bài");
+    expect(summary).toHaveTextContent("15 bài đã duyệt");
+    expect(summary).toHaveTextContent("1 duyệt mức · 2 đề thi sinh · 1 hoàn thành");
+    const pools = screen.getByRole("table", { name: "Bộ tài nguyên của Thư Demo" });
+    expect(within(pools).getAllByRole("row")).toHaveLength(3);
+    expect(within(pools).getByText("B1").closest("tr")).toHaveTextContent("B1Bản nhápCó——");
+    expect(screen.getByText("Bài đã phát hành cho học viên").parentElement).toHaveTextContent("12");
+    expect(screen.getByText("Bài đã lưu nhiều bản nháp (sinh lại hoặc sửa tay)").parentElement).toHaveTextContent("3");
+    expect(screen.getByText("Thời gian trung bình từ soạn đến duyệt").parentElement).toHaveTextContent("5.5 giờ");
+    expect(screen.getByText("Lượt sinh đề bị lỗi").parentElement).toHaveTextContent("1");
+    expect(screen.getByText("Đề đã phát hành").parentElement).toHaveTextContent("1");
+    expect(screen.queryByText(/Số bài soạn theo tuần/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/4 kỹ năng \+ 3 thành phần/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Bài đã sửa tay sau khi AI sinh/)).not.toBeInTheDocument();
     expect(screen.getByText("Yêu cầu xoá tài khoản đã gửi").parentElement).toHaveTextContent("2");
   });
 
-  it("keeps the operations introduction concise while retaining both metrics", () => {
-    render(<ManagerOperations view={operations} />);
-    expect(screen.getByText("Tuần 1/2 · 1 người vận hành. Số bài soạn/tuần; chất lượng qua kết quả học viên.")).toBeInTheDocument();
+  it("switches the monthly performance view through the month picker", async () => {
+    const user = userEvent.setup();
+    const select = vi.fn();
+    render(<ManagerOperations view={operations} onSelectMonth={select} />);
+    const picker = screen.getByRole("combobox", { name: "Chọn tháng" });
+    expect(picker).toHaveValue("2026-11");
+    expect(within(picker).getByRole("option", { name: "Tháng 11/2026 (hiện tại)" })).toBeInTheDocument();
+    await user.selectOptions(picker, "2026-10");
+    expect(select).toHaveBeenCalledWith("2026-10");
   });
 
   it("shows webhook state, exact missed days and audited reminder history", async () => {

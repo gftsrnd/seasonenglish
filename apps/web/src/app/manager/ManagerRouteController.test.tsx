@@ -390,6 +390,49 @@ describe("ManagerRouteController", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Đã copy tin nhắn");
   });
 
+  it("deletes one reminder history row only after the danger confirmation", async () => {
+    const user = userEvent.setup();
+    const history = [
+      { reminderId: "reminder-1", learnerId: "learner-1", learnerName: "Minh Anh", recipient: "minh@e4s.local", missedDays: 4, status: "sent", deliveryStatus: "sent", provider: "resend" as const, createdAt: "2026-11-10T03:00:00.000Z", attemptedAt: null },
+      { reminderId: "reminder-2", learnerId: "learner-2", learnerName: "Bảo Ngọc", recipient: null, missedDays: null, status: "copied", deliveryStatus: null, provider: null, createdAt: "2026-11-09T03:00:00.000Z", attemptedAt: null }
+    ];
+    const getReminders = vi.spyOn(apiClient, "getManagerReminders")
+      .mockResolvedValueOnce({ organizationName: "GFT", inactiveDays: 3, webhookConfigured: false, candidates: [], history })
+      .mockResolvedValue({ organizationName: "GFT", inactiveDays: 3, webhookConfigured: false, candidates: [], history: history.slice(1) });
+    const remove = vi.spyOn(apiClient, "deleteManagerReminderHistory").mockResolvedValue({ deleted: true });
+    renderManager(<MemoryRouter initialEntries={["/mgr/reminders"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    const region = await screen.findByRole("region", { name: "Danh sách lịch sử nhắc" });
+    expect(region).toHaveClass("bounded-scroll-region", "sticky-table-head");
+    await user.click(within(region).getByRole("button", { name: /^Xóa lượt nhắc Minh Anh/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Xóa lượt nhắc" });
+    expect(dialog).toHaveTextContent("người học không bị ảnh hưởng");
+    await user.click(within(dialog).getByRole("button", { name: "Huỷ" }));
+    expect(remove).not.toHaveBeenCalled();
+    await user.click(within(region).getByRole("button", { name: /^Xóa lượt nhắc Minh Anh/ }));
+    await user.click(within(await screen.findByRole("dialog", { name: "Xóa lượt nhắc" })).getByRole("button", { name: "Xóa" }));
+    await waitFor(() => expect(remove).toHaveBeenCalledWith("reminder-1"));
+    await waitFor(() => expect(getReminders).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText("Minh Anh")).not.toBeInTheDocument());
+    expect(screen.getByText("Bảo Ngọc")).toBeInTheDocument();
+  });
+
+  it("reloads Operator performance for the month picked on /mgr/ops", async () => {
+    const user = userEvent.setup();
+    const load = vi.spyOn(apiClient, "getManagerOperations").mockImplementation(async (month) => ({ ...operations, month: month ?? operations.month }));
+    renderManager(<MemoryRouter initialEntries={["/mgr/ops"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Chọn tháng" }), "2026-10");
+    await waitFor(() => expect(load).toHaveBeenLastCalledWith("2026-10"));
+    expect(await screen.findByRole("heading", { name: "Người vận hành · Tháng 10/2026" })).toBeInTheDocument();
+  });
+
+  it("bounds the per-learner report table on screen with a print-reset class", async () => {
+    vi.spyOn(apiClient, "getManagerMonthlyOverview").mockResolvedValue(monthlyOverview);
+    renderManager(<MemoryRouter initialEntries={["/mgr/report"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    const region = await screen.findByRole("region", { name: "Bảng từng học viên" });
+    expect(region).toHaveClass("bounded-scroll-region", "report-scroll-region", "sticky-table-head");
+    expect(within(region).getByRole("table", { name: "Kết quả học tập theo tháng" })).toBeInTheDocument();
+  });
+
   it("does not load provider metadata after the PRD questions section is removed", async () => {
     vi.spyOn(apiClient, "getManagerMonthlyOverview").mockResolvedValue(monthlyOverview);
     vi.spyOn(apiClient, "getManagerSettings").mockResolvedValue(managerSettings);
@@ -904,7 +947,9 @@ const managerProvider = {
 const operations: ManagerOperationsView = {
   organizationName: "GFT", currentWeek: 1, pilotWeeks: 2,
   content: { draft: 1, inReview: 0, published: 1 }, queues: { assessmentReview: 0, practiceReview: 0 }, automation: { pendingJobs: 0, aiFailures: 0 }, recentActivity: [],
-  readiness: { requiredSets: 2, readySets: 1, missing: [{ week: 1, cefr: "B1", state: "missing" }], orphanLegacySets: 0 }, operators: []
+  readiness: { requiredSets: 2, readySets: 1, missing: [{ week: 1, cefr: "B1", state: "missing" }], orphanLegacySets: 0 }, operators: [],
+  month: "2026-11", currentMonth: "2026-11", availableMonths: ["2026-11", "2026-10"],
+  monthSummary: { frameworks: 0, approvedFrameworks: 0, publishedFrameworks: 0, lessons: 0, approvedLessons: 0, failedLessons: 0 }
 };
 const product: ProductPreferencesView = { theme: "auto", vocabImageSource: "wikimedia" };
 const capabilities: SystemCapabilitiesView = { api: true, database: true, ai: true, objectStorage: true, imageProviders: { pexels: false, pixabay: false } };

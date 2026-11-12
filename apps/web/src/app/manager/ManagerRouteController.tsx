@@ -233,6 +233,13 @@ export function MaintenanceConfirmationDialog({ confirmation, busy, onCancel, on
 
 function OperationsRoute() {
   const [view, setView] = useState<ManagerOperationsView>(); const [deleteRequests, setDeleteRequests] = useState<ManagerDeleteRequestsView>(); const [error, setError] = useState("");
+  const [monthLoading, setMonthLoading] = useState(false);
+  const selectMonth = async (month: string) => {
+    setMonthLoading(true); setError("");
+    try { setView(await apiClient.getManagerOperations(month)); }
+    catch { setError("Không tải được hiệu suất của tháng đã chọn."); }
+    finally { setMonthLoading(false); }
+  };
   const load = async () => {
     setView(await apiClient.getManagerOperations());
     const requests = await apiClient.getManagerDeleteRequests().catch(() => undefined);
@@ -242,12 +249,13 @@ function OperationsRoute() {
   if (!view) return <RouteState error={error} title="Hiệu suất vận hành" label="Đang tải hiệu suất vận hành" />;
   const deleteRequestCounts = deleteRequests?.requests.reduce<Record<string, number>>((counts, request) => { counts[request.requestedBy] = (counts[request.requestedBy] ?? 0) + 1; return counts; }, {});
   return <>{error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}
-    <ManagerOperations view={view} {...(deleteRequestCounts ? { deleteRequestCounts } : {})} />
+    <ManagerOperations view={view} monthLoading={monthLoading} onSelectMonth={(month) => void selectMonth(month)} {...(deleteRequestCounts ? { deleteRequestCounts } : {})} />
   </>;
 }
 
 function RemindersRoute() {
   const toast = useToast();
+  const modal = useModal();
   const [view, setView] = useState<ManagerRemindersView>(); const [loadError, setLoadError] = useState(""); const [contextNotice, setContextNotice] = useState(""); const [sending, setSending] = useState<string | null>(null);
   const load = () => apiClient.getManagerReminders().then(setView);
   useEffect(() => { void load().catch(() => setLoadError("Không tải được danh sách nhắc học.")); }, []);
@@ -265,7 +273,12 @@ function RemindersRoute() {
     if (cause instanceof Error && cause.message === "BASE_WEBHOOK_NOT_CONFIGURED") setContextNotice(message);
     else toast.show({ message, tone: "danger" });
   };
-  return <ManagerReminders view={view} sendingKey={sending} notice={contextNotice} noticeTone="danger" onSaveBase={async (learnerId, input) => { await apiClient.saveManagerLearnerBaseNotification(learnerId, input); await load(); toast.show({ message: input.remove ? "Đã gỡ kênh nhận Base.vn của người học." : "Đã lưu kênh nhận Base.vn của người học. Chưa gửi thông báo.", tone: "ok" }); }} onSend={async (learnerId, channel) => { setSending(`${learnerId}:${channel}`); try { const result = await apiClient.sendManagerReminder(learnerId, crypto.randomUUID(), channel); await load(); setContextNotice(""); toast.show({ message: result.provider === "resend" ? "Đã gửi email và lưu vào lịch sử." : "Đã xếp hàng gửi Base.vn và lưu vào lịch sử.", tone: "ok" }); } catch (cause) { reportReminderError(cause, channel === "email" ? "Không gửi được email nhắc học." : "Không gửi được nhắc học qua Base.vn."); } finally { setSending(null); } }} onDismiss={async (learnerId) => { try { await apiClient.dismissManagerReminder(learnerId); await load(); setContextNotice(""); toast.show({ message: "Đã ghi nhận đã nhắc qua kênh khác.", tone: "ok" }); } catch (cause) { reportReminderError(cause, "Không ghi nhận được trạng thái đã nhắc qua kênh khác."); throw new Error("REMINDER_DISMISS_FAILED"); } }} onCopy={async (learnerId) => { try { await apiClient.copyManagerReminder(learnerId); await load(); setContextNotice(""); toast.show({ message: "Đã copy tin nhắn và ghi nhận vào lịch sử.", tone: "ok" }); } catch (cause) { reportReminderError(cause, "Không ghi nhận được việc copy tin nhắn."); } }} />;
+  return <ManagerReminders view={view} sendingKey={sending} notice={contextNotice} noticeTone="danger" onSaveBase={async (learnerId, input) => { await apiClient.saveManagerLearnerBaseNotification(learnerId, input); await load(); toast.show({ message: input.remove ? "Đã gỡ kênh nhận Base.vn của người học." : "Đã lưu kênh nhận Base.vn của người học. Chưa gửi thông báo.", tone: "ok" }); }} onSend={async (learnerId, channel) => { setSending(`${learnerId}:${channel}`); try { const result = await apiClient.sendManagerReminder(learnerId, crypto.randomUUID(), channel); await load(); setContextNotice(""); toast.show({ message: result.provider === "resend" ? "Đã gửi email và lưu vào lịch sử." : "Đã xếp hàng gửi Base.vn và lưu vào lịch sử.", tone: "ok" }); } catch (cause) { reportReminderError(cause, channel === "email" ? "Không gửi được email nhắc học." : "Không gửi được nhắc học qua Base.vn."); } finally { setSending(null); } }} onDismiss={async (learnerId) => { try { await apiClient.dismissManagerReminder(learnerId); await load(); setContextNotice(""); toast.show({ message: "Đã ghi nhận đã nhắc qua kênh khác.", tone: "ok" }); } catch (cause) { reportReminderError(cause, "Không ghi nhận được trạng thái đã nhắc qua kênh khác."); throw new Error("REMINDER_DISMISS_FAILED"); } }} onCopy={async (learnerId) => { try { await apiClient.copyManagerReminder(learnerId); await load(); setContextNotice(""); toast.show({ message: "Đã copy tin nhắn và ghi nhận vào lịch sử.", tone: "ok" }); } catch (cause) { reportReminderError(cause, "Không ghi nhận được việc copy tin nhắn."); } }} onDeleteHistory={async (item) => {
+    const confirmed = await modal.confirm({ title: "Xóa lượt nhắc", message: `Xóa lượt nhắc ${item.learnerName} ngày ${new Date(item.createdAt).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" })} khỏi lịch sử? Chỉ dòng lịch sử bị xóa; người học không bị ảnh hưởng.`, confirmLabel: "Xóa", countdownSeconds: 0, tone: "danger" });
+    if (!confirmed) return;
+    try { await apiClient.deleteManagerReminderHistory(item.reminderId); await load(); toast.show({ message: "Đã xóa lượt nhắc khỏi lịch sử.", tone: "ok" }); }
+    catch { toast.show({ message: "Không xóa được lượt nhắc. Hãy thử lại.", tone: "danger" }); }
+  }} />;
 }
 
 function ReportRoute() {

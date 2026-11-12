@@ -91,7 +91,7 @@ export function ManagerHolidays() {
           <div className="manager-holiday-description">
             <b><time dateTime={holiday.date}>{holidayDate(holiday.date)}</time>{holiday.name ? ` · ${holiday.name}` : ""}</b>
             <small className="muted">
-              {holiday.source === "national" ? "Lịch lễ Việt Nam" : holiday.created_by_name ? `Thêm bởi ${holiday.created_by_name}` : "Ngày nghỉ công ty"}
+              {holiday.source === "national" ? "Lịch lễ Việt Nam · cố định, không xóa" : holiday.created_by_name ? `Thêm bởi ${holiday.created_by_name}` : "Ngày nghỉ công ty"}
               {holiday.source === "national" && holiday.sourceUrl ? <> · <a href={holiday.sourceUrl} target="_blank" rel="noreferrer">Nguồn chính thức</a></> : null}
             </small>
           </div>

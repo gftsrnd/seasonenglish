@@ -17,15 +17,20 @@ export type ManagerRemindersProps = {
   onDismiss?: (learnerId: string) => void | Promise<void>;
   onCopy?: (learnerId: string) => void | Promise<void>;
   onSaveBase?: (learnerId: string, input: ManagerBaseNotificationInput) => Promise<void>;
+  /** Removes one row from the reminder history log; the caller owns the confirmation. */
+  onDeleteHistory?: (item: ManagerReminderHistoryItem) => void | Promise<void>;
 };
 
-export function ManagerReminders({ view, sendingKey, notice, noticeTone = "info", onSend, onSendAll, onDismiss, onCopy, onSaveBase }: ManagerRemindersProps) {
+type ManagerReminderHistoryItem = NonNullable<ManagerRemindersView["history"]>[number];
+
+export function ManagerReminders({ view, sendingKey, notice, noticeTone = "info", onSend, onSendAll, onDismiss, onCopy, onSaveBase, onDeleteHistory }: ManagerRemindersProps) {
   const compact = useMediaQuery("(max-width: 800px)");
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [handlingLearnerId, setHandlingLearnerId] = useState<string | null>(null);
   const [sendingAll, setSendingAll] = useState(false);
   const [editingBaseId, setEditingBaseId] = useState<string | null>(null);
+  const [deletingHistoryId, setDeletingHistoryId] = useState<string | null>(null);
   const [localStatus, setLocalStatus] = useState("");
   const [confirmation, setConfirmation] = useState<{ kind: "all" } | { kind: "single"; learnerId: string; learnerName: string; learnerEmail: string | null; channel: ManagerReminderChannel } | null>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -48,6 +53,14 @@ export function ManagerReminders({ view, sendingKey, notice, noticeTone = "info"
     catch { /* The route reports the failure through the shared toast. */ }
     finally { setHandlingLearnerId(null); }
   };
+  const runDeleteHistory = async (item: ManagerReminderHistoryItem) => {
+    if (!onDeleteHistory || deletingHistoryId) return;
+    setDeletingHistoryId(item.reminderId);
+    try { await onDeleteHistory(item); }
+    catch { /* The route reports the failure through the shared toast. */ }
+    finally { setDeletingHistoryId(null); }
+  };
+  const deleteHistoryButton = (item: ManagerReminderHistoryItem) => onDeleteHistory ? <button className="btn-sm btn-danger manager-reminder-history-delete" type="button" disabled={Boolean(deletingHistoryId)} aria-busy={deletingHistoryId === item.reminderId || undefined} aria-label={`Xóa lượt nhắc ${item.learnerName} ngày ${formatReminderDate(item.createdAt)}`} onClick={() => void runDeleteHistory(item)}>{deletingHistoryId === item.reminderId ? "Đang xóa…" : "Xóa"}</button> : null;
   const runSendAll = async () => {
     if (sendingAll || sending) return;
     setSendingAll(true); setLocalStatus("");
@@ -123,11 +136,12 @@ export function ManagerReminders({ view, sendingKey, notice, noticeTone = "info"
               {item.missedDays !== null ? ` · Vắng ${item.missedDays} ngày` : null}
             </div>
             {item.recipient ? <div className="small muted">Nơi nhận: {item.recipient}</div> : null}
+            {deleteHistoryButton(item)}
           </li>;
         })}
       </ul>
       {!showAllHistory && history.length > visibleHistory.length ? <button className="btn-sm manager-reminder-history-more" type="button" onClick={() => setShowAllHistory(true)}>Xem thêm {history.length - visibleHistory.length} lượt</button> : null}
-      </> : <div className="table-wrap"><table aria-label="Lịch sử nhắc học"><thead><tr><th>Ngày</th><th>Người học</th><th>Nơi nhận</th><th>Kênh</th><th>Bỏ</th><th>Kết quả</th></tr></thead><tbody>{history.map((item) => <tr key={item.reminderId}><td>{formatReminderDate(item.createdAt)}</td><td>{item.learnerName}</td><td>{item.recipient ?? "—"}</td><td>{providerLabel(item.provider)}</td><td>{item.missedDays === null ? "—" : `${item.missedDays} ngày`}</td><td><Badge tone={statusTone(item.deliveryStatus ?? item.status)}>{statusLabel(item.deliveryStatus ?? item.status, item.provider)}</Badge></td></tr>)}</tbody></table></div>}
+      </> : <div className="table-wrap bounded-scroll-region sticky-table-head manager-reminder-history-scroll" role="region" aria-label="Danh sách lịch sử nhắc" tabIndex={0}><table aria-label="Lịch sử nhắc học"><thead><tr><th>Ngày</th><th>Người học</th><th>Nơi nhận</th><th>Kênh</th><th>Bỏ</th><th>Kết quả</th>{onDeleteHistory ? <th><span className="sr-only">Thao tác</span></th> : null}</tr></thead><tbody>{history.map((item) => <tr key={item.reminderId}><td>{formatReminderDate(item.createdAt)}</td><td>{item.learnerName}</td><td>{item.recipient ?? "—"}</td><td>{providerLabel(item.provider)}</td><td>{item.missedDays === null ? "—" : `${item.missedDays} ngày`}</td><td><Badge tone={statusTone(item.deliveryStatus ?? item.status)}>{statusLabel(item.deliveryStatus ?? item.status, item.provider)}</Badge></td>{onDeleteHistory ? <td className="manager-reminder-history-action">{deleteHistoryButton(item)}</td> : null}</tr>)}</tbody></table></div>}
     </section> : null}
     {confirmation ? <div className="modal-backdrop manager-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setConfirmation(null); }}><section ref={dialogRef} className="dialog manager-reminder-confirm-dialog" role="dialog" aria-modal="true" tabIndex={-1} aria-label={`Xác nhận gửi ${confirmation.kind === "single" && confirmation.channel === "base" ? "Base.vn" : "email"}`}><h2>Xác nhận gửi {confirmation.kind === "single" && confirmation.channel === "base" ? "Base.vn" : "email"}</h2>{confirmation.kind === "all" ? <p>Bạn sắp gửi email nhắc học cho <b>{view.candidates.length} người học</b>. Hãy chắc rằng danh sách và nội dung đã đúng.</p> : <p>Gửi {confirmation.channel === "base" ? "Base.vn" : "email"} nhắc học cho <b>{confirmation.learnerName}</b> ({confirmation.learnerEmail ?? "chưa có nơi nhận"})?{confirmation.channel === "base" ? " Tin sẽ đến cuộc trò chuyện được gắn với incoming webhook đã lưu cho người học này." : ""}</p>}<div className="row manager-reminder-confirm-actions"><button className="btn-sm" type="button" onClick={() => setConfirmation(null)}>Huỷ</button><button className="btn-sm btn-primary" type="button" onClick={() => void confirmSend()}>Xác nhận gửi {confirmation.kind === "single" && confirmation.channel === "base" ? "Base.vn" : "email"}</button></div></section></div> : null}
   </div>;
