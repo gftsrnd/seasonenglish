@@ -2,6 +2,7 @@ import { createHmac, createHash, randomBytes, randomInt, randomUUID, timingSafeE
 import type { AccountRole, CourseCompletionView, LearnerAvatarData, SessionView } from "@e4s/contracts";
 import { createRepositories, type ActiveSessionRecord, type DatabaseRepositories, type PublishedAssessmentRecord, type UserIdentity } from "@e4s/database";
 import { createPinHash, issueSessionToken, permissionsFor, sessionTokenHash, verifyCredential } from "@e4s/domain/identity";
+import { SENSITIVE_NAME_MESSAGE_VI, sensitiveTextIssue } from "@e4s/domain/content";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
@@ -118,6 +119,10 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
   app.post("/api/auth/learner/register", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request, reply) => {
     const parsed = learnerRegistrationInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_LEARNER_REGISTRATION" });
+    // The display name is shown to staff and in shared views, so offensive names are refused up front.
+    if (sensitiveTextIssue(parsed.data.displayName)) {
+      return reply.code(422).send({ code: "DISPLAY_NAME_NOT_ALLOWED", message: SENSITIVE_NAME_MESSAGE_VI });
+    }
     try {
       const account = await repositories.identity.registerLearner({
         displayName: normalizeHumanName(parsed.data.displayName),

@@ -1,6 +1,7 @@
 import type { ContentGenerationFindingView, LessonPart, LessonPartCode } from "@e4s/contracts";
 import { validateLessonPartOrder } from "../learning/index.js";
 
+export { hasSensitiveText, SENSITIVE_NAME_MESSAGE_VI, SENSITIVE_TOPIC_MESSAGE_VI, sensitiveTextIssue, type SensitiveTextCategory, type SensitiveTextIssue } from "./sensitive-text.js";
 export { CURATED_LEXICAL_RELATIONS, curatedRelationEvidence, lexicalRelationCoverageSatisfied, relationExemptionIsCredible } from "./lexical-relations.js";
 export {
   answerIsUniqueLongestOption,

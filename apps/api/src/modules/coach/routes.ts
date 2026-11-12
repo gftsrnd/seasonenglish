@@ -8,6 +8,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { assessmentInProgress } from "../assessment/active-attempt.js";
+import { COACH_CONDUCT_RULE } from "./conduct-policy.js";
 import { coachAnswerIdeaLanguage, coachAnswerIdeaPromptRule, fallbackCoachAnswerIdea, repairCoachAnswerIdea } from "./answer-idea.js";
 
 const audioArtifactInput = z.object({
@@ -362,7 +363,7 @@ export function coachPersonaPrompt(
   const registerGuard = persona === "formal"
     ? "LEARNER REGISTER: Slang or overly casual wording in the learner message (for example lol, gimme, mate, 'em, no big deal) is a register problem, never a reason for off_topic. If the message still responds to currentQuestion, use status valid, result partially_correct, countsTowardGoal true, lower only rubric.meaning (appropriateness) to at most 3, and explain the register issue in noteVi and rubric.meaning.improvement. Use off_topic only when the content does not address currentQuestion."
     : "";
-  return [prompt, instruction, correctionGuard, requiredGrammarGuard, correctionCompactnessGuard, registerGuard, cefrGuidance, asrGuidance, COACH_SAME_QUESTION_RULE, coachAnswerIdeaPromptRule(normalizedCefr)].filter(Boolean).join("\n\n");
+  return [prompt, instruction, correctionGuard, requiredGrammarGuard, correctionCompactnessGuard, registerGuard, cefrGuidance, asrGuidance, COACH_CONDUCT_RULE, COACH_SAME_QUESTION_RULE, coachAnswerIdeaPromptRule(normalizedCefr)].filter(Boolean).join("\n\n");
 }
 
 /** An unanswered question stays open: Season asks it again instead of moving on. */

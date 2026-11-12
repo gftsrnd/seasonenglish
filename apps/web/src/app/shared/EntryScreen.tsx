@@ -299,6 +299,7 @@ function errorFor(mode: Mode, audience: "learner" | "staff", code: string, detai
       : "Bạn đã nhập sai mã PIN quá nhiều lần. Vui lòng thử lại sau." };
   }
   if (code === "LEARNER_REGISTRATION_EMAIL_EXISTS" || code === "LEARNER_REGISTRATION_EMAIL_DELETED") return { email: "Email này không khả dụng. Hãy dùng email khác." };
+  if (code === "DISPLAY_NAME_NOT_ALLOWED") return { displayName: details && typeof details === "object" && "message" in details && typeof details.message === "string" ? details.message : "Tên này không phù hợp. Hãy dùng tên thật hoặc một tên lịch sự." };
   if (code === "EMAIL_DELIVERY_FAILED" || code === "EMAIL_DELIVERY_UNAVAILABLE") return { email: "Chưa thể gửi mã xác minh. Vui lòng thử lại." };
   if (code === "PIN_RESET_RESEND_TOO_SOON") return { email: `Mã vừa được gửi. Vui lòng đợi ${retryAfterSeconds(details)} giây rồi gửi lại mã.` };
   if (code === "INVALID_OR_EXPIRED_CODE") return { code: "Mã không đúng hoặc đã hết hạn." };

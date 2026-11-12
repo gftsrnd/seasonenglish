@@ -2,6 +2,7 @@ import type { AudioArtifactInput, AudioArtifactView, GameDescriptor, GameKey, Ga
 import { randomUUID } from "node:crypto";
 import { vocabularyOutputSchema, weeklyPracticeOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { arenaEligible, scoreGameAttempt } from "@e4s/domain/engagement";
+import { hasSensitiveText, SENSITIVE_TOPIC_MESSAGE_VI, sensitiveTextIssue } from "@e4s/domain/content";
 import { validateWeeklyPractice } from "@e4s/domain/progression";
 import { createRepositories } from "@e4s/database";
 import type { FastifyInstance } from "fastify";
@@ -168,10 +169,13 @@ export function registerEngagementRoutes(
       }
       const moderation: GameTopicModeration = nextStrike >= 3
         ? { state: "reported", strike: 3, ...(reportId ? { reportId } : {}), message: "Đã báo người vận hành sau ba lần vi phạm." }
-        : isUnsafeTopic(parsed.data.topic)
+        : topicValidation.unsafe
           ? { state: "unsafe", strike: Math.min(3, nextStrike) as 1 | 2 | 3, message: topicValidation.message }
           : { state: "invalid", message: topicValidation.message };
-      return reply.code(422).send({ code: "VOCABULARY_TOPIC_REJECTED", strikes: nextStrike, moderation });
+      return reply.code(422).send({
+        code: topicValidation.unsafe ? "GAME_TOPIC_NOT_ALLOWED" : "VOCABULARY_TOPIC_REJECTED",
+        message: topicValidation.message, strikes: nextStrike, moderation
+      });
     }
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     if (await repositories.aiRuns.requestExists(learnerId, parsed.data.requestId, "vocabulary_generation")) {
@@ -183,15 +187,21 @@ export function registerEngagementRoutes(
     try {
       const result = await runner.runTask("vocabulary_generation", {
         topic: parsed.data.topic, cefr: current.cefr, count: 20
-      }, { systemPrompt: task.prompt });
+      }, { systemPrompt: `${task.prompt}\n\n${WORD_SET_SAFETY_RULE}` });
       const output = vocabularyOutputSchema.safeParse(result.output);
       if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID", moderation: { state: "ai_rejected", message: "AI không trả về được bộ từ hợp lệ." } satisfies GameTopicModeration });
+      const safeWords = output.data.words.filter((word) => !generatedWordIsSensitive(word));
+      const safeDistractors = output.data.distractors.filter((word) => !generatedWordIsSensitive(word));
+      if (sensitiveTextIssue(output.data.topic) || safeWords.length < MIN_SAFE_GENERATED_WORDS || safeDistractors.length < MIN_SAFE_GENERATED_DISTRACTORS) {
+        request.log.warn({ dropped: output.data.words.length - safeWords.length + output.data.distractors.length - safeDistractors.length }, "Vocabulary generation returned sensitive words");
+        return reply.code(502).send({ code: "AI_OUTPUT_INVALID", moderation: { state: "ai_rejected", message: "AI không trả về được bộ từ phù hợp. Hãy thử một chủ đề khác." } satisfies GameTopicModeration });
+      }
       await repositories.engagement.saveGeneratedWordSet({
         learnerId, requestId: parsed.data.requestId, taskId: task.taskId, promptVersionId: task.promptVersionId,
         output: {
           topic: output.data.topic,
-          words: output.data.words.map(({ imageQuery, ...word }) => ({ ...word, ...(imageQuery ? { imageQuery } : {}) })),
-          distractors: output.data.distractors.map(({ imageQuery, ...word }) => ({ ...word, ...(imageQuery ? { imageQuery } : {}) }))
+          words: safeWords.map(({ imageQuery, ...word }) => ({ ...word, ...(imageQuery ? { imageQuery } : {}) })),
+          distractors: safeDistractors.map(({ imageQuery, ...word }) => ({ ...word, ...(imageQuery ? { imageQuery } : {}) }))
         },
         metadata: result.metadata
       });
@@ -383,8 +393,20 @@ async function withPracticeAudio(
   return { ...view, submission: view.submission ? { ...view.submission, audioArtifact } : view.submission };
 }
 
-function validateVocabularyTopic(topic: string): { message: string; strike: boolean } | null {
+/** Appended to the stored vocabulary prompt at run time so existing prompt versions get the rule too. */
+const WORD_SET_SAFETY_RULE = "Safety: keep every word, meaning, definition and imageQuery appropriate for a workplace or everyday-life English class. Never include profanity, slurs, sexual content, hate, violence, self-harm, weapons or drugs; if the topic is unsuitable, use neutral workplace vocabulary instead.";
+const MIN_SAFE_GENERATED_WORDS = 10;
+const MIN_SAFE_GENERATED_DISTRACTORS = 4;
+
+function generatedWordIsSensitive(word: { english: string; vietnamese: string; definition?: string | undefined; imageQuery?: string | undefined }): boolean {
+  return hasSensitiveText(word.english, word.vietnamese, word.definition, word.imageQuery);
+}
+
+function validateVocabularyTopic(topic: string): { message: string; strike: boolean; unsafe?: true } | null {
   const normalized = topic.normalize("NFKC").trim();
+  // Unsafe content is checked first so slurs hidden behind symbols, extra words or Vietnamese are not
+  // mistaken for a mere format problem (and always count as a strike).
+  if (sensitiveTextIssue(normalized)) return { message: SENSITIVE_TOPIC_MESSAGE_VI, strike: true, unsafe: true };
   const letters = normalized.match(/\p{L}/gu)?.join("") ?? "";
   if (normalized.length > 70) return { message: "Chủ đề tối đa 70 ký tự.", strike: false };
   if (normalized.split(/\s+/u).filter(Boolean).length > 3) return { message: "Nhập chủ đề từ 1 đến 3 từ tiếng Anh.", strike: false };
@@ -399,14 +421,8 @@ function validateVocabularyTopic(topic: string): { message: string; strike: bool
     || !/[aeiouyàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữự]/iu.test(letters)) {
     return { message: "Chủ đề có dấu hiệu là chuỗi vô nghĩa.", strike: true };
   }
-  const blocked = /\b(?:porn|sex|nude|kill|murder|suicide|ma túy|thuốc phiện|khiêu dâm|giết người)\b/iu;
-  if (blocked.test(normalized)) return { message: "Chủ đề không phù hợp với môi trường học tập.", strike: true };
   if (/[^a-z]/iu.test(letters)) return { message: "Nhập chủ đề bằng tiếng Anh, ví dụ coffee shop.", strike: false };
   return null;
-}
-
-function isUnsafeTopic(topic: string): boolean {
-  return /\b(?:porn|sex|nude|kill|murder|suicide|ma túy|thuốc phiện|khiêu dâm|giết người)\b/iu.test(topic.normalize("NFKC").trim());
 }
 
 function gameEvidence(

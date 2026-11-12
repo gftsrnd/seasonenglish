@@ -13,7 +13,7 @@ import type {
 } from "@e4s/contracts";
 import { buildPronunciationAssets, microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
 import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerConsecutiveLearningAbsences, learnerMonthlyAccess, learnerMonthlyAttendanceDates, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
-import { gradeLessonAnswer, validateGeneratedFeedback } from "@e4s/domain/content";
+import { gradeLessonAnswer, SENSITIVE_NAME_MESSAGE_VI, sensitiveTextIssue, validateGeneratedFeedback } from "@e4s/domain/content";
 import { evaluateMonthlyExamEligibility, learnerMonthlySeasonTarget, MONTHLY_EXAM_ENTRY_CUTOFF, monthlyExamEntryState } from "@e4s/domain/progression";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
 import { exerciseTranslationRevealed, readExerciseTranslation, withoutExerciseTranslations } from "@e4s/domain/monthly";
@@ -119,6 +119,9 @@ export function registerLearningRoutes(
   app.put("/api/v1/learner/profile", { preHandler: learnerOnly }, async (request, reply) => {
     const parsed = profileInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_PROFILE", issues: parsed.error.issues });
+    // Short identity fields are shown to staff; narrative answers (concerns, situations…) are not blocked.
+    const unsafeField = (["fullName", "department", "position"] as const).find((field) => sensitiveTextIssue(parsed.data[field]));
+    if (unsafeField) return reply.code(422).send({ code: "PROFILE_TEXT_NOT_ALLOWED", field: unsafeField, message: SENSITIVE_NAME_MESSAGE_VI });
     const { version, ...profile } = parsed.data;
     const complete = isLearnerProfileComplete(profile as LearnerProfileData);
     let saved: Awaited<ReturnType<typeof repositories.learning.saveProfile>>;

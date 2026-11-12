@@ -1,6 +1,7 @@
 import { createRepositories } from "@e4s/database";
 import type { AccountRole } from "@e4s/contracts";
 import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
+import { SENSITIVE_NAME_MESSAGE_VI, sensitiveTextIssue } from "@e4s/domain/content";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
@@ -142,6 +143,7 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
     const params = learnerIdParams.safeParse(request.params);
     const input = z.strictObject({ displayName: z.string().trim().min(2).max(120) }).safeParse(request.body);
     if (!params.success || !input.success) return reply.code(400).send({ code: "MANAGER_LEARNER_NAME_INVALID" });
+    if (sensitiveTextIssue(input.data.displayName)) return reply.code(422).send({ code: "DISPLAY_NAME_NOT_ALLOWED", message: SENSITIVE_NAME_MESSAGE_VI });
     const displayName = await repositories.manager.changeLearnerDisplayName(request.e4sSession!.user.id, params.data.learnerId, input.data.displayName);
     return displayName === null ? reply.code(404).send({ code: "MANAGER_LEARNER_NOT_FOUND" }) : { displayName };
   });
