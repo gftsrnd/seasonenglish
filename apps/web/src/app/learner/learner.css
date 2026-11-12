@@ -1784,6 +1784,9 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .lesson-page .lesson-study-audio{display:inline-flex;width:max-content;min-height:38px;align-items:center;gap:7px;border:1px solid #e2ded7;border-radius:12px;background:#fff;padding:7px 12px}
 .lesson-page .lesson-grammar-copy{display:grid;gap:3px}
 .lesson-page .lesson-grammar-copy p{margin:0;line-height:1.42}
+.lesson-page .lesson-grammar-row{display:grid;gap:6px}
+.lesson-page .lesson-grammar-copy p.lesson-study-explanation,.lesson-page .lesson-grammar-step p.lesson-study-explanation{line-height:1.55}
+.lesson-page .lesson-grammar-formula-line+.lesson-grammar-formula-line{margin-top:3px}
 .lesson-page .lesson-study-focus{margin:0;color:#191510;font-size:1rem;line-height:1.4}
 .lesson-page .lesson-study-explanation{margin:0;color:#766f66;font-size:.92rem;font-weight:400;line-height:1.48}
 .lesson-page .lesson-example-list{display:flex;flex-wrap:wrap;gap:8px}

@@ -98,3 +98,47 @@ export function conciseGrammarExample(value: string | undefined): string {
   const normalized = value?.replace(/\s+/g, " ").trim() ?? "";
   return normalized || "—";
 }
+
+// Internal roadmap step labels ("Bước 3 (Lỗi thường gặp): …", "Step B1 (Identify): …") are operator copy, not learner copy.
+const GRAMMAR_STEP_LABEL = /^\s*(?:Bước|Step)\s+[A-Z]?\d+[A-Za-z]?\s*(?:\([^)]*\))?\s*[:：–-]\s*/iu;
+
+export function withoutGrammarStepLabel(value: string): string {
+  const trimmed = value.trim();
+  const body = trimmed.replace(GRAMMAR_STEP_LABEL, "").trim();
+  if (!body || body === trimmed) return trimmed;
+  return body.charAt(0).toLocaleUpperCase("vi") + body.slice(1);
+}
+
+/**
+ * A stored formula can chain patterns with "→" ("Subject + am/is/are … → Question: … → Short answer: …").
+ * Long chains read better as one pattern per line, so they are split at the arrows into at most
+ * `maxLines` lines (labels such as "Question:" stay inline). Short arrows inside one pattern
+ * ("work → working") are left alone.
+ */
+export function grammarFormulaLines(formula: string, maxLines = 3): string[] {
+  const text = formula.replace(/\s+/gu, " ").trim();
+  if (!text) return [];
+  const parts = text.split(/\s+→\s+/u).map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2 || text.length < 60 || parts.some((part) => part.length < 12)) return [text];
+  return parts.length <= maxLines ? parts : [...parts.slice(0, maxLines - 1), parts.slice(maxLines - 1).join(" → ")];
+}
+
+const GRAMMAR_SENTENCE_BREAK = /(?<=[.!?…])\s+(?=[\p{Lu}"'“‘(])/u;
+const GRAMMAR_TIP_START = /^(?:Tiếng Việt|Lưu ý|Chú ý|Mẹo|Ghi nhớ|Nhớ|Đừng|Tránh|Note|Tip|Remember|Be careful|Careful)(?=[\s,:]|$)/iu;
+
+/**
+ * The grammar explanation under a formula, as at most two short paragraphs:
+ * the lesson goal with the main rule, then one tip line ("Tiếng Việt không dùng …").
+ * Without a tip sentence the goal and the authored text stay as they are.
+ */
+export function grammarExplanationParagraphs(goal: string | undefined, text: string | undefined): string[] {
+  const squash = (value: string | undefined) => value?.replace(/\s+/gu, " ").trim() ?? "";
+  const lead = squash(goal);
+  const body = squash(text);
+  const sentences = body ? body.split(GRAMMAR_SENTENCE_BREAK) : [];
+  const tips = sentences.filter((sentence) => GRAMMAR_TIP_START.test(sentence));
+  const main = sentences.filter((sentence) => !GRAMMAR_TIP_START.test(sentence));
+  if (!tips.length || (!main.length && !lead)) return [lead, body].filter(Boolean);
+  const leadSentence = lead && !/[.!?…]$/u.test(lead) ? `${lead}.` : lead;
+  return [[leadSentence, ...main].filter(Boolean).join(" "), tips.join(" ")];
+}

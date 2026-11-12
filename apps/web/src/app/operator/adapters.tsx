@@ -394,6 +394,7 @@ export function OperatorLessonPreview({ cefr, lessonId, parts, resolveVocabulary
           speak={operatorLessonSpeak}
           openVocabularyModal={setVocabularyModal}
           collapsibleVocabulary={collapsibleVocabulary}
+          showGrammarStepLabel
           resolveVocabularyImage={resolveVocabularyImage ? (itemIndex) => resolveVocabularyImage(lessonId, itemIndex) : undefined}
         />}</section>;
   })}</div></div>{vocabularyModal ? <SharedVocabularyModal state={vocabularyModal} speak={operatorLessonSpeak} language={language} close={() => setVocabularyModal(null)} /> : null}</div>;
