@@ -507,6 +507,8 @@ export function sensitiveTopicSeverity(text: string | null | undefined): (Sensit
   const general = scan(text, GENERAL);
   if (general) return { ...general, severity: "abusive" };
   const topic = scan(text, TOPIC);
+  // Product decision (12/11): self-harm and drug themes are blocked with a strike at once, like abusive topics.
+  if (topic && (topic.category === "self_harm" || topic.category === "drugs")) return { ...topic, severity: "abusive" };
   return topic ? { ...topic, severity: "unsuitable" } : null;
 }
 

@@ -184,7 +184,7 @@ describe("sensitiveTopicIssue — topic-only categories", () => {
 });
 
 describe("sensitiveTopicSeverity", () => {
-  it.each(["n1gger", "f*ck meeting", "porn", "khiêu dâm", "ma túy", "self-harm"])("treats %s as abusive (immediate strike)", (text) => {
+  it.each(["n1gger", "f*ck meeting", "porn", "khiêu dâm", "ma túy", "self-harm", "want to die", "drug addiction", "illegal drugs"])("treats %s as abusive (immediate strike)", (text) => {
     expect(sensitiveTopicSeverity(text)?.severity).toBe("abusive");
   });
 
