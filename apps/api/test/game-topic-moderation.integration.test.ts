@@ -19,7 +19,7 @@ describe("game topic moderation API", () => {
       lastSystemPrompt = options?.systemPrompt ?? "";
       return {
         output: nextOutput,
-        metadata: { traceId: `trace-topic-${aiCalls}`, taskId: "vocabulary_generation", provider: "fixture", model: "fixture-model", attempts: 1, latencyMs: 1, inputHash: "a".repeat(64), schemaValid: true as const, usage: {} }
+        metadata: { traceId: `trace-topic-${crypto.randomUUID()}`, taskId: "vocabulary_generation", provider: "fixture", model: "fixture-model", attempts: 1, latencyMs: 1, inputHash: "a".repeat(64), schemaValid: true as const, usage: {} }
       };
     }
   } });
@@ -94,7 +94,7 @@ describe("game topic moderation API", () => {
   it.each([
     ["a topic that contains more than seven separate words today", "too many words"],
     ["a".repeat(71), "too many characters"],
-    ["người đồng tính", "a protected group"]
+    ["disabled people", "a protected group"]
   ])("soft-rejects %s without adding a strike (%s)", async (topic) => {
     const response = await app.inject({
       method: "POST", url: "/api/v1/engagement/games/word-set", headers: { cookie },
@@ -114,7 +114,12 @@ describe("game topic moderation API", () => {
     expect(strikes.rows[0]?.count).toBe(0);
   });
 
-  it.each(["n1gger", "N I G G E R", "f*ck meeting", "ma túy", "khiêu dâm", "coffee $hit", "self-harm"])(
+  it.each([
+    "n1gger", "N I G G E R", "f*ck meeting", "ma túy", "khiêu dâm", "coffee $hit", "self-harm",
+    // topic-only themes (tester list + evasions)
+    "lesbian", "gay", "bisexual", "transgender", "homosexual", "người đồng tính", "chingchong", "white people",
+    "blackk people", "nazii", "whitepeople", "casino", "guns", "politics", "Hitler", "religion", "sexuality", "crime"
+  ])(
     "refuses the unsafe topic %s with GAME_TOPIC_NOT_ALLOWED before any AI call", async (topic) => {
       const response = await app.inject({
         method: "POST", url: "/api/v1/engagement/games/word-set", headers: { cookie },
@@ -151,6 +156,28 @@ describe("game topic moderation API", () => {
     expect(set.words).toHaveLength(11);
     expect(set.distractors.map((item) => item.english)).not.toContain("stapler");
   });
+
+  it.each(["black coffee", "white board", "Chinese food", "typing race"])(
+    "lets the everyday topic %s through to the AI and drops topic-only generated words", async (topic) => {
+      const slug = topic.toLowerCase().replace(/[^a-z]+/g, "-");
+      const word = (key: string, english: string, vietnamese = `nghĩa ${key}`) => ({ id: `${slug}-${key}`, english, vietnamese, definition: `simple meaning of ${english}`, partOfSpeech: "noun" });
+      nextOutput = {
+        topic,
+        words: [...Array.from({ length: 10 }, (_, index) => word(`ok-${index + 1}`, `menu item ${index + 1}`)), word("ok-bad", "casino"), word("ok-bad2", "people", "người da đen")],
+        distractors: Array.from({ length: 8 }, (_, index) => word(`dis-${index + 1}`, `desk thing ${index + 1}`))
+      };
+      const response = await app.inject({
+        method: "POST", url: "/api/v1/engagement/games/word-set", headers: { cookie },
+        payload: { requestId: crypto.randomUUID(), topic }
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(aiCalls).toBe(1);
+      const set = response.json().wordSet as { words: Array<{ english: string }> };
+      expect(set.words.map((item) => item.english)).not.toContain("casino");
+      expect(set.words.map((item) => item.english)).not.toContain("people");
+      expect(set.words).toHaveLength(10);
+    }
+  );
 
   it("rejects a generated set that is mostly sensitive instead of saving it", async () => {
     const word = (id: string, english: string) => ({ id, english, vietnamese: `nghĩa ${id}`, definition: `meaning ${id}`, partOfSpeech: "noun" });

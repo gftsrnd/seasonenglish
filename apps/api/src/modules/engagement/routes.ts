@@ -2,7 +2,7 @@ import type { AudioArtifactInput, AudioArtifactView, GameDescriptor, GameKey, Ga
 import { randomUUID } from "node:crypto";
 import { vocabularyOutputSchema, weeklyPracticeOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { arenaEligible, scoreGameAttempt } from "@e4s/domain/engagement";
-import { hasSensitiveText, SENSITIVE_TOPIC_MESSAGE_VI, sensitiveTextIssue } from "@e4s/domain/content";
+import { hasSensitiveTopicText, SENSITIVE_TOPIC_MESSAGE_VI, sensitiveTopicIssue } from "@e4s/domain/content";
 import { validateWeeklyPractice } from "@e4s/domain/progression";
 import { createRepositories } from "@e4s/database";
 import type { FastifyInstance } from "fastify";
@@ -192,7 +192,7 @@ export function registerEngagementRoutes(
       if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID", moderation: { state: "ai_rejected", message: "AI không trả về được bộ từ hợp lệ." } satisfies GameTopicModeration });
       const safeWords = output.data.words.filter((word) => !generatedWordIsSensitive(word));
       const safeDistractors = output.data.distractors.filter((word) => !generatedWordIsSensitive(word));
-      if (sensitiveTextIssue(output.data.topic) || safeWords.length < MIN_SAFE_GENERATED_WORDS || safeDistractors.length < MIN_SAFE_GENERATED_DISTRACTORS) {
+      if (sensitiveTopicIssue(output.data.topic) || safeWords.length < MIN_SAFE_GENERATED_WORDS || safeDistractors.length < MIN_SAFE_GENERATED_DISTRACTORS) {
         request.log.warn({ dropped: output.data.words.length - safeWords.length + output.data.distractors.length - safeDistractors.length }, "Vocabulary generation returned sensitive words");
         return reply.code(502).send({ code: "AI_OUTPUT_INVALID", moderation: { state: "ai_rejected", message: "AI không trả về được bộ từ phù hợp. Hãy thử một chủ đề khác." } satisfies GameTopicModeration });
       }
@@ -394,25 +394,28 @@ async function withPracticeAudio(
 }
 
 /** Appended to the stored vocabulary prompt at run time so existing prompt versions get the rule too. */
-const WORD_SET_SAFETY_RULE = "Safety: keep every word, meaning, definition and imageQuery appropriate for a workplace or everyday-life English class. Never include profanity, slurs, sexual content, hate, violence, self-harm, weapons or drugs; if the topic is unsuitable, use neutral workplace vocabulary instead.";
+const WORD_SET_SAFETY_RULE = "Safety: keep every word, meaning, definition and imageQuery appropriate for a workplace or everyday-life English class. Never include profanity, slurs, sexual content, hate, violence, death, self-harm, weapons, drugs, gambling, crime, politics, religion, race or sexual-orientation themes; if the topic is unsuitable, use neutral workplace vocabulary instead.";
 const MIN_SAFE_GENERATED_WORDS = 10;
 const MIN_SAFE_GENERATED_DISTRACTORS = 4;
 
 function generatedWordIsSensitive(word: { english: string; vietnamese: string; definition?: string | undefined; imageQuery?: string | undefined }): boolean {
-  return hasSensitiveText(word.english, word.vietnamese, word.definition, word.imageQuery);
+  return hasSensitiveTopicText(word.english, word.vietnamese, word.definition, word.imageQuery);
 }
 
 function validateVocabularyTopic(topic: string): { message: string; strike: boolean; unsafe?: true } | null {
   const normalized = topic.normalize("NFKC").trim();
   // Unsafe content is checked first so slurs hidden behind symbols, extra words or Vietnamese are not
-  // mistaken for a mere format problem (and always count as a strike).
-  if (sensitiveTextIssue(normalized)) return { message: SENSITIVE_TOPIC_MESSAGE_VI, strike: true, unsafe: true };
+  // mistaken for a mere format problem (and always count as a strike). The topic screen also refuses
+  // themes that do not belong in a workplace mini-game (sexual orientation, race, religion, politics,
+  // weapons, gambling, crime, death, …) — see sensitiveTopicIssue.
+  if (sensitiveTopicIssue(normalized)) return { message: SENSITIVE_TOPIC_MESSAGE_VI, strike: true, unsafe: true };
   const letters = normalized.match(/\p{L}/gu)?.join("") ?? "";
   if (normalized.length > 70) return { message: "Chủ đề tối đa 70 ký tự.", strike: false };
   if (normalized.split(/\s+/u).filter(Boolean).length > 3) return { message: "Nhập chủ đề từ 1 đến 3 từ tiếng Anh.", strike: false };
   if (letters.length < 2) return { message: "Chủ đề không có đủ từ có nghĩa.", strike: false };
   if (/[^\p{L}\p{N}\s&+,'’().\-/]/u.test(normalized)) return { message: "Chủ đề chứa ký tự không phù hợp.", strike: false };
-  const protectedGroup = /\b(?:người đồng tính|người chuyển giới|người khuyết tật|dân tộc|tôn giáo|gay|lesbian|transgender|disabled people|ethnic group|religious group)\b/iu;
+  // Identity, race and religion group topics are refused above as unsafe; disability stays a soft reject.
+  const protectedGroup = /(?:người khuyết tật|disabled people|disabled persons|handicapped people)/iu;
   if (protectedGroup.test(normalized)) {
     return { message: "Hãy chọn một chủ đề học tập hoặc công việc cụ thể hơn.", strike: false };
   }
