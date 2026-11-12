@@ -15,6 +15,8 @@ import { runMonthlyEnrichmentWithRefill, type MonthlyCoreEnrichmentOutcome } fro
 import { buildMonthlyCrossLevelCoreExclusions, getMonthlyCoreLevelIssue } from "./monthly-resource-quality-gates.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
 import { monthlyGenerationFailure } from "./monthly-generation-errors.js";
+import { repairMonthlyCoreIpa } from "./monthly-british-ipa.js";
+import { verifyMonthlyWords } from "./monthly-word-verification.js";
 import { applyMonthlyResourceEdit, blankMonthlyResourcePool, monthlyResourceEditInputSchema } from "./monthly-resource-manual-edit.js";
 
 const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) });
@@ -398,6 +400,10 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         request.log.info({ month: month.month, cefr: criteria.cefr, phase: "core", cores: corePhase.coreTerms.length, preflightSupports: corePhase.supportTerms.length, ...corePhase.stats }, "Monthly resource core phase finished");
       }
       if (!cachedCoreValid) await saveCheckpointCategory("coreTerms", coreTerms);
+      // December 2026: core IPA must be British RP; the generator corrects rejected transcriptions (words are kept).
+      const ipaRepair = await repairMonthlyCoreIpa(coreTerms, (prompt, batch) => runPhase(prompt, batch, { vocabularyCount: batch.length, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 0 }, { temperature: 0 }));
+      if (ipaRepair.changed) await saveCheckpointCategory("coreTerms", coreTerms);
+      if (ipaRepair.remaining.length) throw new MonthlyResourcePlanError([`Core IPA is not British RP after repair: ${ipaRepair.remaining.map((entry) => `${entry.word} ${entry.ipa} (${entry.issue})`).join("; ")}`]);
       if (preflightSupportTerms.length) await saveCheckpointCategory("expandedTerms", preflightSupportTerms);
 
       updateProgress({phase:"expandedTerms",counts:{coreTerms:coreTerms.length}});
@@ -844,6 +850,10 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
           // Examples are always checked against the fixed catalog item, whatever ipa the response used.
           if (acceptedTargetWords.length < pronunciationExampleCount) {
             const selection = selectMonthlyPronunciationCandidates({ candidates: candidate.words, forbiddenWords: forbiddenForTarget, needed: neededExamples, catalogItem: item, coreTerms, acceptedForTarget: acceptedTargetWords, totalForTarget: pronunciationExampleCount });
+            // December 2026 ("ackle"): an independent real-word / British IPA check before an example is kept.
+            const verified = await verifyMonthlyWords(runner, criteria.cefr, selection.selected.map((word) => ({ word: word.word, ipa: word.ipa, role: `pronunciation example of ${item.notation} (${item.labelEn})` })));
+            for (const [index, reason] of verified) selection.rejected.push(`${selection.selected[index]!.word} (${reason})`);
+            selection.selected = selection.selected.filter((_word, index) => !verified.has(index));
             acceptedTargetWords.push(...selection.selected);
             exampleRejections = acceptedTargetWords.length === pronunciationExampleCount ? [] : selection.rejected.length ? selection.rejected : [`only ${acceptedTargetWords.length} of ${pronunciationExampleCount} usable examples have been returned`];
           }
@@ -1015,7 +1025,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     let result;
     try {
       const teachingContract = await repositories.monthlyContent.getReviewTeachingContract(actorId,id,dayNumber);
-      result = await generateMonthlyReviewWithAi(teachingContract, dayNumber, runner, task.prompt);
+      result = await generateMonthlyReviewWithAi(teachingContract, dayNumber, runner, task.prompt, { verifyAnswers: true });
       result.scopeHash = monthlyScopeHash(contract);
     } catch (error) {
       const response = invalidMonthlyPlanReply(reply,error); if (response) return response;
@@ -1050,7 +1060,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     let result;
     try {
-      result = await generateMonthlyDayWithAi(contract, dayNumber, runner, task.prompt, await priorMonthlyGrammarExamples(pool, id, contract, dayNumber));
+      result = await generateMonthlyDayWithAi(contract, dayNumber, runner, task.prompt, await priorMonthlyGrammarExamples(pool, id, contract, dayNumber), { verifyAnswers: true });
     } catch (error) {
       const failure = monthlyGenerationFailure(error);
       if (failure) {

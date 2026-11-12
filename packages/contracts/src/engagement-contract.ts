@@ -85,6 +85,8 @@ export interface GameWordView {
   vietnamese: string;
   definition: string;
   partOfSpeech: string;
+  /** Short context line using the word in `partOfSpeech` (Word sort shows it so the context decides the class). */
+  example?: string;
   /** Resolved by the server through the configured image provider and persisted with the word set. */
   imageUrl?: string;
   imageQuery?: string;
@@ -110,6 +112,8 @@ export interface GameWordSetView {
   words: GameWordView[];
   /** Custom AI sets contain eight off-topic options for multiple-choice game rounds. */
   distractors?: GameWordView[];
+  /** Some words still lack an `example` and the one-time batched backfill has not run for this set yet. */
+  examplesPending?: boolean;
 }
 
 export interface GameHubView {

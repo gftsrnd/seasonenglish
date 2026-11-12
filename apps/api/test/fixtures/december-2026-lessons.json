@@ -1,0 +1,510 @@
+{
+ "source": ".artifacts/dec-2026/lessons (December 2026 generation on 4300, code c148857); grammar items copied verbatim",
+ "grammar": {
+  "A1-L3": {
+   "dailyCode": "A3",
+   "objective": "Bước 2 (Biến thể): Viết câu phủ định với isn't/aren't để nói rằng một việc chưa đúng hoặc chưa sẵn sàng.",
+   "milestoneIds": [
+    "a1-grammar-1-step-2"
+   ],
+   "recallMilestoneIds": [],
+   "items": [
+    {
+     "id": "a3-item-1",
+     "prompt": "Chọn từ đúng để hoàn thành câu: The slides ____ ready for the meeting yet.",
+     "options": [
+      "aren't",
+      "am not",
+      "not is",
+      "isn't"
+     ],
+     "answer": "isn't",
+     "milestoneId": "a1-grammar-1-step-2"
+    },
+    {
+     "id": "a3-item-2",
+     "prompt": "Chọn từ đúng để hoàn thành câu: Our developers ____ free this week.",
+     "options": [
+      "isn't",
+      "am not",
+      "aren't",
+      "doesn't"
+     ],
+     "answer": "aren't",
+     "milestoneId": "a1-grammar-1-step-2"
+    },
+    {
+     "id": "a3-item-3",
+     "prompt": "Chọn từ đúng để hoàn thành câu: I ____ sure the task is hard for the team.",
+     "options": [
+      "isn't",
+      "am not",
+      "aren't",
+      "don't"
+     ],
+     "answer": "am not",
+     "milestoneId": "a1-grammar-1-step-2"
+    },
+    {
+     "id": "a3-item-4",
+     "prompt": "Chọn câu đúng để nói rằng tuần này việc giúp đỡ chưa sẵn sàng: help is ____ ready this week.",
+     "options": [
+      "isn't",
+      "not",
+      "aren't",
+      "am"
+     ],
+     "answer": "isn't",
+     "milestoneId": "a1-grammar-1-step-2"
+    }
+   ]
+  },
+  "A1-L8": {
+   "dailyCode": "B1",
+   "objective": "Bước 1 (Nhận biết): Tìm các đại từ I, me, my, mine, he, him, his trong một tin nhắn nội bộ về buổi họp tổng kết.",
+   "milestoneIds": [
+    "a1-grammar-2-step-1"
+   ],
+   "recallMilestoneIds": [
+    "a1-grammar-1-step-1"
+   ],
+   "items": [
+    {
+     "id": "g1",
+     "prompt": "Chọn từ đúng để hoàn thành câu: Please send ____ your notes after the meeting.",
+     "options": [
+      "my",
+      "mine",
+      "I",
+      "me"
+     ],
+     "answer": "me",
+     "milestoneId": "a1-grammar-1-step-1"
+    },
+    {
+     "id": "g2",
+     "prompt": "Chọn câu có đại từ đứng trước động từ:",
+     "options": [
+      "Him leads the review meeting.",
+      "He lead the review meeting.",
+      "He leads the review meeting.",
+      "His leads the review meeting."
+     ],
+     "answer": "He leads the review meeting.",
+     "milestoneId": "a1-grammar-2-step-1"
+    },
+    {
+     "id": "g3",
+     "prompt": "Chọn từ đúng để hoàn thành câu: The learning notes are ____ for the team meeting.",
+     "options": [
+      "me",
+      "my",
+      "mine",
+      "I"
+     ],
+     "answer": "my",
+     "milestoneId": "a1-grammar-2-step-1"
+    },
+    {
+     "id": "g4",
+     "prompt": "Chọn từ đúng để hoàn thành câu: Our manager asked ____ to lead the project review.",
+     "options": [
+      "me",
+      "I",
+      "my",
+      "mine"
+     ],
+     "answer": "me",
+     "milestoneId": "a1-grammar-2-step-1"
+    }
+   ]
+  },
+  "A2-L8": {
+   "dailyCode": "B1",
+   "objective": "Bước 1 - Nhận biết: Tìm các liên từ and, but, or, so, because trong email nội bộ và xác định hai ý được nối.",
+   "milestoneIds": [
+    "a2-grammar-2-step-1"
+   ],
+   "recallMilestoneIds": [
+    "a2-grammar-1-step-1"
+   ],
+   "items": [
+    {
+     "id": "a2-g-recall-1",
+     "prompt": "Chọn từ đúng để hoàn thành câu: We finished the task early, ____ the manager was pleased.",
+     "options": [
+      "because",
+      "or",
+      "when",
+      "and"
+     ],
+     "answer": "and",
+     "milestoneId": "a2-grammar-1-step-1"
+    },
+    {
+     "id": "a2-g-1",
+     "prompt": "Chọn liên từ đúng: The result was good, ____ the deadline was very tight.",
+     "options": [
+      "so",
+      "or",
+      "but",
+      "because"
+     ],
+     "answer": "but",
+     "milestoneId": "a2-grammar-2-step-1"
+    },
+    {
+     "id": "a2-g-2",
+     "prompt": "Chọn liên từ đúng: We can complete the report today ____ we can finish it next Monday.",
+     "options": [
+      "so",
+      "or",
+      "because",
+      "but"
+     ],
+     "answer": "or",
+     "milestoneId": "a2-grammar-2-step-1"
+    },
+    {
+     "id": "a2-g-3",
+     "prompt": "Chọn liên từ đúng: The company missed the target, ____ the team prepared a new plan.",
+     "options": [
+      "so",
+      "because",
+      "or",
+      "and"
+     ],
+     "answer": "so",
+     "milestoneId": "a2-grammar-2-step-1"
+    },
+    {
+     "id": "a2-g-4",
+     "prompt": "Chọn liên từ đúng: We delayed the task ____ the data from the client was missing.",
+     "options": [
+      "because",
+      "but",
+      "or",
+      "so"
+     ],
+     "answer": "because",
+     "milestoneId": "a2-grammar-2-step-1"
+    }
+   ]
+  },
+  "B1-L8": {
+   "dailyCode": "B1",
+   "objective": "Step B1 (Identify): Notice past simple sequences and past continuous background in a real meeting summary.",
+   "milestoneIds": [
+    "b1-grammar-2-step-1"
+   ],
+   "recallMilestoneIds": [
+    "b1-grammar-1-step-1"
+   ],
+   "items": [
+    {
+     "id": "b1-g2-r1",
+     "prompt": "Which sentence uses the past simple for a finished action in order?",
+     "options": [
+      "I was sending the file when the call started.",
+      "I sent the file, then I called the client.",
+      "I was calling the client while the file sends.",
+      "While I sent the file, I was calling the client."
+     ],
+     "answer": "I sent the file, then I called the client.",
+     "milestoneId": "b1-grammar-1-step-1"
+    },
+    {
+     "id": "b1-g2-1",
+     "prompt": "Which sentence shows a short completed action interrupting a longer action?",
+     "options": [
+      "While we were discussing the plan, the partner called.",
+      "When we were discussing the plan, the partner called.",
+      "We discussed the plan while the partner called.",
+      "While we discussed the plan, the partner was calling."
+     ],
+     "answer": "While we were discussing the plan, the partner called.",
+     "milestoneId": "b1-grammar-2-step-1"
+    },
+    {
+     "id": "b1-g2-2",
+     "prompt": "Choose the sentence that uses the past continuous for background.",
+     "options": [
+      "The team agreed on the date when the manager arrived.",
+      "The team discussed the budget, then the manager arrived.",
+      "The team agrees on the budget while the manager arrives.",
+      "The team was discussing the budget when the manager arrived."
+     ],
+     "answer": "The team was discussing the budget when the manager arrived.",
+     "milestoneId": "b1-grammar-2-step-1"
+    },
+    {
+     "id": "b1-g2-3",
+     "prompt": "Which sentence correctly shows the order of two finished actions?",
+     "options": [
+      "We were agreeing to the plan, then we signed the contract.",
+      "We agree to the plan, while we were signing the contract.",
+      "We agreed to the plan, then we signed the contract.",
+      "We agreed to the plan while signed the contract."
+     ],
+     "answer": "We agreed to the plan, then we signed the contract.",
+     "milestoneId": "b1-grammar-2-step-1"
+    }
+   ]
+  },
+  "B1-L16": {
+   "dailyCode": "K1",
+   "objective": "K1 Contrast A–B: choose Present simple vs present continuous or Past simple vs past continuous and past habits for each situation about describing your current and previous jobs (contribute, workflow, assess).",
+   "milestoneIds": [
+    "b1-grammar-1-step-3",
+    "b1-grammar-2-step-3"
+   ],
+   "recallMilestoneIds": [],
+   "items": [
+    {
+     "id": "k1-1",
+     "prompt": "Every Monday, our team ____ the workflow before the weekly meeting. (review / is reviewing)",
+     "options": [
+      "is reviewing",
+      "reviewed",
+      "reviews",
+      "was reviewing"
+     ],
+     "answer": "reviews",
+     "milestoneId": "b1-grammar-1-step-3"
+    },
+    {
+     "id": "k1-2",
+     "prompt": "This week, I ____ ideas for the year-end report while my manager is away. (contribute / am contributing)",
+     "options": [
+      "contribute",
+      "am contributing",
+      "contributed",
+      "was contributing"
+     ],
+     "answer": "am contributing",
+     "milestoneId": "b1-grammar-1-step-3"
+    },
+    {
+     "id": "k1-3",
+     "prompt": "When I worked in my old company, I ____ the sales results every Friday. (assess / assessed)",
+     "options": [
+      "used to assess",
+      "assess",
+      "assessed",
+      "was assessing"
+     ],
+     "answer": "used to assess",
+     "milestoneId": "b1-grammar-2-step-3"
+    },
+    {
+     "id": "k1-4",
+     "prompt": "While I ____ the workflow in my old job, the system suddenly stopped. (check / was checking)",
+     "options": [
+      "check",
+      "checked",
+      "am checking",
+      "was checking"
+     ],
+     "answer": "was checking",
+     "milestoneId": "b1-grammar-2-step-3"
+    }
+   ]
+  },
+  "B2-L8": {
+   "dailyCode": "B1",
+   "objective": "Day 7 (Step 1 – Identify): Find the if-clause with had + V3 and the result clause with would have + V3 in a short project review message.",
+   "milestoneIds": [
+    "b2-grammar-2-step-1"
+   ],
+   "recallMilestoneIds": [
+    "b2-grammar-1-step-1"
+   ],
+   "items": [
+    {
+     "id": "g1",
+     "prompt": "Read the message: \"If we had tested the login feature earlier, we would have found the bug before the release.\" Which part is the if-clause?",
+     "options": [
+      "we would have found the bug",
+      "before the release",
+      "If we had tested the login feature earlier",
+      "we would have found"
+     ],
+     "answer": "If we had tested the login feature earlier",
+     "milestoneId": "b2-grammar-1-step-1"
+    },
+    {
+     "id": "g2",
+     "prompt": "Which sentence uses the third conditional structure?",
+     "options": [
+      "If the client had approved the plan in June, we would have started the pilot in July.",
+      "If the client approves the plan, we will start the pilot.",
+      "If the client approved the plan, we would start the pilot.",
+      "If the client has approved the plan, we start the pilot."
+     ],
+     "answer": "If the client had approved the plan in June, we would have started the pilot in July.",
+     "milestoneId": "b2-grammar-2-step-1"
+    },
+    {
+     "id": "g3",
+     "prompt": "In the review message \"If Lan had joined the kick-off meeting, she would have understood the scope much better,\" which words form the result clause?",
+     "options": [
+      "If Lan had joined",
+      "she would have understood the scope much better",
+      "the kick-off meeting",
+      "Lan had joined"
+     ],
+     "answer": "she would have understood the scope much better",
+     "milestoneId": "b2-grammar-2-step-1"
+    },
+    {
+     "id": "g4",
+     "prompt": "Which sentence uses the founder in a third conditional message?",
+     "options": [
+      "If the founder reviews the budget, the team will avoid the overspend.",
+      "If the founder had review the budget, the team would avoid the overspend.",
+      "The founder would have reviewed the budget if the team had avoid the overspend.",
+      "If the founder had reviewed the budget in June, the team would have avoided the overspend."
+     ],
+     "answer": "If the founder had reviewed the budget in June, the team would have avoided the overspend.",
+     "milestoneId": "b2-grammar-2-step-1"
+    }
+   ]
+  },
+  "C1-L8": {
+   "dailyCode": "B1",
+   "objective": "Day 1 (Step 1 – Identify): Notice be to in an official schedule notice and be about to in a short workplace update.",
+   "milestoneIds": [
+    "c1-grammar-2-step-1"
+   ],
+   "recallMilestoneIds": [
+    "c1-grammar-1-step-1"
+   ],
+   "items": [
+    {
+     "id": "g1",
+     "prompt": "Which sentence uses be to for an official schedule?",
+     "options": [
+      "The finance team is about to submit the year-end report.",
+      "The finance team has submitted the year-end report.",
+      "The finance team submit the year-end report on Friday.",
+      "The finance team is to submit the year-end report on Friday."
+     ],
+     "answer": "The finance team is to submit the year-end report on Friday.",
+     "milestoneId": "c1-grammar-2-step-1"
+    },
+    {
+     "id": "g2",
+     "prompt": "Which sentence uses be about to for an action happening very soon?",
+     "options": [
+      "The board is to approve the budget next month.",
+      "The dashboard was about to yesterday.",
+      "The meeting is about to start, so please take your seats.",
+      "We are about to the delegate list."
+     ],
+     "answer": "The meeting is about to start, so please take your seats.",
+     "milestoneId": "c1-grammar-2-step-1"
+    },
+    {
+     "id": "g3",
+     "prompt": "Choose the sentence that uses the structure with a delegate.",
+     "options": [
+      "The delegate is to attend the contingency briefing on Monday.",
+      "The delegate are to attend the contingency briefing.",
+      "The delegate to attend contingency briefing Monday.",
+      "The delegate is attend the contingency briefing on Monday."
+     ],
+     "answer": "The delegate is to attend the contingency briefing on Monday.",
+     "milestoneId": "c1-grammar-2-step-1"
+    },
+    {
+     "id": "g4",
+     "prompt": "Which sentence correctly uses be on the point of with a dashboard update?",
+     "options": [
+      "The IT lead is on the point of publish the dashboard.",
+      "The IT lead is on the point of publishing the dashboard.",
+      "The IT lead on the point of publish the dashboard.",
+      "The IT lead is on the point to publish the dashboard."
+     ],
+     "answer": "The IT lead is on the point of publishing the dashboard.",
+     "milestoneId": "c1-grammar-2-step-1"
+    },
+    {
+     "id": "g5",
+     "prompt": "Recall: which sentence uses the correct form of a past topic structure?",
+     "options": [
+      "The sales manager has reviewed the tracker already.",
+      "The sales manager have reviewed the tracker already.",
+      "The sales manager reviewing the tracker already.",
+      "The sales manager reviewed the tracker already today yesterday."
+     ],
+     "answer": "The sales manager has reviewed the tracker already.",
+     "milestoneId": "c1-grammar-1-step-1"
+    }
+   ]
+  },
+  "C1-L4": {
+   "items": [
+    {
+     "id": "g1",
+     "prompt": "Choose the best polite request: '____ if we could postpone the review to next week.'",
+     "options": [
+      "I was wondering",
+      "I wonder",
+      "I am wondering",
+      "I wondered"
+     ],
+     "answer": "I was wondering"
+    },
+    {
+     "id": "g2",
+     "prompt": "The reports ____ all afternoon, so my eyes are tired and the desk is covered in paper.",
+     "options": [
+      "has been reading",
+      "have been reading",
+      "have been read",
+      "has been read"
+     ],
+     "answer": "have been reading"
+    }
+   ]
+  }
+ },
+ "speaking": {
+  "A1-L4": [
+   {
+    "id": "speaking-1",
+    "prompt": "Nghe và chọn từ bạn nghe được.",
+    "options": [
+     "team",
+     "teem"
+    ],
+    "answer": "team",
+    "audioText": "team"
+   },
+   {
+    "id": "speaking-2",
+    "prompt": "Nghe và chọn từ bạn nghe được.",
+    "options": [
+     "weak",
+     "week"
+    ],
+    "answer": "week",
+    "audioText": "week"
+   }
+  ]
+ },
+ "vocabulary": {
+  "A1-L3 week": {
+   "word": "week",
+   "type": "noun",
+   "ipa": "/wiːk/",
+   "meaning": "tuần",
+   "synonyms": [
+    {
+     "note": "bảy ngày",
+     "word": "seven days"
+    }
+   ]
+  }
+ }
+}

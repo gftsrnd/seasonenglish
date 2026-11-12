@@ -233,6 +233,8 @@ const vocabularyWordSchema = z.object({
   vietnamese: z.string().trim().min(1).max(200),
   definition: z.string().trim().min(1).max(300),
   partOfSpeech: z.enum(["noun", "verb", "adjective", "adverb", "preposition", "phrase"]),
+  /** Word sort context sentence; the API keeps it only when it really contains the word. */
+  example: z.string().trim().max(300).optional(),
   imageQuery: z.string().trim().min(2).max(200).optional()
 }).strict();
 
@@ -273,15 +275,57 @@ const vocabularyWordJsonSchema = {
   }
 } as const;
 
+const GAME_WORD_EXAMPLE_DESCRIPTION = "One short natural English sentence (at most 12 words) that contains the exact English form and uses it as the given partOfSpeech, so the sentence alone shows the word class (e.g. noun change: \"We need a change in the plan.\").";
+
+const vocabularyTargetWordJsonSchema = {
+  ...vocabularyWordJsonSchema,
+  required: [...vocabularyWordJsonSchema.required, "example"],
+  properties: { ...vocabularyWordJsonSchema.properties, example: { type: "string", maxLength: 120, description: GAME_WORD_EXAMPLE_DESCRIPTION } }
+} as const;
+
 export const vocabularyOutputJsonSchema = {
   type: "object", additionalProperties: false, required: ["topic", "words", "distractors"],
   properties: {
     topic: { type: "string" },
     words: {
-      type: "array", minItems: 12, maxItems: 12, items: vocabularyWordJsonSchema
+      type: "array", minItems: 12, maxItems: 12, items: vocabularyTargetWordJsonSchema
     },
     distractors: {
       type: "array", minItems: 8, maxItems: 8, items: vocabularyWordJsonSchema
+    }
+  }
+} satisfies Record<string, unknown>;
+
+/** One-time batched backfill of Word sort context sentences for a stored game set (all missing words, one request). */
+export const vocabularyExamplesInputSchema = z.object({
+  cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]),
+  words: z.array(z.object({
+    id: z.string().trim().min(1).max(160),
+    english: z.string().trim().min(1).max(100),
+    partOfSpeech: z.string().trim().min(1).max(60),
+    vietnamese: z.string().trim().max(200)
+  }).strict()).min(1).max(30)
+});
+
+export const vocabularyExamplesOutputSchema = z.object({
+  examples: z.array(z.object({
+    id: z.string().trim().min(1).max(160),
+    example: z.string().trim().min(1).max(300)
+  }).strict()).max(30)
+});
+
+export type VocabularyExamplesTaskInput = z.infer<typeof vocabularyExamplesInputSchema>;
+export type VocabularyExamplesTaskOutput = z.infer<typeof vocabularyExamplesOutputSchema>;
+
+export const vocabularyExamplesOutputJsonSchema = {
+  type: "object", additionalProperties: false, required: ["examples"],
+  properties: {
+    examples: {
+      type: "array", maxItems: 30,
+      items: {
+        type: "object", additionalProperties: false, required: ["id", "example"],
+        properties: { id: { type: "string" }, example: { type: "string", maxLength: 120, description: GAME_WORD_EXAMPLE_DESCRIPTION } }
+      }
     }
   }
 } satisfies Record<string, unknown>;

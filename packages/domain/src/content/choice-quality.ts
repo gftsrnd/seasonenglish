@@ -129,7 +129,49 @@ const ONE_SOUND_SPELLINGS: ReadonlySet<string> = new Set([
 ]);
 
 function collapseDoubledConsonants(word: string): string {
-  return word.replace(/([bcdfghjklmnpqrstvwxz])\1/gu, "$1");
+  // "ck" spells one /k/ (wick ~ week differ only in the vowel).
+  return word.replace(/ck/gu, "k").replace(/([bcdfghjklmnpqrstvwxz])\1/gu, "$1");
+}
+
+/** Common homophones whose spellings differ in more than a vowel team (right / write, hour / our). */
+const HOMOPHONE_GROUPS: ReadonlyArray<readonly string[]> = [
+  ["right", "write", "rite"], ["there", "their"], ["hour", "our"], ["two", "too", "to"], ["know", "no"], ["knew", "new"],
+  ["buy", "by", "bye"], ["whole", "hole"], ["wear", "where"], ["weather", "whether"], ["through", "threw"], ["not", "knot"],
+  ["son", "sun"], ["cell", "sell"], ["cent", "sent", "scent"], ["site", "sight", "cite"], ["role", "roll"], ["brake", "break"],
+  ["flour", "flower"], ["hear", "here"], ["higher", "hire"], ["hi", "high"], ["for", "four"], ["one", "won"], ["piece", "peace"],
+  ["deer", "dear"], ["dew", "due"], ["need", "knead"], ["suite", "sweet"], ["check", "cheque"], ["way", "weigh"], ["wait", "weight"],
+  ["eight", "ate"], ["be", "bee"], ["we", "wee"], ["see", "sea"], ["mail", "male"], ["sale", "sail"], ["tale", "tail"], ["pain", "pane"],
+  ["plain", "plane"], ["main", "mane"], ["made", "maid"], ["waste", "waist"], ["fair", "fare"], ["pair", "pear", "pare"], ["stair", "stare"],
+  ["steal", "steel"], ["real", "reel"], ["heal", "heel"], ["meet", "meat"], ["week", "weak"], ["team", "teem"], ["seem", "seam"],
+  ["feet", "feat"], ["read", "reed"], ["die", "dye"], ["rode", "road", "rowed"], ["sole", "soul"], ["so", "sew", "sow"],
+  ["blue", "blew"], ["route", "root"], ["board", "bored"], ["course", "coarse"], ["key", "quay"], ["profit", "prophet"]
+];
+
+/** A rough sound key of a spelling: silent initial letters dropped, vowel teams and magic e folded to one vowel symbol. */
+function soundKey(word: string): string {
+  return collapseDoubledConsonants(word)
+    .replace(/^kn/u, "n").replace(/^wr/u, "r").replace(/^wh/u, "w").replace(/^gn/u, "n")
+    .replace(/igh/gu, "Y")
+    .replace(/ee|ea|ie(?!s)/gu, "I")
+    .replace(/ai|ay/gu, "A")
+    .replace(/oa|oe/gu, "O")
+    .replace(/oo|ue|ew/gu, "U")
+    .replace(/a([bcdfgklmnprstvz])e$/u, "A$1").replace(/i([bcdfgklmnprstvz])e$/u, "Y$1").replace(/o([bcdfgklmnprstvz])e$/u, "O$1")
+    .replace(/u([bcdfgklmnprstvz])e$/u, "U$1").replace(/e([bcdfgklmnprstvz])e$/u, "I$1");
+}
+
+/**
+ * True when two different spellings are (very likely) pronounced the same:
+ * a listed homophone pair, or the same consonants with two spellings of one
+ * vowel (team / teem, week / weak, sale / sail). Homophones are never minimal
+ * pairs: the learner cannot hear a difference (December 2026 A1 review "team / teem").
+ */
+export function areLikelyHomophones(first: string, second: string): boolean {
+  const a = first.trim().toLocaleLowerCase("en-US");
+  const b = second.trim().toLocaleLowerCase("en-US");
+  if (!a || !b || a === b || !/^[a-z]+$/u.test(a) || !/^[a-z]+$/u.test(b)) return false;
+  if (HOMOPHONE_GROUPS.some((group) => group.includes(a) && group.includes(b))) return true;
+  return soundKey(a) === soundKey(b);
 }
 
 function ipaSegments(ipa: string): string[] {
@@ -165,6 +207,7 @@ export function isPlausibleMinimalPair(first: string, second: string, ipa?: { fi
   if (!/^[a-z]+$/u.test(a) || !/^[a-z]+$/u.test(b)) return true;
   if (a === b) return false;
   if (ipa?.first?.trim() && ipa.second?.trim()) return segmentDistance(ipaSegments(ipa.first), ipaSegments(ipa.second)) === 1;
+  if (areLikelyHomophones(a, b)) return false;
   const x = collapseDoubledConsonants(a);
   const y = collapseDoubledConsonants(b);
   if (x === y) return false;

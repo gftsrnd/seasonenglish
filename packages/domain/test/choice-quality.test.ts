@@ -96,4 +96,21 @@ describe("minimal pair heuristic (AI quality round 2, 11/11)", () => {
     expect(isPlausibleMinimalPair("bomb", "bond", { first: "/bɒm/", second: "/bɒnd/" })).toBe(false);
     expect(isPlausibleMinimalPair("event", "segment", { first: "/ɪˈvent/", second: "/ˈseɡmənt/" })).toBe(false);
   });
+  it("rejects homophones as minimal pairs (December 2026 A1 review: team / teem, week / weak) and accepts week / wick", async () => {
+    const { isPlausibleMinimalPair } = await import("../src/content/index.js");
+    const { areLikelyHomophones } = await import("../src/content/choice-quality.js");
+    const { monthlyPronunciationContrastIssue, monthlyPronunciationContrastRule } = await import("../src/monthly/pronunciation-contrast.js");
+    for (const [a, b] of [["team", "teem"], ["week", "weak"], ["meet", "meat"], ["sale", "sail"], ["right", "write"], ["hour", "our"], ["know", "no"]]) {
+      expect(areLikelyHomophones(a!, b!), `${a}/${b}`).toBe(true);
+      expect(isPlausibleMinimalPair(a!, b!), `${a}/${b}`).toBe(false);
+    }
+    expect(isPlausibleMinimalPair("team", "teem", { first: "/tiːm/", second: "/tiːm/" })).toBe(false);
+    for (const [a, b] of [["ship", "sheep"], ["week", "wick"], ["sit", "seat"], ["hat", "hate"], ["cost", "coast"], ["read", "red"]]) {
+      expect(areLikelyHomophones(a!, b!), `${a}/${b}`).toBe(false);
+      expect(isPlausibleMinimalPair(a!, b!), `${a}/${b}`).toBe(true);
+    }
+    const rule = monthlyPronunciationContrastRule("A1", { ipa: "/iː/" });
+    expect(rule.guidance).toContain("team / teem");
+    expect(monthlyPronunciationContrastIssue(rule, "team", "teem")).toContain("homophones");
+  });
 });

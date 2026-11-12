@@ -562,3 +562,43 @@ describe("vocabulary synonyms/antonyms carry their meaning (12/11)", () => {
     expect(monthlyVocabularyRelationContract("C1")).not.toContain("note");
   });
 });
+
+describe("independent answer verification (December 2026)", () => {
+  it("sends a disputed key back to repair and stops once the checker accepts the item", async () => {
+    let checks = 0;
+    const seen: string[][] = [];
+    const result = await generateMonthlyDay({
+      contract: contract(), dayNumber: 1,
+      generate: async (input) => { seen.push([...input.components]); return { title: "The cost is high", parts: input.components.map((code) => part(code)) }; },
+      verifyAnswers: async () => {
+        checks += 1;
+        return checks === 1 ? [{ severity: "severe", code: "MONTHLY_ANSWER_KEY_DISPUTED", message: "word_class: an independent check found \"The room\" correct", dayNumber: 1, component: "word_class" }] : [];
+      }
+    });
+    expect(result.status).toBe("ready");
+    expect(result.attempts).toBe(2);
+    expect(seen).toEqual([components, ["word_class"]]);
+  });
+  it("runs the monthly_answer_verification task without the key only when asked, and a failing check never fails the lesson", async () => {
+    const tasks: string[] = [];
+    const verificationInputs: Array<Record<string, any>> = [];
+    const runner = (fail: boolean) => ({ runTask: async (taskId: string, input: Record<string, any>, options: Record<string, any>) => {
+      tasks.push(taskId);
+      if (taskId === "monthly_answer_verification") {
+        if (fail) throw new Error("AI_TIMEOUT");
+        verificationInputs.push(input);
+        expect(options.systemPrompt).toContain("the key is NOT given");
+        return { output: { items: input.items.map((item: { ref: string; options: string[] }) => ({ ref: item.ref, correctOptions: [item.options[0]], note: "ok" })) }, metadata: {} };
+      }
+      expect(options.systemPrompt).toContain("ONE CORRECT ANSWER");
+      return { output: { lesson: { ...lessonCandidate(), title: "Budget lesson" } }, metadata: {} };
+    } }) as unknown as import("@e4s/ai").AiTaskRunner;
+    expect((await generateMonthlyDayWithAi(contract(), 1, runner(false), "Prompt")).status).toBe("ready");
+    expect(tasks).not.toContain("monthly_answer_verification");
+    const checked = await generateMonthlyDayWithAi(contract(), 1, runner(false), "Prompt", [], { verifyAnswers: true });
+    expect(checked.status).toBe("ready");
+    expect(verificationInputs[0]!.items.length).toBeGreaterThan(0);
+    expect(JSON.stringify(verificationInputs[0])).not.toContain("\"answer\"");
+    expect((await generateMonthlyDayWithAi(contract(), 1, runner(true), "Prompt", [], { verifyAnswers: true })).status).toBe("ready");
+  });
+});

@@ -181,7 +181,7 @@ describe("pronunciation example gate (real bad outputs)", () => {
 
   it("A2 /s/: zoom, easy, busy and noise are rejected whether the IPA is honest or faked", () => {
     const result = pick("/s/", [
-      example("schedule", "/ˈskedʒuːl/"), example("success", "/səkˈses/"), example("staff", "/stɑːf/"), example("supplier", "/səˈplaɪər/"), example("service", "/ˈsɜːvɪs/"),
+      example("schedule", "/ˈskedʒuːl/"), example("success", "/səkˈses/"), example("staff", "/stɑːf/"), example("supplier", "/səˈplaɪə/"), example("service", "/ˈsɜːvɪs/"),
       example("sales", "/seɪlz/"), example("cost", "/kɒst/"), example("test", "/test/"), example("absence", "/ˈæbsəns/"),
       example("zoom", "/zuːm/"), example("zoom", "/suːm/"), example("easy", "/ˈiːzi/"), example("easy", "/ˈiːsi/"), example("busy", "/ˈbɪsi/"), example("noise", "/nɔɪs/")
     ]);
@@ -213,7 +213,7 @@ describe("pronunciation example gate (real bad outputs)", () => {
   });
 
   it("B1 /ks/ and C1 clusters: tracks /trædks/, count /krʌnt/, ax, client, est and extend are rejected", () => {
-    const ks = pick("/ks/", [example("fix", "/fɪks/"), example("tasks", "/tɑːsks/"), example("checks", "/tʃeks/"), example("works", "/wɜːrks/"), example("tracks", "/trædks/"), example("ax", "/æks/")]);
+    const ks = pick("/ks/", [example("fix", "/fɪks/"), example("tasks", "/tɑːsks/"), example("checks", "/tʃeks/"), example("works", "/wɜːks/"), example("tracks", "/trædks/"), example("ax", "/æks/")]);
     expect(ks.selected.map((item) => item.word)).toEqual(["fix", "tasks", "checks", "works"]);
     expect(ks.rejected.find((entry) => entry.startsWith("tracks"))).toContain("has /d/, which the spelling \"tracks\" cannot produce");
     const st = pick("/st/", [

@@ -1,6 +1,7 @@
 import {
   coachInputSchema, coachOutputJsonSchema, coachOutputSchema, coachRoleplayTurnOutputJsonSchema, coachRoleplayTurnOutputSchema,
   vocabularyInputSchema, vocabularyOutputJsonSchema, vocabularyOutputSchema,
+  vocabularyExamplesInputSchema, vocabularyExamplesOutputJsonSchema, vocabularyExamplesOutputSchema,
   weeklyLessonsInputSchema, weeklyLessonsOutputJsonSchema, weeklyLessonsOutputSchema,
   weeklyLessonDayInputSchema, weeklyLessonDayOutputJsonSchema, weeklyLessonDayOutputSchema,
   monthlyLessonDayOutputJsonSchema, monthlyLessonDayOutputSchema,
@@ -375,6 +376,10 @@ export const AI_TASKS = new AiTaskRegistry([
   {
     id: "vocabulary_generation", promptKey: "vocabulary_generation", inputSchema: vocabularyInputSchema,
     outputSchema: vocabularyOutputSchema, outputJsonSchema: vocabularyOutputJsonSchema
+  },
+  {
+    id: "vocabulary_examples", promptKey: "vocabulary_generation", inputSchema: vocabularyExamplesInputSchema,
+    outputSchema: vocabularyExamplesOutputSchema, outputJsonSchema: vocabularyExamplesOutputJsonSchema
   }
 ]);
 

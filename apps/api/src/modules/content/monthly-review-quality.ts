@@ -150,7 +150,7 @@ export function evaluateMonthlyReviewSections(
     const issue = monthlyPronunciationContrastIssue(taught.rule, taught.text, partner, { first: ipaByWord.get(taught.text), second: ipaByWord.get(spoken(partner)) });
     if (issue) {
       add("severe", "speaking", "MONTHLY_REVIEW_MINIMAL_PAIR_NOT_MINIMAL", taught.rule.kind === "minimal_pair"
-        ? `"${first} / ${second}" is not a minimal pair: the two words must sound exactly the same except for the week's target sound, replaced by one neighbouring sound (e.g. ship / sheep, think / sink, fan / van). Keep the week example word and replace the partner word`
+        ? `"${first} / ${second}" is not a minimal pair${/homophones/u.test(issue) ? ` (${issue})` : ""}: the two words must sound exactly the same except for the week's target sound, replaced by one neighbouring sound (e.g. ship / sheep, think / sink, fan / van; never homophones such as team / teem or week / weak). Keep the week example word and replace the partner word`
         : `"${first} / ${second}" is not a valid contrast for ${taught.soundLabel}: ${issue}. Keep the week example "${taught.text}" and use as partner ${taught.rule.guidance}`);
     }
   }

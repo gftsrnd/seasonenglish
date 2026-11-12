@@ -1,5 +1,6 @@
 import type { CefrLevel } from "@e4s/contracts";
 import { monthlyIpaExampleMatchesTarget, monthlyIpaPhonemes, monthlyIpaShape, monthlyPronunciationPairSide, monthlyPronunciationPhenomenonExampleIssue, type MonthlyPronunciationCatalogItem } from "@e4s/domain";
+import { MONTHLY_BRITISH_IPA_RULE, monthlyBritishIpaIssue } from "./monthly-british-ipa.js";
 
 /**
  * Deterministic quality gates for monthly RESOURCE generation (11/11/2026 fix).
@@ -78,6 +79,22 @@ export function monthlyNonWordIssue(rawWord: string): string | undefined {
   if (letters.length < 3) return `"${rawWord}" is too short to be a real headword (a fragment or abbreviation)`;
   if (MONTHLY_NON_WORD_FRAGMENTS.has(letters)) return `"${rawWord}" is an abbreviation, clipped form or word fragment, not a real word`;
   if (!/[aeiouy]/u.test(letters)) return `"${rawWord}" has no vowel letter and is not a real English word`;
+  return undefined;
+}
+
+/**
+ * Spellings English words do not have (December 2026: "ackle" given as an /æ/
+ * example). Deliberately narrow: a vowel followed by "ck" at the start of the
+ * word (only acknowledge-family words start that way), a letter tripled, or a
+ * doubled consonant at the start. Other invented words are left to the AI word
+ * verification of pronunciation examples.
+ */
+export function monthlyImplausibleSpellingIssue(rawWord: string): string | undefined {
+  const word = rawWord.trim().toLocaleLowerCase("en");
+  if (!/^\p{L}+$/u.test(word)) return undefined;
+  if ((/^[aeiou]ck/u.test(word) && !word.startsWith("acknowledg")) || /(\p{L})\1\1/u.test(word) || /^([bcdfghjkmnpqrstvwxz])\1/u.test(word)) {
+    return `"${rawWord}" is not a real English word; use a common dictionary word that contains the target sound`;
+  }
   return undefined;
 }
 
@@ -268,7 +285,7 @@ export function getMonthlyPronunciationExampleQualityIssue(input: {
   ipa: string;
   coreTerms?: ReadonlyArray<{ word: string; ipa: string }> | undefined;
 }): string | undefined {
-  const nonWord = monthlyNonWordIssue(input.word);
+  const nonWord = monthlyNonWordIssue(input.word) ?? monthlyImplausibleSpellingIssue(input.word);
   if (nonWord) return nonWord;
   const letters = input.word.trim().toLocaleLowerCase("en").replace(/[^a-z]/gu, "");
   const target = monthlyIpaPhonemes(input.targetIpa).filter((token) => !BOUNDARIES.has(token)).map(baseToken);
@@ -309,12 +326,12 @@ export function getMonthlyPronunciationExampleQualityIssue(input: {
       return `"${input.word}" is a core word this month pronounced ${core.ipa}; ${input.ipa} is a different stress pattern of the same spelling`;
     }
   }
-  return undefined;
+  return monthlyBritishIpaIssue(input.word, input.ipa);
 }
 
 /** Example-word rules appended to the Phase 4 prompt; they mirror the gates above. */
 export function buildMonthlyPronunciationExampleRules(): string {
-  return "EXAMPLE RULES (the application checks every example phoneme by phoneme and rejects any that break them): transcribe each example's real standard British pronunciation and put ˈ before the stressed syllable of every word with two or more syllables; never invent or alter a sound to make a word fit (tracks is /træks/, not /trædks/). A vowel target must be the vowel of the stressed syllable (meeting /ˈmiːtɪŋ/ does not illustrate /ɪ/; clear /klɪə/ has the diphthong /ɪə/, not /ɪ/; problem and project have /ɒ/, not /ɜː/; job has /ɒ/, not /æ/). A consonant target must be a real phoneme of the word (zoom, easy, busy and noise have /z/, not /s/). A final-cluster target must end the word or syllable (extend ends in /nd/, not /st/; client has no /st/). A stress target's label must say which syllable is stressed, and every example must follow that label (supplier /səˈplaɪə/ is not first-syllable stress). Use only real dictionary words: no abbreviations, clipped forms or fragments (min, est, ot), no function word in its weak form (to /tə/, can /kən/; a function word in its strong form such as that /ðæt/ or have /hæv/ is fine for /æ/, but never use a function word for /ə/), and no word whose stress differs from the same word used as a core term this month (present the verb vs present the noun). Use a word from the monthly vocabulary pool only when it genuinely contains the target; never include a pool word just because it is in the pool.";
+  return `EXAMPLE RULES (the application checks every example phoneme by phoneme and rejects any that break them): transcribe each example's real standard British pronunciation and put ˈ before the stressed syllable of every word with two or more syllables; never invent or alter a sound to make a word fit (tracks is /træks/, not /trædks/). A vowel target must be the vowel of the stressed syllable (meeting /ˈmiːtɪŋ/ does not illustrate /ɪ/; clear /klɪə/ has the diphthong /ɪə/, not /ɪ/; problem and project have /ɒ/, not /ɜː/; job has /ɒ/, not /æ/). A consonant target must be a real phoneme of the word (zoom, easy, busy and noise have /z/, not /s/). A final-cluster target must end the word or syllable (extend ends in /nd/, not /st/; client has no /st/). A stress target's label must say which syllable is stressed, and every example must follow that label (supplier /səˈplaɪə/ is not first-syllable stress). Use only real dictionary words: no abbreviations, clipped forms or fragments (min, est, ot), no function word in its weak form (to /tə/, can /kən/; a function word in its strong form such as that /ðæt/ or have /hæv/ is fine for /æ/, but never use a function word for /ə/), and no word whose stress differs from the same word used as a core term this month (present the verb vs present the noun). Use a word from the monthly vocabulary pool only when it genuinely contains the target; never include a pool word just because it is in the pool. Every example is a real dictionary word or a natural phrase of real words a colleague would say; never make up a word to fit the sound (ackle is not a word). ${MONTHLY_BRITISH_IPA_RULE}`;
 }
 
 /**
@@ -354,7 +371,7 @@ export function getMonthlyPronunciationCatalogExampleIssue(
   }
   const single = /^\p{L}+(?:[-'’]\p{L}+)*$/u.test(word);
   if (single) {
-    const nonWord = monthlyNonWordIssue(word);
+    const nonWord = monthlyNonWordIssue(word) ?? monthlyImplausibleSpellingIssue(word);
     if (nonWord) return nonWord;
   }
   const formIssue = monthlyPronunciationPhenomenonExampleIssue(item, example);
@@ -371,5 +388,5 @@ export function getMonthlyPronunciationCatalogExampleIssue(
       }
     }
   }
-  return undefined;
+  return monthlyBritishIpaIssue(word, example.ipa);
 }

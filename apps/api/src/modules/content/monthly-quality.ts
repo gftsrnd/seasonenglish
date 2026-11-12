@@ -3,6 +3,8 @@ import { monthlyCollocationTranslationIssues, monthlyExerciseTranslationIssues, 
 import type { LessonPart } from "@e4s/contracts";
 import { monthlyGrammarRoadmapDayIssues } from "./monthly-grammar-roadmap.js";
 import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
+import { monthlyAnswerKeyFindings } from "./monthly-answer-checks.js";
+import { monthlyWordFormScopeFindings } from "./monthly-word-form-scope.js";
 
 const REQUIRED_COMPONENTS = [
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",
@@ -168,6 +170,8 @@ export function evaluateMonthlyLessonQuality(
     }
   }
   evaluateChoiceAndWording(contract, dayNumber, lesson.parts, lockedPlanValues, severe, light);
+  // December 2026: wrong keys, a second correct option, wrong voice, an off-label recall item, and Word form options outside the lesson's words.
+  severe.push(...monthlyAnswerKeyFindings(contract, day, dayNumber, lesson.parts), ...monthlyWordFormScopeFindings(contract, day, dayNumber, lesson.parts));
   // 12/11: every exercise question with a correct answer carries a short Vietnamese
   // question and answer translation (all levels), shown only after it is finished.
   for (const part of lesson.parts) {

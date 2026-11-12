@@ -1,5 +1,5 @@
 import type { CefrLevel } from "@e4s/contracts";
-import { isPlausibleMinimalPair } from "../content/choice-quality.js";
+import { areLikelyHomophones, isPlausibleMinimalPair } from "../content/choice-quality.js";
 import { findMonthlyPronunciationCatalogItem, type MonthlyPronunciationCatalogItem } from "./pronunciation-catalog.js";
 
 /**
@@ -47,7 +47,7 @@ export function monthlyPronunciationContrastRule(cefr: CefrLevel, sound: { ipa: 
   const beginner = cefr === "A1" || cefr === "A2";
   // Legacy sounds outside the catalog keep the phoneme minimal-pair rule.
   if (beginner || !item || item.type === "phoneme" || item.type === "pair") {
-    return { kind: "minimal_pair", guidance: "a true minimal pair: the example word and a real, common word that sounds exactly the same except that the target sound is replaced by one neighbouring sound (same number of sounds, all other sounds identical and in the same order, e.g. ship / sheep, fan / van; never pairs such as event / segment, bat / box or sheet / shift)" };
+    return { kind: "minimal_pair", guidance: "a true minimal pair: the example word and a real, common word that sounds exactly the same except that the target sound is replaced by one neighbouring sound (same number of sounds, all other sounds identical and in the same order, e.g. ship / sheep, fan / van; never pairs such as event / segment, bat / box or sheet / shift, and never two spellings of the same sound such as team / teem, week / weak or meet / meat: homophones sound identical)" };
   }
   const form = item.form;
   const phrase = form ? PHRASE_FORMS.has(form.kind) || (form.kind === "stress" && form.pattern === "multi_compound") : (sound.examples ?? []).some((example) => monthlyPronunciationExampleText(example.word).split(" ").length >= 3);
@@ -77,6 +77,7 @@ export function monthlyPronunciationContrastIssue(rule: MonthlyPronunciationCont
   const b = monthlyPronunciationExampleText(partner);
   if (!a || !b) return "both options are needed";
   if (rule.kind === "minimal_pair") {
+    if (areLikelyHomophones(a, b)) return `"${a}" and "${b}" sound exactly the same (homophones), so the learner cannot hear a difference; the partner must differ in the target sound`;
     return isPlausibleMinimalPair(a, b, ipa) ? undefined : "not a minimal pair: the two words must sound exactly the same except for the target sound, replaced by one neighbouring sound";
   }
   if (rule.kind === "phrase") {

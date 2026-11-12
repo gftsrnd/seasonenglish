@@ -1,6 +1,7 @@
 export * from "./registry.js";
 export * from "./schemas.js";
 export * from "./monthly-review-schemas.js";
+export * from "./monthly-verification-schemas.js";
 export * from "./monthly-final-schemas.js";
 export * from "./monthly-final-read-aloud.js";
 export * from "./monthly-final-sample-repair.js";

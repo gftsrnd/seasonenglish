@@ -4,6 +4,7 @@ import { evaluateMonthlyLessonQuality, monthlyLockedPlanExpectations, normalizeF
 import { rebalanceAnswerTextPositions, type AnswerTextChoice } from "../shared/answer-order.js";
 import { monthlyGrammarRoadmapDayContract } from "./monthly-grammar-roadmap.js";
 import { MONTHLY_REVIEW_COMPONENTS, monthlyReviewSpeakingContrastGuidance, monthlyReviewTargets } from "./monthly-review-quality.js";
+import { collectMonthlyVerifiableItems, MONTHLY_ANSWER_VERIFICATION_PROMPT, monthlyAnswerVerificationFindings, type MonthlyAnswerVerificationVerdict } from "./monthly-answer-checks.js";
 
 const REVIEW_STUDY_COMPONENTS = ["objective", "instruction", "vocabulary", "grammar", "pronunciation"] as const;
 
@@ -70,16 +71,19 @@ export const MONTHLY_DAY_COMPONENTS = [
 ] as const;
 export type MonthlyDayComponent = (typeof MONTHLY_DAY_COMPONENTS)[number];
 
-export async function generateMonthlyDayWithAi(contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string, priorGrammarExamples: readonly string[] = []): Promise<MonthlyDayGenerationResult> {
-  return generateMonthlyContentWithAi("new", contract, dayNumber, runner, systemPrompt, priorGrammarExamples);
+/** `verifyAnswers`: run the independent answer check (monthly_answer_verification) once the deterministic gate passes. */
+export interface MonthlyAiGenerationOptions { verifyAnswers?: boolean }
+
+export async function generateMonthlyDayWithAi(contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string, priorGrammarExamples: readonly string[] = [], options: MonthlyAiGenerationOptions = {}): Promise<MonthlyDayGenerationResult> {
+  return generateMonthlyContentWithAi("new", contract, dayNumber, runner, systemPrompt, priorGrammarExamples, options);
 }
 
 /** Review generation has a separate entry point so ordinary-day callers cannot silently generate a review DaySpec. */
-export async function generateMonthlyReviewWithAi(contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string): Promise<MonthlyDayGenerationResult> {
-  return generateMonthlyContentWithAi("review", contract, dayNumber, runner, systemPrompt);
+export async function generateMonthlyReviewWithAi(contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string, options: MonthlyAiGenerationOptions = {}): Promise<MonthlyDayGenerationResult> {
+  return generateMonthlyContentWithAi("review", contract, dayNumber, runner, systemPrompt, [], options);
 }
 
-async function generateMonthlyContentWithAi(kind: "new" | "review", contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string, priorGrammarExamples: readonly string[] = []): Promise<MonthlyDayGenerationResult> {
+async function generateMonthlyContentWithAi(kind: "new" | "review", contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string, priorGrammarExamples: readonly string[] = [], options: MonthlyAiGenerationOptions = {}): Promise<MonthlyDayGenerationResult> {
   const generated = await generateMonthlyDay({
     contract,
     dayNumber,
@@ -100,7 +104,9 @@ ${monthlyLearnerLanguageContract(contract.cefr)}
 
 ${monthlyVocabularyRelationContract(contract.cefr)}
 
-${MONTHLY_LESSON_TITLE_RULE}` : `${systemPrompt}
+${MONTHLY_LESSON_TITLE_RULE}
+
+${MONTHLY_SINGLE_ANSWER_RULE}` : `${systemPrompt}
 
 Part content field contract: ${MONTHLY_LESSON_PART_CONTENT_CONTRACT}
 
@@ -108,7 +114,11 @@ ${monthlyLearnerLanguageContract(contract.cefr)}
 
 ${monthlyVocabularyRelationContract(contract.cefr)}
 
-${MONTHLY_LESSON_TITLE_RULE}`;
+${MONTHLY_LESSON_TITLE_RULE}
+
+${MONTHLY_SINGLE_ANSWER_RULE}
+
+${MONTHLY_WORD_FORM_SCOPE_RULE}`;
       // Review exercise sections have their own task: its schema requires a retry variant on every choice item.
       const call = async (requested: readonly string[], note: string, maxOutputTokens: number, taskId: "monthly_lesson_day" | "monthly_review_exercises" = "monthly_lesson_day") => {
         let result;
@@ -185,9 +195,42 @@ ${MONTHLY_REVIEW_ITEM_REPAIR_RULE}`;
       }, { systemPrompt: prompt, maxOutputTokens: 8_000, temperature: 0.2, maxAttempts: 2 });
       const output = result.output as { items?: Array<{ section: string; id: string; item: Record<string, unknown> }> };
       return normalizeMonthlyReviewParts(mergeMonthlyReviewItemRepairs(parts, requests, output.items ?? []));
-    } } : {})
+    } } : {}),
+    ...(options.verifyAnswers ? { verifyAnswers: async ({ daySpec, parts }: { daySpec: MonthlyDaySpec; parts: MonthlyLessonCandidate["parts"] }) => monthlyAnswerVerification(contract, daySpec, parts, runner) } : {})
   });
   return generated;
+}
+
+/** Content rules that keep the answer key unambiguous; appended to every monthly lesson and review request. */
+export const MONTHLY_SINGLE_ANSWER_RULE = [
+  "ONE CORRECT ANSWER (an independent checker solves every item without the key; an item with a wrong key or a second correct option is sent back):",
+  "the key agrees with its sentence (plural subject: The slides aren't ready; a possessive before nothing is mine/yours/ours: The notes are mine); every distractor is wrong in that exact sentence, never merely less typical (the simple past is also correct for a past habit, so never offer \"assessed\" next to \"used to assess\"; \"When\" and \"While\" are both correct before a past continuous clause);",
+  "a document, report or file is never the doer of read/write/review/check (the reports have been read, not have been reading); a recall question labelled with a previous topic's milestoneId tests that topic's structure in its answer (to be: am/is/are), never today's topic."
+].join(" ");
+
+/** Daily Word form (word_class) scope (December 2026: A2 L3 invented "colleagueship" twice). */
+export const MONTHLY_WORD_FORM_SCOPE_RULE = "WORD FORM SCOPE: build the word_class question on one of today's core words that is a verb or has a word family on its vocabulary card (lockedScope.supportTerms word_family or the card's family list). Every option is a form the learner meets in this lesson: the word itself, a member of its family list, or a regular -s/-ed/-ing form of a verb (send / sends / sent / sending). Never add a suffix to a noun that has no family (colleague, feedback, deadline: no colleagueship, colleagueing, feedbacked); choose another core word instead.";
+
+/**
+ * Independent answer check (December 2026): solves every choice item without
+ * the key and returns severe findings for a disputed key, a second correct
+ * option or an off-label recall item. A failed call never fails the lesson.
+ */
+export async function monthlyAnswerVerification(contract: MonthlyCurriculumContract, daySpec: MonthlyDaySpec, parts: MonthlyLessonCandidate["parts"], runner: AiTaskRunner): Promise<MonthlyQualityFinding[]> {
+  const items = collectMonthlyVerifiableItems(contract, daySpec, parts);
+  if (!items.length) return [];
+  let verdicts: MonthlyAnswerVerificationVerdict[];
+  try {
+    const result = await runner.runTask("monthly_answer_verification", {
+      cefr: contract.cefr,
+      items: items.map(({ ref, prompt, options, context, mustTest }) => ({ ref, prompt, options, ...(context ? { context } : {}), ...(mustTest ? { mustTest } : {}) }))
+    }, { systemPrompt: MONTHLY_ANSWER_VERIFICATION_PROMPT, maxOutputTokens: 6_000, temperature: 0, maxAttempts: 2 });
+    const output = result.output as { items?: unknown };
+    verdicts = Array.isArray(output?.items) ? output.items.filter((entry): entry is MonthlyAnswerVerificationVerdict => isRecord(entry) && typeof entry.ref === "string" && Array.isArray(entry.correctOptions)) : [];
+  } catch {
+    return [];
+  }
+  return monthlyAnswerVerificationFindings(items, verdicts, daySpec.lessonNumber);
 }
 
 export const MONTHLY_REVIEW_ITEM_REPAIR_RULE = [
@@ -438,6 +481,12 @@ export async function generateMonthlyDay(input: {
    * light findings, each acknowledged by the Operator, before approval).
    */
   repairLight?: (input: MonthlyLightRepairInput) => Promise<MonthlyLessonCandidate["parts"] | null>;
+  /**
+   * Optional independent answer check once the deterministic gate passes. Its
+   * findings are severe: they send the named components back to repair like
+   * any other severe finding (December 2026: approved wrong keys).
+   */
+  verifyAnswers?: (input: { daySpec: MonthlyDaySpec; parts: MonthlyLessonCandidate["parts"] }) => Promise<MonthlyQualityFinding[]>;
   maxAttempts?: number;
   priorGrammarExamples?: readonly string[];
 }): Promise<MonthlyDayGenerationResult> {
@@ -473,6 +522,10 @@ export async function generateMonthlyDay(input: {
     parts = applyMonthlyLockedPlanFields(input.contract, daySpec, keepMeaningfulVocabularyRelations(input.contract, dropSupportTermVocabularyCards(input.contract, mergeParts(parts, generated.parts, requestedComponents, kind === "review"))));
     const candidate = { title, parts };
     report = evaluateMonthlyLessonQuality(input.contract, input.dayNumber, candidate, input.priorGrammarExamples);
+    if (report.severe.length === 0 && input.verifyAnswers) {
+      const disputed = await input.verifyAnswers({ daySpec, parts });
+      if (disputed.length) report = { ...report, severe: disputed };
+    }
     if (report.severe.length === 0) {
       if (input.repairLight) ({ parts, report } = await repairMonthlyLightFindings(input.contract, input.dayNumber, title, parts, report, input.priorGrammarExamples, (current) => input.repairLight!({ daySpec, coreTerms, grammarSteps, parts: current.parts, report: current.report })));
       return { status: "ready", lesson: { title, parts: shuffleMonthlyAnswerOrder(parts, scopeHash, input.dayNumber) }, report, scopeHash, attempts: attempt };
