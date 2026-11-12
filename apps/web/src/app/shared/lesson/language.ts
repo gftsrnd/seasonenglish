@@ -119,6 +119,10 @@ export interface LearnerLessonCopy {
     antonyms: string;
     umbrella: string;
     lexical: string;
+    /** Slang / poetic synonyms modal (12/11). */
+    register: string;
+    usage: string;
+    foundIn: string;
     close: string;
     listen: string;
     definition: string;
@@ -221,7 +225,7 @@ export const learnerLessonCopy: Record<LearnerLessonLanguage, LearnerLessonCopy>
       meaningUnavailable: "Chưa có dữ liệu từ liên quan cho từ này."
     },
     modal: {
-      family: "Họ từ", synonyms: "Đồng nghĩa", antonyms: "Trái nghĩa", umbrella: "Từ bao quát", lexical: "Từ liên quan",
+      family: "Họ từ", synonyms: "Đồng nghĩa", antonyms: "Trái nghĩa", umbrella: "Từ bao quát", lexical: "Từ liên quan", register: "Khẩu ngữ & văn chương", usage: "Cách dùng", foundIn: "Xuất hiện trong",
       close: "Đóng", listen: "Nghe", definition: "Định nghĩa", example: "Ví dụ", context: "Ngữ cảnh", note: "Ghi chú", source: "Nguồn"
     }
   },
@@ -301,7 +305,7 @@ export const learnerLessonCopy: Record<LearnerLessonLanguage, LearnerLessonCopy>
       meaningUnavailable: "No related-word data is available for this word."
     },
     modal: {
-      family: "Word family", synonyms: "Synonyms", antonyms: "Antonyms", umbrella: "Umbrella word", lexical: "Related words",
+      family: "Word family", synonyms: "Synonyms", antonyms: "Antonyms", umbrella: "Umbrella word", lexical: "Related words", register: "Slang & poetic", usage: "When to use", foundIn: "Found in",
       close: "Close", listen: "Listen", definition: "Definition", example: "Example", context: "Context", note: "Note", source: "Source"
     }
   }

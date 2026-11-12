@@ -1291,9 +1291,12 @@ describe("support quality rules (umbrella reuse, adjective umbrella, -ness, -ly,
 
 describe("L-042 register alternatives in the resource pool", () => {
   const register = [
-    { coreId: "core-1-1", kind: "slang", word: "touch base", definition: "talk briefly to check on progress" },
-    { coreId: "core-1-1", kind: "poetic", word: "convene", definition: "come together for a formal meeting" },
-    { coreId: "core-1-2", kind: "slang", word: "bullshit", definition: "talk that is not true" }
+    { coreId: "core-1-1", kind: "slang", word: "touch base", definition: "talk briefly to check on progress", ipa: "/tʌtʃ beɪs/", usage: "Fine with colleagues in chat; not in formal reports." },
+    { coreId: "core-1-1", kind: "poetic", word: "steed", definition: "a horse for riding", ipa: "/stiːd/", source: "Found in old ballads and tales of knights." },
+    // Formal register is not poetic (12/11), and the old shape without IPA / notes is no longer generated.
+    { coreId: "core-1-2", kind: "poetic", word: "convene", definition: "come together for a formal meeting", ipa: "/kənˈviːn/", source: "Common in older poetry." },
+    { coreId: "core-1-2", kind: "slang", word: "bullshit", definition: "talk that is not true", ipa: "/ˈbʊlʃɪt/", usage: "Casual only; never in formal emails." },
+    { coreId: "core-1-3", kind: "slang", word: "ballpark", definition: "a rough guess of a number" }
   ];
   // B1+ pronunciation targets must be the level's catalog notations.
   const levelPlan = (cefr: "B1" | "B2" | "C1") => {
@@ -1306,11 +1309,12 @@ describe("L-042 register alternatives in the resource pool", () => {
     for (const cefr of ["B1", "B2", "C1"] as const) {
       const pool = buildMonthlyResourcesFromAiPlan(month, cefr, theme, criteria, levelPlan(cefr), [], [], register);
       expect(pool.coreTerms[0]!.id).toBe(`${cefr.toLowerCase()}-core-1`);
-      expect(pool.coreTerms[0]!.registerTerms?.map((term) => [term.kind, term.word])).toEqual([["slang", "touch base"], ["poetic", "convene"]]);
-      // The sensitive-text filter drops the vulgar one; a core without alternatives carries no field.
+      expect(pool.coreTerms[0]!.registerTerms?.map((term) => [term.kind, term.word, term.ipa])).toEqual([["slang", "touch base", "/tʌtʃ beɪs/"], ["poetic", "steed", "/stiːd/"]]);
+      // Formal-as-poetic and vulgar slang are dropped, as is the old shape; a core without alternatives carries no field.
       expect(pool.coreTerms[1]!.registerTerms).toBeUndefined();
+      expect(pool.coreTerms[2]!.registerTerms).toBeUndefined();
       const contract = planMonthlyResourcePool(pool);
-      expect(contract.coreTerms[0]!.registerTerms?.map((term) => term.word)).toEqual(["touch base", "convene"]);
+      expect(contract.coreTerms[0]!.registerTerms?.map((term) => term.word)).toEqual(["touch base", "steed"]);
     }
   });
   it("A1–A2 ignore them, and no alternatives is the normal case", () => {

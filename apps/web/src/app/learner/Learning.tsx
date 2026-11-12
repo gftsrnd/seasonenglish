@@ -109,7 +109,9 @@ export type VocabularyModalState =
   | { kind: "synonyms"; item: LessonVocabularyItem }
   | { kind: "antonyms"; item: LessonVocabularyItem }
   | { kind: "umbrella"; item: LessonVocabularyItem }
-  | { kind: "lexical"; item: LessonVocabularyItem; detail?: LessonVocabularyLexicalDetail };
+  | { kind: "lexical"; item: LessonVocabularyItem; detail?: LessonVocabularyLexicalDetail }
+  /** Slang / poetic synonyms (12/11): one card per word, the clicked one first. */
+  | { kind: "register"; item: LessonVocabularyItem; detail?: LessonVocabularyLexicalDetail };
 
 export function LearnerLesson({ view, actions }: { view: LessonView; actions: LearnerCallbacks }) {
   const lesson = view.lesson;
@@ -1070,12 +1072,12 @@ function VocabularyCard({
     ? lexicalDetails
       .filter((detail) => !detailedRelationWords.has(`${detail.kind}:${detail.word.trim().toLocaleLowerCase()}`))
       .map((detail) => detail.kind === "slang" || detail.kind === "poetic" ? {
-        // Slang / formal alternatives: same chip shape as synonyms (word + definition icon), own colour, no translation.
-        tag: lexicalKindLabel(detail.kind, language),
+        // Slang / poetic synonyms: tinted chip with its tag; a click opens the register modal (no translation).
+        tag: lexicalKindLabel(detail.kind, language, detail),
         label: detail.word,
-        ariaLabel: `${language === "en" ? "Listen" : "Nghe"} ${lexicalKindLabel(detail.kind, language)}: ${detail.word}`,
+        ariaLabel: `${lexicalKindLabel(detail.kind, language, detail)}: ${detail.word}`,
         tone: "register" as const,
-        onClick: () => speak(detail.word)
+        onClick: () => openModal({ kind: "register", item, detail })
       } : ({
         label: `${lexicalKindLabel(detail.kind, language)} · ${detail.word}`,
         ariaLabel: `${language === "en" ? "Listen" : "Nghe"} ${lexicalKindLabel(detail.kind, language)}: ${detail.word}`,
@@ -1130,7 +1132,8 @@ export function SharedVocabularyModal({
     synonyms: copy.modal.synonyms,
     antonyms: copy.modal.antonyms,
     umbrella: copy.modal.umbrella,
-    lexical: copy.modal.lexical
+    lexical: copy.modal.lexical,
+    register: copy.modal.register
   } as const;
   if (typeof document === "undefined") return null;
   return createPortal(<div className="modal-backdrop vocabulary-relation-modal" role="presentation">
@@ -1141,6 +1144,7 @@ export function SharedVocabularyModal({
        {state.kind === "antonyms" ? <SynonymsModal item={item} list={item.antonyms} speak={speak} language={language} /> : null}
       {state.kind === "umbrella" ? <UmbrellaModal item={item} speak={speak} language={language} /> : null}
       {state.kind === "lexical" ? <LexicalModal item={item} speak={speak} language={language} {...(state.detail ? { detail: state.detail } : {})} /> : null}
+      {state.kind === "register" ? <RegisterModal item={item} speak={speak} language={language} {...(state.detail ? { detail: state.detail } : {})} /> : null}
     </section>
   </div>, document.body);
 }
@@ -1177,11 +1181,50 @@ function LexicalModal({ item, detail, speak, language }: { item: LessonVocabular
   const [selected, setSelected] = useState<LessonVocabularyLexicalDetail | null>(detail ?? null);
   if (!details.length) return <Notice tone="info">{copy.vocabulary.meaningUnavailable}</Notice>;
   const active = selected ?? details[0]!;
-  return <div className="stack" style={{ gap: 12 }}><div className="row" style={{ flexWrap: "wrap", gap: 8 }}>{details.map((candidate) => <button className={candidate === active ? "btn-primary" : ""} type="button" key={`${candidate.kind}-${candidate.word}`} onClick={() => setSelected(candidate)}>{lexicalKindLabel(candidate.kind, language)} · {candidate.word}</button>)}</div><article className="card flat"><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">{lexicalKindLabel(active.kind, language)}</div><h3>{active.word}</h3></div></div>{active.definition ? <p><b>{copy.modal.definition}:</b> {active.definition}</p> : null}{active.example ? <p><b>{copy.modal.example}:</b> {active.example}</p> : null}{active.context ? <p><b>{copy.modal.context}:</b> {active.context}</p> : null}{active.note ? <p><b>{copy.modal.note}:</b> {active.note}</p> : null}{active.source ? <p className="small muted">{copy.modal.source}: {active.source}</p> : null}</article></div>;
+  return <div className="stack" style={{ gap: 12 }}><div className="row" style={{ flexWrap: "wrap", gap: 8 }}>{details.map((candidate) => <button className={candidate === active ? "btn-primary" : ""} type="button" key={`${candidate.kind}-${candidate.word}`} onClick={() => setSelected(candidate)}>{lexicalKindLabel(candidate.kind, language, candidate)} · {candidate.word}</button>)}</div><article className="card flat"><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">{lexicalKindLabel(active.kind, language, active)}</div><h3>{active.word}</h3></div></div>{active.definition ? <p><b>{copy.modal.definition}:</b> {active.definition}</p> : null}{active.example ? <p><b>{copy.modal.example}:</b> {active.example}</p> : null}{active.context ? <p><b>{copy.modal.context}:</b> {active.context}</p> : null}{active.note ? <p><b>{copy.modal.note}:</b> {active.note}</p> : null}{active.source ? <p className="small muted">{copy.modal.source}: {active.source}</p> : null}</article></div>;
 }
 
-function lexicalKindLabel(kind: LessonVocabularyLexicalDetail["kind"], language: LearnerLessonLanguage = "vi"): string {
-  if (language === "en") return kind === "synonym" ? "Synonym" : kind === "antonym" ? "Antonym" : kind === "slang" ? "Slang" : "Formal";
-  return kind === "synonym" ? "Đồng nghĩa" : kind === "antonym" ? "Trái nghĩa" : kind === "slang" ? "Khẩu ngữ" : "Văn phong";
+/**
+ * Slang / poetic synonyms (12/11): one card per word (word · part of speech,
+ * British IPA, Listen, English definition, then the slang usage note or the
+ * poetic source note). English only — no translation at B1+. Items stored
+ * before 12/11 (no IPA / usage / source) show their definition and register
+ * label as before.
+ */
+function RegisterModal({ item, detail, speak, language }: { item: LessonVocabularyItem; detail?: LessonVocabularyLexicalDetail; speak: (text: string) => void; language: LearnerLessonLanguage }) {
+  const copy = learnerLessonCopy[language];
+  const all = (item.lexicalDetails ?? []).filter((candidate) => candidate.kind === "slang" || candidate.kind === "poetic");
+  const words = detail ? [...all.filter((candidate) => candidate === detail || (candidate.kind === detail.kind && candidate.word === detail.word)), ...all.filter((candidate) => !(candidate === detail || (candidate.kind === detail.kind && candidate.word === detail.word)))] : all;
+  if (!words.length) return <Notice tone="info">{copy.vocabulary.meaningUnavailable}</Notice>;
+  return <div className="stack" style={{ gap: 10, paddingTop: 8 }} aria-label={copy.modal.register}>{words.map((word) => {
+    const label = lexicalKindLabel(word.kind, language, word);
+    const legacy = isLegacyRegisterDetail(word);
+    return <article className="card flat vocabulary-register-card" style={{ minWidth: 0 }} key={`${word.kind}-${word.word}`} data-register-kind={word.kind}>
+      <div className="row between" style={{ gap: 12, alignItems: "flex-start" }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="eyebrow">{label}</div>
+          <b>{word.word}</b>{word.type ? <span className="small muted"> · {word.type}</span> : null}
+          {word.ipa ? <div className="small muted vocabulary-register-ipa">{word.ipa}</div> : null}
+        </div>
+        <button type="button" aria-label={`${copy.modal.listen} ${label.toLocaleLowerCase()}: ${word.word}`} style={listenButtonStyle} onClick={() => speak(word.word)}><Volume2 size={14} aria-hidden="true" />{copy.modal.listen}</button>
+      </div>
+      {word.definition ? <p className="small">{word.definition}</p> : null}
+      {word.kind === "slang" && word.usage ? <p className="small"><b>{copy.modal.usage}:</b> {word.usage}</p> : null}
+      {word.kind === "poetic" && word.source && !legacy ? <p className="small"><b>{copy.modal.foundIn}:</b> {word.source}</p> : null}
+      {legacy && word.context ? <p className="small muted">{word.context}</p> : null}
+    </article>;
+  })}</div>;
+}
+
+/** A slang / poetic detail stored before 12/11 (its "poetic" meant formal register). */
+function isLegacyRegisterDetail(detail: LessonVocabularyLexicalDetail): boolean {
+  return (detail.kind === "slang" || detail.kind === "poetic") && !detail.ipa?.trim() && !detail.usage?.trim() && !detail.source?.trim();
+}
+
+function lexicalKindLabel(kind: LessonVocabularyLexicalDetail["kind"], language: LearnerLessonLanguage = "vi", detail?: LessonVocabularyLexicalDetail): string {
+  // Legacy "poetic" items were formal-register words and keep their old label.
+  const legacyFormal = kind === "poetic" && (!detail || isLegacyRegisterDetail(detail));
+  if (language === "en") return kind === "synonym" ? "Synonym" : kind === "antonym" ? "Antonym" : kind === "slang" ? "Slang" : legacyFormal ? "Formal" : "Poetic";
+  return kind === "synonym" ? "Đồng nghĩa" : kind === "antonym" ? "Trái nghĩa" : kind === "slang" ? "Khẩu ngữ" : legacyFormal ? "Văn phong" : "Văn chương";
 }
 

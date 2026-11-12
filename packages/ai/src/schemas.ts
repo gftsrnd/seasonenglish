@@ -1016,26 +1016,32 @@ export const monthlyResourcePlanOutputJsonSchema = {
 } satisfies Record<string, unknown>;
 
 /**
- * L-042 (B1–C1 only): optional slang / formal-register alternatives for the
- * month's cores, generated in ONE batched call per level and checked by ONE
- * batched audit call (same task, audit prompt). Returning no items is valid.
+ * L-042 (B1–C1 only): optional slang / poetic synonyms for the month's cores,
+ * generated in ONE batched call per level and checked by ONE batched audit
+ * call (same task, audit prompt). Returning no items is valid. `note` is the
+ * slang usage note (when to use / when not to) or the poetic general source
+ * note (no titles, verses or lines).
  */
 const monthlyRegisterTermItemSchema = z.object({
   coreId: z.string().trim().min(1).max(100),
   kind: z.enum(["slang", "poetic"]),
   word: z.string().trim().min(1).max(60),
-  definition: z.string().trim().min(1).max(200)
+  ipa: z.string().trim().min(1).max(80),
+  definition: z.string().trim().min(1).max(200),
+  note: z.string().trim().min(1).max(300)
 }).strict();
 export const monthlyRegisterTermsOutputSchema = z.object({ items: z.array(monthlyRegisterTermItemSchema).max(240) }).strict();
 export type MonthlyRegisterTermsTaskOutput = z.infer<typeof monthlyRegisterTermsOutputSchema>;
 export const monthlyRegisterTermsOutputJsonSchema = {
   type: "object", additionalProperties: false, required: ["items"],
   properties: {
-    items: { type: "array", maxItems: 240, items: { type: "object", additionalProperties: false, required: ["coreId", "kind", "word", "definition"], properties: {
+    items: { type: "array", maxItems: 240, items: { type: "object", additionalProperties: false, required: ["coreId", "kind", "word", "ipa", "definition", "note"], properties: {
       coreId: { type: "string" },
       kind: { type: "string", enum: ["slang", "poetic"] },
       word: { type: "string" },
-      definition: { type: "string", description: "Short simple-English definition or usage note (2-14 words, no Vietnamese, not using the word itself)." }
+      ipa: { type: "string", description: "British English (RP) IPA of word, between slashes." },
+      definition: { type: "string", description: "Short simple-English definition (2-14 words, no Vietnamese, not using the word itself)." },
+      note: { type: "string", description: "slang: when to use it and when NOT to use it; poetic: a general note on where it is found (e.g. older poetry, Shakespeare, the King James Bible), never a specific title, verse or line. English only." }
     } } }
   }
 } satisfies Record<string, unknown>;

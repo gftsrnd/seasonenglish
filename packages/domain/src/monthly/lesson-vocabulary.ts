@@ -252,7 +252,7 @@ function attachTerms(
 function attachRegisterDetails(item: Item, core: MonthlyVocabularyCore, cefr: string): void {
   const hadDetails = Array.isArray(item.lexicalDetails);
   const own = hadDetails ? (item.lexicalDetails as unknown[]).filter((detail) => !(detail && typeof detail === "object" && ["slang", "poetic"].includes(String((detail as Item).kind)))) : [];
-  const details = [...own, ...monthlyRegisterLexicalDetails(validMonthlyRegisterTerms(core, cefr))];
+  const details = [...own, ...monthlyRegisterLexicalDetails(validMonthlyRegisterTerms(core, cefr), core)];
   if (details.length) item.lexicalDetails = details;
   else if (hadDetails && (item.lexicalDetails as unknown[]).length) delete item.lexicalDetails;
 }

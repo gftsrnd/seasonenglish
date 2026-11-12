@@ -448,6 +448,59 @@ export class MonthlyContentRepository {
   }
 
   /**
+   * L-042 register-only regeneration of a DRAFT pool: replaces ONLY
+   * coreTerms[].registerTerms (keyed by core id; a core missing from the map
+   * loses its alternatives). Every other core field, the supports, grammar and
+   * sounds are kept byte-for-byte. Approved and retired frameworks stay locked.
+   */
+  async replaceDraftRegisterTerms(actorId: string, frameworkId: string, expectedVersion: number, registerTermsByCoreId: Readonly<Record<string, NonNullable<MonthlyResourcePoolCoreTerm["registerTerms"]>>>): Promise<Pick<MonthFrameworkView, "id" | "cefr" | "version" | "status" | "scopeHash">> {
+    const actor = await this.requireContentOperator(actorId);
+    const pooledClient = "connect" in this.database;
+    const client = pooledClient ? await (this.database as Pool).connect() : this.database;
+    let saved: { version: number; scopeHash: string; cefr: MonthFrameworkView["cefr"]; month: string; cores: number };
+    try {
+      await client.query("begin");
+      const locked = await client.query<FrameworkRow & { month: string }>(
+        `select mf.id, mf.cefr, mf.version, mf.status, mf.scope_hash, mf.curriculum_contract, mf.quality_acknowledgement, pm.month
+         from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+         where mf.id = $1 and pm.organization_id = $2 for update of mf`, [frameworkId, actor.organization_id]
+      );
+      const row = locked.rows[0];
+      if (!row) throw httpError(404, "MONTHLY_FRAMEWORK_NOT_FOUND", "Monthly framework was not found");
+      if (row.status !== "draft") throw httpError(409, "MONTHLY_FRAMEWORK_IMMUTABLE", "Only draft monthly resources can be changed; ask a Manager to reopen approved resources");
+      if (!await this.isWritableMonth(actor.organization_id, row.month)) throw httpError(409, "MONTHLY_CONTENT_READ_ONLY", "Monthly content is read-only outside the current and next month");
+      if (row.version !== expectedVersion) throw httpError(409, "MONTHLY_FRAMEWORK_VERSION_CONFLICT", "Monthly resources changed since they were opened; reload and try again");
+      const pool = toMonthlyResourcePool(row.curriculum_contract, row.version);
+      const coreTerms = pool.coreTerms.map((core) => {
+        const { registerTerms: _previous, ...rest } = core;
+        const next = registerTermsByCoreId[core.id];
+        return next?.length ? { ...rest, registerTerms: next } : rest;
+      });
+      const version = row.version + 1;
+      const versionedPool = { ...pool, coreTerms, version };
+      planMonthlyResourcePool(versionedPool);
+      const scopeHash = monthlyResourcePoolHash(versionedPool);
+      await client.query(
+        `update month_frameworks set version = $2, curriculum_contract = $3::jsonb, scope_hash = $4, quality_acknowledgement = null, updated_at = now()
+         where id = $1`, [frameworkId, version, JSON.stringify(versionedPool), scopeHash]
+      );
+      // A draft never owns lesson slots (same as saveEditedResourceDraft).
+      await client.query("delete from month_lessons where framework_id = $1", [frameworkId]);
+      saved = { version, scopeHash, cefr: row.cefr, month: row.month, cores: coreTerms.filter((core) => "registerTerms" in core).length };
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      if (pooledClient) (client as PoolClient).release();
+    }
+    await this.audit(actor, "monthly.framework_register_terms_regenerated", frameworkId, {
+      month: saved.month, cefr: saved.cefr, previousVersion: expectedVersion, version: saved.version, scopeHash: saved.scopeHash, coresWithRegisterTerms: saved.cores
+    });
+    return { id: frameworkId, cefr: saved.cefr, version: saved.version, status: "draft", scopeHash: saved.scopeHash };
+  }
+
+  /**
    * Pronunciation targets of the same level in the months before `beforeMonth`
    * (at most `windowMonths`), from the latest non-retired framework of each
    * month, draft or approved: the memory used to pick the next roadmap items.

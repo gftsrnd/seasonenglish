@@ -121,7 +121,14 @@ export interface LessonVocabularyLexicalDetail {
   example?: string;
   context?: string;
   note?: string;
+  /** Poetic (12/11): a general note on where the word is found (never a specific title, verse or line). */
   source?: string;
+  /** Slang / poetic (12/11): British IPA of the word. */
+  ipa?: string;
+  /** Slang / poetic (12/11): part of speech (same as the core word). */
+  type?: string;
+  /** Slang (12/11): when to use it and when not to use it. */
+  usage?: string;
 }
 
 /** Enriched vocabulary supplied by published lesson content. */

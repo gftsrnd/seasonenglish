@@ -123,8 +123,8 @@ export const CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS = {
   /** v3: the two topics are the roadmap pair chosen with 12-month memory (docs/grammar-roadmap.md); older grammar checkpoints are regenerated. */
   grammarTopics: "monthly-resource-grammar-v3-roadmap-pair",
   pronunciationTargets: CURRENT_MONTHLY_PRONUNCIATION_SCHEMA_VERSION,
-  /** L-042 (new category, no existing checkpoint is invalidated): optional B1–C1 slang / formal-register alternatives. */
-  registerTerms: "monthly-resource-register-v1"
+  /** L-042 v2 (12/11): slang / poetic synonyms with British IPA and usage / source notes; formal words are no longer "poetic", so v1 checkpoints are regenerated. */
+  registerTerms: "monthly-resource-register-v2-slang-poetic"
 } as const;
 
 export function isCurrentMonthlyResourceCheckpointCategory(category: string, lineage: unknown): boolean {
@@ -1137,8 +1137,8 @@ export function buildMonthlyResourcesFromAiPlan(
   pronunciationCatalogIds: readonly (string | undefined)[] = [],
   /** Roadmap catalog topic of each grammar topic (A, B), stored on the topic for the 12-month memory. */
   grammarCatalogIds: readonly (string | undefined)[] = [],
-  /** L-042: audited B1–C1 slang / formal-register alternatives keyed by plan core id (ignored at A1–A2). */
-  registerTerms: ReadonlyArray<{ coreId: string; kind: string; word: string; definition: string }> = []
+  /** L-042: audited B1–C1 slang / poetic synonyms keyed by plan core id (ignored at A1–A2). */
+  registerTerms: ReadonlyArray<{ coreId: string; kind: string; word: string; definition: string; ipa?: string | undefined; usage?: string | undefined; source?: string | undefined }> = []
 ): MonthlyResourcePoolContract {
   const calendar = buildMonthlyCalendar(month);
   const newLessonDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar) === "new" ? [index + 1] : []);

@@ -21,6 +21,7 @@ import { MonthlyFindingsPanel } from "./MonthlyFindingsPanel.js";
 import { MonthlyIllustrationPanel } from "./MonthlyIllustrationPanel.js";
 import type { MonthlyIllustrationsView } from "../../api/operator.js";
 import "./months.css";
+import { operatorRegisterKindLabel, operatorRegisterNote, type OperatorRegisterTerm } from "./register-terms.js";
 
 type MonthlyBriefInput = { title: string; brief: string; context: string; communicationGoal: string };
 type MonthlyDayInput = { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> };
@@ -99,7 +100,7 @@ function frameworkStatus(status?: string) {
 /** Relation groups shown for each core in the allocation view, in display order. */
 const PLAN_RELATION_LABELS = [["umbrella", "Từ bao trùm"], ["synonym", "Đồng nghĩa"], ["antonym", "Trái nghĩa"], ["word_family", "Cùng họ từ"], ["collocation", "Cụm từ đi kèm"]] as const;
 /** L-042: optional B1–C1 register alternatives stored on each core (shown with the expanded terms). */
-const REGISTER_LABELS = [["slang", "Khẩu ngữ"], ["poetic", "Văn phong"]] as const;
+const REGISTER_LABELS = ["Khẩu ngữ", "Văn chương", "Văn phong"] as const;
 
 export function OperatorMonths({ month, todayMonth, overview, cefr, busy: externalBusy, readOnly = false, error, resourceCheckpoint, actions }: OperatorMonthsProps) {
   const toast = useToast();
@@ -570,7 +571,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
               const linked = expandedTerms.filter((term) => term.relatedCoreTermId === core.id);
               const groups = [
                 ...PLAN_RELATION_LABELS.map(([relation, label]) => [label, linked.filter((term) => term.relation === relation).map((term) => term.word)] as const),
-                ...REGISTER_LABELS.map(([kind, label]) => [label, (core.registerTerms ?? []).filter((term) => term.kind === kind).map((term) => term.word)] as const)
+                ...REGISTER_LABELS.map((label) => [label, (core.registerTerms ?? []).filter((term) => operatorRegisterKindLabel(term) === label).map((term) => term.word)] as const)
               ].filter(([, words]) => words.length);
               return <div key={core.id} className="monthly-plan-resource-group"><strong>{core.word}{core.type ? <em className="monthly-plan-core-type"> · {core.type}</em> : null}</strong>{groups.length ? <dl className="monthly-plan-relations">{groups.map(([label, words]) => <div key={label}><dt>{label}</dt><dd>{words.join(", ")}</dd></div>)}</dl> : <span>Chưa có từ mở rộng</span>}</div>;
             })}</div><small>Ngữ pháp: {grammarLabels.join(", ") || "Chưa gán"} · Phát âm: {soundLabels.join(", ") || "Chưa gán"}</small></div>
@@ -724,7 +725,7 @@ function formatLessonBlocks(lessonNumbers: number[]): string {
   blocks.push(first === previous ? `N${first}` : `N${first}–N${previous}`);
   return blocks.join(", ");
 }
-function VocabularyPanel({ items, variant, registerCores = [] }: { items: Array<{ id: string; word: string; meaning: string; ipa?: string }>; variant: "core" | "expanded"; registerCores?: Array<{ id: string; word: string; registerTerms?: Array<{ kind: "slang" | "poetic"; word: string; definition: string }> | undefined }> }) {
+function VocabularyPanel({ items, variant, registerCores = [] }: { items: Array<{ id: string; word: string; meaning: string; ipa?: string }>; variant: "core" | "expanded"; registerCores?: Array<{ id: string; word: string; registerTerms?: OperatorRegisterTerm[] | undefined }> }) {
   const grouped = groupVocabularyForDisplay(items);
   const visible = variant === "expanded" ? [...grouped.standalone, ...grouped.phrases] : items;
   const phraseCount = grouped.phrases.length;
@@ -738,7 +739,7 @@ function VocabularyPanel({ items, variant, registerCores = [] }: { items: Array<
     <ol className={`monthly-resource-collection ${variant}`}>{visible.map((item, index) => {
       const standalone = isStandaloneWord(item.word);
       return <li key={item.id} className={standalone ? "standalone" : "phrase"}><i>{index + 1}</i><b>{item.word}</b><small>{variant === "core" ? "Headword" : standalone ? "Từ đơn" : "Cụm bổ trợ"}</small><span>{item.meaning}</span>{item.ipa && <em>{item.ipa}</em>}</li>;
-    })}{registerTerms.map((term, index) => <li key={`${term.coreId}-${term.kind}-${term.word}`} className="register"><i>{visible.length + index + 1}</i><b>{term.word}</b><small>{term.kind === "slang" ? "Khẩu ngữ" : "Văn phong"} · {term.coreWord}</small><span>{term.definition}</span></li>)}</ol>
+    })}{registerTerms.map((term, index) => <li key={`${term.coreId}-${term.kind}-${term.word}`} className="register"><i>{visible.length + index + 1}</i><b>{term.word}</b><small>{operatorRegisterKindLabel(term)} · {term.coreWord}</small><span>{term.definition}{operatorRegisterNote(term) ? <> — <span className="monthly-register-note">{operatorRegisterNote(term)}</span></> : null}</span>{term.ipa && <em>{term.ipa}</em>}</li>)}</ol>
   </>;
 }
 

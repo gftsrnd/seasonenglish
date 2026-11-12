@@ -12,7 +12,7 @@ import { previousMonthlyLessonAudioIndex, withLessonListeningAudio, type Listeni
 import { generateMonthlyDayWithAi, generateMonthlyReviewWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
 import { buildMonthlyCatalogPronunciationPrompt, getMonthlyPronunciationTextIssues, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, getMonthlyGrammarPhaseIssues, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyAiCallBudgetError, monthlyResourceAiCallLimit, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
 import { isInvalidAiOutputDefault, MonthlyCorePhaseShortfallError, runMonthlyCorePhase } from "./monthly-core-phase.js";
-import { monthlyRegisterCheckpointSchema, resumeMonthlyRegisterCheckpoint, runMonthlyRegisterTermsPhase } from "./monthly-register-phase.js";
+import { budgetedMonthlyRegisterRunner, monthlyRegisterCheckpointSchema, regenerateMonthlyRegisterTerms, resumeMonthlyRegisterCheckpoint, runMonthlyRegisterTermsPhase } from "./monthly-register-phase.js";
 import { runMonthlyEnrichmentWithRefill, type MonthlyCoreEnrichmentOutcome } from "./monthly-enrichment-phase.js";
 import { buildMonthlyCrossLevelCoreExclusions, getMonthlyCoreLevelIssue } from "./monthly-resource-quality-gates.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
@@ -54,6 +54,7 @@ const resourceCriteriaInput = z.object({
   pronunciationSoundCount: z.coerce.number().int().min(1).max(12)
 });
 const resourceCheckpointQuery = z.object({ cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]) });
+const registerRegenerationInput = z.object({ expectedVersion: z.int().positive() });
 const lessonInput = z.object({
   title: z.string().trim().min(1).max(200),
   parts: z.array(z.object({ code: z.enum(MONTHLY_DAY_COMPONENTS), title: z.string().optional(), content: z.record(z.string(), z.unknown()) }))
@@ -1018,6 +1019,32 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       if (error instanceof RangeError) return reply.code(422).send({ code: "MONTHLY_RESOURCE_EDIT_INVALID", issues: [{ section: "pool", message: error.message }] });
       throw error;
     }
+  });
+
+  // L-042 (12/11): re-run ONLY the slang / poetic phase of a DRAFT B1–C1 pool
+  // (one batched generation + one batched audit, under the AI-call ceiling).
+  // Cores, supports, grammar and sounds are never touched. Approved pools are
+  // immutable (reopen through a Manager first).
+  app.post("/api/v1/content/month-frameworks/:id/resources/register-terms/regenerate", { preHandler: contentOperator }, async (request, reply) => {
+    const { id } = frameworkParams.parse(request.params);
+    const actorId = request.e4sSession!.user.id;
+    const parsed = registerRegenerationInput.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(422).send({ code: "MONTHLY_REGISTER_TERMS_INVALID", issues: parsed.error.issues.map((issue) => issue.message) });
+    const draft = await repositories.monthlyContent.getResourceDraftForEdit(actorId, id);
+    if (!draft || draft.status === "retired") return reply.code(404).send({ code: "MONTHLY_FRAMEWORK_NOT_FOUND" });
+    if (draft.status !== "draft") return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_IMMUTABLE" });
+    if (!draft.writable) return reply.code(409).send({ code: "MONTHLY_CONTENT_READ_ONLY" });
+    if (draft.version !== parsed.data.expectedVersion) return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_VERSION_CONFLICT", currentVersion: draft.version });
+    if (!monthlyRegisterTermsApply(draft.cefr)) return reply.code(422).send({ code: "MONTHLY_REGISTER_TERMS_NOT_APPLICABLE" });
+    const baseRunner = await runnerFor(actorId);
+    if (!baseRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
+    const { runner, usage } = budgetedMonthlyRegisterRunner(baseRunner);
+    const { coreTerms, phase } = await regenerateMonthlyRegisterTerms({ runner, cefr: draft.cefr, theme: draft.pool.theme.title, coreTerms: draft.pool.coreTerms, supportTerms: draft.pool.supportTerms });
+    request.log.info({ frameworkId: id, cefr: draft.cefr, phase: "register-only", calls: phase.calls, generated: phase.generated, accepted: phase.items.length, rejected: phase.rejected.slice(0, 20), failed: phase.failed, usage }, "Monthly register-only regeneration finished");
+    if (phase.failed) return reply.code(502).send({ code: "MONTHLY_REGISTER_TERMS_FAILED", usage });
+    const byCore = Object.fromEntries(coreTerms.flatMap((core) => core.registerTerms?.length ? [[core.id, core.registerTerms]] : []));
+    const saved = await repositories.monthlyContent.replaceDraftRegisterTerms(actorId, id, draft.version, byCore);
+    return { ...saved, usage, generated: phase.generated, accepted: phase.items.length, rejected: phase.rejected };
   });
 
   app.get("/api/v1/content/month-frameworks/:id/exam-scope", { preHandler: readers }, async (request, reply) => {

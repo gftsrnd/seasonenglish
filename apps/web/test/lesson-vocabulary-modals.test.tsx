@@ -48,8 +48,8 @@ const vocabularyPart: LessonPart = {
       lexicalDetails: [
         { kind: "synonym", word: "coworker", definition: "a person you work with", example: "My coworker joined the call.", context: "workplace", note: "common", source: "lesson" },
         { kind: "antonym", word: "competitor", definition: "a person or company competing with you", example: "The competitor launched a new service.", context: "business", note: "contrast", source: "lesson" },
-        { kind: "slang", word: "workmate", definition: "a colleague", context: "informal", source: "lesson" },
-        { kind: "poetic", word: "fellow worker", definition: "a person sharing your work", note: "literary", source: "lesson" }
+        { kind: "slang", word: "workmate", definition: "a colleague", context: "informal" },
+        { kind: "poetic", word: "fellow worker", definition: "a person sharing your work", context: "literary" }
       ]
     }]
   }
@@ -114,14 +114,16 @@ describe("lesson vocabulary relation modals", () => {
     expect(synonymModal).toHaveTextContent("a person you work with");
     await user.click(within(synonymModal).getByRole("button", { name: "Đóng" }));
 
-    await user.click(within(card).getByRole("button", { name: "Xem Khẩu ngữ: workmate" }));
-    const slangModal = screen.getByTestId("modal.vocab-lexical-detail");
-    expect(slangModal).toHaveTextContent("Khẩu ngữ");
+    // 12/11: slang / poetic chips open the register modal (B1+ is English-only).
+    await user.click(within(card).getByRole("button", { name: "Slang: workmate" }));
+    const slangModal = screen.getByTestId("modal.vocab-register");
+    expect(slangModal).toHaveTextContent("Slang");
     expect(slangModal).toHaveTextContent("a colleague");
-    await user.click(within(slangModal).getByRole("button", { name: "Đóng" }));
+    await user.click(within(slangModal).getByRole("button", { name: "Close" }));
 
-    await user.click(within(card).getByRole("button", { name: "Xem Văn phong: fellow worker" }));
-    expect(screen.getByTestId("modal.vocab-lexical-detail")).toHaveTextContent("literary");
+    // Stored before 12/11 (no IPA / notes): the old "poetic" meant formal and keeps that label.
+    await user.click(within(card).getByRole("button", { name: "Formal: fellow worker" }));
+    expect(screen.getByTestId("modal.vocab-register")).toHaveTextContent("literary");
   });
 
   it("does not render a misleading related-word chip when the server has no detail", () => {
@@ -135,7 +137,7 @@ describe("lesson vocabulary relation modals", () => {
 
   it("keeps slang and poetic detail controls exclusive to B1+", () => {
     render(<LearnerLesson view={{ lesson }} actions={actions()} />);
-    expect(screen.queryByRole("button", { name: "Xem Khẩu ngữ: workmate" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Xem Văn phong: fellow worker" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /workmate/u })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /fellow worker/u })).not.toBeInTheDocument();
   });
 });
