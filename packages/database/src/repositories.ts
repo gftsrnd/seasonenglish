@@ -9347,10 +9347,13 @@ export function coachOpeningQuestion(firstName: string, topic: string, previousQ
   return prompts.find((prompt) => !prior.has(normalize(prompt))) ?? prompts[0]!;
 }
 
-function coachSpokenText(reply: string, question: string): string {
+export function coachSpokenText(reply: string, question: string): string {
   const spoken = reply.trim();
   const followUp = question.trim();
-  return spoken.endsWith(followUp) ? spoken : `${spoken} ${followUp}`.trim();
+  // An Informal turn ends "…question? 😊": the trailing emoji does not make
+  // the question missing, so it is not appended a second time.
+  const withoutEmoji = spoken.replace(/[\p{Extended_Pictographic}️\s]+$/gu, "").trim();
+  return spoken.endsWith(followUp) || withoutEmoji.endsWith(followUp) ? spoken : `${spoken} ${followUp}`.trim();
 }
 
 function storedCoachSpokenText(value: Record<string, unknown>): string {

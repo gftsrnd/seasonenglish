@@ -77,8 +77,11 @@ export function registerCoachRoutes(
       coachCurrentQuestion(existing.messages, existing.topic), existing.persona
     );
     const currentQuestionTranslation = coachCurrentQuestionTranslation(existing.messages);
+    const scenarioOpening = coachScenarioOpening(existing.messages);
+    const learnerMessages = [...existing.messages.filter((item) => item.speaker === "learner").map((item) => item.text), parsed.data.message];
     const validationContext = {
       learnerMessage: parsed.data.message,
+      learnerOwned: coachScenarioRoles(scenarioOpening, learnerMessages).learnerOwned,
       previousSuggestedAnswer: coachPreviousSuggestedAnswer(existing.messages),
       topic: existing.topic,
       currentQuestion,
@@ -147,6 +150,8 @@ export function registerCoachRoutes(
           runner, aiInput, `${coachPersonaPrompt(task.prompt, existing.persona, existing.cefr, audio)}\n\n${coachPracticeTurnPolicy(existing.cefr, existing.topic, (existing.questionHistory ?? []).slice(-20), {
             learnerWordCount: countCoachWords(parsed.data.message),
             currentQuestion,
+            scenarioOpening,
+            learnerMessages,
             unopenedVocabulary: (existing.vocabulary ?? []).filter((item) => !item.opened).map((item) => item.word)
           })}`, existing.persona, validationContext
         );
@@ -157,8 +162,9 @@ export function registerCoachRoutes(
       logRoleplayDiagnostics(request.log, parsed.data.requestId, "practice", scored.roleplay);
       if (feedbackErrorCode) return await saveOutageTurn(feedbackErrorCode, output);
       const normalizedOutput = normalizeCoachVocabularyUnlocks(
-        repeatCurrentQuestionForInvalidTurn(output, {
-          currentQuestion, currentQuestionTranslation, persona: existing.persona, cefr: existing.cefr
+        coachQuestionFlowForTurn(output, {
+          currentQuestion, currentQuestionTranslation, persona: existing.persona, cefr: existing.cefr,
+          learnerMessage: parsed.data.message, topic: existing.topic, priorQuestions: existing.questionHistory ?? []
         }), parsed.data.message, existing.vocabulary
       );
       await repositories.coach.saveAiTurn({
@@ -254,14 +260,17 @@ export function registerCoachRoutes(
           previousSuggestedAnswer: coachPreviousSuggestedAnswer(existing.messages),
           currentQuestion: challengeQuestion,
           currentQuestionTranslation: challengeQuestionTranslation,
-          cefr: existing.targetLevel
+          cefr: existing.targetLevel,
+          learnerOwned: coachScenarioRoles(coachScenarioOpening(existing.messages),
+            [...existing.messages.filter((item) => item.speaker === "learner").map((item) => item.text), parsed.data.message]).learnerOwned
         }
       );
       logRoleplayDiagnostics(request.log, parsed.data.requestId, "challenge", roleplay);
       // Same rule as practice: an answer that does not count re-asks the open question.
-      const normalizedOutput = normalizeCoachVocabularyUnlocks(repeatCurrentQuestionForInvalidTurn(output, {
+      const normalizedOutput = normalizeCoachVocabularyUnlocks(coachQuestionFlowForTurn(output, {
         currentQuestion: challengeQuestion, currentQuestionTranslation: challengeQuestionTranslation,
-        persona: "formal", cefr: existing.targetLevel
+        persona: "formal", cefr: existing.targetLevel,
+        learnerMessage: parsed.data.message, topic: aiInput.scenario
       }), parsed.data.message, []);
       await repositories.coach.saveAiTurn({
         learnerId, sessionId: existing.sessionId, requestId: parsed.data.requestId,
@@ -363,11 +372,79 @@ export function coachPersonaPrompt(
   const registerGuard = persona === "formal"
     ? "LEARNER REGISTER: Slang or overly casual wording in the learner message (for example lol, gimme, mate, 'em, no big deal) is a register problem, never a reason for off_topic. If the message still responds to currentQuestion, use status valid, result partially_correct, countsTowardGoal true, lower only rubric.meaning (appropriateness) to at most 3, and explain the register issue in noteVi and rubric.meaning.improvement. Use off_topic only when the content does not address currentQuestion."
     : "";
-  return [prompt, instruction, correctionGuard, requiredGrammarGuard, correctionCompactnessGuard, registerGuard, cefrGuidance, asrGuidance, COACH_CONDUCT_RULE, COACH_SAME_QUESTION_RULE, coachAnswerIdeaPromptRule(normalizedCefr)].filter(Boolean).join("\n\n");
+  return [prompt, instruction, correctionGuard, requiredGrammarGuard, correctionCompactnessGuard, registerGuard, cefrGuidance, asrGuidance, COACH_CONDUCT_RULE, COACH_ROLE_RULE, COACH_SAME_QUESTION_RULE, coachAnswerIdeaPromptRule(normalizedCefr)].filter(Boolean).join("\n\n");
+}
+
+/**
+ * Fixed sides in the roleplay. Season plays the other person in the
+ * situation for the whole session; the learner plays themselves. Every
+ * question Season asks comes from Season's side, and the answer idea helps
+ * the learner answer it from the learner's side.
+ */
+export const COACH_ROLE_RULE = "FIXED ROLES: The learner always plays themselves: 'you/your' in the scenario and opening is the learner, and everything described as 'your ...' (your update, your report, your slides) belongs to the learner. Season plays the OTHER person in that situation (the client, colleague, teammate, or manager it names) and keeps that same role in every turn; never switch sides. Every question or request in seasonReply is something that person asks the learner, in Season's own voice. Never write the learner's line for them: never ask the question the learner is supposed to ask you, and never say 'my update', 'my report', or similar about something the learner owns (say 'your update'). When the learner asks you something in role, answer it briefly as that person, then ask a NEW in-character question; never answer and then ask the same question again. The answer idea must describe how the learner, from the learner's side, answers that exact question.";
+
+/** Artifact nouns a learner can own in a workplace scenario ("your update"). */
+const LEARNER_ARTIFACT_NOUNS = ["update", "report", "slides", "slide", "deck", "draft", "presentation", "proposal", "summary", "timeline", "email", "design", "document", "plan", "schedule", "estimate", "budget", "demo", "notes"];
+const ARTIFACT_PATTERN = LEARNER_ARTIFACT_NOUNS.join("|");
+const ARTIFACT_MODIFIERS = "(?:(?:latest|new|recent|last|current|first|second|final|revised|weekly|monthly|project|progress|status|sales|team)\\s+){0,2}";
+const SEASON_COUNTERPARTS = ["client", "customer", "colleague", "teammate", "coworker", "co-worker", "manager", "boss", "team leader", "supplier", "partner", "director"];
+
+/**
+ * Who Season plays and which artifacts belong to the learner, read from the
+ * opening (the scenario framing, "A client has concerns about your latest
+ * update…") and the learner's own words ("my update").
+ */
+export function coachScenarioRoles(opening: string, learnerMessages: readonly string[] = []): { seasonRole?: string; learnerOwned: string[] } {
+  const owned = new Set<string>();
+  const collect = (text: string, possessive: "your" | "my") => {
+    for (const match of text.matchAll(new RegExp(`\\b${possessive}\\s+${ARTIFACT_MODIFIERS}(${ARTIFACT_PATTERN})\\b`, "giu"))) {
+      owned.add(match[1]!.toLocaleLowerCase("en-US"));
+    }
+  };
+  collect(opening, "your");
+  for (const message of learnerMessages) collect(message, "my");
+  const role = new RegExp(`\\b(?:a|an|the|your|our)\\s+(?:new\\s+)?(${SEASON_COUNTERPARTS.join("|")})\\b`, "iu").exec(opening)?.[1]?.toLocaleLowerCase("en-US");
+  return { ...(role ? { seasonRole: role } : {}), learnerOwned: [...owned] };
+}
+
+const ROLEPLAY_LEARNER_PERSPECTIVE = "Season's question is phrased from the learner's side (the learner's own line).";
+
+/**
+ * A Season question written from the learner's side: it claims something the
+ * learner owns as Season's ("my update" when the update is the learner's), or
+ * it is the very question the answer idea tells the learner to ask.
+ */
+export function coachQuestionFromLearnerSide(question: string, context: { learnerOwned?: readonly string[]; answerIdea?: string }): boolean {
+  const owned = (context.learnerOwned ?? []).map((noun) => noun.toLocaleLowerCase("en-US"));
+  if (owned.length) {
+    const claims = new RegExp(`\\bmy\\s+${ARTIFACT_MODIFIERS}(${owned.map((noun) => noun.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "iu");
+    if (claims.test(question)) return true;
+  }
+  const idea = context.answerIdea?.trim() ?? "";
+  const asksOther = /^(?:you (?:can|could|might|should)\s+|try (?:to\s+)?)?(?:politely\s+)?ask\b/iu.test(idea);
+  if (asksOther) {
+    const stop = new Set(["the", "a", "an", "you", "your", "they", "them", "their", "what", "which", "how", "about", "can", "could", "ask", "politely", "try", "to", "of", "is", "are", "and", "or", "it", "this", "that", "for", "in", "on", "me", "my", "i"]);
+    const words = (value: string) => new Set((value.toLocaleLowerCase("en-US").match(/\p{L}{3,}/gu) ?? []).filter((word) => !stop.has(word)));
+    const asked = words(question);
+    const suggested = words(idea);
+    if (asked.size >= 2 && [...asked].filter((word) => suggested.has(word)).length / asked.size >= 0.6) return true;
+  }
+  return false;
+}
+
+/** The session's fixed roles, written into the practice policy. */
+export function coachRolePolicy(opening: string, learnerMessages: readonly string[] = []): string {
+  if (!opening.trim()) return "";
+  const roles = coachScenarioRoles(opening, learnerMessages);
+  const season = roles.seasonRole ? `the ${roles.seasonRole} in that situation` : "the other person in that situation (the colleague, client, or manager the learner is talking to)";
+  const owned = roles.learnerOwned.length
+    ? ` These belong to the learner, never to Season: ${roles.learnerOwned.map((noun) => `"your ${noun}"`).join(", ")}; Season never says "my ${roles.learnerOwned[0]}".`
+    : "";
+  return ` SCENARIO ROLES: The session opened with ${JSON.stringify(opening.trim())}. For this whole session the learner is "you" in that opening and Season plays ${season}.${owned} Each Season question is asked by that person to the learner; it is never the line the learner should say.`;
 }
 
 /** An unanswered question stays open: Season asks it again instead of moving on. */
-export const COACH_SAME_QUESTION_RULE = "SAME QUESTION UNTIL ANSWERED: When the learner's message does not answer currentQuestion (off_topic, insufficient, Vietnamese text, too short, 'I don't know', or a request to clarify), the turn does not count and Season must not move on. seasonReply stays in character, may say in one short sentence why that did not answer the question, and then asks currentQuestion again: the same question, optionally rephrased in simpler words. learnerQuestion/nextQuestion is that re-asked question, and the answer idea helps answer currentQuestion. Only a valid answer to currentQuestion moves the conversation to a new question.";
+export const COACH_SAME_QUESTION_RULE = "SAME QUESTION UNTIL ANSWERED: When the learner's message does not answer currentQuestion (off_topic, insufficient, Vietnamese text, too short, 'I don't know', a request to clarify, or currentQuestion itself typed back), the turn does not count and Season must not move on. seasonReply stays in character, may say in one short sentence why that did not answer the question, and then asks currentQuestion again: the same question, optionally rephrased in simpler words. Do not answer or add new content in that turn. learnerQuestion/nextQuestion is that re-asked question, and the answer idea helps answer currentQuestion. Only a valid answer to currentQuestion moves the conversation to a new question, and after a valid answer Season never asks currentQuestion again.";
 
 export function isAcknowledgementOnly(message: string): boolean {
   const normalized = message.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}\s']/gu, "").replace(/\s+/g, " ");
@@ -421,6 +498,9 @@ export function coachPracticeTurnGate(
   cefr: string,
   messages: CoachView["messages"]
 ): { kind: CoachUnansweredKind; reasonVi: string } | undefined {
+  // Season's open question typed back is not an answer to it: the turn does
+  // not count and Season re-asks the same question without answering it.
+  if (isCoachQuestionEcho(message, coachCurrentQuestion(messages, ""))) return { kind: "repeated", reasonVi: COACH_ECHO_REASON_VI };
   if (isRepeatedSeasonMessage(message, messages)) return { kind: "repeated", reasonVi: "Câu trả lời trùng hoàn toàn với một câu trước đó; hãy tự viết câu mới." };
   const words = countCoachWords(message);
   if (words <= 12 && CLARIFICATION_REQUEST.test(message)) {
@@ -442,13 +522,34 @@ export function coachPracticeTurnGateReason(
   return coachPracticeTurnGate(message, cefr, messages)?.reasonVi;
 }
 
+export const COACH_ECHO_REASON_VI = "Câu này lặp lại câu hỏi của Season, chưa phải câu trả lời. Season hỏi lại câu hỏi; hãy trả lời bằng lời của bạn.";
+
+/**
+ * The learner's message is (nearly) Season's open question typed back:
+ * the same question key, or the same content words in both directions.
+ * Such a message never answers the question it repeats.
+ */
+export function isCoachQuestionEcho(message: string, currentQuestion: string): boolean {
+  const asked = cleanCoachQuestionAnchor(currentQuestion);
+  if (!asked || !message.trim()) return false;
+  if (coachQuestionKey(message) === coachQuestionKey(asked)) return true;
+  return coachQuestionOverlap(message, asked) >= 0.8 && coachQuestionOverlap(asked, message) >= 0.8;
+}
+
 function isRepeatedSeasonMessage(message: string, messages: CoachView["messages"]): boolean {
   const normalizeExact = (value: string) => value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/\s+/g, " ").trim();
   const target = normalizeExact(message);
   if (!target) return false;
+  // "An exact copy of any prior Season or learner sentence": a single Season
+  // sentence (for example its question) copied on its own counts too.
+  const sentenceKey = (value: string) => normalizeCoachTurnText(value);
+  const targetKey = sentenceKey(message);
   return messages.some((item) => {
     const prior = item.speaker === "learner" ? item.text : item.feedback?.seasonReply ?? item.text;
-    return normalizeExact(prior) === target;
+    if (normalizeExact(prior) === target) return true;
+    if (item.speaker !== "coach" || !targetKey) return false;
+    const sentences = prior.match(/[^.!?]+[.!?]+|[^.!?]+$/gu) ?? [];
+    return sentences.some((sentence) => sentenceKey(sentence) === targetKey && countCoachWords(sentence) >= 3);
   });
 }
 
@@ -456,7 +557,7 @@ export function coachPracticeTurnPolicy(
   cefr: string,
   topic: string,
   priorQuestions: readonly string[] = [],
-  context: { learnerWordCount?: number; unopenedVocabulary?: readonly string[]; currentQuestion?: string } = {}
+  context: { learnerWordCount?: number; unopenedVocabulary?: readonly string[]; currentQuestion?: string; scenarioOpening?: string; learnerMessages?: readonly string[] } = {}
 ): string {
   // The current question is still open: re-asking it after an unanswered turn
   // is a natural re-prompt, so only the earlier questions are forbidden.
@@ -470,7 +571,7 @@ export function coachPracticeTurnPolicy(
   const monthVocabulary = vocabulary.length
     ? ` MONTH VOCABULARY: This month's lesson words the learner has not used yet: ${JSON.stringify(vocabulary)}. When it fits the scenario naturally, ask a follow-up that gives the learner a chance to use one of them; never list, define, or teach these words in seasonReply.`
     : "";
-  return `SEASON TURN ELIGIBILITY (practice only): A valid turn must be entirely English, answer the current in-character question, contain at least ${minimumSeasonTurnWords(cefr)} words, and include at least one clause with a subject and verb. Reject acknowledgements, fragments, word lists, and an exact copy of any prior Season or learner sentence as insufficient; name the short reason in Vietnamese. Ignore grammatical correctness when deciding whether the turn counts: grammar errors may still count if the other four gates pass. Set countsTowardGoal=true only when all five gates pass. These gates do not change the language score or monthly exam score. ROLEPLAY CONTINUITY: Stay in the workplace topic “${topic}”. Respond to the details in the learner's latest message, then ask one concise, natural in-character follow-up about that detail. Do not use classroom instructions such as asking them to write a complete sentence. If the learner has already stated their role or job, acknowledge it and ask about a project, task, or next step instead of asking about their role again. Do not repeat any earlier question from the supplied priorQuestions. When the learner did not answer currentQuestion, ask currentQuestion again (the same question, optionally in simpler words) instead of a new one; only after a valid answer move forward with a new follow-up about the same topic.${history}${wordCount}${monthVocabulary}`;
+  return `SEASON TURN ELIGIBILITY (practice only): A valid turn must be entirely English, answer the current in-character question, contain at least ${minimumSeasonTurnWords(cefr)} words, and include at least one clause with a subject and verb. Reject acknowledgements, fragments, word lists, and an exact copy of any prior Season or learner sentence as insufficient; name the short reason in Vietnamese. Ignore grammatical correctness when deciding whether the turn counts: grammar errors may still count if the other four gates pass. Set countsTowardGoal=true only when all five gates pass. These gates do not change the language score or monthly exam score. ROLEPLAY CONTINUITY: Stay in the workplace topic “${topic}”. Respond to the details in the learner's latest message, then ask one concise, natural in-character follow-up about that detail. Do not use classroom instructions such as asking them to write a complete sentence. If the learner has already stated their role or job, acknowledge it and ask about a project, task, or next step instead of asking about their role again. Do not repeat any earlier question from the supplied priorQuestions. When the learner did not answer currentQuestion, ask currentQuestion again (the same question, optionally in simpler words) instead of a new one; only after a valid answer move forward with a new follow-up about the same topic.${coachRolePolicy(context.scenarioOpening ?? "", context.learnerMessages ?? [])}${history}${wordCount}${monthVocabulary}`;
 }
 
 const REASK_LEADS: Record<CoachUnansweredKind | "off_topic" | "unavailable", { formal: string; informal: string; vi: string }> = {
@@ -642,7 +743,9 @@ export function repeatCurrentQuestionForInvalidTurn<T extends CoachTaskOutput>(
   const reasksCurrent = Boolean(asked)
     && (coachQuestionKey(asked) === coachQuestionKey(current) || coachQuestionOverlap(asked, current) >= 0.6)
     && normalizeCoachTurnText(reply).includes(normalizeCoachTurnText(asked));
-  if (reasksCurrent) return output;
+  // A kept re-ask may carry one short "why that did not answer" sentence; a
+  // longer turn also answers or adds content, which a re-ask must not do.
+  if (reasksCurrent && coachSentenceCount(replyWithoutQuestion(reply, asked)) <= 1) return output;
   const reask = coachReaskFollowUp({
     kind: output.evaluation.status === "off_topic" ? "off_topic" : "insufficient",
     currentQuestion: current,
@@ -658,6 +761,113 @@ export function repeatCurrentQuestionForInvalidTurn<T extends CoachTaskOutput>(
     nextQuestionTranslation: reask.nextQuestionTranslation,
     suggestedAnswer: { ...fallbackCoachAnswerIdea(context.cefr), kind: "idea" as const }
   };
+}
+
+/** The Season turn without its final question (and the emoji after it). */
+function replyWithoutQuestion(reply: string, question: string): string {
+  const trimmed = reply.replace(/[\p{Extended_Pictographic}️\s]+$/gu, "").trim();
+  const asked = question.trim();
+  if (asked && trimmed.endsWith(asked)) return trimmed.slice(0, -asked.length).trim();
+  const sentences = trimmed.match(/[^.!?]+[.!?]+|[^.!?]+$/gu)?.map((part) => part.trim()).filter(Boolean) ?? [];
+  const last = sentences.at(-1);
+  return last && normalizeCoachTurnText(last) === normalizeCoachTurnText(asked) ? sentences.slice(0, -1).join(" ") : trimmed;
+}
+
+function sameCoachQuestion(a: string, b: string): boolean {
+  if (!a.trim() || !b.trim()) return false;
+  return coachQuestionKey(a) === coachQuestionKey(b)
+    || (coachQuestionOverlap(a, b) >= 0.85 && coachQuestionOverlap(b, a) >= 0.85);
+}
+
+/** The opening Season turn (the scenario framing), or "" when there is none. */
+export function coachScenarioOpening(messages: Array<{ id?: string; speaker: "learner" | "coach"; text: string }>): string {
+  const opening = messages.find((item) => item.speaker === "coach" && item.id?.endsWith(":opening"))
+    ?? messages.find((item) => item.speaker === "coach");
+  return opening?.text.trim() ?? "";
+}
+
+/**
+ * After a VALID answer the open question is closed: a turn that answers and
+ * then asks currentQuestion again keeps its in-character content but gets a
+ * new follow-up question (and a matching answer idea) instead.
+ */
+export function avoidRepeatedQuestionAfterAnswer<T extends CoachTaskOutput>(
+  output: T,
+  context: {
+    currentQuestion: string; persona: "informal" | "formal"; cefr?: string | undefined;
+    learnerMessage?: string; topic?: string; priorQuestions?: readonly string[];
+  }
+): T {
+  if (output.evaluation.status !== "valid") return output;
+  const current = cleanCoachQuestionAnchor(context.currentQuestion);
+  if (!sameCoachQuestion(output.nextQuestion, current)) return output;
+  const fallback = coachFallbackFollowUp(
+    context.learnerMessage ?? "", current, context.topic ?? "workplace conversation", context.persona,
+    [...(context.priorQuestions ?? []), output.nextQuestion]
+  );
+  const question = coachQuestionForPersona(fallback.nextQuestion, context.persona);
+  const emoji = context.persona === "informal" ? " 😊" : "";
+  const content = replyWithoutQuestion(output.seasonReply, output.nextQuestion);
+  const questionTranslation = output.nextQuestionTranslation.trim();
+  const replyTranslation = output.seasonReplyTranslation.trim();
+  const keepContent = /[\p{L}\p{N}]/u.test(content) && normalizeCoachTurnText(content) !== normalizeCoachTurnText(output.seasonReply);
+  const translatedContent = keepContent && questionTranslation && replyTranslation.endsWith(questionTranslation)
+    ? replyTranslation.slice(0, -questionTranslation.length).trim()
+    : undefined;
+  const useContent = keepContent && translatedContent !== undefined;
+  return {
+    ...output,
+    seasonReply: useContent ? `${content} ${question}${emoji}` : `${fallback.seasonReply.replace(/\s*😊$/u, "")}${emoji}`.replace(fallback.nextQuestion, question),
+    seasonReplyTranslation: useContent ? `${translatedContent} ${fallback.nextQuestionTranslation}`.trim() : fallback.seasonReplyTranslation,
+    nextQuestion: question,
+    nextQuestionTranslation: fallback.nextQuestionTranslation,
+    suggestedAnswer: { ...fallbackCoachAnswerIdea(context.cefr), kind: "idea" as const }
+  };
+}
+
+/**
+ * The learner typed currentQuestion back. It is not an answer: the grade is
+ * "insufficient" (it does not count) and the reply is the re-ask below, so
+ * the grading and Season's turn never disagree.
+ */
+export function treatQuestionEchoAsUnanswered<T extends CoachTaskOutput>(output: T, learnerMessage: string, currentQuestion: string): T {
+  if (!isCoachQuestionEcho(learnerMessage, currentQuestion)) return output;
+  return {
+    ...output,
+    evaluation: { status: "insufficient", result: "missing_information", countsTowardGoal: false, noteVi: COACH_ECHO_REASON_VI },
+    rubric: { ...output.rubric, meaning: { score: 0, evidence: COACH_ECHO_REASON_VI, improvement: "Hãy trả lời câu hỏi của Season bằng thông tin của bạn." } },
+    corrections: [], correctedText: "", usedWords: []
+  };
+}
+
+/**
+ * Question flow after grading, in one place for practice and challenge:
+ * an echoed question is not an answer; a turn that does not count re-asks the
+ * open question without answering; a valid answer never re-asks it.
+ */
+export function coachQuestionFlowForTurn<T extends CoachTaskOutput>(
+  output: T,
+  context: {
+    currentQuestion: string; currentQuestionTranslation?: string | undefined; persona: "informal" | "formal"; cefr?: string | undefined;
+    learnerMessage?: string; topic?: string; priorQuestions?: readonly string[];
+  }
+): T {
+  const graded = context.learnerMessage ? treatQuestionEchoAsUnanswered(output, context.learnerMessage, context.currentQuestion) : output;
+  if (graded.evaluation.status !== "valid") {
+    if (graded === output) return repeatCurrentQuestionForInvalidTurn(graded, context);
+    // An echo is always re-asked deterministically, never with the model's
+    // turn that answered the echoed question.
+    const followUp = coachReaskFollowUp({
+      kind: "repeated", currentQuestion: context.currentQuestion, currentQuestionTranslation: context.currentQuestionTranslation,
+      persona: context.persona, cefr: context.cefr
+    });
+    return {
+      ...graded, seasonReply: followUp.seasonReply, seasonReplyTranslation: followUp.seasonReplyTranslation,
+      nextQuestion: followUp.nextQuestion, nextQuestionTranslation: followUp.nextQuestionTranslation,
+      suggestedAnswer: { ...fallbackCoachAnswerIdea(context.cefr), kind: "idea" as const }
+    };
+  }
+  return avoidRepeatedQuestionAfterAnswer(graded, context);
 }
 
 /** Share of the current question's content words that the asked question keeps. */
@@ -726,6 +936,8 @@ interface CoachValidationContext {
   currentQuestion?: string;
   currentQuestionTranslation?: string;
   priorQuestions?: string[];
+  /** Artifacts the learner owns in the scenario ("update" for "your update"); Season never claims them. */
+  learnerOwned?: string[];
   /** Level of the learner (practice) or of the challenge; decides the answer-idea language. */
   cefr?: string;
 }
@@ -1032,6 +1244,7 @@ export function isBlockingRoleplayViolation(violation: string): boolean {
     || isInCharacterAnchorViolation(violation)
     || violation === ROLEPLAY_REPEATED_QUESTION
     || violation === ROLEPLAY_ROLE_AGAIN
+    || violation === ROLEPLAY_LEARNER_PERSPECTIVE
     || violation === ROLEPLAY_NO_QUESTION;
 }
 
@@ -1105,8 +1318,12 @@ function inspectRoleplayTurn(raw: unknown, persona: "informal" | "formal", conte
   const learnerAlreadyStatedRole = /\b(?:i am|i'm|i work as|my role is|i work in)\b/iu.test(context?.learnerMessage ?? "");
   const asksForRoleAgain = (question: string) => learnerAlreadyStatedRole
     && /\b(?:what(?:'s| is) your role|what do you do|what is your job|tell me about your role|where do you work)\b/iu.test(question);
+  const fromLearnerSide = (value: CoachRoleplayTurnOutput) => coachQuestionFromLearnerSide(value.learnerQuestion, {
+    learnerOwned: context?.learnerOwned ?? [], answerIdea: value.answerIdea ?? ""
+  });
   const collect = (value: CoachRoleplayTurnOutput) => [
     ...validate(value),
+    ...(fromLearnerSide(value) ? [ROLEPLAY_LEARNER_PERSPECTIVE] : []),
     ...(repeatedQuestion(value.learnerQuestion) ? [ROLEPLAY_REPEATED_QUESTION] : []),
     ...(asksForRoleAgain(value.learnerQuestion) ? [ROLEPLAY_ROLE_AGAIN] : [])
   ];

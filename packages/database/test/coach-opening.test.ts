@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coachOpeningQuestion } from "../src/repositories.js";
+import { coachOpeningQuestion, coachSpokenText } from "../src/repositories.js";
 
 describe("Season opening prompt", () => {
   it("keeps the same topic while choosing a different next opening prompt", () => {
@@ -20,5 +20,14 @@ describe("Season opening prompt", () => {
 
     expect(second).not.toBe(first);
     expect(third).toBe(first);
+  });
+});
+
+describe("Season spoken text", () => {
+  it("does not append the question again when an Informal turn ends with an emoji", () => {
+    const question = "What did your client say about the update?";
+    expect(coachSpokenText(`Oh, that sounds good! ${question} 😊`, question)).toBe(`Oh, that sounds good! ${question} 😊`);
+    expect(coachSpokenText(`Thank you. ${question}`, question)).toBe(`Thank you. ${question}`);
+    expect(coachSpokenText("Thank you.", question)).toBe(`Thank you. ${question}`);
   });
 });
