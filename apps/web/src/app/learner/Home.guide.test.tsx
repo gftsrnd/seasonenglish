@@ -98,7 +98,7 @@ describe("learner home guide", () => {
   ] as const)("walks the %s home card by card, never returning to card 1", (fixture, titles) => {
     const { walk, distinct } = resolvedWalk(fixtures[fixture]!);
     expect(walk).toEqual([
-      [titles[0], "heading"], [titles[1], "card 1"], [titles[2], "card 2"], [titles[3], "card 3"], ["Hỗ trợ học tập", "support"]
+      [titles[0], "heading"], [titles[1], "card 1"], [titles[2], "card 2"], [titles[3], "card 3"]
     ]);
     expect(distinct).toBe(walk.length);
   });

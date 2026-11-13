@@ -19,7 +19,6 @@ const learnerSteps: Record<string, readonly GuideStep[]> = {
     ['.onboarding-steps [data-onboarding-step="2"].done', "Đã nộp test", "Bài test đầu vào đã nộp, bạn không cần làm lại. Điểm bài test là căn cứ để **Vận hành** xếp mức cho bạn."],
     ['.onboarding-steps [data-onboarding-step="3"].todo', "Vận hành duyệt mức", "Nộp test xong, **Vận hành** xem điểm để xếp mức. Bạn không cần làm gì thêm; bài học **tự mở** khi có mức."],
     ['.onboarding-steps [data-onboarding-step="3"].cur', "Chờ duyệt mức", "Bài test đã gửi, **Vận hành** đang xem điểm để xếp mức. Bạn không cần làm gì thêm; bài học **tự mở** khi có mức."],
-    [".learner-support-entry", "Hỗ trợ học tập", "Gặp vấn đề với tài khoản, hồ sơ hay bài test thì mở thẻ này để gửi **khiếu nại** và xem **phản hồi** đã nhận."],
     ['[data-home-block="primary"]:has(a[href^="/lesson/"])', "Bài học hôm nay", "Bấm bài được đề xuất để học hoặc học tiếp. **Bài học bù** hay **bài ôn** cần làm trước cũng hiện ở đây."],
     ['[data-home-block="primary"]:has(a[href^="/support"]):not(:has(a[href^="/lesson/"]))', "Bài học đang khóa", "Bạn đã bỏ lỡ bài thi tháng trước. Bấm **Gửi đơn xin mở** và nêu lý do để Quản lý xem xét."],
     ['.home-page[data-monthly-preparation="true"] [data-home-block="primary"]:not(:has(a[href^="/lesson/"], a[href^="/support"]))', "Lộ trình đang chuẩn bị", "Vận hành đang chuẩn bị và duyệt bộ bài tháng cho trình độ của bạn. Trong lúc chờ, bạn vẫn luyện được với Season."],

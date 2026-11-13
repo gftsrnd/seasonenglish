@@ -2,7 +2,7 @@ import { RequestEvidenceFields, requestEvidenceArgs, type RequestEvidenceDraft }
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { BookOpen, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MessageCircle, Play, Sprout } from "lucide-react";
 import type { LearnerHomeView, LearnerCallbacks } from "./contracts.js";
-import { Notice, PageTitle, Progress, AppLink, LearnerSupportCard, learnerLessonLabel, learnerLessonPhrase } from "./ui.js";
+import { Notice, PageTitle, Progress, AppLink, learnerLessonLabel, learnerLessonPhrase } from "./ui.js";
 import { buildMonthlyTeachingCalendar } from "@e4s/domain/monthly";
 import { LevelReadinessCard } from "./LevelReadiness.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
@@ -230,7 +230,7 @@ function OnboardingHome({ view, actions }: { view: LearnerHomeView; actions: Lea
         {step === 1 && done ? <AppLink className="btn btn-sm" href="/onboard" navigate={actions.navigate}>← Xem / sửa hồ sơ</AppLink> : current && step < 3 ? <><AppLink className="btn btn-primary" href={step === 1 ? "/onboard" : "/test/placement"} navigate={actions.navigate}>{step === 1 ? view.onboardingDraftAvailable ? "Tiếp tục phần đã lưu" : "Điền hồ sơ (~2 phút)" : view.placementDraft ? "Tiếp tục bài test" : "Bắt đầu test (tối đa 75 phút)"}</AppLink>{step === 2 && !view.placementDraft ? <div className="onboarding-test-note" role="note"><Clock3 size={16} aria-hidden="true" /><span><b>4 phần</b><span>Nghe · Đọc · Viết · Nói</span></span><span className="onboarding-test-note-separator" aria-hidden="true">·</span><span>Tai nghe + micro</span></div> : null}</> : null}
       </div>
     </div>;
-  })}</section><LearnerSupportCard from="home" navigate={actions.navigate} appeals={false} /></div>;
+  })}</section></div>;
 }
 
 function MonthlyExamOverview({ exam, month, navigate }: { exam: NonNullable<LearnerHomeView["monthlyExam"]>; month: LearnerHomeView["month"] | null; navigate: LearnerCallbacks["navigate"] }) {

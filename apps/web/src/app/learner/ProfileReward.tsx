@@ -55,7 +55,7 @@ export function LearnerProfile({ view, actions, courseCompleted = false }: { vie
     setAvatarOpen(false);
     returnTarget?.focus();
   };
-  if (view.profileMissing) return <div className="app-learner-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}><PageTitle title="Tiến độ & hồ sơ" /><Notice tone="warn">Bạn chưa hoàn thành hồ sơ cá nhân.</Notice><AppLink className="btn btn-primary" href="/onboard" navigate={actions.navigate}>Điền hồ sơ</AppLink><LearnerSupportCard from="profile" navigate={actions.navigate} /></div>;
+  if (view.profileMissing) return <div className="app-learner-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}><PageTitle title="Tiến độ & hồ sơ" /><Notice tone="warn">Bạn chưa hoàn thành hồ sơ cá nhân.</Notice><AppLink className="btn btn-primary" href="/onboard" navigate={actions.navigate}>Điền hồ sơ</AppLink></div>;
   const level = view.learner.cefr;
   const goals = labels(view.learner.profile.goals, GOALS);
   const detail = level ? `Trình độ ${level} – ${CEFR_LABELS[level]}${goals ? ` · ${goals}.` : ""}` : "Chưa duyệt trình độ";

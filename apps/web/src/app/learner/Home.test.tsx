@@ -29,12 +29,9 @@ function view(overrides: Partial<LearnerHomeView> = {}): LearnerHomeView {
 }
 
 describe("monthly learner home", () => {
-  it("does not offer appeals on the support card before the level is approved", () => {
+  it("shows no learning-support card before the level is approved", () => {
     render(<LearnerHome view={view({ learner: { displayName: "Học viên mới", cefr: null } })} actions={actions} />);
-    const support = screen.getByRole("link", { name: "Hỗ trợ học tập" });
-    expect(support).toHaveAttribute("href", "/support?from=home");
-    expect(support).toHaveTextContent("Gửi khiếu nại, trả lời khảo sát và xem phản hồi.");
-    expect(support).not.toHaveTextContent(/kháng nghị/i);
+    expect(screen.queryByRole("link", { name: "Hỗ trợ học tập" })).not.toBeInTheDocument();
     expect(screen.queryByText(/kháng nghị/i)).not.toBeInTheDocument();
   });
 
