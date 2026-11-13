@@ -31,10 +31,10 @@ describe("learner absence notice", () => {
 });
 
 describe("Season points tiers", () => {
-  it("returns the next tier above the points and null after the last tier", () => {
-    expect(nextSeasonPointsTier(0)).toBe(60);
-    expect(nextSeasonPointsTier(60)).toBe(180);
-    expect(nextSeasonPointsTier(359)).toBe(360);
-    expect(nextSeasonPointsTier(360)).toBeNull();
+  it("returns the next threshold above the points in the level and null after the last one", () => {
+    expect(nextSeasonPointsTier(0)).toBe(500);
+    expect(nextSeasonPointsTier(500)).toBe(2000);
+    expect(nextSeasonPointsTier(4999)).toBe(5000);
+    expect(nextSeasonPointsTier(5000)).toBeNull();
   });
 });

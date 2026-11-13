@@ -1,7 +1,7 @@
 import type { ManagerMonthlyLearnerView, ManagerMonthlyOverviewView, ManagerProgressView } from "@e4s/contracts";
 import { exportManagerMonthlyCsv, monthlyExamLabel } from "./MonthlyOverview.js";
 import { Bell } from "lucide-react";
-import { rewardBadgeIcon, rewardBadgeKey } from "../shared/reward-badge-icons.js";
+import { rewardBadgeIcon, rewardSeasonOfLearner } from "../shared/reward-badge-icons.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { Badge, OperationalCards, PageTitle, formatDate, percent, type ManagerOperationalProps } from "./shared.js";
 import { formatScore, formatScoreForExport } from "../shared/format-score.js";
@@ -68,7 +68,7 @@ function Kpi({ label, value, detail, state }: { label: string; value: string; de
 }
 
 function LearnerRow({ learner, monthly, weekStartDate, onOpen }: { learner: ManagerProgressView["learners"][number]; monthly?: ManagerMonthlyLearnerView | undefined; weekStartDate?: string; onOpen?: (id: string) => void }) {
-  const missed = learner.missedDays ?? 0; const reward = rewardLevel(learner.rewardPoints, learner.earnedBadges, learner.earnedBadgeDetails);
+  const missed = learner.missedDays ?? 0; const reward = rewardSeasonOfLearner(learner);
   const status = managerLearnerStatus(learner, weekStartDate);
   const badgeDetailText = (learner.earnedBadgeDetails ?? []).map((badge) => `${badge.label}: ${badge.description}`).join(" · ");
   const earnedIcons = [...new Set([...learner.earnedBadges, ...(learner.earnedBadgeDetails ?? []).map(({ key }) => key)].map(rewardBadgeIcon))].join("");
@@ -82,7 +82,7 @@ function LearnerRow({ learner, monthly, weekStartDate, onOpen }: { learner: Mana
     ? <>{formatDate(learner.lastActivityAt)}{missed ? <span className="muted"> ({missed} ngày)</span> : null}</>
     : <span className="muted">Chưa vào học</span>;
   const statusBadge = <Badge tone={status.startsWith("Bỏ ") ? "danger" : status === "Chưa có hoạt động gần đây" ? "warn" : "ok"}>{status}</Badge>;
-  const rewardTitle = `Cấp ${reward.index + 1}: ${reward.name}${badgeDetailText ? ` · ${badgeDetailText}` : ""}`;
+  const rewardTitle = `Cấp ${reward.index + 1}/4: ${reward.name}${learner.cefr ? ` · ${learner.cefr}` : ""} · ${reward.pointsInLevel.toLocaleString("vi-VN")} điểm trong trình độ · tổng ${learner.rewardPoints.toLocaleString("vi-VN")}${badgeDetailText ? ` · ${badgeDetailText}` : ""}`;
   return <tr className="manager-progress-record" role="row">
     <td className="manager-progress-name"><b>{learner.learnerName}</b></td>
     <td className="manager-progress-level"><Badge tone="primary">{learner.cefr}</Badge></td>
@@ -126,7 +126,6 @@ function WeekDots({ count, weekStartDate, activityDates }: { count: number; week
   return <span className="week-dots" aria-label="Điểm danh tuần này">{days.map((day) => <i key={`${day.label}-${day.date}`} className={`dot ${day.active ? "on" : "off"}`} aria-label={`${day.label}: ${day.active ? "đã học" : "chưa học"}`} title={day.date ? `${day.label} · ${day.date}` : day.label} />)}</span>;
 }
 function risk(learner: ManagerProgressView["learners"][number], weekStartDate?: string) { const status = managerLearnerStatus(learner, weekStartDate); return status.startsWith("Bỏ ") ? 2 : status === "Chưa có hoạt động gần đây" ? 1 : 0; }
-function rewardLevel(points: number, badges: readonly string[], details?: readonly { key: string }[]) { const has = new Set([...badges, ...(details ?? []).map((badge) => badge.key)].map(rewardBadgeKey)); const levels = [{ name: "Mùa xuân – gieo hạt", icon: "🌱", min: 0, required: [] }, { name: "Mùa hạ – đón nắng", icon: "☀️", min: 60, required: ["first", "streak3"] }, { name: "Mùa thu – gặt hái", icon: "🍂", min: 180, required: ["week", "friday", "chat"] }, { name: "Mùa đông – vững vàng", icon: "❄️", min: 360, required: ["streak7", "sharp", "words"] }]; let index = 0; while (index + 1 < levels.length) { const next = levels[index + 1]!; if (points < next.min || !next.required.every((id) => has.has(id))) break; index++; } return { ...levels[index]!, index }; } // media-scan: allow-avatar-reward -- deliberate reward symbols
 const DAY_LABELS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"] as const;
 function addDays(start: string, days: number) { const date = new Date(`${start}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); }
 export function managerLearnerStatus(learner: ManagerProgressView["learners"][number], weekStartDate?: string, today = new Date()): string {

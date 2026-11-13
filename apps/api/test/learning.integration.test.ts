@@ -799,7 +799,7 @@ describe("learner profile, home, lesson and progress API", () => {
     expect(response.json()).toMatchObject({
       season: {
         current: { key: "spring", level: 1 },
-        next: { key: "summer", level: 2, pointsRequired: 60 },
+        next: { key: "summer", level: 2, pointsRequired: 500 },
         earnedBadgeCount: 1,
         requiredBadgeCount: 2
       },

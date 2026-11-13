@@ -1,11 +1,16 @@
 import { Link, useSearchParams } from "react-router";
 import { BadgeCertificate, CertificateActions } from "../learner/CertificateDocument.js";
-import { rewardBadgeCatalog } from "./reward-catalog.js";
+import type { CefrLevel } from "@e4s/contracts";
+import { rewardBadgeCatalogAt } from "./reward-catalog.js";
+
+const CEFR_LEVELS: readonly string[] = ["A1", "A2", "B1", "B2", "C1"];
 
 export function ManagerRewardCertificate() {
   const [params] = useSearchParams();
   const points = Number(params.get("points"));
-  const displayPoints = Number.isInteger(points) && points >= 360 && points <= 600 ? points : 420;
+  const displayPoints = Number.isInteger(points) && points >= 5000 && points <= 6000 ? points : 5600;
+  const level = (CEFR_LEVELS.includes(params.get("level") ?? "") ? params.get("level") : "C1") as CefrLevel;
+  const rewardBadgeCatalog = rewardBadgeCatalogAt(level);
   const view = {
     organizationName: "GFT Demo",
     certificateNumber: "SE-PREVIEW",
@@ -15,7 +20,8 @@ export function ManagerRewardCertificate() {
     managerName: "Quản lý mẫu",
     requiredBadgeCount: rewardBadgeCatalog.length,
     displayPoints,
-    season: { name: "Mùa đông", description: "vững vàng" },
+    season: { name: "Mùa đông", description: "vững vàng", cefr: level },
+    cefrLabel: level,
     badges: rewardBadgeCatalog.map(([key, label, description]) => ({ key, label, description, earned: true }))
   };
   const print = () => {

@@ -196,7 +196,8 @@ export interface RewardView {
   cefrLabel: string;
   points: number;
   displayPoints: number;
-  season: { name: string; description: string };
+  /** The Season reached at `cefr` (every CEFR level has its own four-Season ladder). */
+  season: { name: string; description: string; cefr?: CefrLevel | null };
   simulated: boolean;
   earnedBadgeCount: number;
   requiredBadgeCount: number;

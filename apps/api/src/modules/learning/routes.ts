@@ -12,7 +12,7 @@ import type {
   MonthlyExamEligibilityView
 } from "@e4s/contracts";
 import { buildPronunciationAssets, microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
-import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerLearningAbsenceStreak, nextSeasonPointsTier, syncLearnerAbsenceNotice, learnerMonthlyAccess, learnerMonthlyAttendanceDates, learnerMonthlyLessonDates, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
+import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerLearningAbsenceStreak, syncLearnerAbsenceNotice, learnerMonthlyAccess, learnerMonthlyAttendanceDates, learnerMonthlyLessonDates, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
 import { gradeLessonAnswer, SENSITIVE_NAME_MESSAGE_VI, sensitiveTextIssue, validateGeneratedFeedback } from "@e4s/domain/content";
 import { evaluateMonthlyExamEligibility, learnerMonthlySeasonTarget, monthlyAttendanceCountedDates, MONTHLY_EXAM_ENTRY_CUTOFF, monthlyExamEntryState } from "@e4s/domain/progression";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
@@ -313,7 +313,9 @@ export function registerLearningRoutes(
         studyDays: monthlyContext ? progress.studyDays : 0,
         streakDays: monthlyContext ? calculateCurrentStreak(progress.activity.map((item) => item.occurredAt), organizationDate) : 0,
         points,
-        nextPointsTier: monthlyContext ? nextSeasonPointsTier(points) : null,
+        // The ring climbs the current level's Season ladder (points earned since entering the level).
+        ...(monthlyContext ? { seasonPoints: progress.season.pointsInLevel ?? points } : {}),
+        nextPointsTier: monthlyContext ? progress.season.next?.pointsRequired ?? null : null,
         completedReviews,
         totalReviews,
         monthlyExamStatus

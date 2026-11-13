@@ -93,6 +93,9 @@ export interface ManagerProgressView {
     readonly weeklyPracticeScore: number | null;
     readonly weeklyPracticeStatus: "not_submitted" | "pending_review" | "scored";
     readonly rewardPoints: number;
+    /** Points earned since entering the current level and the Season (1–4) reached in that level. */
+    readonly rewardPointsInLevel?: number;
+    readonly rewardSeasonLevel?: 1 | 2 | 3 | 4;
     readonly earnedBadges: readonly string[];
     /** Earned badge metadata is sourced from the organisation badge catalogue. */
     readonly earnedBadgeDetails?: readonly {

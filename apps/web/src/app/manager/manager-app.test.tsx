@@ -285,8 +285,11 @@ describe("new Manager app branch", () => {
     const cases = screen.getByRole("combobox", { name: "Tình huống mẫu" });
     expect(within(cases).getAllByRole("option")).toHaveLength(9);
     await user.selectOptions(cases, "Cấp cao nhất");
-    expect(screen.getByRole("status")).toHaveTextContent("Cấp 4/4 · Mùa đông – vững vàng");
-    expect(screen.getByRole("link", { name: "Xem trước chứng nhận" })).toHaveAttribute("href", "/reward/preview?points=420");
+    expect(screen.getByRole("status")).toHaveTextContent("Cấp 4/4 · Mùa đông – vững vàng · A1");
+    expect(screen.getByRole("link", { name: "Xem trước chứng nhận" })).toHaveAttribute("href", "/reward/preview?points=5600&level=A1");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Trình độ" }), "B1");
+    expect(screen.getByRole("status")).toHaveTextContent("Cấp 4/4 · Mùa đông – vững vàng · B1");
+    expect(screen.getByTestId("season-ladder-title")).toHaveTextContent("Mùa đông · B1");
     const custom = screen.getByRole("button", { name: "Tùy chỉnh điểm và huy hiệu" });
     expect(custom).toHaveAttribute("aria-expanded", "false");
     await user.click(custom);
@@ -300,13 +303,18 @@ describe("new Manager app branch", () => {
     renderRewards();
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Tùy chỉnh điểm và huy hiệu" }));
-    const points = screen.getByLabelText("Điểm giả lập (0–600)");
+    const points = screen.getByLabelText("Điểm trong trình độ (0–6.000)");
     await user.clear(points);
     expect(points).toHaveValue("");
     await user.type(points, "006");
     expect(points).toHaveValue("6");
     const preview = screen.getByRole("region", { name: "Xem trước hồ sơ học viên" });
-    expect(within(preview).getByText("6 / 60")).toBeVisible();
+    expect(within(preview).getByText("6 / 500")).toBeVisible();
+    await user.clear(points);
+    await user.type(points, "99999");
+    expect(points).toHaveValue("6000");
+    await user.clear(points);
+    await user.type(points, "6");
 
     const badge = screen.getByRole("button", { name: "Thợ chữ" });
     expect(within(preview).queryByText("Thợ chữ")).not.toBeInTheDocument();
@@ -327,8 +335,8 @@ describe("new Manager app branch", () => {
     const dialog = screen.getByRole("dialog", { name: "Màn chúc mừng lên cấp" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(document.body).toHaveClass("app-modal-open");
-    expect(dialog).toHaveTextContent("60 điểm · 2 huy hiệu");
-    expect(within(dialog).getByRole("heading", { name: "Mùa hạ – đón nắng" })).toBeVisible();
+    expect(dialog).toHaveTextContent("Mùa hạ – đón nắng · 500 điểm trong A1 · 2 huy hiệu");
+    expect(within(dialog).getByRole("heading", { name: "Mùa hạ · A1" })).toBeVisible();
     expect(within(dialog).getByRole("button", { name: "Đóng màn chúc mừng" })).toHaveFocus();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "Màn chúc mừng lên cấp" })).not.toBeInTheDocument();

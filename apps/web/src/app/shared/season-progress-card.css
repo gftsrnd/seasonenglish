@@ -79,6 +79,7 @@
 }
 .profile-season-card .bdg.off .profile-badge-state { color: #7a5200; }
 .profile-season-card .bdg .profile-badge-description { color: var(--text); }
+.profile-season-card .bdg .profile-badge-earned-level { font-weight: 800; color: var(--ok, #2f7a4f); }
 .profile-season-card .profile-season-empty{margin:6px 0 0;padding:8px 10px;border-radius:10px;background:var(--surface-2)}
 @media(max-width:720px){
   .profile-season-card .profile-season-level-heading{grid-template-columns:1fr;align-items:flex-start}

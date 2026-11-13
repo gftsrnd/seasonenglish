@@ -3,7 +3,7 @@ import type { Pool, PoolClient } from "pg";
 import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, learningAbsenceStreak, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, LEVEL_READINESS_THRESHOLDS, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
-import { pickGameWordExample } from "@e4s/domain/engagement";
+import { longestScheduledLessonStreak, nextRewardSeason, rewardBadgeDescription, rewardBadgeThreshold, rewardSeasonFor, rewardSeasonLabel, REWARD_BADGE_KEYS, REWARD_SEASONS, pickGameWordExample, type RewardSeason } from "@e4s/domain/engagement";
 import { formatDisplayScore } from "./score-format.js";
 import { buildMonthlyCalendar, formatMonthlyDayLabel, monthlyLessonDisplayTitle, evaluateMonthlyLessonAccess, monthlyAttendanceDates, mergedVietnamHolidays, withMonthlyExpandedTerms, type MonthlyLessonAccess, type MonthlyVocabularyCore } from "@e4s/domain/monthly";
 import { FROZEN_MONTHLY_ILLUSTRATIONS_SQL, withFrozenMonthlyIllustrations, type FrozenMonthlyIllustration } from "./monthly-illustration-projection.js";
@@ -36,6 +36,7 @@ import type {
   AssessmentSubmitReason,
   AssessmentViolationReason,
   BadgeRoadmapItem,
+  SeasonLevelView,
   CefrLevel,
   ContentLessonDraftInput,
   ContentLessonMutationResult,
@@ -1102,13 +1103,14 @@ class LearningRepository {
   }
 
   async acknowledgeRewardAnnouncement(learnerId: string, announcementId: string): Promise<boolean> {
-    const seasonUp = /^season-up:([2-4])$/.exec(announcementId);
+    const seasonUp = /^season-up:(?:(A1|A2|B1|B2|C1):)?([2-4])$/.exec(announcementId);
     if (seasonUp) {
-      // The Season congratulation is shown once: closing it marks that Season (and lower ones) celebrated.
+      // The Season congratulation is shown once: closing it marks that Season (and lower ones) of the level celebrated.
       const result = await this.pool.query(
         `update learner_season_milestones set celebrated_at = now()
-         where learner_id = $1 and season_level <= $2 and celebrated_at is null`,
-        [learnerId, Number(seasonUp[1])]
+         where learner_id = $1 and season_level <= $2 and celebrated_at is null
+           and ($3::text is null or cefr = $3)`,
+        [learnerId, Number(seasonUp[2]), seasonUp[1] ?? null]
       );
       return Boolean(result.rowCount);
     }
@@ -1192,10 +1194,11 @@ class LearningRepository {
            ), '-infinity'::timestamptz)
          order by aa.started_at desc limit 1`, [learnerId]
       ),
-      this.pool.query<{ season_level: number }>(
-        `select season_level from learner_season_milestones
-         where learner_id = $1 and celebrated_at is null
-         order by season_level desc limit 1`, [learnerId]
+      this.pool.query<{ season_level: number; cefr: CefrLevel; points_in_level: number }>(
+        `select m.season_level, m.cefr, learner_points_in_level(m.learner_id) as points_in_level
+         from learner_season_milestones m
+         where m.learner_id = $1 and m.celebrated_at is null and m.cefr = learner_current_cefr(m.learner_id)
+         order by m.season_level desc limit 1`, [learnerId]
       )
     ]);
     const profile = profileObject(profileResult.rows[0]?.profile);
@@ -1240,24 +1243,25 @@ class LearningRepository {
     const acknowledged = Boolean(candidateId && lifecycle.rewardAnnouncementAcknowledged === candidateId);
     const announcementKind = acknowledged ? "normal" : candidateKind;
     const seasonName = seasonNameForDate(new Date());
-    // A newly reached Season waits behind a level announcement and is congratulated once.
-    const reachedSeason = announcementKind === "normal"
-      ? SEASONS.find((season) => season.level === seasonMilestone.rows[0]?.season_level) ?? null
+    // A newly reached Season (of the current level's ladder) waits behind a level announcement and is congratulated once.
+    const milestone = seasonMilestone.rows[0];
+    const reachedSeason = announcementKind === "normal" && milestone
+      ? SEASONS.find((season) => season.level === milestone.season_level) ?? null
       : null;
-    if (reachedSeason) {
+    if (reachedSeason && milestone) {
       return {
         levelUpPhase,
         monthlyGoal: typeof profile.monthlyGoal === "string" && profile.monthlyGoal.trim() ? profile.monthlyGoal : null,
         rewardAnnouncement: {
           kind: "season-up",
-          points,
+          points: Number(milestone.points_in_level),
           nextPoints: SEASONS.find((season) => season.level === reachedSeason.level + 1)?.pointsRequired ?? null,
-          seasonName: reachedSeason.name,
+          seasonName: rewardSeasonLabel(reachedSeason, milestone.cefr),
           seasonLevel: reachedSeason.level,
-          level: enrollment?.cefr ?? null,
-          announcementId: `season-up:${reachedSeason.level}`,
+          level: milestone.cefr,
+          announcementId: `season-up:${milestone.cefr}:${reachedSeason.level}`,
           source: "genuine",
-          rule: "Lên Season khi đủ điểm và mọi huy hiệu của Season đó; đi lần lượt, không nhảy cấp."
+          rule: "Mỗi trình độ có 4 Season. Lên Season khi đủ điểm trong trình độ và mọi huy hiệu của Season đó; đi lần lượt, không nhảy cấp. Huy hiệu đã nhận được giữ mãi."
         }
       };
     }
@@ -1267,7 +1271,7 @@ class LearningRepository {
       rewardAnnouncement: {
         kind: announcementKind,
         points,
-        nextPoints: points < 60 ? 60 : null,
+        nextPoints: nextSeasonPointsTier(points),
         seasonName,
         level: (newLevel ? latestLevel : enrollment?.cefr) ?? null,
         ...(announcementKind === "normal" ? {} : {
@@ -2076,7 +2080,7 @@ class LearningRepository {
       this.pool.query<{ points: string; badges: Array<{ key: string; label: string }> }>(
         `select coalesce(sum(re.points), 0)::text as points,
                 coalesce(jsonb_agg(distinct jsonb_build_object('key', b.badge_key, 'label', b.label))
-                  filter (where b.id is not null), '[]'::jsonb) as badges
+                  filter (where b.id is not null and ${ACTIVE_BADGE_SQL("b")}), '[]'::jsonb) as badges
          from reward_events re left join badges b on b.id = re.badge_id
          where re.learner_id = $1`, [learnerId]
       ),
@@ -2119,11 +2123,13 @@ class LearningRepository {
          order by occurred_at desc limit 30`,
         [learnerId, monthlyContext ? `${monthlyContext.month}-01` : null]
       ),
-      this.pool.query<{ badge_key: string; label: string; rule: { description?: string; seasonLevel?: number }; earned: boolean }>(
-        `select b.badge_key, b.label, b.rule,
-                exists(select 1 from reward_events re where re.badge_id = b.id and re.learner_id = $1) as earned
+      this.pool.query<{ badge_key: string; label: string; rule: { description?: string; seasonLevel?: number }; earned: boolean; earned_level: CefrLevel | null }>(
+        `select b.badge_key, b.label, b.rule, earned.at is not null as earned,
+                case when earned.at is not null then learner_level_at($1, earned.at) end as earned_level
          from badges b
          join users u on u.organization_id = b.organization_id and u.id = $1
+         left join lateral (select min(re.created_at) as at from reward_events re where re.badge_id = b.id and re.learner_id = $1) earned on true
+         where ${ACTIVE_BADGE_SQL("b")}
          order by coalesce((b.rule->>'seasonLevel')::int, 99), b.badge_key`, [learnerId]
       ),
       this.pool.query<{ turns_today: string; turns_this_week: string; turns_14_days: string; rubric_average: string | null }>(
@@ -2215,14 +2221,25 @@ class LearningRepository {
     ]);
     const rewards = reward.rows[0] ?? { points: "0", badges: [] };
     const points = Number(rewards.points);
-    const earnedBadgeKeys = new Set(rewards.badges.map((badge) => badge.key));
-    const roadmap = badgeRoadmap.rows.map((badge): BadgeRoadmapItem => ({
-      key: badge.badge_key,
-      label: badge.label,
-      description: badge.rule.description ?? "Tiêu chí được xác định trong hệ thống",
-      seasonLevel: normalizeSeasonLevel(badge.rule.seasonLevel),
-      earned: badge.earned
-    }));
+    const seasonState = await learnerSeasonState(this.pool, learnerId);
+    const earnedBadgeKeys = seasonState?.badgeKeys ?? new Set(rewards.badges.map((badge) => badge.key));
+    const pointsInLevel = seasonState?.pointsInLevel ?? points;
+    const rewardLevel = seasonState?.cefr ?? null;
+    const roadmap = badgeRoadmap.rows.map((badge): BadgeRoadmapItem => {
+      const known = (REWARD_BADGE_KEYS as readonly string[]).includes(badge.badge_key)
+        ? badge.badge_key as (typeof REWARD_BADGE_KEYS)[number] : null;
+      // An earned badge shows the rule it met (at the level it was earned); the others the current level's rule.
+      const ruleLevel = badge.earned ? badge.earned_level ?? rewardLevel : rewardLevel;
+      return {
+        key: badge.badge_key,
+        label: badge.label,
+        description: known ? rewardBadgeDescription(known, ruleLevel) : badge.rule.description ?? "Tiêu chí được xác định trong hệ thống",
+        seasonLevel: normalizeSeasonLevel(badge.rule.seasonLevel),
+        earned: badge.earned,
+        ...(badge.earned ? { earnedLevel: badge.earned_level ?? null } : {}),
+        ...(known ? { threshold: rewardBadgeThreshold(known, rewardLevel) } : {})
+      };
+    });
     const coachSummary = coach.rows[0] ?? { turns_today: "0", turns_this_week: "0", turns_14_days: "0", rubric_average: null };
 
     // Friday reviews are not lessons: excluded from k/N progress and the level-up path.
@@ -2261,7 +2278,7 @@ class LearningRepository {
          where o.learner_id = $1 and ${levelUpOverrideActiveSql("$2")} limit 1`, [learnerId, row.cefr]
       )).rows[0] ?? null
       : null;
-    const badgeCounts = requiredBadgeCountsForNext(points, earnedBadgeKeys);
+    const badgeCounts = requiredBadgeCountsForNext(pointsInLevel, earnedBadgeKeys);
     const assessmentViews = buildAssessmentSnapshots(assessments.rows);
     // Same rule as reward(…, "done"): the badge certificate opens at C1 with an approved monthly final.
     const badgeCertificateAvailable = row.cefr === "C1" && Boolean((await this.pool.query(
@@ -2310,10 +2327,12 @@ class LearningRepository {
         evidence: item.evidence
       })),
       season: {
-        current: seasonFor(points, earnedBadgeKeys),
-        next: nextSeasonFor(points, earnedBadgeKeys),
+        current: seasonForRewards(pointsInLevel, earnedBadgeKeys),
+        next: nextSeasonFor(pointsInLevel, earnedBadgeKeys),
         earnedBadgeCount: badgeCounts.earned,
-        requiredBadgeCount: badgeCounts.required
+        requiredBadgeCount: badgeCounts.required,
+        cefr: rewardLevel,
+        pointsInLevel
       },
       badgeRoadmap: roadmap,
       badgeCertificateAvailable,
@@ -2602,16 +2621,15 @@ class LearningRepository {
   }
 }
 
-const SEASONS = [
-  { key: "spring", level: 1, name: "Mùa xuân – gieo hạt", pointsRequired: 0, badges: [] },
-  { key: "summer", level: 2, name: "Mùa hạ – đón nắng", pointsRequired: 60, badges: ["starter", "streak3"] },
-  { key: "autumn", level: 3, name: "Mùa thu – gặt hái", pointsRequired: 180, badges: ["week_complete", "friday", "coach_friend"] },
-  { key: "winter", level: 4, name: "Mùa đông – vững vàng", pointsRequired: 360, badges: ["streak5", "first_try", "wordsmith"] }
-] as const;
+/** Season ladder of every CEFR level (same thresholds per level), climbed with the points earned in the level. */
+const SEASONS = REWARD_SEASONS;
 
-/** Points of the next Season tier above `points` (60, 180, 360), or null once the last tier is reached. */
-export function nextSeasonPointsTier(points: number): number | null {
-  return SEASONS.find((season) => season.pointsRequired > points)?.pointsRequired ?? null;
+/** SQL predicate: a badge of the current catalog (retired "Chuỗi 3/5 ngày" never count). */
+export const ACTIVE_BADGE_SQL = (alias: string) => `not coalesce((${alias}.rule->>'retired')::boolean, false)`;
+
+/** Points of the next Season threshold above `pointsInLevel` (500, 2 000, 5 000), or null after Mùa đông's. */
+export function nextSeasonPointsTier(pointsInLevel: number): number | null {
+  return SEASONS.find((season) => season.pointsRequired > pointsInLevel)?.pointsRequired ?? null;
 }
 
 function normalizeSeasonLevel(value: number | undefined): 2 | 3 | 4 {
@@ -2619,33 +2637,70 @@ function normalizeSeasonLevel(value: number | undefined): 2 | 3 | 4 {
 }
 
 /**
- * The learner's Season. Tiers are climbed in order, each needing its points and
- * all of its badges, so badges of a higher tier never skip a missing lower tier
- * (the rule the profile text, the manager column and the reward simulator use).
+ * The learner's Season at the current level. Seasons are climbed in order, each
+ * needing its points (earned in the current level) and all of its badges, so
+ * badges of a higher Season never skip a missing lower one (the rule the
+ * profile text, the manager column and the reward simulator use).
  */
-export function seasonForRewards(points: number, badges: ReadonlySet<string>): (typeof SEASONS)[number] {
-  let current: (typeof SEASONS)[number] = SEASONS[0];
-  for (const season of SEASONS.slice(1)) {
-    if (points < season.pointsRequired || !season.badges.every((badge) => badges.has(badge))) break;
-    current = season;
-  }
-  return current;
+export function seasonForRewards(pointsInLevel: number, badges: ReadonlySet<string>): SeasonLevelView {
+  return seasonView(rewardSeasonFor(pointsInLevel, badges));
 }
 
-function seasonFor(points: number, badges: Set<string>) {
-  return seasonForRewards(points, badges);
+function seasonView(season: RewardSeason): SeasonLevelView {
+  return { key: season.key, level: season.level, name: season.name, pointsRequired: season.pointsRequired };
 }
 
-function nextSeasonFor(points: number, badges: Set<string>) {
-  const current = seasonFor(points, badges);
-  return SEASONS.find((season) => season.level === current.level + 1) ?? null;
+function nextSeasonFor(pointsInLevel: number, badges: ReadonlySet<string>): SeasonLevelView | null {
+  const next = nextRewardSeason(pointsInLevel, badges);
+  return next ? seasonView(next) : null;
 }
 
-function requiredBadgeCountsForNext(points: number, badges: Set<string>) {
-  const next = nextSeasonFor(points, badges);
+function requiredBadgeCountsForNext(pointsInLevel: number, badges: ReadonlySet<string>) {
+  const next = nextRewardSeason(pointsInLevel, badges);
   return next
     ? { earned: next.badges.filter((badge) => badges.has(badge)).length, required: next.badges.length }
     : { earned: 0, required: 0 };
+}
+
+/** Lifetime points, points in the current level, the current level and the badges that count. */
+export interface LearnerSeasonState {
+  organizationId: string;
+  cefr: CefrLevel | null;
+  points: number;
+  pointsInLevel: number;
+  /** Start of the current level's ladder; null = every point counts (first level). */
+  levelStartedAt: Date | null;
+  badgeKeys: Set<string>;
+  season: SeasonLevelView;
+  next: SeasonLevelView | null;
+}
+
+export async function learnerSeasonState(db: Pool | PoolClient, learnerId: string): Promise<LearnerSeasonState | null> {
+  const { rows: [row] } = await db.query<{
+    organization_id: string; cefr: CefrLevel | null; points: number; points_in_level: number; level_started_at: Date | null; badge_keys: string[];
+  }>(
+    `select u.organization_id, learner_current_cefr(u.id) as cefr,
+            coalesce((select sum(re.points) from reward_events re where re.learner_id = u.id), 0)::int as points,
+            learner_points_in_level(u.id) as points_in_level,
+            learner_season_started_at(u.id) as level_started_at,
+            coalesce((select array_agg(b.badge_key) from reward_events re join badges b on b.id = re.badge_id
+                      where re.learner_id = u.id and ${ACTIVE_BADGE_SQL("b")}), '{}'::text[]) as badge_keys
+     from users u where u.id = $1`,
+    [learnerId]
+  );
+  if (!row) return null;
+  const badgeKeys = new Set(row.badge_keys);
+  const pointsInLevel = Number(row.points_in_level);
+  return {
+    organizationId: row.organization_id,
+    cefr: row.cefr,
+    points: Number(row.points),
+    pointsInLevel,
+    levelStartedAt: row.level_started_at,
+    badgeKeys,
+    season: seasonForRewards(pointsInLevel, badgeKeys),
+    next: nextSeasonFor(pointsInLevel, badgeKeys)
+  };
 }
 
 function nextCefr(level: CefrLevel | null): CefrLevel | null {
@@ -10453,7 +10508,7 @@ class EngagementRepository {
                 where aa.learner_id = u.id and ad.kind = 'final' and aa.status = 'approved') as monthly_final_approved,
               (select coalesce(jsonb_agg(jsonb_build_object('key', b.badge_key, 'label', b.label,
                 'description', b.rule->>'description', 'earned', exists(select 1 from reward_events x where x.learner_id = u.id and x.badge_id = b.id)) order by b.badge_key), '[]'::jsonb)
-               from badges b where b.organization_id = u.organization_id) as badges
+               from badges b where b.organization_id = u.organization_id and ${ACTIVE_BADGE_SQL("b")}) as badges
        from users u join organizations o on o.id = u.organization_id join enrollments e on e.learner_id = u.id
        left join reward_events re on re.learner_id = u.id where u.id = $1 group by u.id, e.cefr, e.program_id, o.name`,
       [learnerId]
@@ -10491,14 +10546,16 @@ class EngagementRepository {
     }
     const badges = issuance?.badges_snapshot ?? row.badges;
     const signatures = issuance?.signatures_snapshot ?? { operatorName: row.operator_name, managerName: row.manager_name };
-    // The certificate names the learner's actual Season (same ladder as the profile).
-    const season = seasonForRewards(Number(row.points), new Set(row.badges.filter((badge) => badge.earned).map((badge) => badge.key)));
+    // The certificate names the learner's actual Season at the current level (same ladder as the profile).
+    const seasonState = await learnerSeasonState(this.pool, learnerId);
+    const season = seasonState?.season
+      ?? seasonForRewards(Number(row.points), new Set(row.badges.filter((badge) => badge.earned).map((badge) => badge.key)));
     const [seasonName = season.name, seasonDescription = ""] = season.name.split(" – ");
     return {
       mode, learnerName: issuance?.learner_name ?? row.display_name, cefr: issuance?.level ?? row.cefr,
       cefrLabel: cefrDisplayLabel(issuance?.level ?? row.cefr),
       points: Number(row.points), displayPoints: Number(row.points),
-      season: { name: seasonName, description: seasonDescription }, simulated: mode === "preview", earnedBadgeCount,
+      season: { name: seasonName, description: seasonDescription, cefr: seasonState?.cefr ?? row.cefr }, simulated: mode === "preview", earnedBadgeCount,
       requiredBadgeCount: badges.length, printable, certificateNumber: issuance?.certificate_code ?? generatedCode,
       completedAt: issuance?.issued_at.toISOString() ?? (mode === "done" ? row.completed_at : null)?.toISOString() ?? new Date().toISOString(),
       organizationName: issuance?.organization_name ?? row.organization_name,
@@ -12233,6 +12290,7 @@ class ManagerRepository {
         weekly_practice_score: string | null;
         weekly_practice_status: string | null;
         reward_points: string;
+        reward_points_in_level: number;
         earned_badges: string[] | null;
         earned_badge_details: Array<{ key: string; label: string; description: string }> | null;
         activity_dates_this_week: string[] | null;
@@ -12298,10 +12356,11 @@ class ManagerRepository {
             where ps.learner_id = u.id and pw.program_id = $2 and pw.week_number = $3
             order by ps.updated_at desc limit 1) as weekly_practice_status,
            (select coalesce(sum(re.points), 0) from reward_events re where re.learner_id = u.id)::text as reward_points,
+           learner_points_in_level(u.id) as reward_points_in_level,
            (select array_agg(earned.label order by earned.label)
             from (select distinct b.label
                   from reward_events re join badges b on b.id = re.badge_id
-                  where re.learner_id = u.id) earned) as earned_badges,
+                  where re.learner_id = u.id and ${ACTIVE_BADGE_SQL("b")}) earned) as earned_badges,
            (select coalesce(jsonb_agg(earned.badge_json order by earned.badge_label), '[]'::jsonb)
             from (
               select distinct b.label as badge_label,
@@ -12312,7 +12371,7 @@ class ManagerRepository {
                      ) as badge_json
               from reward_events re
               join badges b on b.id = re.badge_id
-              where re.learner_id = u.id
+              where re.learner_id = u.id and ${ACTIVE_BADGE_SQL("b")}
             ) earned) as earned_badge_details,
            (select coalesce(array_agg(activity.day order by activity.day), '{}'::text[])
             from (select distinct a.occurred_at::date::text as day
@@ -12408,6 +12467,8 @@ class ManagerRepository {
       weeklyPracticeScore: row.weekly_practice_score === null ? null : Number(row.weekly_practice_score),
       weeklyPracticeStatus: row.weekly_practice_score !== null ? "scored" as const : row.weekly_practice_status ? "pending_review" as const : "not_submitted" as const,
       rewardPoints: Number(row.reward_points),
+      rewardPointsInLevel: Number(row.reward_points_in_level),
+      rewardSeasonLevel: seasonForRewards(Number(row.reward_points_in_level), new Set((row.earned_badge_details ?? []).map((badge) => badge.key))).level,
       earnedBadges: row.earned_badges ?? [],
       earnedBadgeDetails: row.earned_badge_details ?? [],
       activityDatesThisWeek: row.activity_dates_this_week ?? [],
@@ -14701,8 +14762,10 @@ const FIRST_ACTIVITY_OF_REFERENCE_SQL = `(a.reference_id is null or not exists (
  * - monthly final exam submitted +15; placement / level-up / exit test +10
  * - whole month of the monthly calendar completed (every new and review lesson) +20, once a month
  * Lesson parts (+5…+1, first correct answer only) are paid by awardLessonPartPoints.
- * Badges are awarded once each, with a bell notification; a newly reached
- * Season is recorded once (bell + congratulation modal).
+ * Badges are awarded once each and kept forever, with a bell notification; a badge
+ * not earned yet uses the threshold of the learner's current level. A newly
+ * reached Season of the current level's ladder (points earned in the level) is
+ * recorded once per level (bell + congratulation modal).
  */
 async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Promise<void> {
   if (!("release" in db)) {
@@ -14772,7 +14835,10 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
     [learnerId, PAID_GAME_RESULTS_PER_DAY]
   );
 
-  const [lessons, calendar, coach, words, firstTry, activityDays] = await Promise.all([
+  const state = await learnerSeasonState(db, learnerId);
+  if (!state) return;
+  const cefr = state.cefr;
+  const [lessons, calendar, coach, words, firstTry, finals, facts] = await Promise.all([
     db.query<{ count: string }>("select count(*)::text as count from progress_records where learner_id = $1 and status = 'completed'", [learnerId]),
     learnerMonthlyCalendarProgress(db, learnerId),
     db.query<{ count: string }>(`select count(*)::text as count from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
@@ -14786,8 +14852,22 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
     db.query<{ evidence: Record<string, unknown> }>(
       "select evidence from progress_records where learner_id = $1 and status = 'completed'", [learnerId]
     ),
-    db.query<{ day: string }>(
-      "select distinct occurred_at::date::text as day from activities where learner_id = $1 order by day", [learnerId]
+    // Approved monthly finals: total of the four skills and the weakest skill (monthly pass rule).
+    db.query<{ total: number; sections: number; weakest: number }>(
+      `select sum(s.score)::float8 as total,
+              count(distinct s.section) filter (where s.section in ('listening', 'reading', 'writing', 'speaking'))::int as sections,
+              min(s.score)::float8 as weakest
+       from assessment_attempts aa
+       join assessment_versions av on av.id = aa.assessment_version_id
+       join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'final'
+       join assessment_scores s on s.attempt_id = aa.id
+       where aa.learner_id = $1 and aa.status = 'approved'
+       group by aa.id`, [learnerId]
+    ),
+    db.query<{ today: string; holidays: string[] | null }>(
+      `select organization_system_date(u.organization_id)::text as today,
+              (select array_agg(h.holiday_date::text) from organization_holidays h where h.organization_id = u.organization_id) as holidays
+       from users u where u.id = $1`, [learnerId]
     )
   ]);
   const monthly = monthlyCalendarAchievements(calendar);
@@ -14799,19 +14879,39 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
       [learnerId, monthId]
     );
   }
+  // Streak, whole weeks and on-time reviews count inside the current level only: their
+  // thresholds drop at B1, so lifetime counts would hand them out on arrival. The other
+  // counters are lifetime (their thresholds never drop, so arrival alone never meets them).
+  const levelStartDate = state.levelStartedAt
+    ? new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" }).format(state.levelStartedAt) : null;
+  const inLevel = calendar.filter((day) => !levelStartDate
+    || (day.lessonDate !== null && day.lessonDate >= levelStartDate && (!cefr || !day.cefr || day.cefr === cefr)));
+  const levelCalendar = monthlyCalendarAchievements(inLevel);
+  const today = facts.rows[0]?.today;
+  const holidayDates = new Set(facts.rows[0]?.holidays ?? []);
+  for (const month of new Set(inLevel.flatMap((day) => day.lessonDate ? [day.lessonDate.slice(0, 7)] : []))) {
+    for (const holiday of mergedVietnamHolidays(month, [])) holidayDates.add(holiday.date);
+  }
+  const streak = longestScheduledLessonStreak(
+    inLevel.flatMap((day) => day.lessonDate ? [{ date: day.lessonDate, completedOnTime: day.completed && day.onTime }] : []),
+    { holidays: holidayDates, ...(today ? { today } : {}) }
+  );
+  const finalThreshold = rewardBadgeThreshold("monthly_final_score", cefr);
   const earned = new Set<string>();
-  if (Number(lessons.rows[0]?.count ?? 0) >= 1) earned.add("starter");
-  if (monthly.weekComplete) earned.add("week_complete");
-  if (monthly.fridayOnTime) earned.add("friday");
-  if (Number(coach.rows[0]?.count ?? 0) >= 10) earned.add("coach_friend");
-  if (Number(words.rows[0]?.count ?? 0) >= 15) earned.add("wordsmith");
-  if (firstTry.rows.some((row) => isFirstTryLesson(row.evidence))) earned.add("first_try");
-  const longest = longestBusinessDayStreak(activityDays.rows.map((row) => row.day));
-  if (longest >= 3) earned.add("streak3");
-  if (longest >= 5) earned.add("streak5");
+  if (Number(lessons.rows[0]?.count ?? 0) >= rewardBadgeThreshold("starter", cefr)) earned.add("starter");
+  if (streak >= rewardBadgeThreshold("streak", cefr)) earned.add("streak");
+  if (levelCalendar.completeWeeks >= rewardBadgeThreshold("week_complete", cefr)) earned.add("week_complete");
+  if (levelCalendar.onTimeReviews >= rewardBadgeThreshold("friday", cefr)) earned.add("friday");
+  if (Number(coach.rows[0]?.count ?? 0) >= rewardBadgeThreshold("coach_friend", cefr)) earned.add("coach_friend");
+  if (Number(words.rows[0]?.count ?? 0) >= rewardBadgeThreshold("wordsmith", cefr)) earned.add("wordsmith");
+  if (firstTry.rows.filter((row) => isFirstTryLesson(row.evidence)).length >= rewardBadgeThreshold("first_try", cefr)) earned.add("first_try");
+  if (finals.rows.some((row) => finalThreshold === "passed"
+    ? Number(row.total) >= 70 && Number(row.sections) === 4 && Number(row.weakest) >= 15
+    : Number(row.total) >= finalThreshold)) earned.add("monthly_final_score");
 
   for (const badgeKey of earned) {
-    // A badge is awarded once; the bell notification is sent with that first award only.
+    if (state.badgeKeys.has(badgeKey)) continue;
+    // A badge is awarded once and kept forever; the bell notification is sent with that first award only.
     await db.query(
       `with awarded as (
          insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
@@ -14839,6 +14939,8 @@ export interface MonthlyCalendarLessonProgress {
   completed: boolean;
   /** Completed on its scheduled (organisation) date. */
   onTime: boolean;
+  /** CEFR level of the monthly calendar. */
+  cefr?: CefrLevel | null;
 }
 
 /**
@@ -14848,9 +14950,9 @@ export interface MonthlyCalendarLessonProgress {
  */
 async function learnerMonthlyCalendarProgress(db: Pool | PoolClient, learnerId: string): Promise<MonthlyCalendarLessonProgress[]> {
   const { rows } = await db.query<{
-    month_id: string; framework_id: string; lesson_count: number; kind: string | null; lesson_date: string | null; completed: boolean; on_time: boolean;
+    month_id: string; framework_id: string; cefr: CefrLevel | null; lesson_count: number; kind: string | null; lesson_date: string | null; completed: boolean; on_time: boolean;
   }>(
-    `select pm.id as month_id, mf.id as framework_id, pm.lesson_count, spec.kind, spec.lesson_date::text as lesson_date,
+    `select pm.id as month_id, mf.id as framework_id, mf.cefr, pm.lesson_count, spec.kind, spec.lesson_date::text as lesson_date,
             pr.id is not null as completed,
             coalesce(pr.completed_on = spec.lesson_date, false) as on_time
      from users u
@@ -14879,7 +14981,8 @@ async function learnerMonthlyCalendarProgress(db: Pool | PoolClient, learnerId: 
   );
   return rows.map((row) => ({
     monthId: row.month_id, frameworkId: row.framework_id, lessonCount: Number(row.lesson_count),
-    kind: row.kind === "review" ? "review" : "new", lessonDate: row.lesson_date, completed: row.completed, onTime: row.on_time
+    kind: row.kind === "review" ? "review" : "new", lessonDate: row.lesson_date, completed: row.completed, onTime: row.on_time,
+    cefr: row.cefr
   }));
 }
 
@@ -14888,11 +14991,11 @@ export const MIN_LESSONS_FOR_WEEK_BADGE = 3;
 
 /**
  * Monthly-calendar achievements: months whose every scheduled day is completed
- * (+20 bonus), a calendar week (Mon–Sun) of at least three lessons all completed
- * ("Tuần trọn vẹn") and a Friday review completed on its own day ("Ôn tập đúng hẹn").
+ * (+20 bonus), calendar weeks (Mon–Sun) of at least three lessons all completed
+ * ("Tuần trọn vẹn") and Friday reviews completed on their own day ("Ôn tập đúng hẹn").
  */
 export function monthlyCalendarAchievements(lessons: readonly MonthlyCalendarLessonProgress[]): {
-  completedMonthIds: string[]; weekComplete: boolean; fridayOnTime: boolean;
+  completedMonthIds: string[]; weekComplete: boolean; fridayOnTime: boolean; completeWeeks: number; onTimeReviews: number;
 } {
   const frameworks = new Map<string, MonthlyCalendarLessonProgress[]>();
   const weeks = new Map<string, MonthlyCalendarLessonProgress[]>();
@@ -14908,10 +15011,15 @@ export function monthlyCalendarAchievements(lessons: readonly MonthlyCalendarLes
     const first = days[0]!;
     if (days.length >= first.lessonCount && days.every((day) => day.completed)) completedMonthIds.add(first.monthId);
   }
+  const completeWeeks = [...weeks.values()].filter((days) => days.length >= MIN_LESSONS_FOR_WEEK_BADGE && days.every((day) => day.completed)).length;
+  const onTimeReviews = new Set(lessons.filter((lesson) => lesson.kind === "review" && lesson.onTime)
+    .map((lesson) => `${lesson.frameworkId}:${lesson.lessonDate ?? ""}`)).size;
   return {
     completedMonthIds: [...completedMonthIds],
-    weekComplete: [...weeks.values()].some((days) => days.length >= MIN_LESSONS_FOR_WEEK_BADGE && days.every((day) => day.completed)),
-    fridayOnTime: lessons.some((lesson) => lesson.kind === "review" && lesson.onTime)
+    weekComplete: completeWeeks > 0,
+    fridayOnTime: onTimeReviews > 0,
+    completeWeeks,
+    onTimeReviews
   };
 }
 
@@ -14922,40 +15030,33 @@ function isoWeekStart(date: string): string {
 }
 
 /**
- * Records each Season the learner reached once. The highest newly reached Season
- * gets a bell notification and waits for its congratulation modal; Seasons
- * passed on the way in the same step are not celebrated separately.
+ * Records each Season the learner reached once per CEFR level (every level has
+ * its own ladder). The highest newly reached Season gets a bell notification and
+ * waits for its congratulation modal; Seasons passed on the way in the same step
+ * are not celebrated separately.
  */
 async function recordSeasonMilestones(client: PoolClient, learnerId: string): Promise<void> {
-  const totals = await client.query<{ organization_id: string; points: number; badge_keys: string[] }>(
-    `select u.organization_id,
-            coalesce((select sum(re.points) from reward_events re where re.learner_id = u.id), 0)::int as points,
-            coalesce((select array_agg(b.badge_key) from reward_events re join badges b on b.id = re.badge_id
-                      where re.learner_id = u.id), '{}'::text[]) as badge_keys
-     from users u where u.id = $1 and u.role = 'learner'`,
-    [learnerId]
-  );
-  const row = totals.rows[0];
-  if (!row) return;
-  const level = seasonForRewards(row.points, new Set(row.badge_keys)).level;
+  const state = await learnerSeasonState(client, learnerId);
+  if (!state?.cefr) return;
+  const level = state.season.level;
   if (level < 2) return;
   const inserted = await client.query<{ season_level: number }>(
-    `insert into learner_season_milestones (learner_id, season_level)
-     select $1, level from generate_series(2, $2::int) as level
+    `insert into learner_season_milestones (learner_id, cefr, season_level)
+     select $1, $2, level from generate_series(2, $3::int) as level
      on conflict do nothing
      returning season_level`,
-    [learnerId, level]
+    [learnerId, state.cefr, level]
   );
   if (!inserted.rowCount) return;
   const highest = Math.max(...inserted.rows.map((item) => item.season_level));
   await client.query(
     `update learner_season_milestones set celebrated_at = now()
-     where learner_id = $1 and season_level < $2 and celebrated_at is null`,
-    [learnerId, highest]
+     where learner_id = $1 and cefr = $2 and season_level < $3 and celebrated_at is null`,
+    [learnerId, state.cefr, highest]
   );
   await client.query(
     "select notify_inbox($1, 'learner', $2, $3, 'season_reached', $4)",
-    [row.organization_id, learnerId, `season:${highest}`, String(highest)]
+    [state.organizationId, learnerId, `season:${state.cefr}:${highest}`, `${highest}:${state.cefr}`]
   );
 }
 
@@ -14968,28 +15069,6 @@ function isFirstTryLesson(record: Record<string, unknown>): boolean {
     const value = item as { attempts?: unknown; score?: unknown };
     return value.attempts === 1 && typeof value.score === "number" && value.score >= 80;
   });
-}
-
-function longestBusinessDayStreak(days: string[]): number {
-  let longest = 0;
-  let current = 0;
-  let previous: Date | undefined;
-  for (const day of days) {
-    const date = new Date(`${day}T00:00:00Z`);
-    const weekday = date.getUTCDay();
-    if (weekday === 0 || weekday === 6) continue;
-    const expected = previous ? nextBusinessDay(previous) : undefined;
-    current = !previous || expected?.toISOString().slice(0, 10) === day ? current + 1 : 1;
-    longest = Math.max(longest, current);
-    previous = date;
-  }
-  return longest;
-}
-
-function nextBusinessDay(date: Date): Date {
-  const next = new Date(date);
-  do next.setUTCDate(next.getUTCDate() + 1); while (next.getUTCDay() === 0 || next.getUTCDay() === 6);
-  return next;
 }
 
 export function createRepositories(pool: Pool) {

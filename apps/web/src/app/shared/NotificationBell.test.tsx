@@ -77,16 +77,18 @@ describe("NotificationBell", () => {
   it("tells the learner about a new badge and a new Season", async () => {
     const items = [
       { ...notification, id: "badge-week", kind: "badge_earned", context: "Tuần trọn vẹn" },
-      { ...notification, id: "season-3", kind: "season_reached", context: "3" }
+      { ...notification, id: "season-3", kind: "season_reached", context: "3:B1" },
+      { ...notification, id: "season-old", kind: "season_reached", context: "2" }
     ];
-    api.getNotificationInbox.mockImplementation(async (limit) => ({ items: limit ? items : [], unreadCount: 2, nextCursor: null }));
+    api.getNotificationInbox.mockImplementation(async (limit) => ({ items: limit ? items : [], unreadCount: 3, nextCursor: null }));
     api.markInboxRead.mockResolvedValue({ unreadCount: 1 });
     const user = userEvent.setup();
     render(<MemoryRouter><NotificationBell /></MemoryRouter>);
-    await user.click(await screen.findByRole("button", { name: /2 chưa đọc/ }));
+    await user.click(await screen.findByRole("button", { name: /3 chưa đọc/ }));
     const dialog = screen.getByRole("dialog", { name: "Thông báo" });
-    expect(await within(dialog).findByText("Bạn vừa nhận huy hiệu Tuần trọn vẹn")).toBeInTheDocument();
-    expect(within(dialog).getByText("Chúc mừng! Bạn đã lên Mùa thu – gặt hái")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Bạn vừa nhận huy hiệu 🗓️ Tuần trọn vẹn")).toBeInTheDocument();
+    expect(within(dialog).getByText("Chúc mừng! Bạn đã lên 🍂 Mùa thu · B1")).toBeInTheDocument();
+    expect(within(dialog).getByText("Chúc mừng! Bạn đã lên ☀️ Mùa hạ")).toBeInTheDocument();
   });
 
   it("shows the test-date and unapproved upcoming-lesson notices with their dates", async () => {

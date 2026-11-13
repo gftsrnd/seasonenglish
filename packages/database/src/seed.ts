@@ -55,14 +55,14 @@ export const DEMO_IDS = {
 } as const;
 
 const badgeCatalog = [
-  ["00000000-0000-4000-8000-000000000821", "starter", "Khởi đầu", "Hoàn thành bài học đầu tiên", 2],
-  ["00000000-0000-4000-8000-000000000822", "streak3", "Chuỗi 3 ngày", "Học 3 ngày làm việc liên tiếp (T2–T6)", 2],
-  ["00000000-0000-4000-8000-000000000823", "week_complete", "Tuần trọn vẹn", "Hoàn thành mọi bài của một tuần trong lịch học tháng", 3],
-  ["00000000-0000-4000-8000-000000000824", "friday", "Ôn tập đúng hẹn", "Hoàn thành bài Ôn tuần đúng ngày đã xếp lịch", 3],
-  ["00000000-0000-4000-8000-000000000825", "coach_friend", "Bạn của Season", "Có 10 lượt luyện hợp lệ với Season", 3],
-  ["00000000-0000-4000-8000-000000000826", "streak5", "Chuỗi 5 ngày", "Học 5 ngày làm việc liên tiếp (T2–T6)", 4],
-  ["00000000-0000-4000-8000-000000000827", "first_try", "Đúng ngay lần đầu", "Một bài có Nghe, Đọc, Viết, Nói đều đúng ngay lần đầu", 4],
-  ["00000000-0000-4000-8000-000000000828", "wordsmith", "Thợ chữ", "Dùng 15 từ khác nhau khi luyện với Season", 4]
+  ["00000000-0000-4000-8000-000000000821", "starter", "Khởi đầu", "Hoàn thành bài học mới đầu tiên", 2],
+  ["00000000-0000-4000-8000-000000000829", "streak", "Chuỗi ngày học", "Học liên tiếp các ngày có bài theo lịch tháng (A1–A2: 10 ngày, B1–C1: 5 ngày)", 2],
+  ["00000000-0000-4000-8000-000000000823", "week_complete", "Tuần trọn vẹn", "Hoàn thành mọi bài của các tuần trong lịch học tháng (A1–A2: 3 tuần, B1–C1: 2 tuần)", 3],
+  ["00000000-0000-4000-8000-000000000824", "friday", "Ôn tập đúng hẹn", "Hoàn thành bài Ôn tuần đúng ngày đã xếp lịch (A1–A2: 4 bài, B1–C1: 3 bài)", 3],
+  ["00000000-0000-4000-8000-000000000825", "coach_friend", "Bạn của Season", "Lượt luyện hợp lệ với Season (A1 20, A2 30, B1 50, B2 70, C1 100)", 3],
+  ["00000000-0000-4000-8000-000000000827", "first_try", "Chuẩn ngay lần đầu", "Bài có Nghe, Đọc, Viết, Nói đều đúng ngay lần đầu (A1 1, A2 2, B1 3, B2–C1 5)", 4],
+  ["00000000-0000-4000-8000-00000000082a", "monthly_final_score", "Điểm thi tháng", "Một bài thi tháng đạt (A1) hoặc từ 75 / 80 / 85 / 90 điểm (A2 / B1 / B2 / C1)", 4],
+  ["00000000-0000-4000-8000-000000000828", "wordsmith", "Thợ chữ", "Từ khác nhau dùng khi luyện với Season (A1 15, A2 20, B1 30, B2 40, C1 50)", 4]
 ] as const;
 
 const lessonTitles = [
@@ -606,6 +606,12 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
       [id, DEMO_IDS.organization, key, label, JSON.stringify({ description, seasonLevel })]
     );
   }
+  // "Chuỗi 3 ngày" / "Chuỗi 5 ngày" were replaced by "Chuỗi ngày học"; old ledgers keep them, nothing counts them.
+  await client.query(
+    `update badges set rule = rule || '{"retired": true}'::jsonb
+     where organization_id = $1 and badge_key in ('streak3', 'streak5')`,
+    [DEMO_IDS.organization]
+  );
   await client.query(
     `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
      values ($1, $2, $3, 20, 'lesson', $4) on conflict (id) do nothing`,

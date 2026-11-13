@@ -10,9 +10,9 @@ const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 
 /** Badge keys of each Season tier, in ladder order (seed catalog). */
-const SUMMER = ["starter", "streak3"];
+const SUMMER = ["starter", "streak"];
 const AUTUMN = ["week_complete", "friday", "coach_friend"];
-const WINTER = ["streak5", "first_try", "wordsmith"];
+const WINTER = ["first_try", "monthly_final_score", "wordsmith"];
 
 describe("reward points and Season badges", () => {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -78,6 +78,13 @@ describe("reward points and Season badges", () => {
     await pool.query("delete from inbox_notifications where recipient_id = $1", [learnerId]);
     await pool.query("delete from learner_season_milestones where learner_id = $1", [learnerId]);
     await pool.query("delete from organization_settings where organization_id = $1", [DEMO_IDS.organization]);
+    await pool.query("delete from organization_holidays where organization_id = $1", [DEMO_IDS.organization]);
+    await pool.query("delete from coach_sessions where learner_id = $1", [learnerId]);
+    await pool.query("delete from assessment_attempts where learner_id = $1 and assessment_version_id = $2", [learnerId, finalVersionId]);
+    // The demo learner is at A2 since long ago (one level period: every point counts).
+    await pool.query("update enrollments set cefr = 'A2', cefr_approved = true where learner_id = $1", [learnerId]);
+    await pool.query("delete from learner_level_periods where learner_id = $1", [learnerId]);
+    await pool.query("insert into learner_level_periods (learner_id, cefr, started_at, source) values ($1, 'A2', now() - interval '1 year', 'test')", [learnerId]);
   });
 
   afterAll(async () => { await pool.end(); });
@@ -114,7 +121,7 @@ describe("reward points and Season badges", () => {
   it("starts a learner with no reward history at 0 points in the first Season", async () => {
     expect(await totalPoints()).toBe(0);
     const progress = await repositories.learning.getProgressDashboard(learnerId);
-    expect(progress).toMatchObject({ points: 0, badges: [], season: { current: { level: 1 }, next: { level: 2, pointsRequired: 60 } } });
+    expect(progress).toMatchObject({ points: 0, badges: [], season: { current: { level: 1 }, next: { level: 2, pointsRequired: 500 }, cefr: "A2", pointsInLevel: 0 } });
   });
 
   it("awards a game result +5 once per request, also when the same request arrives in parallel", async () => {
@@ -193,24 +200,24 @@ describe("reward points and Season badges", () => {
     expect(rows.rows).toEqual([{ badge_key: "starter", count: 1 }]);
   });
 
-  it("names the next points tier for the home ring at each boundary", () => {
-    expect([0, 59, 60, 61, 179, 180, 181, 359, 360, 361, 999].map(nextSeasonPointsTier))
-      .toEqual([60, 60, 180, 180, 180, 360, 360, 360, null, null, null]);
+  it("names the next points threshold for the home ring at each boundary", () => {
+    expect([0, 499, 500, 501, 1999, 2000, 2001, 4999, 5000, 5001, 99999].map(nextSeasonPointsTier))
+      .toEqual([500, 500, 2000, 2000, 2000, 5000, 5000, 5000, null, null, null]);
   });
 
-  it("climbs Seasons at exactly 60 / 180 / 360 points once the tier badges are earned", () => {
+  it("climbs Seasons at exactly 500 / 2 000 / 5 000 points in the level once the Season badges are earned", () => {
     const all = new Set([...SUMMER, ...AUTUMN, ...WINTER]);
-    expect([0, 59, 60, 61, 179, 180, 359, 360, 361].map((points) => seasonForRewards(points, all).level))
+    expect([0, 499, 500, 501, 1999, 2000, 4999, 5000, 5001].map((points) => seasonForRewards(points, all).level))
       .toEqual([1, 1, 2, 2, 2, 3, 3, 4, 4]);
   });
 
   it("climbs Seasons in order: higher-tier badges never skip a missing lower tier", async () => {
-    await grantPoints(400);
+    await grantPoints(6000);
     await awardBadges(["starter", ...WINTER]);
     let progress = await repositories.learning.getProgressDashboard(learnerId);
     expect(progress?.season).toMatchObject({ current: { level: 1 }, next: { level: 2 }, earnedBadgeCount: 1, requiredBadgeCount: 2 });
 
-    await awardBadges(["streak3"]);
+    await awardBadges(["streak"]);
     progress = await repositories.learning.getProgressDashboard(learnerId);
     expect(progress?.season).toMatchObject({ current: { level: 2 }, next: { level: 3 }, earnedBadgeCount: 0, requiredBadgeCount: 3 });
 
@@ -222,13 +229,13 @@ describe("reward points and Season badges", () => {
   it("keeps points and badges from earlier months (lifetime ledger, no monthly reset)", async () => {
     await pool.query(
       `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id, created_at)
-       values (gen_random_uuid(), $1, null, 30, 'test_grant', gen_random_uuid(), now() - interval '40 days')`,
+       values (gen_random_uuid(), $1, null, 300, 'test_grant', gen_random_uuid(), now() - interval '40 days')`,
       [learnerId]
     );
-    await grantPoints(30);
+    await grantPoints(200);
     await awardBadges(SUMMER);
     const progress = await repositories.learning.getProgressDashboard(learnerId);
-    expect(progress).toMatchObject({ points: 60, season: { current: { level: 2 } } });
+    expect(progress).toMatchObject({ points: 500, season: { current: { level: 2 }, pointsInLevel: 500 } });
   });
 
   it("shows the manager the same points and badges as the learner profile", async () => {
@@ -314,19 +321,24 @@ describe("reward points and Season badges", () => {
       expect(await totalPoints()).toBe(25);
     });
 
-    it("awards 'Ôn tập đúng hẹn' only when the review is completed on its scheduled day", async () => {
+    it("counts a Friday review for 'Ôn tập đúng hẹn' only when it is completed on its scheduled day (A2 needs 4)", async () => {
       await completeDay(5, "2026-11-09");
       expect(await earnedBadgeKeys()).not.toContain("friday");
       await pool.query("delete from progress_records where learner_id = $1", [learnerId]);
       await completeDay(5, "2026-11-06");
-      expect(await earnedBadgeKeys()).toContain("friday");
+      // One on-time review of the four an A2 learner needs.
+      expect(await earnedBadgeKeys()).not.toContain("friday");
+      const roadmap = (await repositories.learning.getProgressDashboard(learnerId))?.badgeRoadmap.find((badge) => badge.key === "friday");
+      expect(roadmap).toMatchObject({ earned: false, threshold: 4, description: "Hoàn thành 4 bài Ôn tuần đúng ngày đã xếp lịch" });
     });
 
-    it("awards 'Tuần trọn vẹn' when every lesson of one calendar week is completed", async () => {
+    it("counts a calendar week for 'Tuần trọn vẹn' when every lesson of it is completed (A2 needs 3)", async () => {
       for (const lessonNumber of [1, 2, 3, 4]) await completeDay(lessonNumber);
-      expect(await earnedBadgeKeys()).not.toContain("week_complete");
       await completeDay(5, "2026-11-12");
-      expect(await earnedBadgeKeys()).toContain("week_complete");
+      // One whole week of the three an A2 learner needs.
+      expect(await earnedBadgeKeys()).not.toContain("week_complete");
+      const roadmap = (await repositories.learning.getProgressDashboard(learnerId))?.badgeRoadmap.find((badge) => badge.key === "week_complete");
+      expect(roadmap).toMatchObject({ earned: false, threshold: 3 });
     });
 
     it("does not count a short edge week (fewer than three lessons) as a whole week", async () => {
@@ -351,9 +363,9 @@ describe("reward points and Season badges", () => {
       const day = (lessonDate: string, completed: boolean, kind: "new" | "review" = "new", onTime = false): MonthlyCalendarLessonProgress =>
         ({ monthId: "m", frameworkId: "f", lessonCount: 4, kind, lessonDate, completed, onTime });
       expect(monthlyCalendarAchievements([day("2026-11-02", true), day("2026-11-03", true), day("2026-11-06", true, "review"), day("2026-11-09", false)]))
-        .toEqual({ completedMonthIds: [], weekComplete: true, fridayOnTime: false });
+        .toEqual({ completedMonthIds: [], weekComplete: true, fridayOnTime: false, completeWeeks: 1, onTimeReviews: 0 });
       expect(monthlyCalendarAchievements([day("2026-11-02", true), day("2026-11-03", true), day("2026-11-06", true, "review", true), day("2026-11-09", true)]))
-        .toEqual({ completedMonthIds: ["m"], weekComplete: true, fridayOnTime: true });
+        .toEqual({ completedMonthIds: ["m"], weekComplete: true, fridayOnTime: true, completeWeeks: 1, onTimeReviews: 1 });
       expect(monthlyCalendarAchievements([day("2026-11-02", true), day("2026-11-03", true)]).completedMonthIds).toEqual([]);
     });
   });
@@ -402,53 +414,54 @@ describe("reward points and Season badges", () => {
       expect(await notifications("badge_earned")).toEqual([{ event_key: "badge:starter", context: "Khởi đầu" }]);
     });
 
-    it("records a new Season once: one bell notification and one congratulation modal", async () => {
-      await grantPoints(70);
+    it("records a new Season once per level: one bell notification and one congratulation modal", async () => {
+      await grantPoints(700);
       await awardBadges(SUMMER);
       await game(randomUUID(), 0);
-      expect(await notifications("season_reached")).toEqual([{ event_key: "season:2", context: "2" }]);
+      expect(await notifications("season_reached")).toEqual([{ event_key: "season:A2:2", context: "2:A2" }]);
       // The demo learner may first see a level announcement; close it to reach the Season one.
-      let lifecycle = await repositories.learning.learnerLifecycle(learnerId, 70);
+      let lifecycle = await repositories.learning.learnerLifecycle(learnerId, 700);
       if (lifecycle?.rewardAnnouncement.kind !== "season-up" && lifecycle?.rewardAnnouncement.announcementId) {
         await repositories.learning.acknowledgeRewardAnnouncement(learnerId, lifecycle.rewardAnnouncement.announcementId);
-        lifecycle = await repositories.learning.learnerLifecycle(learnerId, 70);
+        lifecycle = await repositories.learning.learnerLifecycle(learnerId, 700);
       }
-      expect(lifecycle?.rewardAnnouncement).toMatchObject({ kind: "season-up", seasonLevel: 2, announcementId: "season-up:2", seasonName: "Mùa hạ – đón nắng" });
-      await expect(repositories.learning.acknowledgeRewardAnnouncement(learnerId, "season-up:2")).resolves.toBe(true);
-      await expect(repositories.learning.acknowledgeRewardAnnouncement(learnerId, "season-up:2")).resolves.toBe(false);
-      expect((await repositories.learning.learnerLifecycle(learnerId, 70))?.rewardAnnouncement.kind).not.toBe("season-up");
+      expect(lifecycle?.rewardAnnouncement).toMatchObject({ kind: "season-up", seasonLevel: 2, level: "A2", announcementId: "season-up:A2:2", seasonName: "Mùa hạ · A2", points: 700, nextPoints: 2000 });
+      await expect(repositories.learning.acknowledgeRewardAnnouncement(learnerId, "season-up:A2:2")).resolves.toBe(true);
+      await expect(repositories.learning.acknowledgeRewardAnnouncement(learnerId, "season-up:A2:2")).resolves.toBe(false);
+      expect((await repositories.learning.learnerLifecycle(learnerId, 700))?.rewardAnnouncement.kind).not.toBe("season-up");
       await game(randomUUID(), 0);
       expect(await notifications("season_reached")).toHaveLength(1);
     });
 
     it("celebrates only the highest Season when several are reached at once", async () => {
-      await grantPoints(200);
+      await grantPoints(2100);
       await awardBadges([...SUMMER, ...AUTUMN]);
       await game(randomUUID(), 0);
-      expect(await notifications("season_reached")).toEqual([{ event_key: "season:3", context: "3" }]);
-      const pending = await pool.query<{ season_level: number }>(
-        "select season_level from learner_season_milestones where learner_id = $1 and celebrated_at is null", [learnerId]
+      expect(await notifications("season_reached")).toEqual([{ event_key: "season:A2:3", context: "3:A2" }]);
+      const pending = await pool.query<{ cefr: string; season_level: number }>(
+        "select cefr, season_level from learner_season_milestones where learner_id = $1 and celebrated_at is null", [learnerId]
       );
-      expect(pending.rows).toEqual([{ season_level: 3 }]);
+      expect(pending.rows).toEqual([{ cefr: "A2", season_level: 3 }]);
     });
   });
 
   describe("badge certificate", () => {
-    it("is offered only when the learner can open it, and names the actual Season", async () => {
-      await grantPoints(70);
+    it("is offered only when the learner can open it, and names the actual Season and level", async () => {
+      await grantPoints(700);
       await awardBadges(SUMMER);
       expect((await repositories.learning.getProgressDashboard(learnerId))?.badgeCertificateAvailable).toBe(false);
       await expect(repositories.engagement.reward(learnerId, "done")).resolves.toBeNull();
       const preview = await repositories.engagement.reward(learnerId, "preview");
-      expect(preview?.season).toEqual({ name: "Mùa hạ", description: "đón nắng" });
-      expect(preview?.displayPoints).toBe(70);
+      expect(preview?.season).toEqual({ name: "Mùa hạ", description: "đón nắng", cefr: "A2" });
+      expect(preview?.displayPoints).toBe(700);
 
       const finalAttempt = randomUUID();
       await pool.query("update enrollments set cefr = 'C1' where learner_id = $1", [learnerId]);
       await pool.query("insert into assessment_attempts (id, assessment_version_id, learner_id, status) values ($1, $2, $3, 'approved')", [finalAttempt, finalVersionId, learnerId]);
       try {
         expect((await repositories.learning.getProgressDashboard(learnerId))?.badgeCertificateAvailable).toBe(true);
-        await expect(repositories.engagement.reward(learnerId, "done")).resolves.toMatchObject({ printable: true, season: { name: "Mùa hạ" } });
+        // A new level restarts the ladder: the C1 certificate names the C1 Season.
+        await expect(repositories.engagement.reward(learnerId, "done")).resolves.toMatchObject({ printable: true, season: { name: "Mùa xuân", cefr: "C1" } });
       } finally {
         await pool.query("delete from assessment_attempts where id = $1", [finalAttempt]);
         await pool.query("update enrollments set cefr = 'A2' where learner_id = $1", [learnerId]);
@@ -465,11 +478,11 @@ describe("reward points and Season badges", () => {
       );
       expect(rows).toEqual([
         { badge_key: "coach_friend", label: "Bạn của Season", season_level: 3 },
-        { badge_key: "first_try", label: "Đúng ngay lần đầu", season_level: 4 },
+        { badge_key: "first_try", label: "Chuẩn ngay lần đầu", season_level: 4 },
         { badge_key: "friday", label: "Ôn tập đúng hẹn", season_level: 3 },
+        { badge_key: "monthly_final_score", label: "Điểm thi tháng", season_level: 4 },
         { badge_key: "starter", label: "Khởi đầu", season_level: 2 },
-        { badge_key: "streak3", label: "Chuỗi 3 ngày", season_level: 2 },
-        { badge_key: "streak5", label: "Chuỗi 5 ngày", season_level: 4 },
+        { badge_key: "streak", label: "Chuỗi ngày học", season_level: 2 },
         { badge_key: "week_complete", label: "Tuần trọn vẹn", season_level: 3 },
         { badge_key: "wordsmith", label: "Thợ chữ", season_level: 4 }
       ]);
@@ -503,6 +516,201 @@ describe("reward points and Season badges", () => {
       expect(applied).toMatchObject({ applied: true, points: 9 });
       expect(await totalPoints()).toBe(10);
       expect((await recomputeDoublePaidRewards(pool, { learnerId })).rewards).toEqual([]);
+    });
+  });
+
+  describe("Seasons per CEFR level", () => {
+    const b1FrameworkId = randomUUID();
+    const b1Days = [
+      ["2026-11-02", "new"], ["2026-11-03", "new"], ["2026-11-04", "new"], ["2026-11-05", "new"], ["2026-11-06", "review"],
+      ["2026-11-09", "new"], ["2026-11-10", "new"], ["2026-11-11", "new"], ["2026-11-12", "new"], ["2026-11-13", "review"],
+      ["2026-11-16", "new"], ["2026-11-17", "new"], ["2026-11-18", "new"], ["2026-11-19", "new"], ["2026-11-20", "review"]
+    ].map(([date, kind], index) => ({ lessonNumber: index + 1, date: date!, kind: kind!, lessonId: randomUUID() }));
+
+    beforeAll(async () => {
+      await pool.query(`insert into month_frameworks (id, program_month_id, cefr, status, curriculum_contract, scope_hash, published_at, published_on)
+        values ($1, $2, 'B1', 'approved', $3, 'scope', now(), '2026-11-02')`,
+        [b1FrameworkId, monthId, JSON.stringify({ month, daySpecs: b1Days.map(({ lessonNumber, date, kind }) => ({ lessonNumber, date, kind })), coreTerms: [], supportTerms: [], grammarTopics: [], sounds: [] })]);
+      const setId = randomUUID();
+      await pool.query("insert into lesson_sets (id, month_framework_id, cefr) values ($1, $2, 'B1')", [setId, b1FrameworkId]);
+      for (const day of b1Days) {
+        const versionId = randomUUID();
+        await pool.query("insert into lesson_set_versions (id, lesson_set_id, version, status) values ($1, $2, $3, 'published')", [versionId, setId, day.lessonNumber]);
+        await pool.query("insert into lessons (id, lesson_set_version_id, day_number, title) values ($1, $2, $3, 'Lesson')", [day.lessonId, versionId, day.lessonNumber]);
+        await pool.query("insert into month_lessons (id, framework_id, lesson_number, lesson_date, lesson_id, scope_hash, status) values ($1, $2, $3, $4, $5, 'scope', 'approved')",
+          [randomUUID(), b1FrameworkId, day.lessonNumber, day.date, day.lessonId]);
+      }
+    });
+
+    /** Changes the learner's level (any path writes the enrollment); optionally backdates the new level's start. */
+    async function setLevel(cefr: string, startedAt?: string) {
+      await pool.query("update enrollments set cefr = $2 where learner_id = $1", [learnerId, cefr]);
+      if (startedAt) {
+        await pool.query(
+          `update learner_level_periods set started_at = $2 where id = (
+             select id from learner_level_periods where learner_id = $1 order by started_at desc, seq desc limit 1)`,
+          [learnerId, startedAt]
+        );
+      }
+    }
+
+    /** B1 calendar days completed on their own date. */
+    async function completeB1(dates: string[]) {
+      for (const date of dates) {
+        const day = b1Days.find((item) => item.date === date)!;
+        await pool.query(
+          `insert into progress_records (id, learner_id, lesson_id, status, evidence, completed_at, completed_on)
+           values (gen_random_uuid(), $1, $2, 'completed', '{}'::jsonb, now(), $3)`,
+          [learnerId, day.lessonId, date]
+        );
+      }
+    }
+
+    /** Valid Season turns; each turn uses one new word. */
+    async function coachTurns(count: number) {
+      const sessionId = randomUUID();
+      await pool.query("insert into coach_sessions (id, learner_id, scenario) values ($1, $2, '{\"kind\":\"practice\"}'::jsonb)", [sessionId, learnerId]);
+      await pool.query(
+        `insert into coach_turns (id, session_id, turn_number, speaker, content, feedback)
+         select gen_random_uuid(), $1, n, 'learner', '{}'::jsonb, jsonb_build_object('relevant', true, 'usedWords', jsonb_build_array('word' || n))
+         from generate_series(1, $2::int) n`,
+        [sessionId, count]
+      );
+    }
+
+    async function sync() { await game(randomUUID(), 0); }
+
+    async function roadmap(key: string) {
+      return (await repositories.learning.getProgressDashboard(learnerId))?.badgeRoadmap.find((badge) => badge.key === key);
+    }
+
+    it("climbs with the points earned in the current level and restarts at Mùa xuân on a level change; badges are kept", async () => {
+      await grantPoints(600);
+      await awardBadges(SUMMER);
+      await sync();
+      let progress = await repositories.learning.getProgressDashboard(learnerId);
+      expect(progress).toMatchObject({ points: 600, season: { current: { level: 2 }, next: { level: 3, pointsRequired: 2000 }, cefr: "A2", pointsInLevel: 600 } });
+
+      await setLevel("B1");
+      progress = await repositories.learning.getProgressDashboard(learnerId);
+      expect(progress).toMatchObject({ points: 600, season: { current: { level: 1 }, next: { level: 2, pointsRequired: 500 }, cefr: "B1", pointsInLevel: 0, earnedBadgeCount: 2, requiredBadgeCount: 2 } });
+      expect(progress?.badges.map((badge) => badge.key).sort()).toEqual(["starter", "streak"]);
+      expect(progress?.badgeRoadmap.find((badge) => badge.key === "streak")).toMatchObject({ earned: true, earnedLevel: "A2" });
+
+      await grantPoints(500);
+      await sync();
+      progress = await repositories.learning.getProgressDashboard(learnerId);
+      expect(progress).toMatchObject({ points: 1100, season: { current: { level: 2 }, cefr: "B1", pointsInLevel: 500 } });
+      expect(await notifications("season_reached")).toEqual([
+        { event_key: "season:A2:2", context: "2:A2" },
+        { event_key: "season:B1:2", context: "2:B1" }
+      ]);
+      const manager = (await repositories.manager.progress(DEMO_IDS.manager))?.learners.find((learner) => learner.learnerId === learnerId);
+      expect(manager).toMatchObject({ rewardPoints: 1100, rewardPointsInLevel: 500, rewardSeasonLevel: 2 });
+
+      // Lowering the level restarts the ladder as well.
+      await setLevel("A2");
+      progress = await repositories.learning.getProgressDashboard(learnerId);
+      expect(progress?.season).toMatchObject({ current: { level: 1 }, cefr: "A2", pointsInLevel: 0 });
+    });
+
+    it("celebrates each (level, Season) once and never a Season of another level", async () => {
+      await grantPoints(600);
+      await awardBadges(SUMMER);
+      await sync();
+      await repositories.learning.acknowledgeRewardAnnouncement(learnerId, "season-up:A2:2");
+      await setLevel("B1");
+      await grantPoints(500);
+      await sync();
+      let lifecycle = await repositories.learning.learnerLifecycle(learnerId, 1100);
+      if (lifecycle?.rewardAnnouncement.kind !== "season-up" && lifecycle?.rewardAnnouncement.announcementId) {
+        await repositories.learning.acknowledgeRewardAnnouncement(learnerId, lifecycle.rewardAnnouncement.announcementId);
+        lifecycle = await repositories.learning.learnerLifecycle(learnerId, 1100);
+      }
+      expect(lifecycle?.rewardAnnouncement).toMatchObject({ kind: "season-up", announcementId: "season-up:B1:2", seasonName: "Mùa hạ · B1", level: "B1", points: 500 });
+      await repositories.learning.acknowledgeRewardAnnouncement(learnerId, "season-up:B1:2");
+      await sync();
+      expect((await repositories.learning.learnerLifecycle(learnerId, 1100))?.rewardAnnouncement.kind).not.toBe("season-up");
+      const milestones = await pool.query<{ cefr: string; season_level: number; celebrated: boolean }>(
+        "select cefr, season_level, celebrated_at is not null as celebrated from learner_season_milestones where learner_id = $1 order by cefr, season_level", [learnerId]
+      );
+      expect(milestones.rows).toEqual([{ cefr: "A2", season_level: 2, celebrated: true }, { cefr: "B1", season_level: 2, celebrated: true }]);
+    });
+
+    it("uses the current level's threshold for a badge not earned yet and keeps earned badges after a level-up", async () => {
+      await coachTurns(25);
+      await sync();
+      // A2: 25 words ≥ 20 (Thợ chữ) but 25 turns < 30 (Bạn của Season).
+      expect(await earnedBadgeKeys()).toEqual(["wordsmith"]);
+      expect(await roadmap("coach_friend")).toMatchObject({ earned: false, threshold: 30, description: "Có 30 lượt luyện hợp lệ với Season" });
+
+      await setLevel("A1");
+      await sync();
+      expect(await earnedBadgeKeys()).toEqual(["coach_friend", "wordsmith"]);
+      expect(await roadmap("coach_friend")).toMatchObject({ earned: true, earnedLevel: "A1", description: "Có 20 lượt luyện hợp lệ với Season" });
+
+      await setLevel("B1");
+      await sync();
+      expect(await earnedBadgeKeys()).toEqual(["coach_friend", "wordsmith"]);
+      expect(await roadmap("wordsmith")).toMatchObject({ earned: true, earnedLevel: "A2" });
+      expect(await roadmap("first_try")).toMatchObject({ earned: false, threshold: 3 });
+      expect(await notifications("badge_earned")).toEqual([
+        { event_key: "badge:coach_friend", context: "Bạn của Season" },
+        { event_key: "badge:wordsmith", context: "Thợ chữ" }
+      ]);
+    });
+
+    it("awards 'Điểm thi tháng' with the level's score: 72 is not enough at A2 (75) but passes at A1", async () => {
+      const attemptId = randomUUID();
+      await pool.query("insert into assessment_attempts (id, assessment_version_id, learner_id, status) values ($1, $2, $3, 'approved')", [attemptId, finalVersionId, learnerId]);
+      for (const section of ["listening", "reading", "writing", "speaking"]) {
+        await pool.query("insert into assessment_scores (id, attempt_id, section, score, source) values (gen_random_uuid(), $1, $2, 18, 'human')", [attemptId, section]);
+      }
+      await sync();
+      expect(await earnedBadgeKeys()).not.toContain("monthly_final_score");
+      expect(await roadmap("monthly_final_score")).toMatchObject({ threshold: 75, description: "Một bài thi tháng đạt từ 75 điểm" });
+      await setLevel("A1");
+      await sync();
+      expect(await earnedBadgeKeys()).toContain("monthly_final_score");
+      expect(await roadmap("monthly_final_score")).toMatchObject({ earned: true, earnedLevel: "A1", description: "Đạt một bài thi tháng" });
+    });
+
+    it("counts a learning day only when that day's scheduled lesson is done on its day; holidays and weekends are skipped", async () => {
+      await setLevel("B1", "2026-11-01T00:00:00+07:00");
+      await systemDate("2026-11-30");
+      // Games alone never make a learning day.
+      await game(randomUUID(), 0);
+      await completeB1(["2026-11-06", "2026-11-09", "2026-11-10", "2026-11-12", "2026-11-13"]);
+      await sync();
+      // Wed 11/11 was scheduled and missed: the longest run is 3 (06, 09, 10) < 5.
+      expect(await earnedBadgeKeys()).not.toContain("streak");
+      await pool.query("insert into organization_holidays (organization_id, holiday_date) values ($1, '2026-11-11')", [DEMO_IDS.organization]);
+      await sync();
+      // With 11/11 a holiday: 06 (Fri) → weekend → 09, 10, 12, 13 = 5 days at B1.
+      expect(await earnedBadgeKeys()).toContain("streak");
+      expect(await roadmap("streak")).toMatchObject({ earned: true, earnedLevel: "B1" });
+    });
+
+    it("counts whole weeks and on-time reviews of the current level (B1: 2 weeks, 3 reviews)", async () => {
+      await setLevel("B1", "2026-11-01T00:00:00+07:00");
+      await systemDate("2026-11-30");
+      await completeB1(["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-13"]);
+      await sync();
+      expect(await earnedBadgeKeys()).not.toContain("week_complete");
+      expect(await earnedBadgeKeys()).not.toContain("friday");
+      await completeB1(["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"]);
+      await sync();
+      expect(await earnedBadgeKeys()).toEqual(expect.arrayContaining(["friday", "week_complete"]));
+    });
+
+    it("does not hand out a lower threshold on arrival: days of the previous level do not count toward the new one", async () => {
+      for (const day of calendarDays) await completeDay(day.lessonNumber);
+      // Seven on-time days at A2 (needs 10).
+      expect(await earnedBadgeKeys()).not.toContain("streak");
+      await setLevel("B1", "2026-11-12T00:00:00+07:00");
+      await sync();
+      expect(await earnedBadgeKeys()).not.toContain("streak");
+      expect(await roadmap("streak")).toMatchObject({ earned: false, threshold: 5 });
     });
   });
 });

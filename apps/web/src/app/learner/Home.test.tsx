@@ -92,6 +92,20 @@ describe("monthly learner home", () => {
     expect(lessons).toHaveAttribute("data-percent", "33");
   });
 
+  it("fills the badge-points ring with the points earned in the current level toward the next Season threshold", () => {
+    const metrics = { completedLessons: 1, totalLessons: 3, studyDays: 1, streakDays: 1, points: 12_345, completedReviews: 0, totalReviews: 1 };
+    const { container, rerender } = render(<LearnerHome view={view({ metrics: { ...metrics, seasonPoints: 1250, nextPointsTier: 2000 } })} actions={actions} />);
+    const points = () => container.querySelector<HTMLElement>('[data-home-metric="points"]')!;
+    expect(points()).toHaveTextContent("1.250Điểm huy hiệu · mốc 2.000");
+    expect(points()).toHaveAttribute("data-percent", "63");
+    expect(points().getAttribute("title")).toMatch(/1\.250 điểm trong .* · tổng tích lũy 12\.345 · còn 750 điểm/);
+    // After Mùa đông of the level: a plain tile with the points of the level.
+    rerender(<LearnerHome view={view({ metrics: { ...metrics, seasonPoints: 5300, nextPointsTier: null } })} actions={actions} />);
+    expect(points()).toHaveTextContent("5.300Điểm huy hiệu");
+    expect(points()).toHaveClass("is-plain");
+    expect(points().querySelector(".ring")).toBeNull();
+  });
+
   it("renders monthly counters, calendar, monthly exam, and no retired weekly/pilot UI", () => {
     render(<LearnerHome view={view()} actions={actions} />);
     expect(screen.getAllByText("Bài tháng").length).toBeGreaterThan(0);

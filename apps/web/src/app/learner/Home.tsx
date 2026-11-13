@@ -54,7 +54,7 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
         <Metric metric="lessons" label="Bài theo lịch" value={`${view.metrics.completedLessons}/${view.metrics.totalLessons}`} percent={ratio(view.metrics.completedLessons, view.metrics.totalLessons)} />
         <Metric metric="reviews" label="Bài ôn" value={`${view.metrics.completedReviews ?? 0}/${view.metrics.totalReviews ?? 0}`} percent={ratio(view.metrics.completedReviews ?? 0, view.metrics.totalReviews ?? 0)} color="var(--primary)" />
         <HomeAttendanceMetric eligibility={view.monthlyEligibility} />
-        <HomePointsMetric points={view.metrics.points} nextTier={view.metrics.nextPointsTier ?? null} />
+        <HomePointsMetric points={view.metrics.seasonPoints ?? view.metrics.points} totalPoints={view.metrics.points} level={view.learner.cefr} nextTier={view.metrics.nextPointsTier ?? null} />
       </div>
       {view.monthlyEligibility ? <AbsenceChip absenceDays={view.monthlyEligibility.absenceDays} maxAbsences={view.monthlyEligibility.maxAbsences} /> : null}
     </section> : null}
@@ -134,8 +134,8 @@ export function LevelUpCelebration({
   return <div className="modal-backdrop" role="presentation">
     <section className="dialog wide" role="dialog" aria-modal="true" aria-label={adjusted ? "Thông báo cập nhật trình độ" : seasonUp ? "Chúc mừng lên Season mới" : "Chúc mừng lên mức"} data-testid="modal.level-up-celebration" data-modal={seasonUp ? "season-up-celebration" : "level-up-celebration"} tabIndex={-1} onKeyDown={handleDialogKeyDown}>
       <div className="row between"><span className={`badge ${genuine ? "ok" : ""}`}>{genuine ? "Thông báo thật" : "Mô phỏng"}</span><button ref={closeRef} type="button" aria-label="Đóng" onClick={() => void onClose()}>Đóng</button></div>
-      <div className="card flat" style={{ marginTop: 12, textAlign: "center" }}><div className="eyebrow">{announcement.seasonName}</div>{adjusted ? null : <Sprout className="celebration-icon" aria-hidden="true" />}<h2>{adjusted ? "Trình độ đã được cập nhật" : isTopLevel ? "Bạn đã đạt mức cao nhất" : `Chúc mừng ${displayName}!`}</h2>{seasonUp ? <p className="badge lvl">Mùa học {announcement.seasonLevel ?? "—"}/4</p> : announcement.level ? <p className="badge lvl">Mức {announcement.level}</p> : null}</div>
-      <p>{adjusted ? "Bài học và điều kiện thi lên mức áp dụng theo trình độ hiện tại của bạn." : isTopLevel ? "Bạn đã hoàn thành chặng CEFR cao nhất trong lộ trình hiện tại." : seasonUp ? `Bạn vừa lên ${announcement.seasonName}. Điểm và huy hiệu tiếp tục được cộng dồn cho Season tiếp theo.` : "Bạn vừa mở một cột mốc mới trong hành trình học tiếng Anh."}</p>
+      <div className="card flat" style={{ marginTop: 12, textAlign: "center" }}><div className="eyebrow">{announcement.seasonName}</div>{adjusted ? null : <Sprout className="celebration-icon" aria-hidden="true" />}<h2>{adjusted ? "Trình độ đã được cập nhật" : isTopLevel ? "Bạn đã đạt mức cao nhất" : `Chúc mừng ${displayName}!`}</h2>{seasonUp ? <p className="badge lvl">Mùa học {announcement.seasonLevel ?? "—"}/4{announcement.level ? ` · ${announcement.level}` : ""}</p> : announcement.level ? <p className="badge lvl">Mức {announcement.level}</p> : null}</div>
+      <p>{adjusted ? "Bài học và điều kiện thi lên mức áp dụng theo trình độ hiện tại của bạn." : isTopLevel ? "Bạn đã hoàn thành chặng CEFR cao nhất trong lộ trình hiện tại." : seasonUp ? `Bạn vừa lên ${announcement.seasonName}. Huy hiệu đã nhận được giữ mãi; điểm trong trình độ này tiếp tục được cộng cho Season tiếp theo.` : "Bạn vừa mở một cột mốc mới trong hành trình học tiếng Anh."}</p>
       <Notice tone="info"><b>Quy tắc công nhận:</b> {announcement.rule ?? (isTopLevel ? "Mức cao nhất được giữ lại trong hồ sơ của bạn." : "Mức mới chỉ hiển thị sau khi người vận hành duyệt bằng chứng học tập.")}</Notice>
       <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}><button type="button" onClick={() => void onClose()}>Đóng</button><button className="btn-primary" type="button" onClick={() => void onClose()}>Tiếp tục học</button></div>
     </section>
@@ -391,11 +391,15 @@ export function compactPoints(points: number): string {
   return `${(Math.floor(value / 100_000) / 10).toLocaleString("vi-VN")}tr`;
 }
 
-/** Ring toward the next Season points tier; a plain number once the last tier is reached. */
-function HomePointsMetric({ points, nextTier }: { points: number; nextTier: number | null }) {
-  if (nextTier === null || nextTier <= 0) return <Metric metric="points" label="Điểm huy hiệu" value={compactPoints(points)} plain title={`${points.toLocaleString("vi-VN")} điểm`} />;
-  // The ring shows the points only ("60/180" overflowed the ring); the next Season tier is named in the label.
-  return <Metric metric="points" label={`Điểm huy hiệu · mốc ${nextTier.toLocaleString("vi-VN")}`} value={compactPoints(points)} percent={ratio(points, nextTier)} color="var(--primary)" title={`${points.toLocaleString("vi-VN")} điểm · còn ${Math.max(0, nextTier - points).toLocaleString("vi-VN")} điểm tới mốc Season tiếp theo`} />;
+/**
+ * Ring toward the next Season of the current level's ladder, filled with the points earned
+ * in the level (`points`); a plain number once Mùa đông is reached. The lifetime total is in the title.
+ */
+function HomePointsMetric({ points, totalPoints = points, level, nextTier }: { points: number; totalPoints?: number; level?: string | null; nextTier: number | null }) {
+  const inLevel = `${points.toLocaleString("vi-VN")} điểm trong ${level ?? "trình độ"} · tổng tích lũy ${totalPoints.toLocaleString("vi-VN")}`;
+  if (nextTier === null || nextTier <= 0) return <Metric metric="points" label="Điểm huy hiệu" value={compactPoints(points)} plain title={inLevel} />;
+  // The ring shows the points only ("500/2.000" overflowed the ring); the next Season threshold is named in the label.
+  return <Metric metric="points" label={`Điểm huy hiệu · mốc ${nextTier.toLocaleString("vi-VN")}`} value={compactPoints(points)} percent={ratio(points, nextTier)} color="var(--primary)" title={`${inLevel} · còn ${Math.max(0, nextTier - points).toLocaleString("vi-VN")} điểm tới mốc Season tiếp theo`} />;
 }
 
 function AbsenceChip({ absenceDays, maxAbsences }: { absenceDays: number; maxAbsences: number }) {

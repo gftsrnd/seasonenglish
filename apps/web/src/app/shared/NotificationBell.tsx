@@ -6,6 +6,7 @@ import type { InboxNotificationView, NotificationInboxView } from "@e4s/contract
 import { getNotificationInbox, markInboxRead } from "../../api/notifications.js";
 import { hasAssessmentLogoutGuard } from "./assessment-logout-guard.js";
 import { useDialog } from "./ModalProvider.js";
+import { rewardBadgeIconForLabel } from "./reward-badge-icons.js";
 import "./notification-bell.css";
 
 const assessmentNames: Record<string, string> = {
@@ -22,7 +23,7 @@ const complaintNames: Record<string, string> = {
   exam_eligibility: "điều kiện dự thi", lesson_unlock: "mở khóa bài học", account_unlock: "mở khóa tài khoản",
   attendance: "điểm danh", lesson_count: "số bài học", account: "tài khoản"
 };
-const seasonNames: Record<string, string> = { "2": "Mùa hạ – đón nắng", "3": "Mùa thu – gặt hái", "4": "Mùa đông – vững vàng" };
+const seasonNames: Record<string, string> = { "2": "☀️ Mùa hạ", "3": "🍂 Mùa thu", "4": "❄️ Mùa đông" }; // media-scan: allow-avatar-reward -- deliberate reward symbols
 const categoryLabels = { support: "Khiếu nại", reopen: "Yêu cầu mở lại", appeal: "Kháng nghị học tập", exam: "Bài thi", account: "Tài khoản", learning: "Học tập" };
 function notificationCategory(value: InboxNotificationView["kind"]): keyof typeof categoryLabels {
   // Server kinds are free text in the database; unknown kinds must never break the inbox.
@@ -174,10 +175,15 @@ function notificationContent(item: InboxNotificationView): { title: string; desc
     case "challenge_retry":
       return { title: item.kind === "challenge_passed" ? "Đã hoàn thành thử thách lên mức" : "Có kết quả thử thách lên mức", description: "Xem kết quả và bước tiếp theo trong hồ sơ.", path: "/profile", action: "Xem hồ sơ" };
     case "badge_earned":
-      return { title: `Bạn vừa nhận huy hiệu ${item.context || "mới"}`, description: "Xem huy hiệu và tiến độ Season trong hồ sơ.", path: "/profile", action: "Xem huy hiệu" };
+    {
+      const icon = item.context ? rewardBadgeIconForLabel(item.context) : undefined;
+      return { title: `Bạn vừa nhận huy hiệu ${item.context ? `${icon ? `${icon} ` : ""}${item.context}` : "mới"}`, description: "Huy hiệu được giữ mãi, kể cả khi đổi trình độ. Xem tiến độ Season trong hồ sơ.", path: "/profile", action: "Xem huy hiệu" };
+    }
     case "season_reached": {
-      const season = seasonNames[item.context];
-      return { title: season ? `Chúc mừng! Bạn đã lên ${season}` : "Chúc mừng! Bạn đã lên Season mới", description: "Xem Season hiện tại và huy hiệu của Season tiếp theo trong hồ sơ.", path: "/profile", action: "Xem Season" };
+      // Context "3:B1" (Season 3 of B1); older notifications carry the Season only ("3").
+      const [seasonLevel = "", level] = item.context.split(":");
+      const season = seasonNames[seasonLevel];
+      return { title: season ? `Chúc mừng! Bạn đã lên ${season}${level ? ` · ${level}` : ""}` : "Chúc mừng! Bạn đã lên Season mới", description: "Xem Season hiện tại và huy hiệu của Season tiếp theo trong hồ sơ.", path: "/profile", action: "Xem Season" };
     }
     default:
       // Unknown or newer server kinds get a neutral row instead of crashing the whole inbox.

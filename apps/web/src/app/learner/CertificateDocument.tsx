@@ -59,9 +59,11 @@ export function BadgeCertificate({ view, preview }: { view: BadgeCertificateView
   const completedAt = new Date(view.completedAt);
   const earnedCount = preview ? view.badges.length : view.badges.filter((badge) => badge.earned).length;
   const date = completedAt.toLocaleDateString("vi-VN");
+  // Every CEFR level has its own Season ladder: the certificate names the Season and its level.
+  const seasonText = view.season.cefr ? `${view.season.name} · ${view.season.cefr}` : view.season.name;
   return <CertificateDocument organizationName={view.organizationName} certificateNumber={view.certificateNumber} learnerName={view.learnerName}
     title="Certificate of Completion" preview={preview}
-    summary={[{ label: "Ngày cấp", value: date }, { label: "Huy hiệu", value: `${earnedCount}/${view.requiredBadgeCount}` }, { label: "Cấp", value: view.season.name }]}
+    summary={[{ label: "Ngày cấp", value: date }, { label: "Huy hiệu", value: `${earnedCount}/${view.requiredBadgeCount}` }, { label: "Season", value: seasonText }]}
     declaration={<>đã hoàn thành bộ {view.requiredBadgeCount} huy hiệu Season English{view.cefrLabel && <> ở trình độ <b>{view.cefrLabel}</b></>}.</>}
     signature={<div className="cert-sign">
       <div><div className="line" /><div className="small">Vận hành</div><div className="xs muted">{view.operatorName}</div></div>
@@ -72,7 +74,7 @@ export function BadgeCertificate({ view, preview }: { view: BadgeCertificateView
       <div><span className="xs muted">Ngày cấp</span><b>{date}</b></div>
       <div><span className="xs muted">Huy hiệu</span><b>{earnedCount}/{view.requiredBadgeCount}</b></div>
       <div><span className="xs muted">Điểm</span><b>{view.displayPoints}</b></div>
-      <div><span className="xs muted">Cấp</span><b>{view.season.name}</b></div>
+      <div><span className="xs muted">Season</span><b>{seasonText}</b></div>
     </div>
     <ul className="cert-badges badge-certificate-list">
       {view.badges.map((badge) => <li className="cert-badge" key={badge.key}>

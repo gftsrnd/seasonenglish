@@ -1,10 +1,9 @@
-export const rewardBadgeCatalog = [
-  ["first", "Khởi đầu", "Hoàn thành bài học đầu tiên"],
-  ["week", "Tuần trọn vẹn", "Hoàn thành mọi bài của một tuần trong lịch học tháng"],
-  ["streak3", "Chuỗi 3 ngày", "Học 3 ngày làm việc liên tiếp (T2–T6)"],
-  ["streak7", "Chuỗi 5 ngày", "Học 5 ngày làm việc liên tiếp (T2–T6)"],
-  ["sharp", "Đúng ngay lần đầu", "Một bài có Nghe, Đọc, Viết, Nói đều đúng ngay lần đầu"],
-  ["words", "Thợ chữ", "Dùng 15 từ khác nhau khi luyện với Season"],
-  ["chat", "Bạn của Season", "Có 10 lượt luyện hợp lệ với Season"],
-  ["friday", "Ôn tập đúng hẹn", "Hoàn thành bài Ôn tuần đúng ngày đã xếp lịch"]
-] as const;
+import type { CefrLevel } from "@e4s/contracts";
+import { REWARD_BADGE_KEYS, REWARD_BADGE_LABELS, rewardBadgeDescription } from "@e4s/domain/engagement";
+
+/** The eight Season badges with their rule at a level (same catalog and thresholds as the server). */
+export function rewardBadgeCatalogAt(level: CefrLevel) {
+  return REWARD_BADGE_KEYS.map((key) => [key, REWARD_BADGE_LABELS[key], rewardBadgeDescription(key, level)] as const);
+}
+
+export const rewardBadgeCatalog = rewardBadgeCatalogAt("A1");

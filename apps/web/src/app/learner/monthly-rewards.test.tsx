@@ -16,12 +16,12 @@ const actions = { navigate: vi.fn(), saveAvatar: vi.fn() } as unknown as Learner
 
 const view = {
   learner: { displayName: "Học viên Demo", cefr: "B1", profile: { fullName: "Học viên Demo", goals: [], habits: [], learningStyles: [], explanationLanguage: "auto", durationMinutes: 10, device: "both", selfLevel: "unknown", certificates: [] } },
-  points: 400,
+  points: 12400,
   badges: [],
   weeks: [],
   studyDays: 0,
   activity: [],
-  season: { current: { key: "winter", level: 4, name: "Mùa đông – vững vàng", pointsRequired: 360 }, next: null, earnedBadgeCount: 0, requiredBadgeCount: 0 },
+  season: { current: { key: "winter", level: 4, name: "Mùa đông – vững vàng", pointsRequired: 5000 }, next: null, earnedBadgeCount: 0, requiredBadgeCount: 0, cefr: "B1", pointsInLevel: 5200 },
   badgeRoadmap: [],
   levelReadiness: { targetLevel: null, windowDays: 14, eligible: false, examAvailable: false, criteria: [] },
   stats: { completedLessons: 0, coachTurns: 0, studyDays: 0 },
@@ -42,11 +42,49 @@ describe("profile 'Cách tính điểm'", () => {
       "Mini game đạt từ 50% điểm tối đa: +5, tối đa 3 lượt có điểm mỗi ngày (chơi thêm vẫn được, không cộng điểm)",
       "Nộp bài thi cuối tháng: +15",
       "Bài kiểm tra đầu vào, thi lên mức: +10",
-      "Hoàn thành trọn lịch học tháng (mọi bài mới và bài ôn): +20, một lần mỗi tháng",
-      "Lên cấp: đủ điểm và mọi huy hiệu của cấp; đi lần lượt, không nhảy cấp."
+      "Hoàn thành trọn lịch học tháng (mọi bài mới và bài ôn): +20, một lần mỗi tháng"
     ]);
     expect(rules).not.toHaveTextContent(/bí mật/);
     expect(REWARD_POINT_RULES).toHaveLength(8);
+    const season = screen.getByTestId("reward-season-rules");
+    expect(season).toHaveTextContent("Mỗi trình độ (A1–C1) có 4 Season: 🌱 Mùa xuân (bắt đầu) → ☀️ Mùa hạ 500 điểm → 🍂 Mùa thu 2.000 điểm → ❄️ Mùa đông 5.000 điểm");
+    expect(season).toHaveTextContent("Season bắt đầu lại từ Mùa xuân của trình độ mới");
+    expect(season).toHaveTextContent("huy hiệu đã nhận được giữ mãi");
+    expect(season).toHaveTextContent("Mini game, luyện Season không tính; cuối tuần, ngày nghỉ lễ không tính và không làm đứt chuỗi");
+  });
+});
+
+describe("profile Season card", () => {
+  const roadmap = [
+    { key: "starter", label: "Khởi đầu", description: "Hoàn thành bài học mới đầu tiên", seasonLevel: 2, earned: true, earnedLevel: "A2", threshold: 1 },
+    { key: "streak", label: "Chuỗi ngày học", description: "Học 5 ngày học liên tiếp", seasonLevel: 2, earned: true, earnedLevel: "A2", threshold: 5 },
+    { key: "week_complete", label: "Tuần trọn vẹn", description: "Hoàn thành mọi bài của 2 tuần (T2–CN) trong lịch học tháng", seasonLevel: 3, earned: false, threshold: 2 },
+    { key: "friday", label: "Ôn tập đúng hẹn", description: "Hoàn thành 3 bài Ôn tuần đúng ngày đã xếp lịch", seasonLevel: 3, earned: true, earnedLevel: "B1", threshold: 3 },
+    { key: "coach_friend", label: "Bạn của Season", description: "Có 50 lượt luyện hợp lệ với Season", seasonLevel: 3, earned: false, threshold: 50 }
+  ];
+  const b1 = {
+    ...view, points: 3100, badges: [{ key: "starter", label: "Khởi đầu" }, { key: "streak", label: "Chuỗi ngày học" }, { key: "friday", label: "Ôn tập đúng hẹn" }],
+    season: { current: { key: "summer", level: 2, name: "Mùa hạ – đón nắng", pointsRequired: 500 }, next: { key: "autumn", level: 3, name: "Mùa thu – gặt hái", pointsRequired: 2000 }, earnedBadgeCount: 1, requiredBadgeCount: 3, cefr: "B1", pointsInLevel: 1250 },
+    badgeRoadmap: roadmap
+  } as unknown as ProfileView;
+
+  it("shows the current level's ladder, points in the level toward the next threshold and the lifetime total", () => {
+    render(<LearnerProfile view={b1} actions={actions} />);
+    expect(screen.getByTestId("season-ladder-title")).toHaveTextContent("Mùa hạ · B1");
+    expect(screen.getByTestId("season-points-summary")).toHaveTextContent("Điểm trong B1: 1.250 · Tổng điểm tích lũy: ★ 3.100");
+    expect(screen.getByText("1.250 / 2.000")).toBeInTheDocument();
+    expect(screen.getByText(/Thiếu huy hiệu/).parentElement).toHaveTextContent("Tuần trọn vẹn, Bạn của Season");
+  });
+
+  it("marks earned badges with the level they were earned at and shows the current level's rule for the others", () => {
+    render(<LearnerProfile view={b1} actions={actions} />);
+    const friday = document.querySelector<HTMLElement>("[data-badge-key='friday']")!;
+    expect(within(friday).getByText("Đạt ở B1")).toBeInTheDocument();
+    expect(within(friday).getByRole("img", { name: "Biểu tượng Ôn tập đúng hẹn" })).toHaveTextContent("⏰");
+    const coach = document.querySelector<HTMLElement>("[data-badge-key='coach_friend']")!;
+    expect(within(coach).getByRole("img", { name: "Chưa đạt" })).toBeInTheDocument();
+    expect(coach).toHaveTextContent("Có 50 lượt luyện hợp lệ với Season");
+    expect(within(coach).queryByText(/Đạt ở/)).not.toBeInTheDocument();
   });
 });
 
@@ -67,14 +105,14 @@ describe("Season congratulation modal", () => {
   it("congratulates the learner on the new Season and closes once", async () => {
     const onClose = vi.fn();
     render(<LevelUpCelebration displayName="Minh Anh" onClose={onClose} announcement={{
-      kind: "season-up", points: 190, nextPoints: 360, seasonName: "Mùa thu – gặt hái", seasonLevel: 3,
-      announcementId: "season-up:3", source: "genuine", rule: "Lên Season khi đủ điểm và mọi huy hiệu của Season đó; đi lần lượt, không nhảy cấp."
+      kind: "season-up", points: 2100, nextPoints: 5000, seasonName: "Mùa thu · B1", seasonLevel: 3, level: "B1",
+      announcementId: "season-up:B1:3", source: "genuine", rule: "Lên Season khi đủ điểm và mọi huy hiệu của Season đó; đi lần lượt, không nhảy cấp."
     }} />);
     const dialog = screen.getByRole("dialog", { name: "Chúc mừng lên Season mới" });
     expect(dialog).toHaveAttribute("data-modal", "season-up-celebration");
     expect(within(dialog).getByText("Chúc mừng Minh Anh!")).toBeInTheDocument();
-    expect(within(dialog).getByText("Mùa học 3/4")).toBeInTheDocument();
-    expect(within(dialog).getByText(/Bạn vừa lên Mùa thu – gặt hái/)).toBeInTheDocument();
+    expect(within(dialog).getByText("Mùa học 3/4 · B1")).toBeInTheDocument();
+    expect(within(dialog).getByText(/Bạn vừa lên Mùa thu · B1\. Huy hiệu đã nhận được giữ mãi/)).toBeInTheDocument();
     await userEvent.setup().click(within(dialog).getByRole("button", { name: "Tiếp tục học" }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -86,6 +124,9 @@ describe("manager reward simulator", () => {
     expect(screen.getByRole("button", { name: "Tuần trọn vẹn", hidden: true })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ôn tập đúng hẹn", hidden: true })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Thợ chữ", hidden: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Chuỗi ngày học", hidden: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Điểm thi tháng", hidden: true })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Chuỗi 3 ngày|Chuỗi 5 ngày/, hidden: true })).not.toBeInTheDocument();
     const rules = screen.getByTestId("reward-point-rules");
     expect(rules).toHaveTextContent("Hoàn thành bài Ôn tuần (thứ Sáu): +15");
     expect(rules).toHaveTextContent("Mini game đạt từ 50% điểm tối đa");

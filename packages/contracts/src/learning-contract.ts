@@ -23,7 +23,7 @@ export interface RewardAnnouncementView {
   points: number;
   nextPoints: number | null;
   seasonName: string;
-  /** `season-up`: the reward Season (2–4) just reached. */
+  /** `season-up`: the reward Season (2–4) just reached, at the CEFR level `level`. */
   seasonLevel?: number;
   level?: CefrLevel | null;
   /** Stable server key used to acknowledge a one-time celebration. */
@@ -391,8 +391,10 @@ export interface LearnerHomeView {
     studyDays: number;
     streakDays: number;
     points: number;
-    /** Points of the next Season tier; null or absent once the last tier is reached. */
+    /** Points of the next Season of the current level's ladder; null or absent once Mùa đông is reached. */
     nextPointsTier?: number | null;
+    /** Points earned since the learner entered the current level (the Season ladder); `points` stays lifetime. */
+    seasonPoints?: number;
     completedReviews?: number;
     totalReviews?: number;
     monthlyExamStatus?: "unpublished" | "locked" | "ready" | "completed";
@@ -464,9 +466,14 @@ export interface SeasonLevelView {
 export interface BadgeRoadmapItem {
   key: string;
   label: string;
+  /** The rule at the learner's current level (earned badges: the rule they met). */
   description: string;
   seasonLevel: 2 | 3 | 4;
   earned: boolean;
+  /** CEFR level the badge was earned at; badges are kept forever. */
+  earnedLevel?: CefrLevel | null;
+  /** Threshold at the learner's current level ("passed" = a passed monthly final). */
+  threshold?: number | "passed";
 }
 
 export interface AssessmentSnapshot {
@@ -527,6 +534,10 @@ export interface LearnerProgressView {
     next: SeasonLevelView | null;
     earnedBadgeCount: number;
     requiredBadgeCount: number;
+    /** The CEFR level whose ladder is climbed (every level has the same four Seasons). */
+    cefr?: CefrLevel | null;
+    /** Points earned since entering the current level; `points` stays the lifetime total. */
+    pointsInLevel?: number;
   };
   badgeRoadmap: BadgeRoadmapItem[];
   /** The learner can open the badge certificate ("/reward/done"); otherwise only its preview. */

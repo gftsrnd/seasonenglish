@@ -2,27 +2,32 @@ import { useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { ChevronRight, X } from "lucide-react";
 import { PageTitle } from "./shared.js";
-import type { BadgeRoadmapItem, SeasonLevelView } from "@e4s/contracts";
+import type { BadgeRoadmapItem, CefrLevel, SeasonLevelView } from "@e4s/contracts";
+import { REWARD_SEASONS, rewardBadgeThreshold, rewardSeasonLabel, type RewardBadgeKey } from "@e4s/domain/engagement";
 import { SeasonFigure, SeasonProgressCard } from "../shared/SeasonProgressCard.js";
 import { rewardBadgeIcon } from "../shared/reward-badge-icons.js";
 import { useDialog } from "../shared/ModalProvider.js";
-import { rewardBadgeCatalog as badges } from "./reward-catalog.js";
+import { rewardBadgeCatalogAt } from "./reward-catalog.js";
 import "./rewards.css";
 
-const levels: Array<SeasonLevelView & { required: readonly string[] }> = [
-  { key: "spring", level: 1, name: "Mùa xuân – gieo hạt", pointsRequired: 0, required: [] },
-  { key: "summer", level: 2, name: "Mùa hạ – đón nắng", pointsRequired: 60, required: ["first", "streak3"] },
-  { key: "autumn", level: 3, name: "Mùa thu – gặt hái", pointsRequired: 180, required: ["week", "friday", "chat"] },
-  { key: "winter", level: 4, name: "Mùa đông – vững vàng", pointsRequired: 360, required: ["streak7", "sharp", "words"] },
-];
+const CEFR_LEVELS: readonly CefrLevel[] = ["A1", "A2", "B1", "B2", "C1"];
+const MAX_SIMULATED_POINTS = 6000;
+/** Every CEFR level climbs the same four Seasons with the points earned in that level. */
+const levels: Array<SeasonLevelView & { required: readonly string[]; shortName: string }> = REWARD_SEASONS.map((season) => ({
+  key: season.key, level: season.level, name: season.name, shortName: season.shortName, pointsRequired: season.pointsRequired, required: season.badges
+}));
+const SUMMER = ["starter", "streak"];
+const AUTUMN = ["week_complete", "friday", "coach_friend"];
+const ALL_BADGES = levels.flatMap((level) => level.required);
 const cases = [
-  ["Mới bắt đầu", 0, []], ["Cấp 1 · đủ điểm, thiếu huy hiệu", 80, ["first"]], ["Cấp 1 · đủ huy hiệu, thiếu điểm", 40, ["first", "streak3"]],
-  ["Vừa lên cấp 2", 65, ["first", "streak3"]], ["Cấp 2 · điểm cao, kẹt vì huy hiệu", 400, ["first", "streak3", "week"]], ["Vừa lên cấp 3", 190, ["first", "streak3", "week", "friday", "chat"]],
-  ["Cấp 3 · thiếu 1 huy hiệu cuối", 420, ["first", "streak3", "week", "friday", "chat", "streak7", "sharp"]], ["Cấp cao nhất", 420, badges.map((item) => item[0])], ["Có huy hiệu cấp cao nhưng thiếu cấp dưới", 400, ["first", "streak7", "sharp", "words"]]
+  ["Mới vào trình độ", 0, []], ["Cấp 1 · đủ điểm, thiếu huy hiệu", 650, ["starter"]], ["Cấp 1 · đủ huy hiệu, thiếu điểm", 300, SUMMER],
+  ["Vừa lên cấp 2", 520, SUMMER], ["Cấp 2 · điểm cao, kẹt vì huy hiệu", 3000, [...SUMMER, "week_complete"]], ["Vừa lên cấp 3", 2100, [...SUMMER, ...AUTUMN]],
+  ["Cấp 3 · thiếu 1 huy hiệu cuối", 5600, [...SUMMER, ...AUTUMN, "first_try", "monthly_final_score"]], ["Cấp cao nhất", 5600, ALL_BADGES], ["Có huy hiệu cấp cao nhưng thiếu cấp dưới", 5600, ["starter", "first_try", "monthly_final_score", "wordsmith"]]
 ] as const;
 
 export function ManagerRewards() {
   const [pointsInput, setPointsInput] = useState("0");
+  const [cefr, setCefr] = useState<CefrLevel>("A1");
   const [earned, setEarned] = useState<readonly string[]>([]);
   const [revealedBadgeLevel, setRevealedBadgeLevel] = useState<number>();
   const [preview, setPreview] = useState<number | null>(null);
@@ -34,38 +39,49 @@ export function ManagerRewards() {
   const points = Number(pointsInput);
   const level = useMemo(() => rewardLevel(points, earned), [points, earned]);
   const next = levels[level.index + 1] ?? null;
+  const badges = rewardBadgeCatalogAt(cefr);
   const badgeRoadmap: BadgeRoadmapItem[] = levels.flatMap(({ level: seasonLevel, required }) => {
     if (seasonLevel === 1) return [];
     return required.map((key) => {
       const [, label, description] = badges.find(([id]) => id === key)!;
-      return { key, label, description, seasonLevel, earned: earned.includes(key) };
+      const isEarned = earned.includes(key);
+      return { key, label, description, seasonLevel: seasonLevel as 2 | 3 | 4, earned: isEarned,
+        threshold: rewardBadgeThreshold(key as RewardBadgeKey, cefr), ...(isEarned ? { earnedLevel: cefr } : {}) };
     });
   });
   const season = {
     current: level,
     next,
     earnedBadgeCount: next?.required.filter((key) => earned.includes(key)).length ?? 0,
-    requiredBadgeCount: next?.required.length ?? 0
+    requiredBadgeCount: next?.required.length ?? 0,
+    cefr,
+    pointsInLevel: points
   };
   const previewLevel = preview === null ? undefined : levels[preview];
   const selectedCase = cases.findIndex(([, casePoints, caseBadges]) => points === casePoints && equalSets(earned, caseBadges));
-  const certificatePath = level.level === 4 ? `/reward/preview?points=${points}` : "/reward/preview";
+  const certificatePath = level.level === 4 ? `/reward/preview?points=${points}&level=${cefr}` : `/reward/preview?level=${cefr}`;
   const closePreview = () => {
     setPreview(null);
     queueMicrotask(() => previewTriggerRef.current?.focus());
   };
   useDialog(preview !== null, previewDialogRef, closePreview, previewCloseRef);
   return <div className="manager-page manager-rewards-page">
-    <PageTitle><Link to="/mgr" className="manager-page-back small">← Tiến độ nhóm</Link><h1>Giả lập phần thưởng</h1><p className="muted">Xem phần thưởng theo tình huống mẫu.</p></PageTitle>
+    <PageTitle><Link to="/mgr" className="manager-page-back small">← Tiến độ nhóm</Link><h1>Giả lập phần thưởng</h1><p className="muted">Xem phần thưởng theo tình huống mẫu. Mỗi trình độ có 4 Season, tính bằng điểm kiếm được trong trình độ; huy hiệu được giữ mãi.</p></PageTitle>
     <div className="manager-reward-workspace">
       <section className="card manager-reward-controls" aria-label="Thiết lập giả lập">
+        <label className="field">
+          <span>Trình độ</span>
+          <select value={cefr} onChange={(event) => setCefr(event.target.value as CefrLevel)}>
+            {CEFR_LEVELS.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </label>
         <label className="field">
           <span>Tình huống mẫu</span>
           <select value={selectedCase} onChange={(event) => {
             const scenario = cases[Number(event.target.value)];
             if (scenario) {
               setPointsInput(String(scenario[1]));
-              setEarned(scenario[2]);
+              setEarned([...scenario[2]]);
               setRevealedBadgeLevel(undefined);
             }
           }}>
@@ -79,15 +95,15 @@ export function ManagerRewards() {
         </button>
         <div className="manager-reward-custom" id={customId} hidden={!customOpen}>
           <label className="field">
-            <span>Điểm giả lập (0–600)</span>
+            <span>Điểm trong trình độ (0–6.000)</span>
             <input type="text" inputMode="numeric" placeholder="0" value={pointsInput}
               onChange={(event) => {
                 const value = event.target.value;
-                if (/^[0-9]*$/.test(value)) setPointsInput(value === "" ? "" : String(Math.min(600, Number(value))));
+                if (/^[0-9]*$/.test(value)) setPointsInput(value === "" ? "" : String(Math.min(MAX_SIMULATED_POINTS, Number(value))));
               }} />
           </label>
           <div className="manager-reward-badge-field">
-            <span className="small" id={`${customId}-badges`}>Huy hiệu đã có</span>
+            <span className="small" id={`${customId}-badges`}>Huy hiệu đã có (giữ mãi khi đổi trình độ)</span>
             <div className="manager-reward-badge-group" role="group" aria-labelledby={`${customId}-badges`}>
               {badges.map(([id, name, description]) => <button className="btn-sm"
                 type="button" key={id} title={description} aria-pressed={earned.includes(id)}
@@ -111,7 +127,7 @@ export function ManagerRewards() {
             }}>Xem lên cấp {tier}</button>)}
           </div>
         </header>
-        <div className="reward-screen-reader" role="status">Cấp {level.level}/4 · {level.name}</div>
+        <div className="reward-screen-reader" role="status">Cấp {level.level}/4 · {level.name} · {cefr}</div>
         <SeasonProgressCard view={{ points, badgeCount: earned.length, season, badgeRoadmap }} revealedBadgeLevel={revealedBadgeLevel} certificateAction={
           <Link className="btn btn-sm" to={certificatePath}>Xem trước chứng nhận</Link>
         } />
@@ -127,9 +143,9 @@ export function ManagerRewards() {
         </div>
         <div className="reward-celebration-body">
           <SeasonFigure level={previewLevel.level} />
-          <div className="eyebrow">Lên cấp {previewLevel.level}/4</div>
-          <h2>{previewLevel.name}</h2>
-          <p className="small">{previewLevel.pointsRequired} điểm · {previewLevel.required.length} huy hiệu</p>
+          <div className="eyebrow">Lên cấp {previewLevel.level}/4 · {cefr}</div>
+          <h2>{rewardSeasonLabel(previewLevel, cefr)}</h2>
+          <p className="small">{previewLevel.name} · {previewLevel.pointsRequired.toLocaleString("vi-VN")} điểm trong {cefr} · {previewLevel.required.length} huy hiệu</p>
         </div>
         <button className="btn-primary reward-celebration-action" type="button" onClick={closePreview}>Tiếp tục</button>
       </section>
