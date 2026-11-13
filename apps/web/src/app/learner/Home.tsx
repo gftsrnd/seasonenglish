@@ -372,7 +372,7 @@ function MonthlyEligibilitySummary({ eligibility, actions }: { eligibility: NonN
 function Metric({ metric, label, secondary, value, pending, percent, color = "var(--olive)", plain = false, title }: { metric?: string; label: string; secondary?: string | undefined; value?: string; pending?: string; percent?: number; color?: string; plain?: boolean; title?: string | undefined }) {
   const figure = pending ? <div className="metric-pending" role="status">{pending}</div>
     : plain ? <div className="stat-figure"><b>{value}</b></div>
-      : <div className="ring" style={{ "--p": percent ?? 0, "--c": color } as CSSProperties}><b>{value}</b></div>;
+      : <div className="ring" style={{ "--p": percent ?? 0, "--c": color } as CSSProperties}><b data-long={(value?.length ?? 0) >= 5 ? "" : undefined}>{value}</b></div>;
   return <article className={`stat${pending ? " is-pending" : ""}${plain ? " is-plain" : ""}`} data-home-metric={metric} data-percent={plain || pending ? undefined : percent ?? 0} title={title}>{figure}<span className="lbl">{label}</span>{secondary ? <small className="metric-secondary" style={{ display: "block" }}>{secondary}</small> : null}</article>;
 }
 
@@ -383,11 +383,19 @@ function HomeAttendanceMetric({ eligibility }: { eligibility: LearnerHomeView["m
   return <Metric metric="attendance" label="Điểm danh" value={`${eligibility.attendedDays}/${daysSoFar}`} percent={ratio(eligibility.attendedDays, daysSoFar)} color="var(--peach)" title={`Đã học ${eligibility.attendedDays} trên ${daysSoFar} ngày học đã qua`} />;
 }
 
+/** Compact points for the 46px ring: 1.250 stays exact, 12.345 → 12,3k, 1.234.567 → 1,2tr (full value in the title). */
+export function compactPoints(points: number): string {
+  const value = Math.max(0, Math.round(points));
+  if (value < 10_000) return value.toLocaleString("vi-VN");
+  if (value < 1_000_000) return `${(Math.floor(value / 100) / 10).toLocaleString("vi-VN")}k`;
+  return `${(Math.floor(value / 100_000) / 10).toLocaleString("vi-VN")}tr`;
+}
+
 /** Ring toward the next Season points tier; a plain number once the last tier is reached. */
 function HomePointsMetric({ points, nextTier }: { points: number; nextTier: number | null }) {
-  if (nextTier === null || nextTier <= 0) return <Metric metric="points" label="Điểm huy hiệu" value={String(points)} plain />;
+  if (nextTier === null || nextTier <= 0) return <Metric metric="points" label="Điểm huy hiệu" value={compactPoints(points)} plain title={`${points.toLocaleString("vi-VN")} điểm`} />;
   // The ring shows the points only ("60/180" overflowed the ring); the next Season tier is named in the label.
-  return <Metric metric="points" label={`Điểm huy hiệu · mốc ${nextTier}`} value={String(points)} percent={ratio(points, nextTier)} color="var(--primary)" title={`Còn ${Math.max(0, nextTier - points)} điểm tới mốc Season tiếp theo`} />;
+  return <Metric metric="points" label={`Điểm huy hiệu · mốc ${nextTier.toLocaleString("vi-VN")}`} value={compactPoints(points)} percent={ratio(points, nextTier)} color="var(--primary)" title={`${points.toLocaleString("vi-VN")} điểm · còn ${Math.max(0, nextTier - points).toLocaleString("vi-VN")} điểm tới mốc Season tiếp theo`} />;
 }
 
 function AbsenceChip({ absenceDays, maxAbsences }: { absenceDays: number; maxAbsences: number }) {

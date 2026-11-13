@@ -2141,3 +2141,7 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
   .monthly-home-metrics .stat .stat-figure{width:auto;height:auto;place-items:start}
   .monthly-home-metrics .stat .stat-figure > b{font-size:1rem}
 }
+
+/* Ring/tile numbers never wrap or spill: one line, tabular digits, slightly tighter for 5–6 characters (13/11). */
+.ring > b,.stat-figure > b{white-space:nowrap;font-variant-numeric:tabular-nums;letter-spacing:-.02em;overflow:hidden;text-overflow:clip;max-width:100%}
+.ring > b[data-long]{font-size:.78rem}
