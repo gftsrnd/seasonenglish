@@ -342,6 +342,8 @@ function finalPhonemes(ipa: string): string[] {
 const VOICELESS = new Set(["p", "t", "k", "f", "θ"]);
 const SIBILANTS = new Set(["s", "z", "ʃ", "ʒ", "tʃ", "dʒ"]);
 const ED_VOICELESS = new Set(["p", "k", "f", "θ", "s", "ʃ", "tʃ"]);
+/** -s/-es spellings after a hissing sound (/s z ʃ ʒ tʃ dʒ/), always /ɪz/. */
+const HISSING_ES_SPELLING = /(?:[sxz]|sh|ch|[cgsz]e)s$/u;
 
 function isSingleWord(text: string): boolean {
   return /^\p{L}+(?:[-'’]\p{L}+)*$/u.test(text.trim());
@@ -404,12 +406,20 @@ export function monthlyPronunciationPhenomenonExampleIssue(item: MonthlyPronunci
       const beforeLast = tokens.at(-2);
       if (form.ending.startsWith("s")) {
         if (!/s$/u.test(letters)) return `"${word}" does not end in -s/-es`;
+        // Spelling guard (rule: /ɪz/ only after a hissing sound): offices, changes, pushes, boxes.
+        const sibilantSpelling = HISSING_ES_SPELLING.test(letters);
+        if (form.ending === "s_iz" && !sibilantSpelling) return `"${word}" does not end in a hissing sound (s, x, z, sh, ch, ce, ge, se, ze) before -es, so it is not /ɪz/`;
+        if (form.ending !== "s_iz" && sibilantSpelling) return `"${word}" ends in a hissing sound before -es, so its ending is /ɪz/, not the target ending`;
         if (form.ending === "s_iz") return last === "z" && (beforeLast === "ɪ" || beforeLast === "ə") && SIBILANTS.has(tokens.at(-3) ?? "") ? undefined : `${ipa} does not end in /ɪz/ after /s z ʃ ʒ tʃ dʒ/`;
         if ((beforeLast === "ɪ" || beforeLast === "ə") && last === "z") return `${ipa} ends in /ɪz/, not the target ending`;
         if (form.ending === "s_s") return last === "s" && VOICELESS.has(beforeLast ?? "") ? undefined : `${ipa} does not end in /s/ after a voiceless /p t k f θ/`;
         return last === "z" && !VOICELESS.has(beforeLast ?? "") && !SIBILANTS.has(beforeLast ?? "") ? undefined : `${ipa} does not end in /z/ after a voiced sound`;
       }
       if (!/ed$/u.test(letters)) return `"${word}" does not end in -ed`;
+      // Spelling guard (rule: /ɪd/ only after /t/ or /d/): wanted, needed can never teach /t/ or /d/.
+      const tdStem = /[td]ed$/u.test(letters);
+      if (form.ending === "ed_id" && !tdStem) return `"${word}" has no t or d before -ed, so it is not /ɪd/`;
+      if (form.ending !== "ed_id" && tdStem) return `"${word}" has t or d before -ed, so its ending is /ɪd/, not the target ending`;
       if (form.ending === "ed_id") return last === "d" && (beforeLast === "ɪ" || beforeLast === "ə") && ["t", "d"].includes(tokens.at(-3) ?? "") ? undefined : `${ipa} does not end in /ɪd/ after /t/ or /d/`;
       if ((beforeLast === "ɪ" || beforeLast === "ə") && last === "d") return `${ipa} ends in /ɪd/, not the target ending`;
       if (form.ending === "ed_t") return last === "t" && ED_VOICELESS.has(beforeLast ?? "") ? undefined : `${ipa} does not end in /t/ after a voiceless sound`;

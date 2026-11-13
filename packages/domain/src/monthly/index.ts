@@ -8,6 +8,7 @@ export * from "./daily-progression.js";
 export * from "./carryover-review.js";
 export * from "./pronunciation-ipa.js";
 export * from "./pronunciation-catalog.js";
+export * from "./pronunciation-rules.js";
 export * from "./pronunciation-contrast.js";
 export * from "./grammar-catalog.js";
 export * from "./exercise-translation.js";
