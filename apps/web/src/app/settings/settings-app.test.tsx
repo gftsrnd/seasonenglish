@@ -184,7 +184,7 @@ describe("new Settings app branch", () => {
     expect(screen.getByText("Học viên A")).toBeInTheDocument();
     expect(screen.queryByText(/Lịch pilot|Số tuần của chu kỳ|Chu kỳ/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Nghe (phút)")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Lưu thiết lập học theo tháng" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Lưu thiết lập học theo tháng" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Lưu bài test" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Lưu ngưỡng" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Ngưỡng xét lên|Số ngày xét|Hạ mức: tỉ lệ sai|Sẵn sàng thi lên level/)).not.toBeInTheDocument();

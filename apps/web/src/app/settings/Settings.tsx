@@ -227,11 +227,11 @@ function AiSection({ draft, configured, lastTest, capabilities, aiTestDisabled, 
 function MonthlyLearningSection({ value, onChange, onSave, coachLimitReadOnly = false }: ManagerSectionProps & { coachLimitReadOnly?: boolean }) {
   return <section className="card"><h3>Học theo tháng</h3>
     <p className="small muted">Bài học được mở theo lịch tháng từ Thứ Hai đến Thứ Sáu. Ngày học cuối cùng là Bài thi tháng; thời lượng và cấu trúc đề được quản lý trong mục Bài kiểm tra.</p>
-    <div className="grid cols-2 settings-monthly-fields"><NumberField label="Giới hạn chat với Season (1–200 lượt/ngày cho mỗi học viên)" value={value.coachDailyLimit} min={1} max={200} disabled={coachLimitReadOnly} onChange={(coachDailyLimit) => onChange({ ...value, coachDailyLimit })} /></div>
+    <div className="settings-monthly-fields"><NumberField label="Giới hạn chat với Season (1–200 lượt/ngày cho mỗi học viên)" value={value.coachDailyLimit} min={1} max={200} disabled={coachLimitReadOnly} onChange={(coachDailyLimit) => onChange({ ...value, coachDailyLimit })} /></div>
     <p className="small muted">{coachLimitReadOnly ? "Quản lý thiết lập giới hạn Season."
       : "Giới hạn Season mới áp dụng từ ngày 1 của tháng kế tiếp."}
       {value.coachDailyLimitStartsMonth ? ` Hạn mức đã lưu có hiệu lực từ 01/${value.coachDailyLimitStartsMonth.slice(5)}/${value.coachDailyLimitStartsMonth.slice(0, 4)}.` : ""}</p>
-    <Save label="Lưu thiết lập học theo tháng" onSave={onSave} />
+    {coachLimitReadOnly ? null : <Save label="Lưu thiết lập học theo tháng" onSave={onSave} />}
   </section>;
 }
 
