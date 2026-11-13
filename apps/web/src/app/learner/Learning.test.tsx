@@ -870,7 +870,8 @@ describe("learner lesson study content", () => {
 
     await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
     expect(screen.getByText(/nghe lần lượt 3 từ mẫu phát âm/i)).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /2\. bài tập/i })).toBeDisabled();
+    // Study is complete, so the Practice tab opens; only the Speaking part stays behind the listening gate.
+    expect(screen.getByRole("tab", { name: /2\. bài tập/i })).toHaveAttribute("aria-selected", "true");
 
     expect(screen.queryByRole("button", { name: "Nghe từ phát âm: I" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Kiểm tra nói" })).not.toBeInTheDocument();
