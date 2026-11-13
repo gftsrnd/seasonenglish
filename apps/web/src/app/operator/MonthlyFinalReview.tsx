@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { LineField } from "../shared/LineField.js";
 import type {
   AssessmentLevelFormUpdateInput, MonthlyFinalCheckView, MonthlyFinalDraftView, MonthlyFinalExamStatus,
   MonthlyFinalGenCode, MonthlyFinalUpdateInput
@@ -25,7 +26,7 @@ export function plainMonthlyFinalIssue(check: MonthlyFinalCheckView): { area: st
     case "GEN04": return { area: "Nghe", text: `Từ được hỏi nhưng chưa có trong bài nghe${list}.` };
     case "GEN10": return { area: "Viết · Nói", text: "Bài mẫu Viết / Nói B chưa có câu dùng ngữ pháp của tháng." };
     case "GEN11": return { area: "Nói A", text: `Bài đọc thành tiếng thiếu từ luyện âm${list}.` };
-    case "GEN17": return { area: "Lựa chọn", text: `Đáp án đúng hay là lựa chọn dài nhất (${after}) — nên cân lại độ dài các lựa chọn.` };
+    case "GEN17": return { area: "Lựa chọn", text: `Đáp án đúng dồn vào một vị trí A/B/C (${after}) — nên đổi thứ tự lựa chọn.` };
     case "GEN18": return { area: "Đề học viên", text: "Đề học viên đang lộ câu lấy từ lời giải, bài mẫu hoặc script." };
     case "GEN23": return { area: "Hướng dẫn", text: `Hướng dẫn cho học viên dùng thuật ngữ ngữ pháp${list} — viết lại bằng lời đơn giản.` };
     default: return { area: "Khác", text: `${check.title}${check.detail ? ` — ${check.detail}` : ""}` };
@@ -221,8 +222,8 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
         })}
         <h5>Câu dùng ngữ pháp trong từng bản nghe</h5>
         {evidence.map((item, index) => <div className="monthly-final-grammar-grid" key={item.groupKey}>
-          <label>{item.groupKey} · câu GA<input aria-label={`${item.groupKey} câu GA`} value={item.gaSentence} disabled={!editable} onChange={(event) => setEvidence((previous) => previous.map((entry, entryIndex) => entryIndex === index ? { ...entry, gaSentence: event.target.value } : entry))} /></label>
-          <label>{item.groupKey} · câu GB<input aria-label={`${item.groupKey} câu GB`} value={item.gbSentence} disabled={!editable} onChange={(event) => setEvidence((previous) => previous.map((entry, entryIndex) => entryIndex === index ? { ...entry, gbSentence: event.target.value } : entry))} /></label>
+          <label>{item.groupKey} · câu GA<LineField aria-label={`${item.groupKey} câu GA`} value={item.gaSentence} disabled={!editable} onChange={(event) => setEvidence((previous) => previous.map((entry, entryIndex) => entryIndex === index ? { ...entry, gaSentence: event.target.value } : entry))} /></label>
+          <label>{item.groupKey} · câu GB<LineField aria-label={`${item.groupKey} câu GB`} value={item.gbSentence} disabled={!editable} onChange={(event) => setEvidence((previous) => previous.map((entry, entryIndex) => entryIndex === index ? { ...entry, gbSentence: event.target.value } : entry))} /></label>
         </div>)}
       </details>
 
@@ -237,8 +238,8 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
         <summary><b>Gói người chấm</b> <span className="xs muted">lời giải, bài mẫu, rubric</span></summary>
         <div className="table-wrap"><table><thead><tr><th>Câu</th><th>Giải thích</th><th>Trích đoạn bằng chứng (câu nghe)</th></tr></thead><tbody>
           {Object.entries(items).map(([key, item]) => <tr key={key}><td>{key}</td>
-            <td><input aria-label={`Giải thích ${key}`} value={item.explanation} disabled={!editable} onChange={(event) => setItems((previous) => ({ ...previous, [key]: { ...previous[key]!, explanation: event.target.value } }))} /></td>
-            <td>{key.startsWith("L") ? <input aria-label={`Bằng chứng ${key}`} value={item.evidence ?? ""} disabled={!editable} onChange={(event) => setItems((previous) => ({ ...previous, [key]: { ...previous[key]!, evidence: event.target.value } }))} /> : null}</td></tr>)}
+            <td><LineField aria-label={`Giải thích ${key}`} value={item.explanation} disabled={!editable} onChange={(event) => setItems((previous) => ({ ...previous, [key]: { ...previous[key]!, explanation: event.target.value } }))} /></td>
+            <td>{key.startsWith("L") ? <LineField aria-label={`Bằng chứng ${key}`} value={item.evidence ?? ""} disabled={!editable} onChange={(event) => setItems((previous) => ({ ...previous, [key]: { ...previous[key]!, evidence: event.target.value } }))} /> : null}</td></tr>)}
         </tbody></table></div>
         <h5>Bài Writing mẫu</h5><p className="small" style={{ whiteSpace: "pre-line" }}>{exam.grader.writingSample || "—"}</p>
         <p className="xs muted">GA chính: {exam.grader.writingGrammarEvidence.gaMain} · GA phụ: {exam.grader.writingGrammarEvidence.gaSecondary} · GB chính: {exam.grader.writingGrammarEvidence.gbMain} · GB phụ: {exam.grader.writingGrammarEvidence.gbSecondary}</p>

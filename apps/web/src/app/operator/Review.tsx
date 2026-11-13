@@ -12,6 +12,7 @@ import { normalizeAudioEvidence, type AudioEvidence } from "../shared/media/audi
 import { normalizeBlankPrompt } from "../learner/text.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { formatScore, formatScoreOutOf } from "../shared/format-score.js";
+import { LineField } from "../shared/LineField.js";
 
 const TABS: Array<[ReviewTab, string]> = [["coach", "Phản hồi Season"], ["appeals", "Kháng nghị"], ["attempts", "Cảnh báo bài tập"]];
 
@@ -209,7 +210,7 @@ export function WeeklyPracticeEditor({ item, readOnly, onSave, compact = false, 
     <div className={`operator-weekly-practice-header${compact ? " compact" : ""}`}>{compact ? null : <div className="operator-weekly-practice-heading"><b>{headingLabel ?? `Tuần ${item.week} · ${item.topic}`}</b><div className="operator-weekly-practice-meta"><LevelChip level={item.cefr} /><span>v{item.version}</span><span>{item.status === "approved" ? "Đã duyệt" : item.status === "review" ? "Chờ duyệt" : "Bản nháp"}</span></div></div>}<Button small aria-label={`Sinh bài cuối tuần · ${context}`} disabled={readOnly || saving} onClick={generate}>Sinh bài cuối tuần</Button></div>
     <div className="operator-weekly-practice-fields"><label>Đề bài<textarea aria-label={`Đề bài · ${context}`} value={task} disabled={readOnly || saving} onChange={event => setTask(event.target.value)} /></label>
     <label>Hướng dẫn<textarea aria-label={`Hướng dẫn · ${context}`} value={guidance} disabled={readOnly || saving} onChange={event => setGuidance(event.target.value)} /></label>
-    <label>Từ bắt buộc<input aria-label={`Từ bắt buộc · ${context}`} value={vocabulary} disabled={readOnly || saving} onChange={event => setVocabulary(event.target.value)} /></label></div>
+    <label>Từ bắt buộc<LineField aria-label={`Từ bắt buộc · ${context}`} value={vocabulary} disabled={readOnly || saving} onChange={event => setVocabulary(event.target.value)} /></label></div>
     {saveError && <div className="small" role="alert">{saveError}</div>}
     <div className="row operator-review-action-footer"><Button small primary aria-label={`Lưu bản nháp · ${context}`} busy={saving} disabled={readOnly || saving || !task.trim() || !guidance.trim() || requiredVocabulary.length > 12} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</Button></div>
   </article>;

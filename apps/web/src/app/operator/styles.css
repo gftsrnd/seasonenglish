@@ -3424,7 +3424,8 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
 .app-operator .operator-weekly-practice-fields { display: grid; gap: 14px; }
 .app-operator .operator-weekly-practice-fields > label { display: grid; gap: 7px; font-size: .84rem; font-weight: 700; }
 .app-operator .operator-weekly-practice-fields textarea { min-height: 94px; line-height: 1.55; padding: 12px 14px; }
-.app-operator .operator-weekly-practice-fields input { min-height: 44px; padding: 10px 14px; }
+.app-operator .operator-weekly-practice-fields input,
+.app-operator .operator-weekly-practice-fields textarea.line-field { min-height: 44px; padding: 10px 14px; }
 .app-operator .operator-weekly-practice-editor .operator-review-action-footer { padding-top: 0; }
 
 @media (max-width: 680px) {
@@ -3620,6 +3621,7 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
 .operator-level-option-editor > label { display: grid; grid-template-columns: 32px minmax(0, 1fr); align-items: center; gap: 8px; }
 .operator-level-option-editor > label > span { color: var(--muted); font-size: .78rem; font-weight: 700; }
 .operator-level-option-editor input,
+.operator-level-option-editor textarea.line-field,
 .operator-level-option-editor select { width: 100%; min-width: 0; }
 .operator-level-option-editor > .operator-level-answer-editor { grid-template-columns: 100px minmax(0, 180px); margin-top: 4px; }
 
@@ -4098,6 +4100,7 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 
 .operator-level-editor-dialog .operator-level-question-content textarea,
 .operator-level-editor-dialog .operator-level-option-editor input,
+.operator-level-editor-dialog .operator-level-option-editor textarea.line-field,
 .operator-level-editor-dialog .operator-level-option-editor select { border-radius: 8px; }
 
 .operator-level-editor-dialog .operator-level-audio-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -4637,7 +4640,7 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 .operator-modal-scope .operator-editor-findings.is-severe { background: #fff4f0; border-top-color: #f0c2b4; }
 .operator-modal-scope .operator-editor-findings-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .operator-modal-scope .operator-editor-findings-count { flex: none; font-weight: 700; color: var(--text); }
-.operator-modal-scope .operator-editor-findings-first { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.operator-modal-scope .operator-editor-findings-first { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; text-align: left; }
 .operator-modal-scope .operator-editor-finding-link { padding: 0; border: 0; background: none; box-shadow: none; font: inherit; font-weight: 400; color: var(--text); text-align: left; cursor: pointer; min-height: 0 !important; }
 .operator-modal-scope .operator-editor-finding-link strong { color: var(--brown, #8a4d08); text-decoration: underline; text-underline-offset: 2px; }
 /* Buttons are inline-flex app-wide, which squeezed the section label to min-content; the collapsed first line is a
@@ -4662,7 +4665,7 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 .operator-modal-scope .operator-review-variant-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .operator-modal-scope .operator-review-question .grid.cols-2 { gap: 16px; }
 .operator-modal-scope .operator-grammar-example-list { display: grid; gap: 8px; }
-/* Lesson editor one-line fields (LineField): look like an input, start one row high and grow to show all their text. */
-.app-operator textarea.operator-line-field,
-.operator-modal-scope textarea.operator-line-field,
-body > .operator-modal-scope .operator-editor-section textarea.operator-line-field { min-height: 40px; line-height: 1.35; resize: vertical; overflow: hidden; overflow-wrap: anywhere; }
+/* One-line fields (LineField): look like an input, start one row high and grow to show all their text. */
+.app-operator textarea.line-field,
+.operator-modal-scope textarea.line-field,
+body > .operator-modal-scope .operator-editor-section textarea.line-field { min-height: 40px; line-height: 1.35; resize: vertical; overflow: hidden; overflow-wrap: anywhere; }

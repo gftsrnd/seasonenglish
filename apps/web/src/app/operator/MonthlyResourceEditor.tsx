@@ -4,6 +4,7 @@ import type { CefrLevel, MonthFrameworkView, MonthlyResourceEditInput, MonthlyRe
 import type { MonthlyIllustrationsView, MonthlyResourceCheckpointPrefillView } from "../../api/operator.js";
 import { IllustrationTile, illustrationsEditable } from "./MonthlyIllustrationPanel.js";
 import { operatorRegisterKindLabel, operatorRegisterNote } from "./register-terms.js";
+import { LineField } from "../shared/LineField.js";
 
 type Resources = NonNullable<MonthFrameworkView["resources"]>;
 type SupportRow = MonthlyResourceEditInput["supportTerms"][number];
@@ -196,7 +197,7 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
                 {!CORE_TYPES.includes(core.type as (typeof CORE_TYPES)[number]) && <option value={core.type}>{core.type || "—"}</option>}
                 {CORE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
               </select></label>
-              <label>Nghĩa<input aria-label={`Nghĩa từ cốt lõi ${index + 1}`} aria-invalid={invalid(core.id, "meaning")} value={core.meaning} disabled={disabled} onChange={(event) => updateCore(core.id, { meaning: event.target.value })} /></label>
+              <label>Nghĩa<LineField aria-label={`Nghĩa từ cốt lõi ${index + 1}`} aria-invalid={invalid(core.id, "meaning")} value={core.meaning} disabled={disabled} onChange={(event) => updateCore(core.id, { meaning: event.target.value })} /></label>
               <label>IPA<input aria-label={`IPA từ cốt lõi ${index + 1}`} aria-invalid={invalid(core.id, "ipa")} value={core.ipa} disabled={disabled} onChange={(event) => updateCore(core.id, { ipa: event.target.value })} /></label>
             </div>
             {rowErrors(core.id)}
@@ -214,7 +215,7 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
               {supports.map((support, supportIndex) => <div key={support.id} className="monthly-resource-editor-support">
                 <div className="monthly-resource-editor-row support">
                   <input aria-label={`Từ mở rộng ${supportIndex + 1} của ${core.word}`} aria-invalid={invalid(support.id, "word")} placeholder="Từ" value={support.word} disabled={disabled} onChange={(event) => updateSupport(support.id, { word: event.target.value })} />
-                  <input aria-label={`Nghĩa từ mở rộng ${supportIndex + 1} của ${core.word}`} aria-invalid={invalid(support.id, "meaning")} placeholder="Nghĩa" value={support.meaning} disabled={disabled} onChange={(event) => updateSupport(support.id, { meaning: event.target.value })} />
+                  <LineField aria-label={`Nghĩa từ mở rộng ${supportIndex + 1} của ${core.word}`} aria-invalid={invalid(support.id, "meaning")} placeholder="Nghĩa" value={support.meaning} disabled={disabled} onChange={(event) => updateSupport(support.id, { meaning: event.target.value })} />
                   <input aria-label={`Từ loại từ mở rộng ${supportIndex + 1} của ${core.word}`} aria-invalid={invalid(support.id, "type")} placeholder="Từ loại" value={support.type} disabled={disabled} onChange={(event) => updateSupport(support.id, { type: event.target.value })} />
                   <select aria-label={`Quan hệ từ mở rộng ${supportIndex + 1} của ${core.word}`} value={support.relation} disabled={disabled} onChange={(event) => updateSupport(support.id, { relation: event.target.value as Relation })}>{RELATIONS.map((relation) => <option key={relation.value} value={relation.value}>{relation.label}</option>)}</select>
                   <select aria-label={`CEFR từ mở rộng ${supportIndex + 1} của ${core.word}`} aria-invalid={invalid(support.id, "cefr")} value={support.cefr ?? ""} disabled={disabled} onChange={(event) => updateSupport(support.id, { cefr: (event.target.value || undefined) as CefrLevel | undefined })}><option value="">CEFR —</option>{LEVELS.map((level) => <option key={level} value={level}>{level}</option>)}</select>
@@ -237,8 +238,8 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
           {topic.steps.map((step, stepIndex) => <div key={step.id} className="monthly-resource-editor-step">
             <span className="eyebrow">Bước {stepIndex + 1}</span>
             <div className="monthly-resource-editor-row grammar">
-              <label>Trọng tâm<input aria-label={`Trọng tâm chủ điểm ${topicIndex + 1} bước ${stepIndex + 1}`} aria-invalid={invalid(step.id, "focus")} value={step.focus} disabled={disabled} onChange={(event) => updateStep(topic.id, step.id, { focus: event.target.value })} /></label>
-              <label>Công thức<input aria-label={`Công thức chủ điểm ${topicIndex + 1} bước ${stepIndex + 1}`} aria-invalid={invalid(step.id, "formula")} value={step.formula} disabled={disabled} onChange={(event) => updateStep(topic.id, step.id, { formula: event.target.value })} /></label>
+              <label>Trọng tâm<LineField aria-label={`Trọng tâm chủ điểm ${topicIndex + 1} bước ${stepIndex + 1}`} aria-invalid={invalid(step.id, "focus")} value={step.focus} disabled={disabled} onChange={(event) => updateStep(topic.id, step.id, { focus: event.target.value })} /></label>
+              <label>Công thức<LineField aria-label={`Công thức chủ điểm ${topicIndex + 1} bước ${stepIndex + 1}`} aria-invalid={invalid(step.id, "formula")} value={step.formula} disabled={disabled} onChange={(event) => updateStep(topic.id, step.id, { formula: event.target.value })} /></label>
               <label>Cách dùng<textarea aria-label={`Cách dùng chủ điểm ${topicIndex + 1} bước ${stepIndex + 1}`} aria-invalid={invalid(step.id, "usage")} value={step.usage} disabled={disabled} onChange={(event) => updateStep(topic.id, step.id, { usage: event.target.value })} /></label>
               {[0, 1].map(offset => <label key={offset}>Mục tiêu ngày {stepIndex * 2 + offset + 1}<textarea aria-label={`Mục tiêu ngày ${stepIndex * 2 + offset + 1} chủ điểm ${topicIndex + 1}`} value={step.dailyObjectives?.[offset] ?? ""} disabled={disabled} onChange={event => { const objectives = [...(step.dailyObjectives ?? ["", ""])]; objectives[offset] = event.target.value; updateStep(topic.id, step.id, { dailyObjectives: objectives.some(Boolean) ? objectives : undefined }); }} /></label>)}
               <label>Ví dụ (mỗi dòng một câu)<textarea aria-label={`Ví dụ chủ điểm ${topicIndex + 1} bước ${stepIndex + 1}`} aria-invalid={invalid(step.id, "examples")} value={step.examples.join("\n")} disabled={disabled} onChange={(event) => updateStep(topic.id, step.id, { examples: event.target.value.split("\n") })} /></label>

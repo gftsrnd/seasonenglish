@@ -1037,12 +1037,7 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
 }
 
 .sort-context {
-  display: -webkit-box;
   margin: 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
   color: var(--text);
   line-height: 1.4;
   overflow-wrap: anywhere;

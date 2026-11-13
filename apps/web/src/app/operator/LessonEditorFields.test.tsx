@@ -21,7 +21,7 @@ describe("LessonEditorFields LineField", () => {
     const field = screen.getByLabelText("Câu hỏi");
     expect(field.tagName).toBe("TEXTAREA");
     expect(field).toHaveAttribute("rows", "1");
-    expect(field).toHaveClass("operator-line-field");
+    expect(field).toHaveClass("line-field");
     expect(field.style.height).toMatch(/^\d+(\.\d+)?px$/);
     expect(parseFloat(field.style.height)).toBeGreaterThanOrEqual(62);
   });
@@ -34,6 +34,20 @@ describe("LessonEditorFields LineField", () => {
     expect(fireEvent.keyDown(field, { key: "a" })).toBe(true);
     fireEvent.change(field, { target: { value: "Where do\nthey\r\nwork?" } });
     expect(field).toHaveValue("Where do they work?");
+  });
+
+  it("with grow={false} keeps the surrounding box size but still keeps one line", () => {
+    vi.spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get").mockReturnValue(62);
+    const onChange = vi.fn();
+    render(<label>Tiêu đề<LineField grow={false} value="Tháng 1" onChange={onChange} /></label>);
+    const field = screen.getByLabelText("Tiêu đề");
+    expect(field.tagName).toBe("TEXTAREA");
+    expect(field).not.toHaveClass("line-field");
+    expect(field).not.toHaveAttribute("rows");
+    expect(field.style.height).toBe("");
+    expect(fireEvent.keyDown(field, { key: "Enter" })).toBe(false);
+    fireEvent.change(field, { target: { value: "Tháng\n1" } });
+    expect(onChange.mock.calls[0]?.[0].target.value).toBe("Tháng 1");
   });
 
   it("renders answer choices as growing fields with their labels and option index", () => {
@@ -51,7 +65,7 @@ describe("LessonEditorFields LineField", () => {
     render(<ModalProvider><LessonFormEditor weekNumber={2} cefr="A2" initial={emptyLesson(1)} onSave={() => undefined} onCancel={() => undefined} /></ModalProvider>);
     for (const label of ["Tiêu đề bài", "Đọc – Câu hỏi", "Đọc – Lựa chọn 1", "Nghe – Câu hỏi", "Nghe – Lựa chọn 4", "Yêu cầu", "Âm mục tiêu", "Mẹo phát âm"]) {
       expect(screen.getByLabelText(label).tagName, label).toBe("TEXTAREA");
-      expect(screen.getByLabelText(label), label).toHaveClass("operator-line-field");
+      expect(screen.getByLabelText(label), label).toHaveClass("line-field");
     }
   });
 });

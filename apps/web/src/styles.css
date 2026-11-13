@@ -229,6 +229,8 @@ label { display: grid; gap: 5px; color: var(--muted); font-size: .8rem; font-wei
 input, textarea, select { width: 100%; min-height: 42px; border: 1px solid #d6d1c8; border-radius: 10px; background: var(--surface); padding: 10px 14px; color: var(--text); font-size: .92rem; }
 input:focus, textarea:focus, select:focus { border-color: var(--primary); outline: 0; box-shadow: 0 0 0 3px var(--primary-glow); }
 textarea { min-height: 70px; resize: vertical; }
+/* One-line fields (LineField): an input-sized box that wraps and grows with its text instead of cutting it off. */
+textarea.line-field { min-height: 42px; resize: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .choice-set { grid-column: 1/-1; border: 0; padding: 0; }
 .choice-set legend { margin-bottom: 7px; color: #57514a; font-size: 11px; font-weight: 650; }
 .choice-grid { display: flex; flex-wrap: wrap; gap: 7px; }

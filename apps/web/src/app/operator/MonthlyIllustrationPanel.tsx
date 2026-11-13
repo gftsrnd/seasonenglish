@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ImageUp, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import type { MonthlyIllustrationsView, MonthlyIllustrationView } from "../../api/operator.js";
+import { LineField } from "../shared/LineField.js";
 
 /**
  * Core-word illustrations of the month: one square 256px picture per core word.
@@ -75,7 +76,7 @@ export function IllustrationTile({ image, canEdit, canGenerate, onGenerate, onUp
       {onRemove && image.url ? <button type="button" className="monthly-illustration-action" aria-label={`Xóa ảnh của ${image.word}`} title="Xóa ảnh (từ này sẽ chỉ hiện chữ)" onClick={() => void onRemove(image.word)}><Trash2 size={14} aria-hidden="true" /> Xóa ảnh</button> : null}
     </div> : null}
     {hintOpen && editable ? <form className="monthly-illustration-hint" onSubmit={(event) => { event.preventDefault(); setHintOpen(false); void onGenerate({ words: [image.word], ...(hint.trim() ? { hint: hint.trim() } : {}) }); }}>
-      <input value={hint} maxLength={300} placeholder="Gợi ý thêm (không bắt buộc), vd: vẽ cảnh họp" aria-label={`Gợi ý vẽ lại ${image.word}`} onChange={(event) => setHint(event.target.value)} />
+      <LineField value={hint} maxLength={300} placeholder="Gợi ý thêm (không bắt buộc), vd: vẽ cảnh họp" aria-label={`Gợi ý vẽ lại ${image.word}`} onChange={(event) => setHint(event.target.value)} />
       <button type="submit" className="btn-sm btn-primary">Vẽ lại</button>
     </form> : null}
   </Tag>;

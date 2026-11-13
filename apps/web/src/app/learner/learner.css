@@ -1837,8 +1837,8 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .coach-page .coach-word-list{gap:8px}
 .coach-page .coach-surface .coach-word-chip{width:38px;height:38px;min-width:38px;min-height:38px;justify-content:center;border:1px solid #ddd8d0;border-radius:11px;background:#f5f4f1;padding:0;color:#746d65;box-shadow:none}
 .coach-page .coach-surface .coach-word-chip.is-locked:hover{border-color:var(--primary-line);background:var(--primary-soft);color:var(--primary-dark);transform:translateY(-1px)}
-.coach-page .coach-surface .coach-word-chip.is-opened{width:auto;max-width:180px;padding:0 12px;border-color:var(--secondary-line);background:var(--secondary-soft);color:var(--secondary)}
-.coach-page .coach-surface .coach-word-chip.is-opened b{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.coach-page .coach-surface .coach-word-chip.is-opened{width:auto;height:auto;max-width:180px;padding:4px 12px;border-color:var(--secondary-line);background:var(--secondary-soft);color:var(--secondary)}
+.coach-page .coach-surface .coach-word-chip.is-opened b{max-width:100%}
 .coach-page .coach-surface .coach-word-chip.is-locked{width:auto;max-width:240px;padding:0 12px;gap:7px;cursor:default}
 .coach-page .coach-surface .coach-word-chip span,.coach-page .coach-surface .coach-word-chip b{min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.25}
 .coach-page .coach-surface .coach-word-chip.is-locked:hover{transform:none}
@@ -1857,7 +1857,7 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .coach-page .audio-capture-preview audio{display:none}
 .coach-page .audio-capture-replay{display:inline-flex;align-items:center;gap:5px;min-width:0;height:34px;padding:0 8px;white-space:nowrap}
 .coach-page .audio-capture-remove{display:inline-grid;place-items:center;width:32px;min-width:32px;height:32px;padding:0;color:var(--danger)}
-.coach-page .audio-capture-status{max-width:112px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.75rem;color:var(--muted)}
+.coach-page .audio-capture-status{min-width:0;max-width:220px;white-space:normal;overflow-wrap:anywhere;line-height:1.2;font-size:.75rem;color:var(--muted)}
 .coach-page .audio-capture-status--error{padding:0;border:0;background:transparent;color:var(--danger);cursor:pointer}
 @media(max-width:480px){
   .coach-page .chat-compose{gap:4px!important;margin-inline:8px!important}

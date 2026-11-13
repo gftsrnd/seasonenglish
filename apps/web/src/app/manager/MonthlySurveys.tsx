@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { LineField } from "../shared/LineField.js";
 import {
   MONTHLY_SURVEY_LIMITS as limits,
   type ManagerMonthlySurveyView,
@@ -226,12 +227,12 @@ function SurveyDraftEditor({ definition, busy, onChange, onSave, onClose }: {
   return <form className="monthly-survey-editor" onSubmit={onSave}>
     <fieldset className="monthly-survey-stack monthly-survey-fieldset" disabled={busy} aria-label="Soạn khảo sát">
       <label className="monthly-survey-field"><span>Tiêu đề khảo sát</span>
-        <input value={definition.title} maxLength={limits.title} onChange={event => onChange({ ...definition, title: event.target.value })} />
+        <LineField value={definition.title} maxLength={limits.title} onChange={event => onChange({ ...definition, title: event.target.value })} />
       </label>
       {questions.map((question, index) => <fieldset className="monthly-survey-question monthly-survey-stack" key={index}>
         <legend>Câu hỏi {index + 1}</legend>
         <label className="monthly-survey-field"><span>Nội dung câu hỏi</span>
-          <input value={question.prompt} maxLength={limits.prompt} onChange={event => updateQuestion(index, { ...question, prompt: event.target.value })} />
+          <LineField value={question.prompt} maxLength={limits.prompt} onChange={event => updateQuestion(index, { ...question, prompt: event.target.value })} />
         </label>
         <label className="monthly-survey-field"><span>Loại câu hỏi</span>
           <select value={question.kind} onChange={event => {
@@ -247,7 +248,7 @@ function SurveyDraftEditor({ definition, busy, onChange, onSave, onClose }: {
         {question.kind === "single_choice" ? <>
           {question.options.map((option, optionIndex) => <div key={optionIndex} className="monthly-survey-option">
             <label className="monthly-survey-field"><span>Lựa chọn {optionIndex + 1}</span>
-              <input value={option} maxLength={limits.option} onChange={event => updateQuestion(index, {
+              <LineField value={option} maxLength={limits.option} onChange={event => updateQuestion(index, {
                 ...question, options: question.options.map((item, i) => i === optionIndex ? event.target.value : item)
               })} />
             </label>

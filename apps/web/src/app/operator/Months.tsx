@@ -22,6 +22,7 @@ import { MonthlyIllustrationPanel, illustrationCounts } from "./MonthlyIllustrat
 import type { MonthlyIllustrationsView } from "../../api/operator.js";
 import "./months.css";
 import { operatorRegisterKindLabel, operatorRegisterNote, type OperatorRegisterTerm } from "./register-terms.js";
+import { LineField } from "../shared/LineField.js";
 
 type MonthlyBriefInput = { title: string; brief: string; context: string; communicationGoal: string };
 type MonthlyDayInput = { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> };
@@ -546,7 +547,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       </div> : null}
       <div id="monthly-brief-fields" hidden={compact && briefLocked && briefEditorMonth !== month}>
       <div className="monthly-topic-grid">
-        <label>Tiêu đề<input value={brief.title} disabled={!canEdit || busy} onChange={(event) => setBrief({ ...brief, title: event.target.value })} /></label>
+        <label>Tiêu đề<LineField grow={false} value={brief.title} disabled={!canEdit || busy} onChange={(event) => setBrief({ ...brief, title: event.target.value })} /></label>
         <label>Mô tả<textarea value={brief.brief} disabled={!canEdit || busy} onChange={(event) => setBrief({ ...brief, brief: event.target.value })} /></label>
         <label>Bối cảnh<textarea value={brief.context} disabled={!canEdit || busy} onChange={(event) => setBrief({ ...brief, context: event.target.value })} /></label>
         <label>Mục tiêu giao tiếp<textarea value={brief.communicationGoal} disabled={!canEdit || busy} onChange={(event) => setBrief({ ...brief, communicationGoal: event.target.value })} /></label>
