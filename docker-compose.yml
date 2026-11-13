@@ -92,6 +92,8 @@ services:
       AI_PROVIDER: ${AI_PROVIDER:-anthropic}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
+      # Hard ceiling on AI calls per monthly resource generation request (progress is kept when it is reached).
+      MONTHLY_RESOURCE_AI_CALL_LIMIT: ${MONTHLY_RESOURCE_AI_CALL_LIMIT:-800}
       # Core-word illustrations (monthly resources). Leave the key empty to disable AI images.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-}
