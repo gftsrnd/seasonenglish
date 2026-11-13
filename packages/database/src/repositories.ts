@@ -1551,15 +1551,15 @@ class LearningRepository {
     );
     const row = result.rows[0];
     if (!row) throw new Error("Could not persist lesson progress");
-    if (input.progress.status === "completed") {
+    if (input.progress.status === "completed") await withLearnerRewardLock(this.pool, input.learnerId, async (client) => {
       const [previousActivities, lessonDuration] = await Promise.all([
-        this.pool.query<{ count: string }>(
+        client.query<{ count: string }>(
           `select count(*)::text as count from activities
            where learner_id = $1 and reference_type = 'lesson' and reference_id = $2
              and activity_type in ('lesson', 'lesson_review')`,
           [input.learnerId, input.lessonId]
         ),
-        this.pool.query<{ duration_minutes: string | null }>(
+        client.query<{ duration_minutes: string | null }>(
           `select case
                     when coalesce(content->>'durationMinutes', '') ~ '^\\d+$'
                       then content->>'durationMinutes'
@@ -1576,7 +1576,7 @@ class LearningRepository {
         Number(previousActivities.rows[0]?.count ?? 0),
         Number(lessonDuration.rows[0]?.duration_minutes ?? 10)
       );
-      await this.pool.query(
+      await client.query(
         `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
          values ($1, $2, $3, 'lesson', $4, $5, $6::jsonb)`,
         [
@@ -1584,8 +1584,8 @@ class LearningRepository {
           JSON.stringify({ score: input.progress.score ?? null, review: activity.activityType === "lesson_review" })
         ]
       );
-      await syncLearnerRewards(this.pool, input.learnerId);
-    }
+      await syncLearnerRewards(client, input.learnerId);
+    });
     return mapProgress(row.status, row.score, row.evidence, row.updated_at);
   }
 
@@ -1734,12 +1734,7 @@ class LearningRepository {
               JSON.stringify({ completedPartCodes, evidence: mergedEvidence })]
           );
           if (storedEvidence.status === "correct" && storedEvidence.score && storedEvidence.score > 0) {
-            await client.query(
-              `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
-               values ($1, $2, null, $4, 'lesson_part', $3)
-               on conflict do nothing`,
-              [randomUUID(), input.learnerId, attemptId, Math.max(1, 6 - storedEvidence.attempts)]
-            );
+            await awardLessonPartPoints(client, input.learnerId, attemptId, Math.max(1, 6 - storedEvidence.attempts));
           }
           await client.query("commit");
         }
@@ -1822,11 +1817,7 @@ class LearningRepository {
       const evidence = mapPartEvidence(row);
       await applyLessonAttemptEvidence(client, input.learnerId, row, evidence);
       if (input.status === "correct") {
-        await client.query(
-          `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
-           values ($1, $2, null, $4, 'lesson_part', $3) on conflict do nothing`,
-          [randomUUID(), input.learnerId, row.id, Math.max(1, 6 - row.attempt_number)]
-        );
+        await awardLessonPartPoints(client, input.learnerId, row.id, Math.max(1, 6 - row.attempt_number));
       }
       if (input.transcript !== undefined && row.artifact_key) {
         await client.query(
@@ -2549,15 +2540,17 @@ class LearningRepository {
       [microLessonId, learnerId]
     );
     if (!updated.rowCount) return null;
-    await this.pool.query(
-      `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
-       select $1, $2, 'micro_lesson', 'micro_lesson', $3, 5,
-              jsonb_build_object('score', (progress->'attempt'->>'score')::int)
-       from micro_lessons where id = $3 and learner_id = $2
-       and not exists (select 1 from activities where learner_id = $2 and reference_type = 'micro_lesson' and reference_id = $3)`,
-      [randomUUID(), learnerId, microLessonId]
-    );
-    await syncLearnerRewards(this.pool, learnerId);
+    await withLearnerRewardLock(this.pool, learnerId, async (client) => {
+      await client.query(
+        `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
+         select $1, $2, 'micro_lesson', 'micro_lesson', $3, 5,
+                jsonb_build_object('score', (progress->'attempt'->>'score')::int)
+         from micro_lessons where id = $3 and learner_id = $2
+         and not exists (select 1 from activities where learner_id = $2 and reference_type = 'micro_lesson' and reference_id = $3)`,
+        [randomUUID(), learnerId, microLessonId]
+      );
+      await syncLearnerRewards(client, learnerId);
+    });
     return this.findMicroLesson(learnerId, microLessonId);
   }
 }
@@ -2578,9 +2571,22 @@ function normalizeSeasonLevel(value: number | undefined): 2 | 3 | 4 {
   return value === 3 || value === 4 ? value : 2;
 }
 
+/**
+ * The learner's Season. Tiers are climbed in order, each needing its points and
+ * all of its badges, so badges of a higher tier never skip a missing lower tier
+ * (the rule the profile text, the manager column and the reward simulator use).
+ */
+export function seasonForRewards(points: number, badges: ReadonlySet<string>): (typeof SEASONS)[number] {
+  let current: (typeof SEASONS)[number] = SEASONS[0];
+  for (const season of SEASONS.slice(1)) {
+    if (points < season.pointsRequired || !season.badges.every((badge) => badges.has(badge))) break;
+    current = season;
+  }
+  return current;
+}
+
 function seasonFor(points: number, badges: Set<string>) {
-  return [...SEASONS].reverse().find((season) =>
-    points >= season.pointsRequired && season.badges.every((badge) => badges.has(badge))) ?? SEASONS[0];
+  return seasonForRewards(points, badges);
 }
 
 function nextSeasonFor(points: number, badges: Set<string>) {
@@ -6458,13 +6464,15 @@ class AssessmentRepository {
         );
       }
       await client.query("commit");
-      await this.pool.query(
-        `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
-         select $1, $2, 'assessment', 'assessment_attempt', $3, 30, '{}'::jsonb
-         where not exists (select 1 from activities where learner_id = $2 and reference_type = 'assessment_attempt' and reference_id = $3)`,
-        [randomUUID(), input.learnerId, input.attemptId]
-      );
-      await syncLearnerRewards(this.pool, input.learnerId);
+      await withLearnerRewardLock(this.pool, input.learnerId, async (rewardClient) => {
+        await rewardClient.query(
+          `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
+           select $1, $2, 'assessment', 'assessment_attempt', $3, 30, '{}'::jsonb
+           where not exists (select 1 from activities where learner_id = $2 and reference_type = 'assessment_attempt' and reference_id = $3)`,
+          [randomUUID(), input.learnerId, input.attemptId]
+        );
+        await syncLearnerRewards(rewardClient, input.learnerId);
+      });
       return this.findAttempt(input.learnerId, input.attemptId);
     } catch (error) {
       await client.query("rollback");
@@ -10202,13 +10210,15 @@ class EngagementRepository {
         input.duelId ?? null, JSON.stringify({ correct: input.correct, total: input.total, evidence: input.details })]
     );
     const row = result.rows[0]!;
-    await this.pool.query(
-      `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
-       select $1, $2, 'game', 'game_result', $3, 5, $4::jsonb
-       where not exists (select 1 from activities where learner_id = $2 and reference_type = 'game_result' and reference_id = $3)`,
-      [randomUUID(), input.learnerId, row.id, JSON.stringify({ game: input.game, score: input.score, maxScore: input.maxScore })]
-    );
-    await syncLearnerRewards(this.pool, input.learnerId);
+    await withLearnerRewardLock(this.pool, input.learnerId, async (client) => {
+      await client.query(
+        `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
+         select $1, $2, 'game', 'game_result', $3, 5, $4::jsonb
+         where not exists (select 1 from activities where learner_id = $2 and reference_type = 'game_result' and reference_id = $3)`,
+        [randomUUID(), input.learnerId, row.id, JSON.stringify({ game: input.game, score: input.score, maxScore: input.maxScore })]
+      );
+      await syncLearnerRewards(client, input.learnerId);
+    });
     return gameResultView(row);
   }
 
@@ -14570,7 +14580,62 @@ async function applyScheduledLevelChanges(
   }
 }
 
+/**
+ * Pays a correct lesson part (+5 on the first try, one less per retry) only for
+ * the first correct answer of that part: answering the same part again later
+ * (new request, another attempt after a correct answer) never adds points.
+ */
+async function awardLessonPartPoints(client: PoolClient, learnerId: string, attemptId: string, points: number): Promise<void> {
+  await lockLearnerRewards(client, learnerId);
+  await client.query(
+    `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
+     select $1, $2, null, $4, 'lesson_part', attempt.id
+     from lesson_part_attempts attempt
+     where attempt.id = $3 and attempt.learner_id = $2
+       and not exists (
+         select 1 from reward_events paid
+         join lesson_part_attempts earlier on earlier.id = paid.source_id
+         where paid.learner_id = $2 and paid.source_type = 'lesson_part' and paid.badge_id is null and paid.points > 0
+           and earlier.lesson_id = attempt.lesson_id and earlier.part_code = attempt.part_code)
+     on conflict do nothing`,
+    [randomUUID(), learnerId, attemptId, points]
+  );
+}
+
+/**
+ * Serialises reward work for one learner until the surrounding transaction ends,
+ * so parallel requests (double click, retry, two tabs) cannot award the same
+ * activity twice or collide on the reward ledger's business keys.
+ */
+async function lockLearnerRewards(client: PoolClient, learnerId: string): Promise<void> {
+  await client.query("select pg_advisory_xact_lock(hashtext($1))", [`rewards:${learnerId}`]);
+}
+
+/** Runs `work` in its own transaction holding the learner's reward lock. */
+async function withLearnerRewardLock<T>(pool: Pool, learnerId: string, work: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await lockLearnerRewards(client, learnerId);
+    const result = await work(client);
+    await client.query("commit");
+    return result;
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Promise<void> {
+  if (!("release" in db)) {
+    await withLearnerRewardLock(db, learnerId, (client) => syncLearnerRewards(client, learnerId));
+    return;
+  }
+  await lockLearnerRewards(db, learnerId);
+  // One activity earns points once. When the same action was recorded twice
+  // (a historical race), only the earliest row of that reference is paid.
   await db.query(
     `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
      select gen_random_uuid(), a.learner_id, null,
@@ -14589,7 +14654,15 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
          where ct.id = a.reference_id and coalesce(cs.scenario->>'kind', 'practice') = 'level_up'
        ))
        and not exists (select 1 from reward_events re where re.learner_id = a.learner_id
-         and re.source_type = 'activity_points' and re.source_id = a.id and re.badge_id is null)`,
+         and re.source_type = 'activity_points' and re.source_id = a.id and re.badge_id is null)
+       and (a.reference_id is null or not exists (
+         select 1 from activities twin
+         where twin.learner_id = a.learner_id and twin.activity_type = a.activity_type
+           and twin.reference_type = a.reference_type and twin.reference_id = a.reference_id and twin.id <> a.id
+           and ((twin.occurred_at, twin.id) < (a.occurred_at, a.id)
+             or exists (select 1 from reward_events paid where paid.learner_id = twin.learner_id
+               and paid.source_type = 'activity_points' and paid.source_id = twin.id and paid.badge_id is null))))
+     on conflict (learner_id, source_type, source_id) where badge_id is null do nothing`,
     [learnerId]
   );
 
