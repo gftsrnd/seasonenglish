@@ -491,3 +491,6 @@ details.monthly-resource-editor-section>:not(summary)+:not(summary){margin-top:1
 /* Slang / formal alternatives continue the expanded list in their own colour. */
 .monthly-resource-collection li.register{border-color:#cdbfe6;background:#f1ecfa}
 .monthly-resource-collection li.register small{color:#5b4691}
+.monthly-resource-checkpoint .monthly-resource-checkpoint-suggestion{margin-top:6px;color:var(--text)}
+.monthly-resource-editor-missing{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;border:1px solid var(--warn-line,var(--line));background:var(--warn-tint,var(--surface-3));color:var(--text);font-size:.72rem;font-style:normal;font-weight:600}
+.monthly-resource-editor-prefill{margin:0 0 10px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-3);font-size:.82rem}

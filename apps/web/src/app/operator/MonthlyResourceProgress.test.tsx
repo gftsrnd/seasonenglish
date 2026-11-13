@@ -12,4 +12,8 @@ describe("monthly resource progress",()=>{
  render(<MonthlyResourceProgress running={false} progress={{runId:"r",status:"failed",phase:"grammarTopics",counts:{coreTerms:48,expandedTerms:204},startedAt:"2026-11-06T00:00:00Z",updatedAt:"2026-11-06T00:01:00Z"}} />);
  expect(screen.getByRole("status")).toHaveTextContent("Chưa hoàn tất ở phần Ngữ pháp");expect(screen.getByText("Phát âm").closest("li")).toHaveAttribute("data-state","waiting");
  });
+ it("labels an unfinished stage neutrally as in progress, not as an error",()=>{
+ render(<MonthlyResourceProgress running={false} progress={{runId:"r",status:"failed",phase:"expandedTerms",counts:{coreTerms:54,expandedTerms:240},startedAt:"2026-11-06T00:00:00Z",updatedAt:"2026-11-06T00:01:00Z"}} />);
+ expect(screen.getByText("Từ mở rộng").closest("li")).toHaveTextContent("Đang làm dở");expect(screen.queryByText("Cần thử lại")).toBeNull();
+ });
 });

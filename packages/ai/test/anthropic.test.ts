@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { NATIVE_JSON_FIELD_INSTRUCTION, createAnthropicProvider } from "../src/providers/anthropic.js";
+import { ANTHROPIC_MAX_RETRY_AFTER_MS, NATIVE_JSON_FIELD_INSTRUCTION, createAnthropicProvider } from "../src/providers/anthropic.js";
+import { createAiService } from "../src/service.js";
+import { AI_TASKS } from "../src/registry.js";
 import { weeklyLessonsOutputJsonSchema } from "../src/schemas.js";
 
 describe("Anthropic provider", () => {
@@ -432,5 +434,44 @@ describe("Anthropic provider native JSON field instruction", () => {
   it("leaves other tasks' system text unchanged", async () => {
     expect(await systemTextFor("weekly_lesson_day")).not.toContain(NATIVE_JSON_FIELD_INSTRUCTION);
     expect(await systemTextFor("level_form_listening_generation")).not.toContain(NATIVE_JSON_FIELD_INSTRUCTION);
+  });
+
+  it("fails fast on a 429 with a Retry-After longer than a minute instead of waiting it out on every attempt", async () => {
+    const fetch = vi.fn().mockImplementation(async () => new Response("rate-limited", { status: 429, headers: { "retry-after": "180" } }));
+    const provider = createAnthropicProvider({ apiKey: "test-secret-key", fetch });
+    await expect(provider.complete({
+      taskId: "coach_dialogue", systemPrompt: "Coach safely.", input: { message: "Hello" },
+      outputJsonSchema: { type: "object" }, signal: new AbortController().signal, traceId: "trace-long-retry-after"
+    })).rejects.toMatchObject({ code: "AI_PROVIDER_RATE_LIMIT", retryable: false, retryAfterMs: 180_000 });
+    expect(180_000).toBeGreaterThan(ANTHROPIC_MAX_RETRY_AFTER_MS);
+
+    // Through the runner: one provider call, no sleep, the rate-limit code surfaces.
+    fetch.mockClear();
+    const sleep = vi.fn(async () => undefined);
+    const service = createAiService({ registry: AI_TASKS, provider, loadPrompt: async () => "Coach safely.", sleep });
+    await expect(service.runTask("coach_dialogue", {
+      message: "I work at product.", cefr: "A2", persona: "formal", mode: "practice",
+      scenario: "Daily meeting", currentQuestion: "Where do you work?", priorTurns: []
+    })).rejects.toMatchObject({ code: "AI_PROVIDER_RATE_LIMIT" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("keeps short 429 retries: a brief Retry-After is waited out and the call is retried", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response("rate-limited", { status: 429, headers: { "retry-after": "2" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        stop_reason: "end_turn",
+        content: [{ type: "tool_use", input: { reply: "Hi", correction: null, nextQuestion: null, mistakes: [] } }]
+      }), { status: 200 }));
+    const provider = createAnthropicProvider({ apiKey: "test-secret-key", fetch });
+    const sleep = vi.fn(async () => undefined);
+    const service = createAiService({ registry: AI_TASKS, provider, loadPrompt: async () => "Coach safely.", sleep, retryBaseDelayMs: 0 });
+    await service.runTask("coach_dialogue", {
+      message: "I work at product.", cefr: "A2", persona: "formal", mode: "practice",
+      scenario: "Daily meeting", currentQuestion: "Where do you work?", priorTurns: []
+    }).catch(() => undefined);
+    expect(fetch.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(sleep).toHaveBeenCalledWith(2000);
   });
 });

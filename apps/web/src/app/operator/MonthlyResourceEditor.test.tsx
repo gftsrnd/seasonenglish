@@ -118,3 +118,45 @@ describe("MonthlyResourceEditor", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 });
+
+describe("MonthlyResourceEditor prefilled from a generation checkpoint", () => {
+  afterEach(() => cleanup());
+  const blankGrammar = [{ id: "grammar-1", title: "", steps: [1, 2, 3].map((step) => ({ id: `grammar-1-${step}`, focus: "", formula: "", usage: "", examples: [] })) }];
+  const blankSounds = [{ id: "sound-1", ipa: "", label: "", examples: [] }];
+  const prefilled: Resources = {
+    ...resources,
+    coreTerms: resources.coreTerms.map((core, index) => ({ ...core, id: `core-${index + 1}` })),
+    supportTerms: resources.supportTerms.map((term) => ({ ...term, relatedCoreTermId: term.relatedCoreTermId === "a2-core-1" ? "core-1" : "core-2" })),
+    grammarTopics: blankGrammar,
+    sounds: blankSounds
+  };
+  const prefill = { source: "checkpoint" as const, generationId: "generation-1", updatedAt: "2026-11-04T00:00:00.000Z", categories: { coreTerms: 2, expandedTerms: 6, grammarTopics: 0, pronunciationTargets: 0 } };
+
+  it("opens with the checkpoint's cores and expanded words and marks missing grammar and pronunciation “Cần bổ sung”", () => {
+    render(<MonthlyResourceEditor cefr="A2" version={1} resources={prefilled} prefill={prefill} onSave={vi.fn()} onClose={vi.fn()} />);
+    const dialog = within(screen.getByRole("dialog", { name: "Sửa tay tài nguyên A2" }));
+    expect(dialog.getByRole("status")).toHaveTextContent("Đã nạp phần AI đã sinh: 2 từ cốt lõi, 6 từ mở rộng.");
+    expect(dialog.getByText("2 từ cốt lõi · 6 từ mở rộng")).toBeInTheDocument();
+    const grammar = dialog.getByRole("group", { name: "Ngữ pháp" });
+    expect(within(grammar).getAllByText("Cần bổ sung").length).toBeGreaterThan(0);
+    const sounds = dialog.getByRole("group", { name: "Phát âm" });
+    expect(within(sounds).getAllByText("Cần bổ sung").length).toBeGreaterThan(0);
+    // Complete vocabulary is not flagged.
+    const vocabulary = dialog.getByRole("group", { name: "Từ vựng" });
+    expect(within(vocabulary).queryByText("Cần bổ sung")).not.toBeInTheDocument();
+  });
+
+  it("saves the prefilled pool unchanged and shows the server's specific Vietnamese issues on their rows", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn<(input: MonthlyResourceEditInput) => Promise<void>>().mockRejectedValue(Object.assign(new Error("MONTHLY_RESOURCE_EDIT_INVALID"), { details: { issues: [{ section: "grammarTopics", rowId: "grammar-1", field: "title", message: "Tên chủ điểm không được để trống." }] } }));
+    render(<MonthlyResourceEditor cefr="A2" version={1} resources={prefilled} prefill={prefill} onSave={onSave} onClose={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Lưu bản nháp" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      expectedVersion: 1,
+      coreTerms: [expect.objectContaining({ id: "core-1", word: "budget" }), expect.objectContaining({ id: "core-2", word: "approve" })],
+      supportTerms: expect.arrayContaining([expect.objectContaining({ word: "finance", relatedCoreTermId: "core-1" })])
+    }));
+    expect(await screen.findByText("Chưa lưu: còn 1 lỗi cần sửa.")).toBeInTheDocument();
+    expect(screen.getByText("Tên chủ điểm không được để trống.")).toBeInTheDocument();
+  });
+});

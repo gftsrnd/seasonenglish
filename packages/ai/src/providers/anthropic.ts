@@ -103,8 +103,16 @@ export function createAnthropicProvider(options: {
       }
       if (!response.ok) {
         const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
-        if (response.status === 429) throw new AiProviderError("AI_PROVIDER_RATE_LIMIT", true, undefined, retryAfterMs);
-        if (response.status >= 500) throw new AiProviderError("AI_PROVIDER_UNAVAILABLE", true, undefined, retryAfterMs);
+        if (response.status === 429) {
+          // A long Retry-After means the account is throttled for minutes: waiting
+          // it out on every attempt held one request for ~2 minutes and then still
+          // failed. Fail fast (not retryable) so the caller can tell the Operator.
+          if (retryAfterMs !== undefined && retryAfterMs > ANTHROPIC_MAX_RETRY_AFTER_MS) {
+            throw new AiProviderError("AI_PROVIDER_RATE_LIMIT", false, { retryAfterMs }, retryAfterMs);
+          }
+          throw new AiProviderError("AI_PROVIDER_RATE_LIMIT", true, undefined, retryAfterMs);
+        }
+        if (response.status >= 500) throw new AiProviderError("AI_PROVIDER_UNAVAILABLE", true, undefined, retryAfterMs === undefined ? undefined : Math.min(ANTHROPIC_MAX_RETRY_AFTER_MS, retryAfterMs));
         const providerError = await response.json().catch(() => null) as AnthropicErrorResponse | null;
         throw new AiProviderError(
           "AI_PROVIDER_REJECTED",
@@ -160,17 +168,21 @@ function anthropicUsage(usage: AnthropicResponse["usage"]): AiProviderResponse["
   };
 }
 
+/** Longest 429 Retry-After the runner waits out; a longer one fails the call at once. */
+export const ANTHROPIC_MAX_RETRY_AFTER_MS = 60_000;
+
+/** Retry-After in ms (seconds or HTTP date), uncapped so a long throttle is visible. */
 function parseRetryAfterMs(headerValue: string | null): number | undefined {
   if (!headerValue) return undefined;
   const trimmed = headerValue.trim();
   if (!trimmed) return undefined;
   const seconds = Number(trimmed);
   if (Number.isFinite(seconds) && seconds >= 0) {
-    return Math.min(60_000, Math.ceil(seconds * 1000));
+    return Math.ceil(seconds * 1000);
   }
   const parsedDate = Date.parse(trimmed);
   if (!Number.isNaN(parsedDate)) {
-    return Math.min(60_000, Math.max(0, parsedDate - Date.now()));
+    return Math.max(0, parsedDate - Date.now());
   }
   return undefined;
 }

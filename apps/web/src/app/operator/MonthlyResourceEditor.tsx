@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { CefrLevel, MonthFrameworkView, MonthlyResourceEditInput, MonthlyResourceEditIssue } from "@e4s/contracts";
-import type { MonthlyIllustrationsView } from "../../api/operator.js";
+import type { MonthlyIllustrationsView, MonthlyResourceCheckpointPrefillView } from "../../api/operator.js";
 import { IllustrationTile, illustrationsEditable } from "./MonthlyIllustrationPanel.js";
 import { operatorRegisterKindLabel, operatorRegisterNote } from "./register-terms.js";
 
@@ -26,6 +26,8 @@ export interface MonthlyResourceEditorProps {
   busy?: boolean;
   onSave(input: MonthlyResourceEditInput): Promise<void>;
   onClose(): void;
+  /** Set when the pool was prefilled from an unfinished AI generation checkpoint. */
+  prefill?: MonthlyResourceCheckpointPrefillView;
   /** Core-word pictures of this draft; editable here until approval freezes them. */
   illustrations?: {
     view: MonthlyIllustrationsView;
@@ -46,13 +48,28 @@ export function toMonthlyResourceEditInput(version: number, resources: Resources
   };
 }
 
+const MIN_SUPPORTS = 3;
+const MIN_GRAMMAR_EXAMPLES = 3;
+const MIN_SOUND_EXAMPLES = 9;
+type EditGrammarTopic = MonthlyResourceEditInput["grammarTopics"][number];
+type EditSound = MonthlyResourceEditInput["sounds"][number];
+/** A grammar topic still lacking a title, a step field or 3 examples per step. */
+export function grammarTopicNeedsWork(topic: EditGrammarTopic): boolean {
+  return !topic.title.trim() || topic.steps.some((step) => !step.focus.trim() || !step.formula.trim() || !step.usage.trim() || step.examples.filter((example) => example.trim()).length < MIN_GRAMMAR_EXAMPLES);
+}
+/** A pronunciation target still lacking its IPA, name or 9 example words. */
+export function soundNeedsWork(sound: EditSound): boolean {
+  return !sound.ipa.trim() || !sound.label.trim() || sound.examples.filter((example) => example.word.trim() && example.ipa.trim()).length < MIN_SOUND_EXAMPLES;
+}
+const NeedsWork = () => <em className="monthly-resource-editor-missing">Cần bổ sung</em>;
+
 /**
  * Manual editor for a DRAFT monthly resource pool (VH-R30/VH-R35). The number
  * of core words is fixed (replace a word in its row); supports can be added or
  * removed per core. The server validates the whole pool and answers with
  * per-row issues that are shown on the matching line.
  */
-export function MonthlyResourceEditor({ cefr, version, resources, busy = false, onSave, onClose, illustrations }: MonthlyResourceEditorProps) {
+export function MonthlyResourceEditor({ cefr, version, resources, busy = false, onSave, onClose, illustrations, prefill }: MonthlyResourceEditorProps) {
   const [draft, setDraft] = useState(() => toMonthlyResourceEditInput(version, resources));
   const [issues, setIssues] = useState<MonthlyResourceEditIssue[]>([]);
   // Large sections start folded; a section with save issues opens so its rows are visible.
@@ -83,6 +100,7 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
     for (const support of draft.supportTerms) map.set(support.relatedCoreTermId, [...(map.get(support.relatedCoreTermId) ?? []), support]);
     return map;
   }, [draft.supportTerms]);
+  const coresNeedingWork = draft.coreTerms.filter((core) => !core.word.trim() || (supportsByCore.get(core.id)?.length ?? 0) < MIN_SUPPORTS).length;
   const coreIssueCount = (coreId: string) => (issuesByRow.get(coreId)?.length ?? 0) + (supportsByCore.get(coreId) ?? []).reduce((count, support) => count + (issuesByRow.get(support.id)?.length ?? 0), 0);
 
   const updateCore = (id: string, patch: Partial<MonthlyResourceEditInput["coreTerms"][number]>) => setDraft((current) => ({ ...current, coreTerms: current.coreTerms.map((core) => core.id === id ? { ...core, ...patch } : core) }));
@@ -157,10 +175,13 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
           <button type="button" className="btn btn-primary" disabled={disabled} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</button>
         </div>
       </header>
+      {prefill && <p className="monthly-resource-editor-prefill" role="status">Đã nạp phần AI đã sinh: {[
+        [prefill.categories.coreTerms, "từ cốt lõi"], [prefill.categories.expandedTerms, "từ mở rộng"], [prefill.categories.grammarTopics, "chủ điểm ngữ pháp"], [prefill.categories.pronunciationTargets, "mục tiêu phát âm"]
+      ].filter(([count]) => Number(count) > 0).map(([count, label]) => `${count} ${label}`).join(", ")}. Chỉ cần bổ sung những mục đánh dấu “Cần bổ sung”, rồi bấm Lưu bản nháp.</p>}
       {failure && <div className="monthly-error" role="alert">{failure}{generalIssues.length > 0 && <ul>{generalIssues.map((issue, index) => <li key={index}>{issue.message}</li>)}</ul>}</div>}
 
       <details className="monthly-resource-editor-section" aria-label="Từ vựng" open={openSections.vocabulary} onToggle={(event) => toggleSection("vocabulary", event.currentTarget.open)}>
-        <summary><h3>Từ cốt lõi &amp; từ mở rộng</h3><span className="small muted">{draft.coreTerms.length} từ cốt lõi · {draft.supportTerms.length} từ mở rộng</span></summary>
+        <summary><h3>Từ cốt lõi &amp; từ mở rộng</h3><span className="small muted">{draft.coreTerms.length} từ cốt lõi · {draft.supportTerms.length} từ mở rộng</span>{coresNeedingWork > 0 && <><NeedsWork /><span className="small muted"> {coresNeedingWork} từ cốt lõi</span></>}</summary>
         {draft.coreTerms.map((core, index) => {
           const supports = supportsByCore.get(core.id) ?? [];
           const problems = coreIssueCount(core.id);
@@ -168,7 +189,7 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
           const register = (resources.coreTerms.find((term) => term.id === core.id)?.registerTerms ?? []);
           const open = openCores.has(core.id);
           return <details key={core.id} className={`monthly-resource-editor-core${problems ? " has-errors" : ""}`} open={open} onToggle={(event) => toggleCore(core.id, (event.currentTarget as HTMLDetailsElement).open)}>
-            <summary><i className="monthly-resource-editor-chevron" aria-hidden="true">▸</i><b>{index + 1}.</b> <span className="monthly-resource-editor-word">{core.word || "(trống)"}</span><small className="monthly-resource-editor-type">{core.type}</small><small className="monthly-resource-editor-meaning">{core.meaning}</small>{register.length > 0 && <small className="monthly-resource-editor-register-count">{register.length} khẩu ngữ/văn chương</small>}<small className="monthly-resource-editor-count">{supports.length} từ mở rộng</small>{problems > 0 && <em>{problems} lỗi</em>}</summary>
+            <summary><i className="monthly-resource-editor-chevron" aria-hidden="true">▸</i><b>{index + 1}.</b> <span className="monthly-resource-editor-word">{core.word || "(trống)"}</span><small className="monthly-resource-editor-type">{core.type}</small><small className="monthly-resource-editor-meaning">{core.meaning}</small>{register.length > 0 && <small className="monthly-resource-editor-register-count">{register.length} khẩu ngữ/văn chương</small>}<small className="monthly-resource-editor-count">{supports.length} từ mở rộng</small>{(!core.word.trim() || supports.length < MIN_SUPPORTS) && <NeedsWork />}{problems > 0 && <em>{problems} lỗi</em>}</summary>
             <div className="monthly-resource-editor-row core">
               <label>Từ<input aria-label={`Từ cốt lõi ${index + 1}`} aria-invalid={invalid(core.id, "word")} value={core.word} disabled={disabled} onChange={(event) => updateCore(core.id, { word: event.target.value })} /></label>
               <label>Từ loại<select aria-label={`Từ loại ${index + 1}`} aria-invalid={invalid(core.id, "type")} value={core.type} disabled={disabled} onChange={(event) => updateCore(core.id, { type: event.target.value })}>
@@ -208,8 +229,9 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
       </details>
 
       <details className="monthly-resource-editor-section" aria-label="Ngữ pháp" open={openSections.grammar} onToggle={(event) => toggleSection("grammar", event.currentTarget.open)}>
-        <summary><h3>Ngữ pháp</h3><span className="small muted">{draft.grammarTopics.length} chủ điểm · {draft.grammarTopics.reduce((total, topic) => total + topic.steps.length, 0)} bước</span></summary>
+        <summary><h3>Ngữ pháp</h3><span className="small muted">{draft.grammarTopics.length} chủ điểm · {draft.grammarTopics.reduce((total, topic) => total + topic.steps.length, 0)} bước</span>{draft.grammarTopics.some(grammarTopicNeedsWork) && <NeedsWork />}</summary>
         {draft.grammarTopics.map((topic, topicIndex) => <div key={topic.id} className="monthly-resource-editor-group">
+          {grammarTopicNeedsWork(topic) && <NeedsWork />}
           <label>Chủ điểm {topicIndex + 1}<input aria-label={`Tên chủ điểm ${topicIndex + 1}`} aria-invalid={invalid(topic.id, "title")} value={topic.title} disabled={disabled} onChange={(event) => updateTopic(topic.id, { title: event.target.value })} /></label>
           {rowErrors(topic.id)}
           {topic.steps.map((step, stepIndex) => <div key={step.id} className="monthly-resource-editor-step">
@@ -227,8 +249,9 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
       </details>
 
       <details className="monthly-resource-editor-section" aria-label="Phát âm" open={openSections.sounds} onToggle={(event) => toggleSection("sounds", event.currentTarget.open)}>
-        <summary><h3>Phát âm</h3><span className="small muted">{draft.sounds.length} âm · {draft.sounds.reduce((total, sound) => total + sound.examples.length, 0)} từ ví dụ</span></summary>
+        <summary><h3>Phát âm</h3><span className="small muted">{draft.sounds.length} âm · {draft.sounds.reduce((total, sound) => total + sound.examples.length, 0)} từ ví dụ</span>{draft.sounds.some(soundNeedsWork) && <NeedsWork />}</summary>
         {draft.sounds.map((sound, soundIndex) => <div key={sound.id} className="monthly-resource-editor-group">
+          {soundNeedsWork(sound) && <NeedsWork />}
           <div className="monthly-resource-editor-row sound">
             <label>IPA mục tiêu {soundIndex + 1}<input aria-label={`IPA mục tiêu ${soundIndex + 1}`} aria-invalid={invalid(sound.id, "ipa")} value={sound.ipa} disabled={disabled} onChange={(event) => updateSound(sound.id, { ipa: event.target.value })} /></label>
             <label>Tên<input aria-label={`Tên mục tiêu ${soundIndex + 1}`} aria-invalid={invalid(sound.id, "label")} value={sound.label} disabled={disabled} onChange={(event) => updateSound(sound.id, { label: event.target.value })} /></label>

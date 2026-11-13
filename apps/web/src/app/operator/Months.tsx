@@ -9,11 +9,11 @@ import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { useManagerSectionHeader } from "../manager/shared.js";
 import { Badge, Button, OperatorPage, PageTitle } from "./primitives.js";
 import { OperatorLessonPreview, OperatorPracticeReview } from "./adapters.js";
-import type { MonthlyResourceCheckpointView } from "../../api/operator.js";
+import type { MonthlyResourceCheckpointPrefillView, MonthlyResourceCheckpointView } from "../../api/operator.js";
 import { groupVocabularyForDisplay, isStandaloneWord } from "./resource-display.js";
 import { MonthlyFinalReview } from "./MonthlyFinalReview.js";
 import { MonthlyResourceProgress } from "./MonthlyResourceProgress.js";
-import { isGatewayTimeout, monthlyGenerationMessage, monthlyFinalGenerationMessage } from "./monthly-generation-message.js";
+import { isGatewayTimeout, monthlyGenerationMessage, monthlyFinalGenerationMessage, monthlyResourceGenerationNotice, monthlyResourceManualSuggestion } from "./monthly-generation-message.js";
 import { MonthlyResourceEditor } from "./MonthlyResourceEditor.js";
 import { MonthlyReviewPractice } from "./MonthlyReviewPractice.js";
 import { describeMonthlyFindings, MONTHLY_PART_TITLES } from "./monthly-failure-findings.js";
@@ -47,7 +47,7 @@ export interface OperatorMonthsActions {
   onPublishMonth?(id: string, confirmedOn: string): Promise<void>;
   /** Saves a hand-edited DRAFT resource pool (VH-R30/VH-R35); rejects with per-row `details.issues`. */
   onSaveResources?(id: string, input: MonthlyResourceEditInput): Promise<void>;
-  onLoadManualResources?(month: string, cefr: CefrLevel): Promise<NonNullable<MonthlyOperatorOverviewView["frameworks"][number]["resources"]> & { theme: { version: number } }>;
+  onLoadManualResources?(month: string, cefr: CefrLevel): Promise<NonNullable<MonthlyOperatorOverviewView["frameworks"][number]["resources"]> & { theme: { version: number }; prefill?: MonthlyResourceCheckpointPrefillView }>;
   onCreateManualResources?(month: string, cefr: CefrLevel, input: MonthlyResourceEditInput): Promise<void>;
   /** Asks a Manager to reopen this level's approved monthly resources. */
   onRequestResourcesReopen?(id: string, reason: string): Promise<void> | void;
@@ -291,9 +291,12 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
         return;
       }
       setResourceGenerationFailed(true);
+      // A run that ended short but kept progress is normal: calm notice, no manual-editing
+      // hint until the 3rd unfinished run in a row (the API counts them on the checkpoint).
+      const notice = monthlyResourceGenerationNotice(error);
+      toast.show({ message: notice.message, tone: notice.tone });
       const noAi = error instanceof Error && ["AI_UNAVAILABLE", "AI_PROMPT_NOT_READY"].includes(error.message);
-      showUnavailable(noAi ? "Chưa kết nối AI, bạn có thể soạn tay." : "AI không tạo được đủ tài nguyên. Hãy thử lại hoặc soạn tay.");
-      await openManualResources();
+      if (noAi) await openManualResources();
     } finally {resourceGenerationInFlight.current=false;setResourceGenerating(false);}
   };
   const generateDay = async (dayNumber: number, kind: "new" | "review") => {
@@ -451,6 +454,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
               return <li key={key}><span>{label}</span><strong>{shown}</strong><em>{state}</em></li>;
             })}</ul>
             <small>Tiếp tục sẽ sinh các nhóm còn thiếu; nhóm đã lưu vẫn ở trạng thái nháp và chưa dùng cho học viên. Số từ mở rộng có thể giảm tạm thời: từ cốt lõi nào không đủ quan hệ bắt buộc sẽ được thay, và các từ mở rộng của nó được bỏ rồi sinh lại.</small>
+            {!resourceRunning && monthlyResourceManualSuggestion(resourceCheckpoint.failedAttempts) && <small className="monthly-resource-checkpoint-suggestion">{monthlyResourceManualSuggestion(resourceCheckpoint.failedAttempts)}</small>}
           </div>}
           {framework?.status !== "approved" && <button type="button" className={`btn ${framework?.resources ? "btn-danger" : "btn-primary"} monthly-resource-main-action`} aria-busy={resourceRunning} disabled={busy || !canEdit} onClick={() => void generateFramework()}>{resourceRunning ? <><span className="spinner" aria-hidden="true" />Đang sinh tài nguyên…</> : resourceCheckpoint?.state === "draft_checkpoint" && !framework?.resources ? "Tiếp tục nhóm còn thiếu" : framework?.resources ? "Sinh lại tài nguyên" : "Sinh tài nguyên"}</button>}
           {framework?.status === "draft" && <button type="button" className="btn monthly-resource-main-action" disabled={busy || !canEdit} onClick={() => void approveFramework()}>Duyệt tài nguyên</button>}
@@ -595,6 +599,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       cefr={cefr}
       version={manualResources.theme.version}
       resources={manualResources}
+      {...(manualResources.prefill ? { prefill: manualResources.prefill } : {})}
       busy={busy}
       onClose={() => setManualResources(undefined)}
       onSave={async (input) => { await actions.onCreateManualResources!(month, cefr, input); setManualResources(undefined); }}

@@ -18,7 +18,8 @@ import {
 import type { CefrLevel, MonthlyResourceEditInput, MonthlyResourceEditIssue, SharedMonthBriefView } from "@e4s/contracts";
 import { z } from "zod";
 import { isPronunciationTargetAllowedForLevel, isValidMonthlyPronunciationIpaTarget } from "./monthly-resource-plan-spec.js";
-import { isVietnameseMonthlyText, monthlyDailyObjectivesMustBeEnglish } from "./monthly-resource-generation.js";
+import { isCurrentMonthlyResourceCheckpointCategory, isVietnameseMonthlyText, monthlyDailyObjectivesMustBeEnglish, relationSource } from "./monthly-resource-generation.js";
+import { monthlyResourcePlanOutputSchema } from "@e4s/ai";
 import { findMonthlyPronunciationCatalogItem, monthlyPronunciationExampleIssue, monthlyPronunciationMaxSyllables } from "@e4s/domain";
 
 /**
@@ -89,6 +90,76 @@ export function blankMonthlyResourcePool(brief: SharedMonthBriefView, level: Cef
       }))
     })),
     sounds: Array.from({ length: 4 }, (_, index) => ({ id: `sound-${index + 1}`, ipa: "", label: "", examples: [] }))
+  };
+}
+
+/** What a manual pool took over from an unfinished AI generation checkpoint. */
+export interface MonthlyResourceCheckpointPrefill {
+  source: "checkpoint";
+  generationId: string;
+  updatedAt: string;
+  /** Rows taken from the checkpoint per category; 0 means the Operator must add it ("Cần bổ sung"). */
+  categories: { coreTerms: number; expandedTerms: number; grammarTopics: number; pronunciationTargets: number };
+}
+
+type CheckpointLike = { generationId: string; updatedAt: string; categories: Record<string, unknown>; sourceLineage: Record<string, unknown> };
+
+/**
+ * Fills a blank manual pool with what an unfinished AI generation already saved
+ * (cores, expanded words, grammar topics, pronunciation targets), so the Operator
+ * only completes what is missing. The blank pool's IDs (`core-N`, `grammar-N-M`,
+ * `sound-N`) stay the structure; checkpoint rows only fill values. Rows that no
+ * longer parse with the current checkpoint schema are left blank.
+ */
+export function prefillMonthlyResourcePoolFromCheckpoint(blank: MonthlyResourcePoolContract, checkpoint: CheckpointLike | null | undefined): { pool: MonthlyResourcePoolContract; prefill: MonthlyResourceCheckpointPrefill | null } {
+  if (!checkpoint) return { pool: blank, prefill: null };
+  const rows = <T>(key: "coreTerms" | "expandedTerms" | "grammarTopics" | "pronunciationTargets", schema: z.ZodType<T>): T[] => {
+    if (!isCurrentMonthlyResourceCheckpointCategory(key, checkpoint.sourceLineage[key])) return [];
+    const value = checkpoint.categories[key];
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((item) => { const parsed = schema.safeParse(item); return parsed.success ? [parsed.data] : []; });
+  };
+  const shape = monthlyResourcePlanOutputSchema.shape;
+  const cores = rows("coreTerms", shape.coreTerms.element).slice(0, blank.coreTerms.length);
+  const coreIdMap = new Map(cores.map((core, index) => [core.id, blank.coreTerms[index]!.id]));
+  const expanded = rows("expandedTerms", shape.expandedTerms.element).filter((term) => coreIdMap.has(term.relatesToCoreId));
+  const grammar = rows("grammarTopics", shape.grammarTopics.element).slice(0, blank.grammarTopics.length);
+  const sounds = rows("pronunciationTargets", shape.pronunciationTargets.element).slice(0, blank.sounds.length);
+  if (!cores.length && !expanded.length && !grammar.length && !sounds.length) return { pool: blank, prefill: null };
+  const level = blank.cefr.toLowerCase();
+  const pool: MonthlyResourcePoolContract = {
+    ...blank,
+    coreTerms: blank.coreTerms.map((slot, index) => {
+      const core = cores[index];
+      return core ? { ...slot, word: core.word, meaning: core.meaning, type: core.type, ipa: core.ipa, ...(core.cefr ? { cefr: core.cefr } : {}) } : slot;
+    }),
+    supportTerms: expanded.map((term, index) => ({
+      id: `${level}-expanded-${index + 1}`,
+      word: term.word, meaning: term.meaning, type: term.type, relation: term.relation,
+      source: relationSource(term.relation), component: "expanded" as const,
+      relatedCoreTermId: coreIdMap.get(term.relatesToCoreId)!,
+      ...(term.cefr ? { cefr: term.cefr } : {}),
+      ...(term.definition?.trim() && (term.relation === "synonym" || term.relation === "antonym") && !["A1", "A2"].includes(blank.cefr) ? { definition: term.definition.trim() } : {})
+    })),
+    grammarTopics: blank.grammarTopics.map((slot, index) => {
+      const topic = grammar[index];
+      if (!topic) return slot;
+      return { ...slot, title: topic.title, steps: slot.steps.map((stepSlot, stepIndex) => {
+        const step = topic.steps[stepIndex];
+        return step ? { ...stepSlot, focus: step.focus, formula: step.formula, usage: step.usage, examples: [...step.examples], ...(step.dailyObjectives ? { dailyObjectives: [...step.dailyObjectives] } : {}) } : stepSlot;
+      }) };
+    }),
+    sounds: blank.sounds.map((slot, index) => {
+      const target = sounds[index];
+      return target ? { ...slot, ipa: target.ipa, label: target.label, examples: target.words.map((word, wordIndex) => ({ id: `${slot.id}-word-${wordIndex + 1}`, word: word.word, ipa: word.ipa })) } : slot;
+    })
+  };
+  return {
+    pool,
+    prefill: {
+      source: "checkpoint", generationId: checkpoint.generationId, updatedAt: checkpoint.updatedAt,
+      categories: { coreTerms: cores.length, expandedTerms: expanded.length, grammarTopics: grammar.length, pronunciationTargets: sounds.length }
+    }
   };
 }
 

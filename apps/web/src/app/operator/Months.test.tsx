@@ -174,6 +174,47 @@ describe("Operator monthly planner", () => {
     expect(onLoadManualResources).not.toHaveBeenCalled();
   });
 
+  const partialRun = (failedAttempts: number, onGenerateFramework: Parameters<typeof OperatorMonths>[0]["actions"]["onGenerateFramework"], onLoadManualResources = vi.fn()) => render(<ToastProvider><OperatorMonths
+      month="2026-11" todayMonth="2026-11" cefr="A2" busy={false}
+      overview={{ systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: { month: "2026-11", title: "Customer handover", brief: "Prepare a handover.", context: "Customer success", communicationGoal: "Explain risks", version: 1, status: "approved" }, frameworks: [] }}
+      resourceCheckpoint={{ state: "draft_checkpoint", draftOnly: true, publishable: false, retryOnlyMissing: true, generationId: "generation-1", version: 2, briefVersion: 1, updatedAt: "2026-11-04T00:00:00.000Z", failedAttempts, categories: {
+        coreTerms: { state: "complete", count: 48, target: 48 }, expandedTerms: { state: "missing", count: 240, target: 432 }, grammarTopics: { state: "missing", count: 0, target: 2 }, pronunciationTargets: { state: "missing", count: 0, target: 4 }
+      } }}
+      actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework, onLoadManualResources, onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
+    /></ToastProvider>);
+  const budgetMessage = "Đã dùng hết 400 lượt gọi AI cho lần này; phần đã làm được đã lưu (240 từ mở rộng). Bấm Tiếp tục để sinh tiếp.";
+  const budgetError = (failedAttempts: number) => Object.assign(new Error("MONTHLY_RESOURCE_PLAN_INVALID"), { code: "MONTHLY_RESOURCE_PLAN_INVALID", status: 422, details: { code: "MONTHLY_RESOURCE_PLAN_INVALID", issues: [budgetMessage], progressSaved: true, failedAttempts } });
+
+  it("shows a stopped run that kept progress as a calm info notice, without opening the manual editor", async () => {
+    const user = userEvent.setup();
+    const onLoadManualResources = vi.fn();
+    partialRun(1, vi.fn().mockRejectedValue(budgetError(1)), onLoadManualResources);
+    await user.click(screen.getByRole("button", { name: "Tiếp tục nhóm còn thiếu" }));
+    const toast = (await screen.findByText(budgetMessage)).closest(".ds-toast");
+    expect(toast).toHaveClass("ds-toast--info");
+    expect(screen.queryByText(/AI không tạo được đủ tài nguyên/u)).not.toBeInTheDocument();
+    expect(screen.queryByText(/có thể soạn tay phần còn thiếu/u)).not.toBeInTheDocument();
+    expect(screen.queryByText("Cần thử lại")).not.toBeInTheDocument();
+    expect(onLoadManualResources).not.toHaveBeenCalled();
+  });
+
+  it("suggests manual completion from the 3rd unfinished run, still in a neutral tone", async () => {
+    const user = userEvent.setup();
+    partialRun(3, vi.fn().mockRejectedValue(budgetError(3)));
+    expect(screen.getByRole("status", { name: "Tiến độ tài nguyên nháp" })).toHaveTextContent("Đã thử 3 lần chưa xong — có thể soạn tay phần còn thiếu.");
+    await user.click(screen.getByRole("button", { name: "Tiếp tục nhóm còn thiếu" }));
+    const toast = (await screen.findByText(`${budgetMessage} Đã thử 3 lần chưa xong — có thể soạn tay phần còn thiếu.`)).closest(".ds-toast");
+    expect(toast).toHaveClass("ds-toast--info");
+  });
+
+  it("explains an AI provider rate limit with a warn notice", async () => {
+    const user = userEvent.setup();
+    partialRun(0, vi.fn().mockRejectedValue(Object.assign(new Error("AI_PROVIDER_RATE_LIMIT"), { code: "AI_PROVIDER_RATE_LIMIT", status: 429, details: { code: "AI_PROVIDER_RATE_LIMIT" } })));
+    await user.click(screen.getByRole("button", { name: "Tiếp tục nhóm còn thiếu" }));
+    const toast = (await screen.findByText("Nhà cung cấp AI đang giới hạn tốc độ; chưa tốn lượt sinh. Thử lại sau ít phút.")).closest(".ds-toast");
+    expect(toast).toHaveClass("ds-toast--warn");
+  });
+
   it("presents four pronunciation targets in the fixed responsive grid", async () => {
     const user = userEvent.setup();
     const { container } = render(<ToastProvider><OperatorMonths

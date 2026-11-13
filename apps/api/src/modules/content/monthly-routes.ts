@@ -10,7 +10,7 @@ import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { previousMonthlyLessonAudioIndex, withLessonListeningAudio, type ListeningAudioService } from "../assessment/listening-audio.js";
 import { generateMonthlyDayWithAi, generateMonthlyReviewWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
-import { buildMonthlyCatalogPronunciationPrompt, getMonthlyPronunciationTextIssues, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, getMonthlyGrammarPhaseIssues, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyAiCallBudgetError, monthlyResourceAiCallLimit, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
+import { buildMonthlyCatalogPronunciationPrompt, getMonthlyPronunciationTextIssues, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, describeMonthlyResourceCheckpointProgress, MONTHLY_RESOURCE_ATTEMPTS_LINEAGE_KEY, monthlyResourcePartialProgressMessage, readMonthlyResourceFailedAttempts, getMonthlyGrammarPhaseIssues, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyAiCallBudgetError, monthlyResourceAiCallLimit, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
 import { isInvalidAiOutputDefault, MonthlyCorePhaseShortfallError, runMonthlyCorePhase } from "./monthly-core-phase.js";
 import { budgetedMonthlyRegisterRunner, monthlyRegisterCheckpointSchema, regenerateMonthlyRegisterTerms, resumeMonthlyRegisterCheckpoint, runMonthlyRegisterTermsPhase } from "./monthly-register-phase.js";
 import { runMonthlyEnrichmentWithRefill, type MonthlyCoreEnrichmentOutcome } from "./monthly-enrichment-phase.js";
@@ -19,7 +19,7 @@ import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
 import { monthlyGenerationFailure } from "./monthly-generation-errors.js";
 import { repairMonthlyCoreIpa } from "./monthly-british-ipa.js";
 import { verifyMonthlyWords } from "./monthly-word-verification.js";
-import { applyMonthlyResourceEdit, blankMonthlyResourcePool, monthlyResourceEditInputSchema } from "./monthly-resource-manual-edit.js";
+import { applyMonthlyResourceEdit, blankMonthlyResourcePool, monthlyResourceEditInputSchema, prefillMonthlyResourcePoolFromCheckpoint } from "./monthly-resource-manual-edit.js";
 
 const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) });
 const frameworkParams = z.object({ id: z.uuid() });
@@ -224,6 +224,8 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       version: checkpoint?.version ?? null,
       briefVersion: checkpoint?.briefVersion ?? null,
       updatedAt: checkpoint?.updatedAt ?? null,
+      // Consecutive unfinished generation runs; the web offers manual completion from the 3rd on.
+      failedAttempts: readMonthlyResourceFailedAttempts(checkpoint?.sourceLineage),
       categories
     };
   });
@@ -917,30 +919,62 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       updateProgress({status:"completed"});
       logUsage("saved");
       return framework;
-    } catch (error) {
+    } catch (caught) {
+      let error = caught;
       updateProgress({status:"failed"});
-      logUsage(error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code) : error instanceof Error ? error.name : "failed");
+      // An unfinished run keeps its checkpoint. Count consecutive unfinished
+      // runs on it (the counter goes away with the checkpoint once a draft is
+      // saved) and name what it kept ("240 từ mở rộng") in the Operator message.
+      const recordUnfinishedAttempt = async (): Promise<{ summary?: string; failedAttempts: number; progressSaved: boolean }> => {
+        try {
+          const saved = await repositories.monthlyContent.getResourceGenerationCheckpoint(actorId, month.month, criteria.cefr);
+          if (!saved) return { failedAttempts: 0, progressSaved: false };
+          const counts = Object.fromEntries((["coreTerms", "expandedTerms", "grammarTopics", "pronunciationTargets"] as const).map((key) => {
+            const value = saved.categories[key];
+            return [key, isCurrentMonthlyResourceCheckpointCategory(key, saved.sourceLineage[key]) && Array.isArray(value) ? value.length : 0];
+          }));
+          const summary = describeMonthlyResourceCheckpointProgress(counts) || undefined;
+          const failedAttempts = readMonthlyResourceFailedAttempts(saved.sourceLineage) + 1;
+          await repositories.monthlyContent.saveResourceGenerationCheckpoint(actorId, {
+            month: month.month, cefr: criteria.cefr, briefVersion: saved.briefVersion, generationId: saved.generationId,
+            categories: {},
+            sourceLineage: { [MONTHLY_RESOURCE_ATTEMPTS_LINEAGE_KEY]: { failedAttempts, lastFailedAt: new Date().toISOString() } }
+          }).catch(() => undefined);
+          return { ...(summary ? { summary } : {}), failedAttempts, progressSaved: Boolean(summary) };
+        } catch { return { failedAttempts: 0, progressSaved: false }; }
+      };
+      const attempt = error instanceof MonthlyResourceCriteriaError ? { failedAttempts: 0, progressSaved: false } : await recordUnfinishedAttempt();
+      const attemptBody = { progressSaved: attempt.progressSaved, failedAttempts: attempt.failedAttempts };
+      if (error instanceof MonthlyResourcePlanError && !(error instanceof MonthlyAiCallBudgetError) && aiBudget.exhausted) {
+        error = new MonthlyAiCallBudgetError(aiCallLimit, attempt.summary, error.errors);
+      } else if (error instanceof MonthlyAiCallBudgetError) {
+        error = new MonthlyAiCallBudgetError(error.limit, attempt.summary, error.errors.slice(1));
+      } else if (error instanceof MonthlyResourcePlanError && attempt.progressSaved) {
+        // Shortfall, replaced cores, a later phase that did not pass: progress is kept, so say so calmly.
+        error = new MonthlyResourcePlanError([monthlyResourcePartialProgressMessage(attempt.summary), ...error.errors]);
+      }
+      logUsage(error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code) : error instanceof MonthlyResourcePlanError ? error.message : error instanceof Error ? error.name : "failed");
       if (error instanceof MonthlyResourceCriteriaError) {
         return reply.code(422).send({ code: error.code, requiredVocabularyCount: error.requiredVocabularyCount });
-      }
-      if (aiBudget.exhausted && error instanceof MonthlyResourcePlanError && !(error instanceof MonthlyAiCallBudgetError)) {
-        error = new MonthlyResourcePlanError([...new MonthlyAiCallBudgetError(aiCallLimit).errors, ...error.errors]);
       }
       if (error instanceof MonthlyResourcePlanError) {
         console.error("Monthly resource plan rejected", { issues: error.errors, month: month.month, cefr: criteria.cefr });
         request.log.warn({ issues: error.errors, month: month.month, cefr: criteria.cefr }, "Monthly resource plan rejected");
-        return reply.code(422).send({ code: "MONTHLY_RESOURCE_PLAN_INVALID", issues: error.errors });
+        return reply.code(422).send({ code: "MONTHLY_RESOURCE_PLAN_INVALID", issues: error.errors, ...attemptBody });
       }
       if (error instanceof RangeError) {
         request.log.warn({ message: error.message, month: month.month, cefr: criteria.cefr }, "Monthly resource pool rejected");
-        return reply.code(422).send({ code: "MONTHLY_RESOURCE_PLAN_INVALID", issues: [error.message] });
+        return reply.code(422).send({ code: "MONTHLY_RESOURCE_PLAN_INVALID", issues: attempt.progressSaved ? [monthlyResourcePartialProgressMessage(attempt.summary), error.message] : [error.message], ...attemptBody });
       }
       if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
-        return reply.code(422).send({ code: "AI_OUTPUT_INVALID", issues: safeGenerationDiagnosticIssues(error) });
+        return reply.code(422).send({ code: "AI_OUTPUT_INVALID", issues: safeGenerationDiagnosticIssues(error), ...attemptBody });
       }
       if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_TRUNCATED") {
-        return reply.code(422).send({ code: "AI_OUTPUT_TRUNCATED", message: "A resource slice exceeded the AI output limit; no monthly resources were saved. Retry generation." });
+        return reply.code(422).send({ code: "AI_OUTPUT_TRUNCATED", message: "A resource slice exceeded the AI output limit; no monthly resources were saved. Retry generation.", ...attemptBody });
       }
+      // Provider failures (rate limit 429, rejected, unavailable, timeout) keep their code so the web can explain them.
+      const providerFailure = monthlyGenerationFailure(error);
+      if (providerFailure) return reply.code(providerFailure.status).send({ code: providerFailure.body.code, ...attemptBody });
       throw error;
     }
   });
@@ -955,21 +989,27 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     if (!overview.monthWindow.writable) return { code: "MONTHLY_CONTENT_READ_ONLY" } as const;
     if (overview.brief?.status !== "approved") return { code: "MONTHLY_TOPIC_NOT_APPROVED" } as const;
     if (overview.frameworks.some(item => item.cefr === cefr)) return { code: "MONTHLY_FRAMEWORK_VERSION_CONFLICT" } as const;
-    return blankMonthlyResourcePool(overview.brief, cefr);
+    // No saved resource draft yet: an unfinished AI generation's checkpoint
+    // (cores, expanded words, grammar, pronunciation) prefills the manual pool
+    // so the Operator only completes what is missing.
+    const checkpoint = await repositories.monthlyContent.getResourceGenerationCheckpoint(actorId, month, cefr);
+    return prefillMonthlyResourcePoolFromCheckpoint(blankMonthlyResourcePool(overview.brief, cefr), checkpoint);
   };
   app.get("/api/v1/content/months/:month/resources/manual", { preHandler: contentOperator }, async (request, reply) => {
     const { month } = params.parse(request.params);
     const { cefr } = resourceCheckpointQuery.parse(request.query);
-    const pool = await manualResourcePool(request.e4sSession!.user.id, month, cefr);
-    return "code" in pool ? reply.code(409).send(pool) : pool;
+    const manual = await manualResourcePool(request.e4sSession!.user.id, month, cefr);
+    if ("code" in manual) return reply.code(409).send(manual);
+    return manual.prefill ? { ...manual.pool, prefill: manual.prefill } : manual.pool;
   });
   app.put("/api/v1/content/months/:month/resources/manual", { preHandler: contentOperator }, async (request, reply) => {
     const { month } = params.parse(request.params);
     const { cefr } = resourceCheckpointQuery.parse(request.query);
     const input = monthlyResourceEditInputSchema.parse(request.body);
     const actorId = request.e4sSession!.user.id;
-    const pool = await manualResourcePool(actorId, month, cefr);
-    if ("code" in pool) return reply.code(409).send(pool);
+    const manual = await manualResourcePool(actorId, month, cefr);
+    if ("code" in manual) return reply.code(409).send(manual);
+    const { pool } = manual;
     if (input.expectedVersion !== pool.theme.version) return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_VERSION_CONFLICT" });
     const edited = applyMonthlyResourceEdit(pool, input, { otherLevelCoreTerms: await otherLevelCoreTerms(actorId, month, cefr) });
     if (!edited.ok) return reply.code(422).send({ code: "MONTHLY_RESOURCE_EDIT_INVALID", issues: edited.issues, warnings: edited.warnings });

@@ -16,3 +16,30 @@ it("reports monthly exam content failures and preserves the current draft",()=>{
   expect(monthlyFinalGenerationMessage({code:"MONTHLY_FINAL_GENERATION_QUALITY_FAILED",details:{report:{checks:[{code:"GEN11"},{code:"GEN22"}]}}})).toBe("Đề mới chưa đạt yêu cầu về từ luyện âm, độ dài và level. Chưa thay bản nháp hiện có; hãy thử sinh lại.");
   expect(monthlyFinalGenerationMessage({code:"AI_OUTPUT_INVALID"})).not.toContain("ngày thi");
 });
+
+import { monthlyResourceGenerationNotice } from "./monthly-generation-message.js";
+const budget = "Đã dùng hết 400 lượt gọi AI cho lần này; phần đã làm được đã lưu (240 từ mở rộng). Bấm Tiếp tục để sinh tiếp.";
+it("shows the server's budget-cap message as a calm info notice without suggesting manual editing", () => {
+  const notice = monthlyResourceGenerationNotice({ code: "MONTHLY_RESOURCE_PLAN_INVALID", details: { issues: [budget, "Core vocabulary generation saved 54 of 54"], progressSaved: true, failedAttempts: 1 } });
+  expect(notice).toEqual({ message: budget, tone: "info", progressSaved: true });
+  expect(notice.message).not.toMatch(/soạn tay/iu);
+});
+it("suggests manual completion only from the 3rd unfinished run in a row, still not red", () => {
+  const partial = "Đã sinh thêm một phần (243 từ mở rộng). Bấm Tiếp tục để sinh tiếp.";
+  expect(monthlyResourceGenerationNotice({ code: "MONTHLY_RESOURCE_PLAN_INVALID", details: { issues: [partial], progressSaved: true, failedAttempts: 2 } }).message).toBe(partial);
+  const third = monthlyResourceGenerationNotice({ code: "MONTHLY_RESOURCE_PLAN_INVALID", details: { issues: [partial], progressSaved: true, failedAttempts: 3 } });
+  expect(third).toMatchObject({ tone: "info", message: `${partial} Đã thử 3 lần chưa xong — có thể soạn tay phần còn thiếu.` });
+});
+it("never shows English validator text; partial progress without a known message gets the neutral wording", () => {
+  const notice = monthlyResourceGenerationNotice({ code: "MONTHLY_RESOURCE_PLAN_INVALID", details: { issues: ["Grammar phase failed after 3 attempts: x"], progressSaved: true, failedAttempts: 1 } });
+  expect(notice).toMatchObject({ tone: "info", message: "Đã sinh thêm một phần. Bấm Tiếp tục để sinh tiếp." });
+});
+it("maps AI provider throttling and blocking to a warn notice with the reason", () => {
+  expect(monthlyResourceGenerationNotice({ code: "AI_PROVIDER_RATE_LIMIT", status: 429, details: { code: "AI_PROVIDER_RATE_LIMIT" } })).toMatchObject({ tone: "warn", message: "Nhà cung cấp AI đang giới hạn tốc độ; chưa tốn lượt sinh. Thử lại sau ít phút." });
+  expect(monthlyResourceGenerationNotice({ code: "AI_PROVIDER_REJECTED", details: { progressSaved: true } }).tone).toBe("warn");
+  expect(monthlyResourceGenerationNotice({ code: "NETWORK_UNAVAILABLE" }).tone).toBe("warn");
+});
+it("uses the red tone only when the server broke and nothing was saved", () => {
+  expect(monthlyResourceGenerationNotice({ code: "HTTP_500", status: 500 }).tone).toBe("danger");
+  expect(monthlyResourceGenerationNotice({ code: "HTTP_500", status: 500, details: { progressSaved: true } }).tone).toBe("info");
+});

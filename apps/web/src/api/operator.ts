@@ -24,6 +24,14 @@ export type AssessmentAudioReadView = AudioArtifactView & {
   questionKey?: string | null;
 };
 
+/** What the manual resource pool took over from an unfinished AI generation checkpoint. */
+export type MonthlyResourceCheckpointPrefillView = {
+  source: "checkpoint";
+  generationId: string;
+  updatedAt: string;
+  categories: Record<"coreTerms" | "expandedTerms" | "grammarTopics" | "pronunciationTargets", number>;
+};
+
 export type MonthlyResourceCheckpointView = {
   progress?: import("@e4s/contracts").MonthlyResourceGenerationProgress | null;
   state: "draft_checkpoint" | "not_started";
@@ -34,6 +42,8 @@ export type MonthlyResourceCheckpointView = {
   version: number | null;
   briefVersion: number | null;
   updatedAt: string | null;
+  /** Consecutive unfinished generation runs on this checkpoint (older APIs omit it). */
+  failedAttempts?: number;
   categories: Record<"coreTerms" | "expandedTerms" | "grammarTopics" | "pronunciationTargets", { state: "complete" | "missing"; count: number; target: number }>;
 };
 
@@ -98,7 +108,7 @@ export interface OperatorApiClient {
   requestContentMonthResourcesReopen(id: string, reason: string): Promise<MonthFrameworkReopenRequestView>;
   /** Saves an Operator hand-edit of a DRAFT resource pool; 422 carries per-row `issues`. */
   saveContentMonthResources?(id: string, input: MonthlyResourceEditInput): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
-  getManualContentMonthResources?(month: string, cefr: CefrLevel): Promise<NonNullable<import("@e4s/contracts").MonthFrameworkView["resources"]> & { theme: { version: number } }>;
+  getManualContentMonthResources?(month: string, cefr: CefrLevel): Promise<NonNullable<import("@e4s/contracts").MonthFrameworkView["resources"]> & { theme: { version: number }; prefill?: MonthlyResourceCheckpointPrefillView }>;
   createManualContentMonthResources?(month: string, cefr: CefrLevel, input: MonthlyResourceEditInput): Promise<unknown>;
   getMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
   /** Core-word illustrations of a monthly framework (generated while resources are a draft, frozen on approval). */

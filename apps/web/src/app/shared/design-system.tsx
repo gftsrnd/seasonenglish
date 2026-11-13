@@ -20,7 +20,7 @@ export function Badge({ children, tone = "", className = "" }: { children: React
   return <span className={["badge", "ds-badge", tone && `ds-badge--${tone}`, className].filter(Boolean).join(" ")}>{children}</span>;
 }
 
-type ToastTone = "info" | "ok" | "danger";
+type ToastTone = "info" | "ok" | "warn" | "danger";
 type ToastInput = { message: ReactNode; tone?: ToastTone; durationMs?: number };
 type ToastItem = ToastInput & { id: number };
 type ToastApi = { show: (input: ToastInput) => number; dismiss: (id: number) => void };

@@ -1212,10 +1212,46 @@ export function monthlyResourceAiCallLimit(env: Record<string, string | undefine
 }
 
 /** Thrown when one generation request reaches its AI call ceiling; checkpoints already saved are kept. */
+/**
+ * The per-request AI-call ceiling was reached. `errors[0]` is the Operator
+ * message the web shows as-is (it names what the checkpoint kept when the
+ * caller knows it); any further entries are the underlying plan issues.
+ */
 export class MonthlyAiCallBudgetError extends MonthlyResourcePlanError {
-  constructor(readonly limit: number) {
-    super([`Đã dùng hết hạn mức ${limit} lượt gọi AI cho lần sinh này nên hệ thống đã dừng để tránh tốn chi phí. Phần đã đạt được lưu lại; bấm sinh lại sẽ tiếp tục từ đó.`]);
+  readonly code = "AI_CALL_BUDGET";
+  constructor(readonly limit: number, savedSummary?: string, details: readonly string[] = []) {
+    super([monthlyAiCallBudgetMessage(limit, savedSummary), ...details]);
   }
+}
+
+/** Operator message for a request stopped by the AI-call ceiling. */
+export function monthlyAiCallBudgetMessage(limit: number, savedSummary?: string): string {
+  return `Đã dùng hết ${limit} lượt gọi AI cho lần này; phần đã làm được đã lưu${savedSummary ? ` (${savedSummary})` : ""}. Bấm Tiếp tục để sinh tiếp.`;
+}
+
+/** Checkpoint `sourceLineage` key holding the consecutive unfinished-run counter (reset when the draft is saved: the checkpoint is deleted). */
+export const MONTHLY_RESOURCE_ATTEMPTS_LINEAGE_KEY = "attempts";
+/** From this many consecutive unfinished runs on, the Operator is offered manual completion. */
+export const MONTHLY_RESOURCE_MANUAL_SUGGESTION_AFTER = 3;
+
+export function readMonthlyResourceFailedAttempts(sourceLineage: Record<string, unknown> | null | undefined): number {
+  const entry = sourceLineage?.[MONTHLY_RESOURCE_ATTEMPTS_LINEAGE_KEY];
+  const value = entry && typeof entry === "object" ? (entry as { failedAttempts?: unknown }).failedAttempts : undefined;
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : 0;
+}
+
+/** Calm Operator message for a run that ended short but kept progress. */
+export function monthlyResourcePartialProgressMessage(savedSummary?: string): string {
+  return `Đã sinh thêm một phần${savedSummary ? ` (${savedSummary})` : ""}. Bấm Tiếp tục để sinh tiếp.`;
+}
+
+/**
+ * "54 từ cốt lõi, 240 từ mở rộng" — what a resource checkpoint keeps, for the
+ * Operator messages of a stopped run. Empty categories are left out.
+ */
+export function describeMonthlyResourceCheckpointProgress(counts: Partial<Record<"coreTerms" | "expandedTerms" | "grammarTopics" | "pronunciationTargets", number>>): string {
+  const labels = [["coreTerms", "từ cốt lõi"], ["expandedTerms", "từ mở rộng"], ["grammarTopics", "chủ điểm ngữ pháp"], ["pronunciationTargets", "mục tiêu phát âm"]] as const;
+  return labels.flatMap(([key, label]) => (counts[key] ?? 0) > 0 ? [`${counts[key]} ${label}`] : []).join(", ");
 }
 
 export class MonthlyResourceCriteriaError extends Error {
@@ -1227,7 +1263,7 @@ export class MonthlyResourceCriteriaError extends Error {
   }
 }
 
-function relationSource(relation: MonthlyResourcePlanTaskOutput["expandedTerms"][number]["relation"]): "example" | "family" | "synonym" | "antonym" | "group" {
+export function relationSource(relation: MonthlyResourcePlanTaskOutput["expandedTerms"][number]["relation"]): "example" | "family" | "synonym" | "antonym" | "group" {
   if (relation === "word_family") return "family";
   if (relation === "collocation") return "example";
   if (relation === "umbrella") return "group";

@@ -39,3 +39,48 @@ export function monthlyFinalGenerationMessage(reason:unknown):string {
   if(error.code === "MONTHLY_FINAL_ALREADY_PUBLISHED")return "Đề tháng đã phát hành. Cần mở khóa theo luồng quản lý trước khi thay đổi.";
   return "Không sinh được đề thi tháng. Bản nháp hiện có vẫn được giữ; hãy thử lại.";
 }
+
+/** Consecutive unfinished resource runs after which manual completion is suggested. */
+export const MONTHLY_RESOURCE_MANUAL_SUGGESTION_AFTER = 3;
+
+export function monthlyResourceManualSuggestion(failedAttempts: number | undefined): string | undefined {
+  return failedAttempts !== undefined && failedAttempts >= MONTHLY_RESOURCE_MANUAL_SUGGESTION_AFTER
+    ? `Đã thử ${failedAttempts} lần chưa xong — có thể soạn tay phần còn thiếu.`
+    : undefined;
+}
+
+/**
+ * Operator messages the API writes for a resource run that stopped (AI-call
+ * cap, partial progress kept, AI provider throttling/blocking). They are shown
+ * as-is; any other issue text (validator detail, English) is not.
+ */
+const KNOWN_RESOURCE_OPERATOR_MESSAGE = /^(Đã dùng hết (hạn mức )?\d+ lượt gọi AI|Đã sinh thêm một phần|Mới có \d+\/\d+ từ cốt lõi|Nhà cung cấp AI)/u;
+
+export type MonthlyResourceNotice = { message: string; tone: "info" | "warn" | "danger"; progressSaved: boolean };
+
+/**
+ * Toast for a failed monthly RESOURCE generation. A run that ended short but
+ * kept its progress is normal (the next run continues it): neutral tone, no
+ * manual-editing hint until the 3rd unfinished run in a row. Provider/network
+ * problems get warn tone with the reason; red only when something broke and
+ * nothing was kept.
+ */
+export function monthlyResourceGenerationNotice(reason: unknown): MonthlyResourceNotice {
+  const error = reason && typeof reason === "object" ? reason as { code?: unknown; message?: unknown; details?: unknown } : {};
+  const code = typeof error.code === "string" ? error.code : typeof error.message === "string" ? error.message : "";
+  const details = error.details && typeof error.details === "object" ? error.details as { issues?: unknown; progressSaved?: unknown; failedAttempts?: unknown } : {};
+  const progressSaved = details.progressSaved === true;
+  const failedAttempts = typeof details.failedAttempts === "number" ? details.failedAttempts : undefined;
+  const firstIssue = Array.isArray(details.issues) && typeof details.issues[0] === "string" ? details.issues[0].trim() : "";
+  const withSuggestion = (message: string) => [message, monthlyResourceManualSuggestion(failedAttempts)].filter(Boolean).join(" ");
+  if (code === "AI_UNAVAILABLE" || code === "AI_PROMPT_NOT_READY") return { message: "Chưa kết nối AI, bạn có thể soạn tay.", tone: "warn", progressSaved };
+  if (code === "AI_PROVIDER_RATE_LIMIT") return { message: withSuggestion("Nhà cung cấp AI đang giới hạn tốc độ; chưa tốn lượt sinh. Thử lại sau ít phút."), tone: "warn", progressSaved };
+  if (code === "AI_PROVIDER_REJECTED") return { message: withSuggestion(`Nhà cung cấp AI đang chặn yêu cầu (có thể do hạn mức tài khoản)${progressSaved ? "; phần đã làm được vẫn được lưu" : ""}. Hãy báo quản trị hệ thống.`), tone: "warn", progressSaved };
+  if (code === "AI_TIMEOUT" || code === "AI_PROVIDER_UNAVAILABLE" || code === "AI_PROVIDER_NETWORK" || code === "AI_PROVIDER_FAILED" || code === "AI_PROVIDER_MALFORMED_RESPONSE") {
+    return { message: withSuggestion(`Dịch vụ AI tạm thời không phản hồi${progressSaved ? "; phần đã làm được vẫn được lưu" : ""}. Thử lại sau ít phút.`), tone: "warn", progressSaved };
+  }
+  if (code === "NETWORK_UNAVAILABLE") return { message: "Mất kết nối tới E4S. Kiểm tra mạng rồi bấm Tiếp tục.", tone: "warn", progressSaved };
+  if (firstIssue && KNOWN_RESOURCE_OPERATOR_MESSAGE.test(firstIssue)) return { message: withSuggestion(firstIssue), tone: "info", progressSaved: progressSaved || !firstIssue.startsWith("Nhà cung cấp AI") };
+  if (progressSaved) return { message: withSuggestion("Đã sinh thêm một phần. Bấm Tiếp tục để sinh tiếp."), tone: "info", progressSaved };
+  return { message: withSuggestion("AI chưa tạo được tài nguyên lần này. Hãy thử lại."), tone: code.startsWith("HTTP_5") || code === "API_INVALID_RESPONSE" ? "danger" : "warn", progressSaved };
+}
