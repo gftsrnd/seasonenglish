@@ -182,7 +182,7 @@ export function validateLessonPublication(
     if (isEnglishOnlyLevel(cefr)) {
       if (containsVietnameseLearnerText(lesson.title)) add(lesson, "title", "B1+ requires the learner-facing lesson title to be in English.");
       for (const part of lesson.parts) {
-        if (containsVietnameseLearnerText(part.title) || learnerFacingPartContainsVietnamese(part, options.lockedPlanValues?.[part.code])) {
+        if ((containsVietnameseLearnerText(part.title) && !STANDARD_SECTION_TITLES.has(part.title.trim())) || learnerFacingPartContainsVietnamese(part, options.lockedPlanValues?.[part.code])) {
           add(lesson, part.code, "B1+ requires all learner-facing content in this section to be in English; only vocabulary meanings may be Vietnamese.");
         }
       }
@@ -303,6 +303,13 @@ export function containsVietnameseLearnerText(value: unknown): boolean {
   const words = value.toLocaleLowerCase("vi").match(/[\p{L}]+/gu) ?? [];
   return words.some((word) => vietnameseLearnerWords.has(word));
 }
+
+/**
+ * Default section names the manual editor stores on every part ("Mục tiêu bài học", "Từ vựng", "Nghe"…). Learners
+ * see the app's own section headings, not these, so a B1+ lesson must not fail the English-only rule because of
+ * them (13/11: every section of a hand-edited B2 lesson was flagged).
+ */
+const STANDARD_SECTION_TITLES = new Set(["Mục tiêu bài học", "Hướng dẫn làm bài", "Từ vựng", "Ngữ pháp", "Phát âm", "Nghe", "Đọc", "Viết", "Từ loại", "Dùng từ", "Nói", "Ôn tập"]);
 
 function learnerFacingPartContainsVietnamese(part: LessonPart, locked?: Readonly<Record<string, string>>): boolean {
   const visit = (value: unknown, parentKey = ""): boolean => {
