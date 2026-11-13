@@ -391,7 +391,7 @@ function HomePointsMetric({ points, nextTier }: { points: number; nextTier: numb
 
 function AbsenceChip({ absenceDays, maxAbsences }: { absenceDays: number; maxAbsences: number }) {
   const tone = absenceDays > maxAbsences ? "danger" : absenceDays > 0 ? "warn" : "ok";
-  return <p className={`home-absence-chip badge ${tone}`} data-home-metric="absence" data-tone={tone}>Đã vắng {absenceDays} ngày · tối đa {maxAbsences} ngày để được thi tháng</p>;
+  return <p className={`home-absence-chip badge ${tone}`} data-home-metric="absence" data-tone={tone}>Vắng {absenceDays}/{maxAbsences} ngày cho phép</p>;
 }
 
 const ABSENCE_LOCK_DAYS = 5;

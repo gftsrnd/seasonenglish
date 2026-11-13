@@ -66,7 +66,7 @@ describe("monthly learner home", () => {
     expect(attendance.querySelector(".metric-secondary")).toBeNull();
     expect(attendance).toHaveAttribute("data-percent", "0");
     const chip = container.querySelector<HTMLElement>('[data-home-metric="absence"]')!;
-    expect(chip).toHaveTextContent("Đã vắng 3 ngày · tối đa 4 ngày để được thi tháng");
+    expect(chip).toHaveTextContent("Vắng 3/4 ngày cho phép");
     expect(chip).toHaveClass("warn");
     rerender(<LearnerHome view={view({ monthlyEligibility: { ...eligibility, attendedDays: 3, absenceDays: 1 } })} actions={actions} />);
     expect(container.querySelector('[data-home-metric="attendance"]')).toHaveAttribute("data-percent", "75");
