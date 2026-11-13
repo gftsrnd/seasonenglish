@@ -8,7 +8,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
-import { monthlyLessonIntegrityIssues } from "./monthly-integrity.js";
+import { monthlyLessonIntegrityIssues, withMonthlyIntegrityIssues, type MonthlyIntegrityIssue } from "./monthly-integrity.js";
 import { previousMonthlyLessonAudioIndex, withLessonListeningAudio, type ListeningAudioService } from "../assessment/listening-audio.js";
 import { generateMonthlyDayWithAi, generateMonthlyReviewWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
 import { buildMonthlyCatalogPronunciationPrompt, getMonthlyPronunciationTextIssues, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, describeMonthlyResourceCheckpointProgress, MONTHLY_RESOURCE_ATTEMPTS_LINEAGE_KEY, monthlyResourcePartialProgressMessage, readMonthlyResourceFailedAttempts, getMonthlyGrammarPhaseIssues, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyAiCallBudgetError, monthlyResourceAiCallLimit, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
@@ -128,11 +128,12 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     return reply.code(204).send();
   });
   app.get("/api/v1/content/months", { preHandler: readers }, async (request) => {
-    return repositories.monthlyContent.getOverview(request.e4sSession!.user.id);
+    return withMonthlyIntegrityIssues(await repositories.monthlyContent.getOverview(request.e4sSession!.user.id));
   });
   app.get("/api/v1/content/months/:month", { preHandler: readers }, async (request) => {
     const input = params.parse(request.params);
-    return repositories.monthlyContent.getOverview(request.e4sSession!.user.id, input.month);
+    // Saved drafts carry the structural problems "Vẫn duyệt" would be refused for (13/11), so the page explains them up front.
+    return withMonthlyIntegrityIssues(await repositories.monthlyContent.getOverview(request.e4sSession!.user.id, input.month));
   });
   app.get("/api/v1/content/month-frameworks/:id/publication-preview", { preHandler: contentOperator }, async (request) => {
     const { id } = frameworkParams.parse(request.params);
@@ -1240,10 +1241,19 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     catch (error) { const response = invalidMonthlyPlanReply(reply, error); if (response) return response; throw error; }
     const kind = contract.daySpecs.find((day) => day.lessonNumber === dayNumber)?.kind === "review" ? "review" : "new";
     // The override accepts quality findings only: a lesson that would not render or play stays blocked.
-    await repositories.monthlyContent.approveMonthlyDay(request.e4sSession!.user.id, id, dayNumber, {
-      acknowledgeSevereFindings: true,
-      integrityIssues: (parts) => monthlyLessonIntegrityIssues(kind, parts).map((issue) => issue.message)
-    });
+    // A refusal carries the structured problems so the page can name each one and open the editor on it.
+    let blocking: MonthlyIntegrityIssue[] = [];
+    try {
+      await repositories.monthlyContent.approveMonthlyDay(request.e4sSession!.user.id, id, dayNumber, {
+        acknowledgeSevereFindings: true,
+        integrityIssues: (parts) => (blocking = monthlyLessonIntegrityIssues(kind, parts)).map((issue) => issue.message)
+      });
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "MONTHLY_DAY_INTEGRITY_BLOCKED") {
+        return reply.code(409).send({ code: "MONTHLY_DAY_INTEGRITY_BLOCKED", message: error instanceof Error ? error.message : "", issues: blocking });
+      }
+      throw error;
+    }
     return reply.code(204).send();
   });
 

@@ -4627,6 +4627,10 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 .operator-monthly-finding-link { padding: 0; border: 0; background: none; font: inherit; font-weight: 700; color: var(--brown, #8a4d08); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; min-height: 0 !important; }
 .app-operator .operator-monthly-findings-dock { position: sticky; z-index: 9; top: 8px; display: grid; gap: 8px; margin-bottom: 14px; }
 .app-operator .operator-monthly-findings-dock > .operator-monthly-findings { margin: 0; box-shadow: 0 6px 18px rgba(30, 30, 30, .08); }
+/* 13/11: why "Vẫn duyệt" is not offered (structural problems), with its "Sửa tay" action. */
+.app-operator .operator-monthly-approve-blocked { gap: 10px; flex-wrap: wrap; align-items: center; padding: 10px 12px; border: 1px solid var(--danger-line); border-radius: 10px; background: var(--danger-soft); }
+.app-operator .operator-monthly-approve-blocked p { flex: 1 1 18em; min-width: 0; margin: 0; color: var(--danger); overflow-wrap: anywhere; }
+.operator-editor-approve-blocked { flex: 1 1 18em; margin: 0; color: var(--danger); }
 @media (max-width: 960px) {
   /* Below 961px the app top bar is a sticky strip (54-60px), not the side bar. */
   .app-operator .operator-monthly-findings-dock { top: 64px; }

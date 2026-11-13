@@ -85,7 +85,8 @@ export function LessonFormEditor({
   grammarStepLabels,
   findings,
   focusFinding,
-  approveAnyway
+  approveAnyway,
+  approveBlocked
 }: {
   weekNumber: number;
   cefr: string;
@@ -118,6 +119,8 @@ export function LessonFormEditor({
    * (the caller warns first). Only for the saved draft, so it waits until the form has no unsaved edits.
    */
   approveAnyway?: { severeCount: number; onApprove(): void | Promise<void> } | undefined;
+  /** 13/11: why "Vẫn duyệt" is not offered — structural problems the server would refuse; shown beside the save button. */
+  approveBlocked?: string | undefined;
 }) {
   const modal = useModal();
   const [state, setState] = useState<EditorState>(() => readLesson(initial, vocabularyCount));
@@ -286,7 +289,7 @@ export function LessonFormEditor({
       </>}
       {saveError && <div className="operator-editor-notice" role="alert"><Banner tone="danger" icon={<TriangleAlert className="operator-banner-svg" size={17} strokeWidth={2.25} />}>{saveError}</Banner></div>}
       {problems.length > 0 && <div className="operator-editor-notice" role="alert"><Banner tone="warn"><div className="small"><b>{problems.length} mục cần bổ sung:</b><ul>{problems.map(problem => <li key={problem}>{problem}</li>)}</ul><p>Bạn có thể sửa tiếp, hoặc lưu tạm: bài sẽ bị gắn nhãn &quot;chưa đủ 4 kỹ năng&quot; cho đến khi bổ sung.</p></div></Banner></div>}
-      <div className="row operator-editor-actions"><Button type="button" disabled={busy} onClick={onCancel}>Huỷ</Button>{busy && <span className="small muted" role="status" aria-live="polite">Đang lưu…</span>}{approveAnyway ? <Button type="button" className="btn-danger operator-lesson-approve-anyway-button" disabled={busy || unsaved} title={unsaved ? "Lưu bản nháp trước; nút này duyệt bản đã lưu." : undefined} onClick={() => void approveAnyway.onApprove()}>Vẫn duyệt (còn {approveAnyway.severeCount} lỗi nặng)</Button> : null}<Button type="button" className="operator-lesson-save-button" primary busy={busy} disabled={busy} onClick={() => void submit()}>{busy ? "Đang lưu…" : forceSave ? "Lưu dù còn thiếu" : "Kiểm tra & lưu"}</Button></div>
+      <div className="row operator-editor-actions"><Button type="button" disabled={busy} onClick={onCancel}>Huỷ</Button>{busy && <span className="small muted" role="status" aria-live="polite">Đang lưu…</span>}{!approveAnyway && approveBlocked ? <p className="xs operator-editor-approve-blocked" role="note">{approveBlocked}</p> : null}{approveAnyway ? <Button type="button" className="btn-danger operator-lesson-approve-anyway-button" disabled={busy || unsaved} title={unsaved ? "Lưu bản nháp trước; nút này duyệt bản đã lưu." : undefined} onClick={() => void approveAnyway.onApprove()}>Vẫn duyệt (còn {approveAnyway.severeCount} lỗi nặng)</Button> : null}<Button type="button" className="operator-lesson-save-button" primary busy={busy} disabled={busy} onClick={() => void submit()}>{busy ? "Đang lưu…" : forceSave ? "Lưu dù còn thiếu" : "Kiểm tra & lưu"}</Button></div>
       {approveAnyway && unsaved ? <p className="xs muted">Có thay đổi chưa lưu: hãy bấm “Kiểm tra &amp; lưu” trước khi vẫn duyệt bản nháp.</p> : null}
     </div>
   </section></div>;

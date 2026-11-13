@@ -79,6 +79,21 @@ export interface MonthLessonCellView {
    * the day's draft, never replaces one, and can never be approved.
    */
   generationFailure?: MonthLessonGenerationFailureView;
+  /**
+   * 13/11: structural problems of the saved draft (operator overview only) that
+   * keep it from rendering or playing. Any of them makes the server refuse
+   * "Vẫn duyệt" (MONTHLY_DAY_INTEGRITY_BLOCKED), so the page explains them instead.
+   */
+  integrityIssues?: MonthlyIntegrityIssueView[];
+}
+
+/** One structural problem; `item`/`variant` (1-based) name the question when it is on one. */
+export interface MonthlyIntegrityIssueView {
+  component: string;
+  /** Vietnamese, e.g. "Ngữ pháp: câu luyện 4 có đáp án không nằm trong các lựa chọn". */
+  message: string;
+  item?: number;
+  variant?: number;
 }
 
 export interface MonthLessonGenerationFailureView {

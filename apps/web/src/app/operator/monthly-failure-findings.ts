@@ -1,4 +1,4 @@
-import type { MonthlyQualityFindingView } from "@e4s/contracts";
+import type { MonthlyIntegrityIssueView, MonthlyQualityFindingView } from "@e4s/contracts";
 import { lessonPartsForTab, lessonPracticeCodes } from "../shared/lesson/structure.js";
 
 /** Vietnamese section names, as the operator lesson preview titles them. */
@@ -204,3 +204,59 @@ function optionContaining(parts: readonly Part[], segment: LabelSegment, word: s
 
 function asList(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }
 function quote(value: string): string { return `“${value}”`; }
+
+
+/** Key prefix of the lines built from structural problems (`integrityIssues`), for the editor's jump-to-field. */
+export const MONTHLY_INTEGRITY_LINE_PREFIX = "integrity-";
+
+/**
+ * Structural problems that keep a draft from rendering or playing (13/11). The
+ * server refuses "Vẫn duyệt" while any exist, so they are shown as severe lines
+ * that open the editor at the named question.
+ */
+export function describeMonthlyIntegrityIssues(issues: readonly MonthlyIntegrityIssueView[] | undefined, context: MonthlyFindingContext): MonthlyFindingLine[] {
+  return (issues ?? []).map((issue, index) => ({
+    key: `${MONTHLY_INTEGRITY_LINE_PREFIX}${index}`, code: "MONTHLY_DAY_INTEGRITY", component: issue.component, severity: "severe" as const,
+    where: sectionLabel(issue.component, context, issue), what: integrityWhat(issue),
+    ...(issue.item ? { item: issue.item } : {}), ...(issue.variant ? { variant: issue.variant } : {})
+  }));
+}
+
+/** The problem without its section prefix and question number ("có đáp án không nằm trong các lựa chọn"), capitalised. */
+function integrityWhat(issue: MonthlyIntegrityIssueView): string {
+  const body = issue.message.replace(/^[^:]+:\s*/u, "").replace(/^câu(?: luyện)? \d+(?: bản làm lại \d+)?\s*/u, "").trim();
+  const text = body || issue.message;
+  return `${text[0]!.toLocaleUpperCase("vi")}${text.slice(1)}.`;
+}
+
+/** "câu ngữ pháp 4 có đáp án không nằm trong các lựa chọn" — one problem, as a sentence fragment. */
+function integrityPhrase(issue: MonthlyIntegrityIssueView): string {
+  const title = MONTHLY_PART_TITLES[issue.component] ?? issue.component;
+  const body = issue.message.replace(/^[^:]+:\s*/u, "").replace(/^câu(?: luyện)? \d+(?: bản làm lại \d+)?\s*/u, "").trim();
+  if (issue.item) return `câu ${title.toLocaleLowerCase("vi")} ${issue.item}${issue.variant ? ` (bản làm lại ${issue.variant})` : ""} ${body}`;
+  return `phần ${title} ${body}`;
+}
+
+/**
+ * Calm Operator wording for a refused "Vẫn duyệt" (MONTHLY_DAY_INTEGRITY_BLOCKED):
+ * "Không duyệt vượt được: câu ngữ pháp 4 có đáp án không nằm trong các lựa chọn. Mở Sửa tay để sửa câu này."
+ */
+export function monthlyIntegrityBlockedMessage(issues: readonly MonthlyIntegrityIssueView[] | undefined): string {
+  const list = issues ?? [];
+  if (!list.length) return "Không duyệt vượt được: bài đang thiếu nội dung để học viên mở và làm. Mở Sửa tay để sửa rồi lưu lại.";
+  const shown = list.slice(0, 3).map(integrityPhrase).join("; ");
+  const more = list.length > 3 ? `; và ${list.length - 3} chỗ khác` : "";
+  const fix = list.length === 1 ? (list[0]!.item ? "Mở Sửa tay để sửa câu này." : "Mở Sửa tay để sửa phần này.") : "Mở Sửa tay để sửa các chỗ này.";
+  return `Không duyệt vượt được: ${shown}${more}. ${fix}`;
+}
+
+/** Reads `issues` from an API error body (MONTHLY_DAY_INTEGRITY_BLOCKED), keeping only well-formed entries. */
+export function integrityIssuesFromError(details: unknown): MonthlyIntegrityIssueView[] {
+  const issues = details && typeof details === "object" && "issues" in details ? (details as { issues?: unknown }).issues : undefined;
+  return Array.isArray(issues) ? issues.flatMap((raw): MonthlyIntegrityIssueView[] => {
+    if (!raw || typeof raw !== "object") return [];
+    const item = raw as Record<string, unknown>;
+    if (typeof item.component !== "string" || typeof item.message !== "string") return [];
+    return [{ component: item.component, message: item.message, ...(typeof item.item === "number" ? { item: item.item } : {}), ...(typeof item.variant === "number" ? { variant: item.variant } : {}) }];
+  }) : [];
+}

@@ -4,6 +4,7 @@ import { monthlyDefaultLessonTitle, monthlyGatedLightFindings, monthlyLessonDisp
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import "./styles.css";
+import { describeMonthlyIntegrityIssues, integrityIssuesFromError, MONTHLY_INTEGRITY_LINE_PREFIX, monthlyIntegrityBlockedMessage } from "./monthly-failure-findings.js";
 import type {
   AssessmentFormPreviewView,
   AssessmentDefinitionView,
@@ -220,7 +221,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
   const [resourceGenerationActive,setResourceGenerationActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> }; kind?: "new" | "review"; date?: string; vocabularyCount?: number; defaultTitle?: string; cefr?: CefrLevel; findings?: { title: string; lines: MonthlyFindingLine[] }; grammarStepLabels?: Record<string, string>; focusFinding?: string; severeCount?: number }>();
+  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> }; kind?: "new" | "review"; date?: string; vocabularyCount?: number; defaultTitle?: string; cefr?: CefrLevel; findings?: { title: string; lines: MonthlyFindingLine[] }; grammarStepLabels?: Record<string, string>; focusFinding?: string; severeCount?: number; approveBlocked?: string }>();
   const systemMonthInitialized = useRef(false);
   useEffect(() => { if (linkedMonth) setMonth(linkedMonth); }, [linkedMonth]);
   const pendingScrollRestore = useRef<number | null>(null);
@@ -298,8 +299,11 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     return day?.kind === "review" ? "bài ôn" : day?.newLessonNumber ? `bài ${day.newLessonNumber}` : "bài học";
   };
   type OverviewLesson = import("@e4s/contracts").MonthlyOperatorOverviewView["frameworks"][number]["lessons"][number];
-  /** 13/11: a saved draft that still has severe findings may be approved on purpose ("Vẫn duyệt"). */
-  const canApproveDayAnyway = (lesson: OverviewLesson | undefined): boolean => Boolean(lesson?.content?.parts?.length && (lesson.status === "draft" || lesson.status === "failed") && lesson.quality.severe.length);
+  /**
+   * 13/11: a saved draft that still has severe findings may be approved on purpose ("Vẫn duyệt"),
+   * unless it has structural problems (`integrityIssues`): the server refuses those, so the button is not offered.
+   */
+  const canApproveDayAnyway = (lesson: OverviewLesson | undefined): boolean => Boolean(lesson?.content?.parts?.length && (lesson.status === "draft" || lesson.status === "failed") && lesson.quality.severe.length && !lesson.integrityIssues?.length);
   /** Warns with the remaining severe findings (same wording as the findings strip), then approves with the override. */
   const approveDayAnyway = async (frameworkId: string, dayNumber: number): Promise<boolean> => {
     const lesson = overview?.frameworks.find((item) => item.id === frameworkId)?.lessons.find((item) => item.lessonNumber === dayNumber);
@@ -312,13 +316,26 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     </div>;
     if (!await modal.confirm({ title: lesson.kind === "review" ? "Vẫn duyệt bài ôn?" : "Vẫn duyệt bài học?", message, confirmLabel: "Vẫn duyệt", cancelLabel: "Quay lại sửa" })) return false;
     let approved = false;
+    let blocked: ReturnType<typeof integrityIssuesFromError> | undefined;
     await run(async () => {
-      await client.approveContentMonthDay(frameworkId, dayNumber, { acknowledgeSevereFindings: true });
-      approved = true;
-    }, `Đã duyệt ${monthDayLabel(dayNumber)} (còn lỗi nặng chưa sửa).`);
+      try {
+        await client.approveContentMonthDay(frameworkId, dayNumber, { acknowledgeSevereFindings: true });
+        approved = true;
+      } catch (reason) {
+        // The server found structural problems (the lesson would not render or play): explain them instead of a raw code.
+        if (!(reason instanceof Error) || reason.message !== "MONTHLY_DAY_INTEGRITY_BLOCKED") throw reason;
+        blocked = integrityIssuesFromError((reason as { details?: unknown }).details);
+      }
+    }, undefined);
+    if (approved) toast.show({ message: `Đã duyệt ${monthDayLabel(dayNumber)} (còn lỗi nặng chưa sửa).`, tone: "ok" });
+    if (blocked) {
+      const issues = blocked;
+      const edit = await modal.confirm({ title: "Chưa duyệt vượt được", message: <p data-testid="monthly-integrity-blocked">{monthlyIntegrityBlockedMessage(issues)}</p>, confirmLabel: "Sửa tay", cancelLabel: "Đóng" });
+      if (edit) openDayEditor(frameworkId, dayNumber, undefined, issues.length ? `${MONTHLY_INTEGRITY_LINE_PREFIX}0` : undefined, issues);
+    }
     return approved;
   };
-  const openDayEditor = (frameworkId: string, dayNumber: number, cellSlot?: { kind: "new" | "review"; date?: string | undefined; title?: string | undefined }, focusFinding?: string) => {
+  const openDayEditor = (frameworkId: string, dayNumber: number, cellSlot?: { kind: "new" | "review"; date?: string | undefined; title?: string | undefined }, focusFinding?: string, integrity?: import("@e4s/contracts").MonthlyIntegrityIssueView[]) => {
     const framework = overview?.frameworks.find((item) => item.id === frameworkId);
     const savedLesson = framework?.lessons.find((item) => item.lessonNumber === dayNumber);
     const saved = savedLesson?.content;
@@ -345,17 +362,19 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     const findingSource = saved?.parts?.length
       ? savedLesson?.status !== "approved" && savedLesson ? { title: "Kiểm tra chất lượng bản nháp", findings: [...savedLesson.quality.severe, ...savedLesson.quality.light], parts: saved.parts } : undefined
       : candidate?.parts?.length && savedLesson?.generationFailure ? { title: "Lần sinh AI gần nhất chưa đạt", findings: [...savedLesson.generationFailure.report.severe, ...savedLesson.generationFailure.report.light], parts: candidate.parts } : undefined;
-    const findingLines = findingSource ? describeMonthlyFindings(findingSource.findings, { kind: findingKind, parts: findingSource.parts }) : [];
+    // Structural problems of the saved draft come first: they are what keeps "Vẫn duyệt" refused.
+    const integrityIssues = saved?.parts?.length && savedLesson?.status !== "approved" ? integrity ?? savedLesson?.integrityIssues : undefined;
+    const findingLines = findingSource ? [...describeMonthlyIntegrityIssues(integrityIssues, { kind: findingKind, parts: findingSource.parts }), ...describeMonthlyFindings(findingSource.findings, { kind: findingKind, parts: findingSource.parts })] : [];
     // Daily practice questions name their grammar step by its short title, never by its id.
     const carryoverTopics = framework?.resources?.carryoverReviews?.find((item) => item.lessonNumber === dayNumber)?.grammarTopics ?? [];
     const grammarStepLabels = Object.fromEntries([...(framework?.resources?.grammarTopics ?? []), ...carryoverTopics].flatMap((topic) => topic.steps).map((step) => [step.id, step.focus || step.formula]));
-    const editorMeta = { ...meta, grammarStepLabels, ...(findingSource && findingLines.length ? { findings: { title: findingSource.title, lines: findingLines } } : {}), ...(focusFinding ? { focusFinding } : {}), ...(saved?.parts?.length && canApproveDayAnyway(savedLesson) ? { severeCount: savedLesson!.quality.severe.length } : {}) };
+    const editorMeta = { ...meta, grammarStepLabels, ...(findingSource && findingLines.length ? { findings: { title: findingSource.title, lines: findingLines } } : {}), ...(focusFinding ? { focusFinding } : {}), ...(saved?.parts?.length && !integrityIssues?.length && canApproveDayAnyway(savedLesson) ? { severeCount: savedLesson!.quality.severe.length } : {}), ...(integrityIssues?.length ? { approveBlocked: monthlyIntegrityBlockedMessage(integrityIssues) } : {}) };
     setEditor(saved?.parts?.length ? { frameworkId, dayNumber, initial: { ...saved, ...(savedTitle ? { title: savedTitle } : {}) }, ...editorMeta }
       : candidate?.parts?.length ? { frameworkId, dayNumber, initial: { ...(candidateTitle ? { title: candidateTitle } : {}), parts: candidate.parts.map((part) => ({ ...part, title: part.title || MONTHLY_PART_TITLES[part.code ?? ""] || part.code || "Nội dung" })) }, ...editorMeta }
       : seed ? { frameworkId, dayNumber, initial: { title: seed.title, parts: seed.parts }, ...editorMeta } : { frameworkId, dayNumber, ...editorMeta });
   };
   const editorCefr = editor?.cefr ?? cefr;
-  const dayEditor = !readOnly && editor ? <LessonFormEditor weekNumber={0} cefr={editorCefr} initial={editor.initial?.parts?.length ? { dayNumber: editor.dayNumber - 1, title: editor.initial.title || editor.defaultTitle || `Bài ${editor.dayNumber}`, durationMinutes: 10, parts: editor.initial.parts.map((part) => ({ code: (part.code || "instruction") as import("@e4s/contracts").LessonPartCode, title: part.title || part.code || "Nội dung", content: part.content || {} })) } : { ...emptyLesson(editor.dayNumber - 1), ...(editor.defaultTitle ? { title: editor.defaultTitle } : {}) }} vocabularyCount={editor.vocabularyCount ?? 3} kind={editor.kind === "review" ? "review" : "lesson"} monthly grammarStepLabels={editor.grammarStepLabels} findings={editor.findings} focusFinding={editor.focusFinding} approveAnyway={editor.severeCount ? { severeCount: editor.severeCount, onApprove: async () => {
+  const dayEditor = !readOnly && editor ? <LessonFormEditor weekNumber={0} cefr={editorCefr} initial={editor.initial?.parts?.length ? { dayNumber: editor.dayNumber - 1, title: editor.initial.title || editor.defaultTitle || `Bài ${editor.dayNumber}`, durationMinutes: 10, parts: editor.initial.parts.map((part) => ({ code: (part.code || "instruction") as import("@e4s/contracts").LessonPartCode, title: part.title || part.code || "Nội dung", content: part.content || {} })) } : { ...emptyLesson(editor.dayNumber - 1), ...(editor.defaultTitle ? { title: editor.defaultTitle } : {}) }} vocabularyCount={editor.vocabularyCount ?? 3} kind={editor.kind === "review" ? "review" : "lesson"} monthly grammarStepLabels={editor.grammarStepLabels} findings={editor.findings} focusFinding={editor.focusFinding} approveBlocked={editor.approveBlocked} approveAnyway={editor.severeCount ? { severeCount: editor.severeCount, onApprove: async () => {
     const target = editor;
     if (!await approveDayAnyway(target.frameworkId, target.dayNumber)) return;
     setEditor(undefined);
@@ -401,6 +420,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         // 13/11 "Vẫn duyệt": a saved draft that still has severe findings may be approved on purpose, after a warning.
         ...(canApproveDayAnyway(lesson) ? { onApproveAnyway: async () => { if (await approveDayAnyway(framework.id, lesson.lessonNumber)) navigate(paths.months); } } : {}),
         onEdit: (findingKey?: string) => openDayEditor(framework.id, lesson.lessonNumber, undefined, findingKey),
+        ...(lesson.integrityIssues?.length && lesson.content?.parts?.length ? { approveBlocked: monthlyIntegrityBlockedMessage(lesson.integrityIssues) } : {}),
         // VH-R44: no per-day regenerate; generate once, then edit by hand. Hidden until the rule changes.
         ...(SHOW_MONTHLY_DAY_REGENERATE && framework.status === "approved" ? { onRegenerate: async () => {
           if (!await modal.confirm({ title: lesson.kind === "review" ? "Sinh lại bài ôn?" : "Sinh lại bài học?", message: "Bản nháp hiện tại sẽ bị thay.", confirmLabel: "Sinh lại", tone: "danger", countdownSeconds: 0 })) return;
@@ -1629,6 +1649,10 @@ const operatorErrorMessages: Record<string, string> = {
   MONTHLY_DAY_DRAFT_NOT_FOUND: "Không tìm thấy bản nháp. Hãy tải lại lịch tháng.",
   MONTHLY_DAY_QUALITY_BLOCKED: "Bài chưa thể duyệt. Hãy mở bản nháp và sửa các mục chất lượng trước khi duyệt lại.",
   MONTHLY_DAY_QUALITY_ACK_REQUIRED: "Hãy kiểm tra và xác nhận từng cảnh báo trước khi duyệt.",
+  MONTHLY_DAY_INTEGRITY_BLOCKED: "Không duyệt vượt được: bài đang thiếu nội dung để học viên mở và làm. Mở Sửa tay để sửa rồi lưu lại.",
+  MONTHLY_DAY_ALREADY_APPROVED: "Bài này đã được duyệt nên đang khoá. Hãy bấm \"Yêu cầu mở lại\" để Quản lý mở lại bài trước khi sửa.",
+  MONTHLY_FRAMEWORK_PLAN_INVALID: "Kế hoạch tháng đang có lỗi nên chưa lưu hoặc duyệt bài được. Hãy mở Tài nguyên tháng để kiểm tra.",
+  MONTHLY_CONTENT_READ_ONLY: "Tháng này chỉ xem được, không sửa được nữa.",
   NETWORK_UNAVAILABLE: "Không thể kết nối tới E4S. Kiểm tra mạng rồi thử lại.",
   WEEK_SUGGESTION_FAILED: "Không thể tạo gợi ý tuần lúc này. Hãy bấm Gợi ý để thử lại; nếu vẫn lỗi, bạn có thể nhập chủ đề thủ công rồi lưu.",
   AI_UNAVAILABLE: "AI chưa được cấu hình trên máy chủ.",
@@ -1676,6 +1700,7 @@ function message(reason: unknown) {
   const missing = details && typeof details === "object" && "missing" in details ? (details as { missing?: unknown }).missing : undefined;
   if (raw === "MONTHLY_FINAL_INPUT_ERROR" && Array.isArray(missing)) return `INPUT_ERROR: khung tháng thiếu ${missing.map(String).join(", ")}.`;
   if (raw === "MONTHLY_FINAL_NOT_READY" && Array.isArray(issues)) return `Đề chưa READY. Còn: ${issues.map(String).join(", ")}.`;
+  if (raw === "MONTHLY_DAY_INTEGRITY_BLOCKED") return monthlyIntegrityBlockedMessage(integrityIssuesFromError(details));
   if (raw === "CONTENT_VALIDATION_FAILED" && Array.isArray(issues) && issues.length) {
     const summary = issues.slice(0, 2).map(issue => {
       if (typeof issue === "string") return issue;
@@ -1685,6 +1710,9 @@ function message(reason: unknown) {
     }).join("; ");
     return `${label} Chi tiết: ${summary}`;
   }
+  // Never a bare code: an unknown 4xx code shows the server's own Vietnamese message when it sent one.
+  const serverMessage = details && typeof details === "object" && "message" in details ? (details as { message?: unknown }).message : undefined;
+  if (label === raw && /^[A-Z][A-Z0-9_]+$/u.test(raw) && typeof serverMessage === "string" && /[À-ỹ]/u.test(serverMessage)) return serverMessage;
   return label;
 }
 

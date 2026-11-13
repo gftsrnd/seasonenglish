@@ -16,7 +16,7 @@ import { MonthlyResourceProgress } from "./MonthlyResourceProgress.js";
 import { isGatewayTimeout, monthlyGenerationMessage, monthlyFinalGenerationMessage, monthlyFinalGenerationTone, monthlyResourceGenerationNotice, monthlyResourceManualSuggestion } from "./monthly-generation-message.js";
 import { MonthlyResourceEditor } from "./MonthlyResourceEditor.js";
 import { MonthlyReviewPractice } from "./MonthlyReviewPractice.js";
-import { describeMonthlyFindings, MONTHLY_PART_TITLES } from "./monthly-failure-findings.js";
+import { describeMonthlyFindings, describeMonthlyIntegrityIssues, MONTHLY_INTEGRITY_LINE_PREFIX, MONTHLY_PART_TITLES } from "./monthly-failure-findings.js";
 import { MonthlyFindingsPanel } from "./MonthlyFindingsPanel.js";
 import { MonthlyIllustrationPanel, illustrationCounts } from "./MonthlyIllustrationPanel.js";
 import type { MonthlyIllustrationsView } from "../../api/operator.js";
@@ -658,7 +658,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
   </main>;
 }
 
-export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPart, busy = false, onClose, onRequestReopen, onApprove, onApproveAnyway, onEdit, onRegenerate }: { date: string; cefr: CefrLevel; lesson: MonthlyOperatorOverviewView["frameworks"][number]["lessons"][number]; resources?: MonthlyOperatorOverviewView["frameworks"][number]["resources"]; focusedPart?: string | null; busy?: boolean; onClose(): void; onRequestReopen?(reason: string): Promise<void>; onApprove?(): Promise<void> | void; /** 13/11 "Vẫn duyệt": approve a saved draft although severe findings remain (asks for confirmation first). */ onApproveAnyway?(): Promise<void> | void; onEdit?(findingKey?: string): void; onRegenerate?(): Promise<void> | void }) {
+export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPart, busy = false, onClose, onRequestReopen, onApprove, onApproveAnyway, approveBlocked, onEdit, onRegenerate }: { date: string; cefr: CefrLevel; lesson: MonthlyOperatorOverviewView["frameworks"][number]["lessons"][number]; resources?: MonthlyOperatorOverviewView["frameworks"][number]["resources"]; focusedPart?: string | null; busy?: boolean; onClose(): void; onRequestReopen?(reason: string): Promise<void>; onApprove?(): Promise<void> | void; /** 13/11 "Vẫn duyệt": approve a saved draft although severe findings remain (asks for confirmation first). */ onApproveAnyway?(): Promise<void> | void; /** 13/11: why "Vẫn duyệt" is not offered (structural problems the server would refuse); shown with a "Sửa tay" action. */ approveBlocked?: string | undefined; onEdit?(findingKey?: string): void; onRegenerate?(): Promise<void> | void }) {
   const isDraft = lesson.status !== "approved";
   const [requestingReopen, setRequestingReopen] = useState(false);
   const parts = lesson.content?.parts ?? [];
@@ -688,6 +688,8 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
   const draftSevere = parts.length ? lesson.quality.severe.length : 0;
   const draftLines = isDraft ? describeMonthlyFindings(draftFindings, { kind: lesson.kind, parts: reviewParts }) : [];
   const failureLines = failure ? describeMonthlyFindings([...failure.report.severe, ...failure.report.light], { kind: lesson.kind, parts: failedParts }) : [];
+  // Structural problems keep even "Vẫn duyệt" refused: listed first, each line opens the editor on its question.
+  const integrityLines = isDraft && parts.length ? describeMonthlyIntegrityIssues(lesson.integrityIssues, { kind: lesson.kind, parts: reviewParts }) : [];
   const kindLabel = lesson.kind === "review" ? "Ôn tập" : "Bài mới";
   // Same shell as the weekly lesson-set page so the legacy lesson styles (.app-operator) apply.
   return <OperatorPage title={`${kindLabel} ${dateLabel}`} hideRouteBack><PageTitle actions={<div className="row operator-page-title-actions">
@@ -704,7 +706,9 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
     <div className="operator-lesson-set-meta"><strong>{title}</strong><span>{cefr === "A1" || cefr === "A2" ? "tiếng Việt" : "tiếng Anh"}</span></div>
   </PageTitle>
     {/* The findings stay at the top of the view while the lesson below is scrolled, so the Operator always sees what to fix and where. */}
-    {(draftLines.length > 0 || failure) && <div className="operator-monthly-findings-dock">
+    {(draftLines.length > 0 || failure || integrityLines.length > 0) && <div className="operator-monthly-findings-dock">
+      {approveBlocked && <div className="operator-monthly-approve-blocked row between" role="note" data-testid={`monthly-approve-blocked-note-${lesson.lessonNumber}`}><p className="small">{approveBlocked}</p>{onEdit && <Button small disabled={busy} onClick={() => onEdit(integrityLines.length ? `${MONTHLY_INTEGRITY_LINE_PREFIX}0` : undefined)}><Pencil className="operator-button-icon" size={14} aria-hidden="true" />Sửa tay</Button>}</div>}
+      {integrityLines.length > 0 && <MonthlyFindingsPanel label="Lỗi làm bài không mở hoặc không làm được" title="Lỗi làm bài không mở hoặc không làm được" badge={{ tone: "danger", text: "Không duyệt vượt được" }} lines={integrityLines} onEditLine={onEdit && !busy ? (line) => onEdit(line.key) : undefined} testId={`monthly-integrity-${lesson.lessonNumber}`} />}
       {draftLines.length > 0 && <MonthlyFindingsPanel label="Kiểm tra chất lượng bản nháp" title="Kiểm tra chất lượng bản nháp" badge={{ tone: draftSevere ? "danger" : "warn", text: draftSevere ? "Chưa duyệt được" : "Có cảnh báo" }} lines={draftLines} onEditLine={onEdit && !busy ? (line) => onEdit(line.key) : undefined} testId={`monthly-draft-quality-${lesson.lessonNumber}`} />}
       {failure && <MonthlyFindingsPanel label="Lần sinh AI chưa đạt" title="Lần sinh AI gần nhất chưa đạt" badge={{ tone: "danger", text: "Không duyệt được" }} lines={failureLines} onEditLine={editCandidate && !busy ? (line) => onEdit?.(line.key) : undefined} testId={`monthly-generation-failure-${lesson.lessonNumber}`} />}
     </div>}
