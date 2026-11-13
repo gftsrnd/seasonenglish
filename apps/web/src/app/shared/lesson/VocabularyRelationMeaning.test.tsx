@@ -34,11 +34,13 @@ describe("synonym/antonym chip meaning (12/11)", () => {
     for (const call of speak.mock.calls) expect(call[0]).not.toMatch(/hỗ trợ|cản trở/u);
   });
 
-  it("B1–C1: no meaning popup at all; the chip only plays the word", () => {
+  it("B1–C1: the book icon shows the English definition and never a Vietnamese note", () => {
     renderCard("B2", { synonyms: [{ word: "assist", definition: "help someone do something" }], antonyms: [{ word: "hinder", note: "cản trở" }] });
-    expect(screen.queryByRole("button", { name: "View meaning" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Xem nghĩa" })).not.toBeInTheDocument();
-    expect(screen.queryByText("help someone do something")).not.toBeInTheDocument();
+    const icons = screen.getAllByRole("button", { name: "View meaning" });
+    expect(icons).toHaveLength(1);
+    fireEvent.click(icons[0]!);
+    expect(screen.getByText("help someone do something")).toBeVisible();
+    expect(screen.getByText("help someone do something")).toHaveAttribute("lang", "en");
     expect(screen.queryByText("cản trở")).not.toBeInTheDocument();
   });
 

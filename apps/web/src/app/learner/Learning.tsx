@@ -1118,14 +1118,13 @@ function VocabularyCard({
 }
 
 /**
- * Meaning popup of a synonym/antonym chip (12/11): A1–A2 the Vietnamese
- * meaning (`note`); B1–C1 have no popup at all — the chip only plays the word.
+ * Meaning popup of a synonym/antonym chip: A1–A2 the Vietnamese meaning (`note`, translate icon);
+ * B1–C1 the English `definition` (book icon, 13/11) — never a Vietnamese note from B1. Only synonyms and
+ * antonyms get it; the chip itself still plays the word.
  */
 function relationMeaning(value: { note?: string | undefined; definition?: string | undefined }, englishOnly: boolean): Pick<VocabularyRelationChip, "meaning" | "meaningLang"> {
-  // B1–C1: no popup at all (12/11) — the chip only plays the word.
-  if (englishOnly) return {};
-  const meaning = value.note?.trim();
-  return meaning ? { meaning, meaningLang: "vi" } : {};
+  const meaning = (englishOnly ? value.definition : value.note)?.trim();
+  return meaning ? { meaning, meaningLang: englishOnly ? "en" : "vi" } : {};
 }
 
 export function SharedVocabularyModal({
