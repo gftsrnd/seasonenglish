@@ -17,3 +17,7 @@
 .lesson-study-formula-box--wrong{background:#f8e3de;border:1px solid #e6b7ad}
 .lesson-study-formula-box--wrong .lesson-study-formula-label,.lesson-study-formula-box--wrong .lesson-study-focus{color:#7d271b}
 .lesson-study-formula-box--wrong .lesson-study-focus strong{text-decoration:line-through;text-decoration-thickness:1px}
+/* Wrong/right example pair in one chip: the wrong sentence red and struck through, the right one green. */
+.lesson-example-pair{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}
+.lesson-example-wrong{color:#7d271b;text-decoration:line-through;text-decoration-thickness:1px}
+.lesson-example-right{color:#294414}

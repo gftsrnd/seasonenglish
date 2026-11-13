@@ -611,6 +611,45 @@ export interface GrammarFormulaBox { tone: "neutral" | "correct" | "wrong"; labe
 
 const CORRECT_MARKER = /^(?:✓|✔|✅|(?:đúng|correct|right)\s*:)/iu;
 const MARKER = /(✓|✔|✅|✗|✘|❌|(?<![\p{L}])(?:đúng|sai|correct|right|wrong|incorrect|not)\s*:)/iu;
+/** Roadmap "common errors" label: shown to nobody, it only says the line lists error rules. */
+const ERROR_CHECK_LABEL = /^\s*(?:error check|common errors?|common mistakes?|lỗi thường gặp)\s*:\s*/iu;
+/** "(NOT is knowing)": the wrong form of the rule it follows. Upper-case NOT only, so a "(not)" slot stays a slot. */
+const NOT_NOTE = /\(\s*NOT\s+[^)]+\)/u;
+const NOT_NOTES = /\s*\(\s*NOT\s+([^)]+)\)/gu;
+
+/** The separate rules of an error-check line: split at " / " between two "+" patterns, and at " vs ". */
+function errorCheckRules(text: string): string[] {
+  const { parts, seps } = splitTop(text, /\s+\/\s+|\s+vs\.?\s+/iuy);
+  const rules: string[] = [];
+  parts.forEach((part, index) => {
+    const separator = seps[index - 1] ?? "";
+    const previous = rules[rules.length - 1];
+    // "verb-ed / irregular", "I am / He is": alternatives of one rule stay together.
+    if (previous !== undefined && separator.includes("/") && !(part.includes(" + ") && previous.includes(" + "))) rules[rules.length - 1] = `${previous}${separator}${part}`;
+    else rules.push(part);
+  });
+  return rules.map((rule) => rule.trim()).filter(Boolean);
+}
+
+/** "Wrong: She work in Hanoi. Right: She works in Hanoi." (also Sai:/Đúng:, Incorrect:/Correct:, ✗/✓, either order). */
+const WRONG_MARK = String.raw`(?:wrong|incorrect|sai|✗|✘|❌)`;
+const RIGHT_MARK = String.raw`(?:right|correct|đúng|✓|✔|✅)`;
+const PAIR_SEPARATOR = String.raw`\s*(?:→|->|—|–|;|\|)?\s*`;
+const WRONG_FIRST = new RegExp(String.raw`^\s*${WRONG_MARK}\s*:\s*(.+?)${PAIR_SEPARATOR}${RIGHT_MARK}\s*:\s*(.+?)\s*$`, "iu");
+const WRONG_FIRST_SYMBOL = new RegExp(String.raw`^\s*[✗✘❌]\s*(.+?)${PAIR_SEPARATOR}[✓✔✅]\s*:?\s*(.+?)\s*$`, "u");
+const RIGHT_FIRST = new RegExp(String.raw`^\s*${RIGHT_MARK}\s*:\s*(.+?)${PAIR_SEPARATOR}${WRONG_MARK}\s*:\s*(.+?)\s*$`, "iu");
+const RIGHT_FIRST_SYMBOL = new RegExp(String.raw`^\s*[✓✔✅]\s*(.+?)${PAIR_SEPARATOR}[✗✘❌]\s*:?\s*(.+?)\s*$`, "u");
+
+/** A wrong/right example split into its two sentences; undefined for an ordinary example. */
+export function grammarExamplePair(example: string): { wrong: string; right: string } | undefined {
+  const text = example.replace(/\s+/gu, " ").trim();
+  const wrongFirst = text.match(WRONG_FIRST) ?? text.match(WRONG_FIRST_SYMBOL);
+  const rightFirst = wrongFirst ? undefined : text.match(RIGHT_FIRST) ?? text.match(RIGHT_FIRST_SYMBOL);
+  const wrong = (wrongFirst?.[1] ?? rightFirst?.[2])?.trim();
+  const right = (wrongFirst?.[2] ?? rightFirst?.[1])?.trim();
+  return wrong && right ? { wrong, right } : undefined;
+}
+
 const cleanPiece = (value: string) => value.replace(/^[\s/;,.()]+|[\s/;,(]+$/gu, "").replace(/^([^()]*)\)$/u, "$1").trim();
 
 /**
@@ -622,6 +661,20 @@ export function grammarFormulaBoxes(formula: string, language: "vi" | "en", spli
   const text = formula.replace(/\s+/gu, " ").trim();
   const single: GrammarFormulaBox[] = [{ tone: "neutral", lines: splitLines(formula) }];
   if (!text) return single;
+  // (c) "Error check: …" and "(NOT …)" rules: never a two-structure compare; each rule on its own line.
+  const errorCheck = ERROR_CHECK_LABEL.test(text);
+  if (errorCheck || NOT_NOTE.test(text)) {
+    const rules = errorCheckRules(text.replace(ERROR_CHECK_LABEL, ""));
+    const wrong = rules.flatMap((rule) => [...rule.matchAll(NOT_NOTES)].map((found) => found[1]!.trim()).filter(Boolean));
+    const correct = rules.map((rule) => rule.replace(NOT_NOTES, "").replace(/\s+/gu, " ").trim()).filter(Boolean);
+    if (wrong.length && correct.length) {
+      return [
+        { tone: "correct", label: language === "en" ? "Correct" : "Đúng", lines: correct },
+        { tone: "wrong", label: language === "en" ? "Incorrect" : "Sai", lines: wrong }
+      ];
+    }
+    if (errorCheck) return [{ tone: "neutral", lines: correct.length ? correct : [text] }];
+  }
   // (b) correct vs wrong pattern.
   const parts = text.split(MARKER);
   if (parts.length > 1) {

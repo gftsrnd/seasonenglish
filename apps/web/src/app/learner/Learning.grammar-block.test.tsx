@@ -41,8 +41,10 @@ describe("learner grammar block", () => {
     expect(formula).toHaveTextContent("Question: Am/Is/Are + subject + complement?");
 
     const paragraphs = Array.from(block.querySelectorAll("p.lesson-study-explanation")).map((node) => node.textContent);
+    // The day-plan objective ("Tìm và sửa lỗi …") is roadmap metadata: learners see only the teaching explanation.
+    expect(block).not.toHaveTextContent(/Tìm và sửa lỗi/);
     expect(paragraphs).toEqual([
-      "Tìm và sửa lỗi thiếu to be hoặc dùng sai dạng am/is/are trong các câu giới thiệu. Hãy kiểm tra chủ ngữ: I dùng am, he/she/it dùng is, we/you/they dùng are.",
+      "Hãy kiểm tra chủ ngữ: I dùng am, he/she/it dùng is, we/you/they dùng are.",
       "Tiếng Việt không dùng to be trong câu như 'Tôi là nhân viên', nên dễ quên."
     ]);
   });
