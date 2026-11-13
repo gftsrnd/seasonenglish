@@ -182,8 +182,10 @@
 .vocabulary-card-relations .chip.synonym { border-color: #b6cc82; background: #e9f1d5; color: #294414; }
 .vocabulary-card-relations .chip.antonym { border-color: #e6b7ad; background: #f8e3de; color: #7d271b; }
 .vocabulary-card-relations .chip.register { border-color: #cdbfe6; background: #f1ecfa; color: #3b2a66; }
-.vocabulary-card-relations .chip.register, .lesson-page .vocabulary-card-relations .chip.register, .app-operator .operator-lesson-preview .vocabulary-card-relations .chip.register { display: inline-flex; align-items: baseline; }
-.vocabulary-card-relations .chip .vocabulary-card-chip-tag { line-height: inherit; margin-right: 6px; font-size: .62rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; opacity: .75; }
+.vocabulary-card-relations .chip.register, .lesson-page .vocabulary-card-relations .chip.register, .app-operator .operator-lesson-preview .vocabulary-card-relations .chip.register { display: inline-flex; align-items: center; }
+/* Tag as a small pill centred on the chip, so it no longer rides above the word. */
+.vocabulary-card-relations .chip .vocabulary-card-chip-tag { display: inline-flex; align-items: center; height: 1.35em; padding: 0 .45em; margin-right: 6px; border-radius: 4px; background: rgb(59 42 102 / .1); font-size: .62rem; line-height: 1; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.vocabulary-card-relations .chip.register .vocabulary-card-chip-label { line-height: 1.2; }
 .vocabulary-card-relations .chip.family { border-color: var(--line); background: var(--surface-2); color: var(--text); }
 
 .vocabulary-relation-detail {
