@@ -72,3 +72,84 @@ export function withMonthlyReadAloudTargets<T extends { code?: string; content?:
     return targets.length ? { ...part, content: { ...part.content, passageTargets: targets } } : part;
   });
 }
+
+/**
+ * Read-aloud position overlaps (13/11, B1 2026-12): the combined review passage
+ * counts the first two examples of each monthly sound once each, and a word
+ * inside a marked phrase is that phrase's position. A linking or other phrase
+ * example that reuses another sound's read-aloud word ("checked it" next to
+ * "checked", "called us" next to "called") makes the passage almost impossible
+ * to write, so the month's examples must keep them apart:
+ * - two read-aloud examples (the first two of any sound) never share a word;
+ * - a phrase example of one sound (any position) never contains a single-word
+ *   read-aloud example of another sound ("asked about it" next to "asked").
+ * Small function words (it, us, the, to, on …) may repeat: they are never
+ * targets on their own, unless one example is wholly inside the other.
+ */
+const READ_ALOUD_FUNCTION_WORDS = new Set([
+  "a", "an", "the", "this", "that", "these", "those", "some", "any", "all", "each", "every", "no", "not",
+  "i", "me", "my", "mine", "we", "us", "our", "ours", "you", "your", "yours", "he", "him", "his", "she", "her", "hers", "it", "its", "they", "them", "their", "theirs", "there", "here",
+  "to", "for", "of", "at", "from", "in", "on", "by", "with", "about", "into", "onto", "up", "out", "off", "over", "after", "before", "as", "than",
+  "and", "but", "or", "so", "if", "when", "while",
+  "am", "is", "are", "was", "were", "be", "been", "being", "do", "does", "did", "have", "has", "had",
+  "can", "could", "will", "would", "shall", "should", "may", "might", "must", "can't", "won't"
+]);
+
+/** The words of an example as spoken (‿, ↗ and (noun) notes removed), lower case. */
+export function monthlyReadAloudExampleTokens(word: string): string[] {
+  return monthlyPronunciationExampleText(word).toLocaleLowerCase("en-US").match(/[a-z0-9]+(?:'[a-z0-9]+)*/gu) ?? [];
+}
+
+const isReadAloudFunctionWord = (token: string) => READ_ALOUD_FUNCTION_WORDS.has(token)
+  || READ_ALOUD_FUNCTION_WORDS.has(token.endsWith("n't") ? token.slice(0, -3) : token.replace(/'(?:s|re|ve|ll|d|m)$/u, ""));
+
+/** Why two examples cannot both be read-aloud targets of one passage, or undefined when they can. */
+export function monthlyReadAloudExampleClash(first: string, second: string): string | undefined {
+  const a = monthlyReadAloudExampleTokens(first);
+  const b = monthlyReadAloudExampleTokens(second);
+  if (!a.length || !b.length) return undefined;
+  const shared = a.find((token) => !isReadAloudFunctionWord(token) && b.includes(token));
+  if (shared) return `"${monthlyPronunciationExampleText(first)}" and "${monthlyPronunciationExampleText(second)}" share the word "${shared}"`;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  for (let start = 0; start + short.length <= long.length; start += 1) {
+    if (short.every((token, index) => long[start + index] === token)) return `"${short.join(" ")}" is inside "${long.join(" ")}"`;
+  }
+  return undefined;
+}
+
+/** Examples that form one phrase (two or more spoken words). */
+export function isMonthlyReadAloudPhraseExample(word: string): boolean {
+  return monthlyReadAloudExampleTokens(word).length > 1;
+}
+
+/** How many examples of each sound the combined review passage reads aloud (`requiredPositions`). */
+export const MONTHLY_READ_ALOUD_POSITIONS_PER_SOUND = 2;
+
+export interface MonthlyReadAloudOverlap {
+  soundId: string; exampleId: string; word: string;
+  otherSoundId: string; otherExampleId: string; otherWord: string;
+  reason: string;
+}
+
+/**
+ * Plan validator: every pair of examples of the month that breaks the rule above
+ * (both read-aloud positions, or a phrase of one sound against a single-word
+ * read-aloud position of another). [] when the month's examples can share one passage.
+ */
+export function monthlyReadAloudPositionOverlaps(sounds: readonly MonthlyReadAloudSoundSource[]): MonthlyReadAloudOverlap[] {
+  const entries = sounds.flatMap((sound) => sound.examples.map((example, index) => ({
+    soundId: sound.id, exampleId: example.id, word: example.word,
+    required: index < MONTHLY_READ_ALOUD_POSITIONS_PER_SOUND, phrase: isMonthlyReadAloudPhraseExample(example.word)
+  })));
+  const overlaps: MonthlyReadAloudOverlap[] = [];
+  entries.forEach((first, index) => {
+    for (const second of entries.slice(index + 1)) {
+      const otherSound = first.soundId !== second.soundId;
+      const standaloneInPhrase = (single: typeof first, phrase: typeof first) => single.required && !single.phrase && phrase.phrase;
+      const applies = (first.required && second.required) || (otherSound && (standaloneInPhrase(first, second) || standaloneInPhrase(second, first)));
+      const reason = applies ? monthlyReadAloudExampleClash(first.word, second.word) : undefined;
+      if (reason) overlaps.push({ soundId: first.soundId, exampleId: first.exampleId, word: first.word, otherSoundId: second.soundId, otherExampleId: second.exampleId, otherWord: second.word, reason });
+    }
+  });
+  return overlaps;
+}

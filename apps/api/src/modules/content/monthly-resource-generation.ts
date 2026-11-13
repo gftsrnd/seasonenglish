@@ -1,4 +1,4 @@
-import { MONTHLY_RELATION_DEFINITION_MAX_WORDS, monthlyRelationMeaningIssue, selectMonthlyRegisterTerms, allowedMonthlySupportLevels, describeRequiredSupportRelations, isMonthlyCoreLevelAllowed, isMonthlySupportLevelAllowed, maxMonthlyWordFamilyLevel, buildMonthlyCalendar, monthlyCorePartOfSpeech, monthlyDayKind, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, monthlyIpaExampleMatchesTarget, monthlyPronunciationPairSide, monthlyPronunciationRule, optionalStructuralSupportRelationsFor, type MonthlyPronunciationCatalogItem, requiredSupportRelationsFor, monthlyGrammarCoverageIssues, monthlyGrammarTopicTitle, MONTHLY_GRAMMAR_PAIR_TYPE_LABELS, type MonthlyGrammarCatalogPair, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
+import { MONTHLY_RELATION_DEFINITION_MAX_WORDS, monthlyRelationMeaningIssue, selectMonthlyRegisterTerms, allowedMonthlySupportLevels, describeRequiredSupportRelations, isMonthlyCoreLevelAllowed, isMonthlySupportLevelAllowed, maxMonthlyWordFamilyLevel, buildMonthlyCalendar, monthlyCorePartOfSpeech, monthlyDayKind, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, monthlyIpaExampleMatchesTarget, monthlyPronunciationPairSide, monthlyPronunciationRule, isMonthlyReadAloudPhraseExample, monthlyReadAloudExampleClash, monthlyPronunciationExampleText, MONTHLY_READ_ALOUD_POSITIONS_PER_SOUND, optionalStructuralSupportRelationsFor, type MonthlyPronunciationCatalogItem, requiredSupportRelationsFor, monthlyGrammarCoverageIssues, monthlyGrammarTopicTitle, MONTHLY_GRAMMAR_PAIR_TYPE_LABELS, type MonthlyGrammarCatalogPair, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
 import type { CefrLevel } from "@e4s/contracts";
 import { monthlyResourcePlanOutputSchema, type MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.js";
@@ -484,6 +484,8 @@ export function selectMonthlyPronunciationCandidates(input: {
   acceptedForTarget?: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"];
   /** Total examples the target needs (pair balance); defaults to `needed`. */
   totalForTarget?: number;
+  /** Earlier targets of this month, in order: a phrase example never contains one of their single-word read-aloud examples. */
+  earlierTargets?: ReadonlyArray<MonthlyReadAloudTargetWords>;
 }): { selected: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"]; rejected: string[] } {
   if (input.catalogItem) return selectMonthlyCatalogPronunciationCandidates({ ...input, catalogItem: input.catalogItem });
   const selected: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"] = [];
@@ -526,6 +528,7 @@ function selectMonthlyCatalogPronunciationCandidates(input: {
   catalogItem: MonthlyPronunciationCatalogItem;
   acceptedForTarget?: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"];
   totalForTarget?: number;
+  earlierTargets?: ReadonlyArray<MonthlyReadAloudTargetWords>;
 }): { selected: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"]; rejected: string[] } {
   const item = input.catalogItem;
   const selected: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"] = [];
@@ -547,7 +550,7 @@ function selectMonthlyCatalogPronunciationCandidates(input: {
       ? `has ${syllables} syllables`
       : input.forbiddenWords.has(word) || chosen.has(word)
         ? "duplicates a pronunciation example already used"
-        : getMonthlyPronunciationCatalogExampleIssue(item, candidate, input.coreTerms) ?? "";
+        : getMonthlyPronunciationCatalogExampleIssue(item, candidate, input.coreTerms) ?? monthlyReadAloudPhraseRejection(candidate.word, input.earlierTargets ?? []) ?? "";
     let side: number | undefined;
     if (!reason && item.type === "pair") {
       side = monthlyPronunciationPairSide(item, candidate)?.side;
@@ -563,6 +566,65 @@ function selectMonthlyCatalogPronunciationCandidates(input: {
     if (selected.length === input.needed) break;
   }
   return { selected, rejected };
+}
+
+/** A target's examples in order; the first two are read aloud in the combined review passage. */
+export interface MonthlyReadAloudTargetWords { words: ReadonlyArray<{ word: string }> }
+
+const readAloudWords = (target: MonthlyReadAloudTargetWords) => target.words.slice(0, MONTHLY_READ_ALOUD_POSITIONS_PER_SOUND).map((word) => word.word);
+
+/**
+ * Read-aloud rule (13/11, B1 2026-12 "checked it" / "called us"): a phrase example
+ * never contains a single-word read-aloud example of an earlier target of the month.
+ */
+export function monthlyReadAloudPhraseRejection(candidate: string, earlierTargets: ReadonlyArray<MonthlyReadAloudTargetWords>): string | undefined {
+  if (!isMonthlyReadAloudPhraseExample(candidate)) return undefined;
+  for (const word of earlierTargets.flatMap(readAloudWords)) {
+    if (isMonthlyReadAloudPhraseExample(word)) continue;
+    const clash = monthlyReadAloudExampleClash(candidate, word);
+    if (clash) return `${clash}; "${monthlyPronunciationExampleText(word)}" is read aloud for an earlier target this month, so use a different verb or word`;
+  }
+  return undefined;
+}
+
+/** Why an example cannot be one of this target's two read-aloud examples, given the earlier targets of the month. */
+function readAloudPositionClash(word: string, earlierTargets: ReadonlyArray<MonthlyReadAloudTargetWords>): string | undefined {
+  const single = !isMonthlyReadAloudPhraseExample(word);
+  for (const target of earlierTargets) {
+    for (const [index, other] of target.words.entries()) {
+      // Read-aloud against read-aloud always; a single read-aloud word also against any phrase example of another target.
+      if (index >= MONTHLY_READ_ALOUD_POSITIONS_PER_SOUND && !(single && isMonthlyReadAloudPhraseExample(other.word))) continue;
+      const clash = monthlyReadAloudExampleClash(word, other.word);
+      if (clash) return clash;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Puts two examples first that can share the combined review passage with the earlier
+ * targets' read-aloud examples and with each other (no shared word, neither inside the
+ * other); the rest keep their order. `issue` when no such pair exists among `words`.
+ */
+export function orderMonthlyPronunciationExamplesForReadAloud<T extends { word: string }>(words: readonly T[], earlierTargets: ReadonlyArray<MonthlyReadAloudTargetWords>): { ordered: T[]; issue?: string; drop: T[] } {
+  const fit = words.map((word) => !readAloudPositionClash(word.word, earlierTargets));
+  const usable = fit.filter(Boolean).length;
+  for (let first = 0; first < words.length; first += 1) {
+    if (!fit[first]) continue;
+    for (let second = first + 1; second < words.length; second += 1) {
+      if (!fit[second] || monthlyReadAloudExampleClash(words[first]!.word, words[second]!.word)) continue;
+      return { ordered: [words[first]!, words[second]!, ...words.filter((_word, index) => index !== first && index !== second)], drop: [] };
+    }
+  }
+  const earlier = earlierTargets.flatMap(readAloudWords).map((word) => `"${monthlyPronunciationExampleText(word)}"`);
+  const clashes = words.flatMap((word) => { const clash = readAloudPositionClash(word.word, earlierTargets); return clash ? [clash] : []; });
+  // To make room for new examples: the last ones that cannot be read aloud, or (every usable pair clashes) the last usable one.
+  const drop = usable >= 2 ? words.filter((_word, index) => fit[index]).slice(-1) : words.filter((_word, index) => !fit[index]).slice(-(2 - usable));
+  return {
+    ordered: [...words],
+    drop,
+    issue: `the first two examples of this item are read aloud in one review passage together with the earlier items' read-aloud examples (${earlier.join(", ") || "none"}), so at least two examples must share no word with those and none with each other except small function words (it, us, the, to, on)${clashes.length ? `; rejected as read-aloud examples: ${clashes.slice(0, 6).join("; ")}` : ""}`
+  };
 }
 
 export const MONTHLY_PRONUNCIATION_EXPLANATION_MAX_WORDS = 50;
@@ -598,6 +660,8 @@ export function buildMonthlyCatalogPronunciationPrompt(input: {
   neededExamples: number;
   usedWords: readonly string[];
   acceptedWords: readonly string[];
+  /** The first two examples of each earlier item: read aloud with this item's first two in one review passage. */
+  readAloudWords?: readonly string[];
   coreWords: readonly string[];
   vocabulary: string;
   exampleRejections?: readonly string[];
@@ -623,12 +687,17 @@ export function buildMonthlyCatalogPronunciationPrompt(input: {
   const ruleLine = rule
     ? ` RULE SHOWN TO LEARNERS for this item (the explanation and every example must agree with it): ${rule.ruleEn} Typical Vietnamese-learner mistake: ${rule.mistakeEn}${rule.caution ? ` GENERATION CAUTIONS (tendencies, not absolute rules; accept standard British and American variants): ${rule.caution}` : ""}`
     : "";
+  // 13/11 (B1 2026-12): the combined review passage reads the first two examples of all four items once each.
+  const readAloud = (input.readAloudWords ?? []).map((word) => `"${monthlyPronunciationExampleText(word)}"`);
+  const readAloudRule = readAloud.length
+    ? ` READ-ALOUD RULE: the first two examples of every item are read aloud together in one review passage, each exactly once. Earlier items' read-aloud examples: ${readAloud.join(", ")}. Never put any of these words inside a phrase example (for "-ed linked to the next word" use other verbs than the -ed words above, e.g. not "checked it" when "checked" is read aloud), and make your first two examples share no word with them or with each other except small function words (it, us, the, to, on).`
+    : "";
   const repair = [
     input.exampleRejections?.length ? `EXAMPLE REPAIR: keep the same item; the application rejected these examples: ${input.exampleRejections.join("; ")}. Return new, different examples that follow the example form exactly; never repeat a rejected example.` : "",
     input.textIssues?.length ? `TEXT REPAIR: ${input.textIssues.join("; ")}.` : "",
     input.schemaIssue ?? ""
   ].filter(Boolean).join(" ");
-  return `PHASE 4 — ONE ROADMAP PRONUNCIATION ITEM ONLY. This phase prompt overrides any general pronunciation guidance (choosing targets, a three-syllable limit for every example, Vietnamese labels at every level). The application has ALREADY CHOSEN the item for roadmap slot ${input.slot} from the product roadmap of level ${input.cefr}; do not choose, change or rename the item. Item: id ${item.id}; notation ${item.notation}; type ${kind}; roadmap group ${item.group}; meaning "${item.labelEn}" (Vietnamese: "${item.labelVi}"). This month's four items in order: ${input.monthItems.map((entry) => `${entry.notation} ${entry.labelEn}`).join(" → ")}. Level catalog in roadmap order (context only): ${catalogLine}. Already taught to this level in the previous 12 months (never teach them again here): ${taught.join("; ") || "none"}. Return exactly one pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. Set ipa to exactly "${item.notation}". Write label in ${textLanguage}, at most 80 characters, naming this item (for example "${label}"). Write explanation in ${textLanguage}: at most ${MONTHLY_PRONUNCIATION_EXPLANATION_MAX_WORDS} words and at most ${MONTHLY_PRONUNCIATION_EXPLANATION_MAX_CHARS} characters (the application rejects longer text), giving the mouth shape or the rule and one common mistake of Vietnamese learners. Return at least ${Math.max(18, input.neededExamples * 2)} ordered candidate examples so the application can select ${input.neededExamples}; learners meet them three at a time (recognise, distinguish, use in a sentence). EXAMPLE FORM for this item (the application checks every example and rejects any that break it): ${item.exampleGuidance}${phraseRule}${ruleLine} Each example's ipa is its real standard British pronunciation in slashes. Prefer this month's core words when they genuinely show the item (core words: ${input.coreWords.join(", ") || "none"}); otherwise use familiar ${input.cefr}-level workplace words. Monthly vocabulary pool (use a word only when it genuinely shows the item): ${input.vocabulary}. Never reuse examples of earlier items of this month: ${input.usedWords.join("; ") || "none"}. Already accepted for this item (do not repeat): ${input.acceptedWords.join("; ") || "none"}.${exampleRules} Use neutral workplace content; never invent cultural, historical or identity-based framing.${repair ? ` ${repair}` : ""}`;
+  return `PHASE 4 — ONE ROADMAP PRONUNCIATION ITEM ONLY. This phase prompt overrides any general pronunciation guidance (choosing targets, a three-syllable limit for every example, Vietnamese labels at every level). The application has ALREADY CHOSEN the item for roadmap slot ${input.slot} from the product roadmap of level ${input.cefr}; do not choose, change or rename the item. Item: id ${item.id}; notation ${item.notation}; type ${kind}; roadmap group ${item.group}; meaning "${item.labelEn}" (Vietnamese: "${item.labelVi}"). This month's four items in order: ${input.monthItems.map((entry) => `${entry.notation} ${entry.labelEn}`).join(" → ")}. Level catalog in roadmap order (context only): ${catalogLine}. Already taught to this level in the previous 12 months (never teach them again here): ${taught.join("; ") || "none"}. Return exactly one pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. Set ipa to exactly "${item.notation}". Write label in ${textLanguage}, at most 80 characters, naming this item (for example "${label}"). Write explanation in ${textLanguage}: at most ${MONTHLY_PRONUNCIATION_EXPLANATION_MAX_WORDS} words and at most ${MONTHLY_PRONUNCIATION_EXPLANATION_MAX_CHARS} characters (the application rejects longer text), giving the mouth shape or the rule and one common mistake of Vietnamese learners. Return at least ${Math.max(18, input.neededExamples * 2)} ordered candidate examples so the application can select ${input.neededExamples}; learners meet them three at a time (recognise, distinguish, use in a sentence). EXAMPLE FORM for this item (the application checks every example and rejects any that break it): ${item.exampleGuidance}${phraseRule}${ruleLine} Each example's ipa is its real standard British pronunciation in slashes. Prefer this month's core words when they genuinely show the item (core words: ${input.coreWords.join(", ") || "none"}); otherwise use familiar ${input.cefr}-level workplace words. Monthly vocabulary pool (use a word only when it genuinely shows the item): ${input.vocabulary}. Never reuse examples of earlier items of this month: ${input.usedWords.join("; ") || "none"}. Already accepted for this item (do not repeat): ${input.acceptedWords.join("; ") || "none"}.${readAloudRule}${exampleRules} Use neutral workplace content; never invent cultural, historical or identity-based framing.${repair ? ` ${repair}` : ""}`;
 }
 
 export function doesMonthlyPronunciationExampleMatch(targetIpa: string, exampleIpa: string, word?: string): boolean {

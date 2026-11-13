@@ -11,7 +11,7 @@ import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { monthlyLessonIntegrityIssues, withMonthlyIntegrityIssues, type MonthlyIntegrityIssue } from "./monthly-integrity.js";
 import { previousMonthlyLessonAudioIndex, withLessonListeningAudio, type ListeningAudioService } from "../assessment/listening-audio.js";
 import { generateMonthlyDayWithAi, generateMonthlyReviewWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
-import { buildMonthlyCatalogPronunciationPrompt, getMonthlyPronunciationTextIssues, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, describeMonthlyResourceCheckpointProgress, MONTHLY_RESOURCE_ATTEMPTS_LINEAGE_KEY, monthlyResourcePartialProgressMessage, readMonthlyResourceFailedAttempts, getMonthlyGrammarPhaseIssues, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyAiCallBudgetError, monthlyResourceAiCallLimit, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
+import { orderMonthlyPronunciationExamplesForReadAloud, buildMonthlyCatalogPronunciationPrompt, getMonthlyPronunciationTextIssues, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, describeMonthlyResourceCheckpointProgress, MONTHLY_RESOURCE_ATTEMPTS_LINEAGE_KEY, monthlyResourcePartialProgressMessage, readMonthlyResourceFailedAttempts, getMonthlyGrammarPhaseIssues, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyAiCallBudgetError, monthlyResourceAiCallLimit, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
 import { isInvalidAiOutputDefault, MonthlyCorePhaseShortfallError, runMonthlyCorePhase } from "./monthly-core-phase.js";
 import { budgetedMonthlyRegisterRunner, monthlyRegisterCheckpointSchema, regenerateMonthlyRegisterTerms, resumeMonthlyRegisterCheckpoint, runMonthlyRegisterTermsPhase } from "./monthly-register-phase.js";
 import { runMonthlyEnrichmentWithRefill, type MonthlyCoreEnrichmentOutcome } from "./monthly-enrichment-phase.js";
@@ -833,8 +833,11 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       for (const [index, target] of cachedPronunciationTargets.entries()) {
         const item = pronunciationItems[index];
         if (!item || target.ipa !== item.notation || target.words.length < pronunciationExampleCount || getMonthlyPronunciationTextIssues(criteria.cefr, target).length) break;
-        const recheck = selectMonthlyPronunciationCandidates({ candidates: target.words, forbiddenWords: new Set(cachedPrefix.flatMap((prior) => prior.words.map((word) => normalizeMonthlyResourceWord(word.word)))), needed: target.words.length, catalogItem: item, coreTerms, totalForTarget: target.words.length });
+        const recheck = selectMonthlyPronunciationCandidates({ candidates: target.words, forbiddenWords: new Set(cachedPrefix.flatMap((prior) => prior.words.map((word) => normalizeMonthlyResourceWord(word.word)))), needed: target.words.length, catalogItem: item, coreTerms, totalForTarget: target.words.length, earlierTargets: cachedPrefix });
         if (recheck.selected.length !== target.words.length) break;
+        // 13/11: a checkpointed target whose first two examples clash with the earlier read-aloud examples is regenerated.
+        const readAloudOrder = orderMonthlyPronunciationExamplesForReadAloud(target.words, cachedPrefix);
+        if (readAloudOrder.issue || readAloudOrder.ordered.slice(0, 2).some((word, index) => word !== target.words[index])) break;
         cachedPrefix.push(target);
       }
       const pronunciationTargets: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"] = cachedPrefix;
@@ -866,6 +869,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
             neededExamples: Math.max(1, neededExamples),
             usedWords: [...usedPronunciationWords],
             acceptedWords: acceptedTargetWords.map((word) => word.word),
+            readAloudWords: pronunciationTargets.flatMap((target) => target.words.slice(0, 2).map((word) => word.word)),
             coreWords: coreWordList,
             vocabulary: monthlyVocabularyForPronunciation,
             exampleRejections,
@@ -902,13 +906,26 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
           }
           // Examples are always checked against the fixed catalog item, whatever ipa the response used.
           if (acceptedTargetWords.length < pronunciationExampleCount) {
-            const selection = selectMonthlyPronunciationCandidates({ candidates: candidate.words, forbiddenWords: forbiddenForTarget, needed: neededExamples, catalogItem: item, coreTerms, acceptedForTarget: acceptedTargetWords, totalForTarget: pronunciationExampleCount });
+            const selection = selectMonthlyPronunciationCandidates({ candidates: candidate.words, forbiddenWords: forbiddenForTarget, needed: neededExamples, catalogItem: item, coreTerms, acceptedForTarget: acceptedTargetWords, totalForTarget: pronunciationExampleCount, earlierTargets: pronunciationTargets });
             // December 2026 ("ackle"): an independent real-word / British IPA check before an example is kept.
             const verified = await verifyMonthlyWords(runner, criteria.cefr, selection.selected.map((word) => ({ word: word.word, ipa: word.ipa, role: `pronunciation example of ${item.notation} (${item.labelEn})` })));
             for (const [index, reason] of verified) selection.rejected.push(`${selection.selected[index]!.word} (${reason})`);
             selection.selected = selection.selected.filter((_word, index) => !verified.has(index));
             acceptedTargetWords.push(...selection.selected);
             exampleRejections = acceptedTargetWords.length === pronunciationExampleCount ? [] : selection.rejected.length ? selection.rejected : [`only ${acceptedTargetWords.length} of ${pronunciationExampleCount} usable examples have been returned`];
+            // 13/11 (B1 2026-12): the first two examples must be able to share the review passage with the earlier
+            // targets' read-aloud examples. Put such a pair first; with none, drop the examples that block it and
+            // ask once more (same attempt budget) for examples with other words.
+            if (acceptedTargetWords.length === pronunciationExampleCount) {
+              const readAloudOrder = orderMonthlyPronunciationExamplesForReadAloud(acceptedTargetWords, pronunciationTargets);
+              if (readAloudOrder.issue) {
+                const kept = acceptedTargetWords.filter((word) => !readAloudOrder.drop.includes(word));
+                acceptedTargetWords.splice(0, acceptedTargetWords.length, ...kept);
+                exampleRejections = [readAloudOrder.issue];
+              } else {
+                acceptedTargetWords.splice(0, acceptedTargetWords.length, ...readAloudOrder.ordered);
+              }
+            }
           }
           if (acceptedText && acceptedTargetWords.length === pronunciationExampleCount) break;
           issue = [...textIssues, ...exampleRejections].join("; ");

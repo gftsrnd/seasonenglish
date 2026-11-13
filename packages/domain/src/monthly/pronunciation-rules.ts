@@ -115,10 +115,10 @@ export const MONTHLY_PRONUNCIATION_RULES: Readonly<Record<string, MonthlyPronunc
     caution: `${ENDING_CAUTION} An /ɪd/ example must have /t/ or /d/ before the ending.`
   },
   "b1-ed-link": {
-    ruleVi: "Khi từ có -ed đứng trước từ bắt đầu bằng nguyên âm, âm /t/ hoặc /d/ cuối nối sang nguyên âm đó: checked it /tʃekt‿ɪt/, called us /kɔːld‿ʌs/.",
-    ruleEn: "When an -ed word comes before a word starting with a vowel, its final /t/ or /d/ joins that vowel: checked it /tʃekt‿ɪt/, called us /kɔːld‿ʌs/.",
-    rememberVi: "Đọc như thể /t/ hoặc /d/ là âm đầu của từ sau: \"check-tit\".",
-    rememberEn: "Say the /t/ or /d/ as if it starts the next word: \"check-tit\".",
+    ruleVi: "Khi từ có -ed đứng trước từ bắt đầu bằng nguyên âm, âm /t/ hoặc /d/ cuối nối sang nguyên âm đó: booked it /bʊkt‿ɪt/, moved on /muːvd‿ɒn/.",
+    ruleEn: "When an -ed word comes before a word starting with a vowel, its final /t/ or /d/ joins that vowel: booked it /bʊkt‿ɪt/, moved on /muːvd‿ɒn/.",
+    rememberVi: "Đọc như thể /t/ hoặc /d/ là âm đầu của từ sau: \"boo-kit\".",
+    rememberEn: "Say the /t/ or /d/ as if it starts the next word: \"boo-kit\".",
     mistakeVi: "Ngắt hơi giữa hai từ và nuốt mất đuôi -ed.",
     mistakeEn: "Pausing between the words and losing the -ed.",
     caution: "Link only where a vowel really follows; do not add ‿ to every word boundary."

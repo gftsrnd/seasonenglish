@@ -1,4 +1,4 @@
-import { isMonthlyPronunciationCatalogNotation, monthlyPronunciationMaxSyllables, isMonthlySupportLevelAllowed, maxMonthlySupportRepeats, monthlySupportLevelRule, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, describeRequiredSupportRelations, hasRequiredMonthlySupportRelations } from "@e4s/domain";
+import { monthlyReadAloudPositionOverlaps, isMonthlyPronunciationCatalogNotation, monthlyPronunciationMaxSyllables, isMonthlySupportLevelAllowed, maxMonthlySupportRepeats, monthlySupportLevelRule, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, describeRequiredSupportRelations, hasRequiredMonthlySupportRelations } from "@e4s/domain";
 
 /**
  * Reusable contract for AI generation of monthly hard learning resources.
@@ -409,6 +409,9 @@ export function validateMonthlyResourcePlanShape(
   }
   const pronunciationWords = plan.pronunciationTargets.flatMap((target) => target.words.map((word) => normalize(word.word)));
   if (new Set(pronunciationWords).size !== pronunciationWords.length) errors.push("Pronunciation examples repeat between targets.");
+  // 13/11 (B1 2026-12 "checked it" / "called us"): the review passage reads the first two examples of every target once each.
+  const overlaps = monthlyReadAloudPositionOverlaps(plan.pronunciationTargets.map((target, index) => ({ id: `sound-${index + 1}`, examples: target.words.map((word, wordIndex) => ({ id: `sound-${index + 1}-word-${wordIndex + 1}`, word: word.word })) })));
+  if (overlaps.length) errors.push(`Pronunciation read-aloud examples overlap: ${overlaps.map((overlap) => overlap.reason).join("; ")}.`);
   return errors;
 }
 

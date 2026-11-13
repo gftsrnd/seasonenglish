@@ -83,7 +83,7 @@ describe("roadmap pronunciation gates (11/11)", () => {
     expect(isPronunciationTargetAllowedForLevel("A2", "/C‿V/")).toBe(false);
     const plan = {
       coreTerms: [], expandedTerms: [], grammarTopics: [],
-      pronunciationTargets: monthlyPronunciationCatalog("B2").slice(4, 8).map((entry, index) => ({ id: `p${index}`, ipa: entry.notation, label: entry.labelEn, explanation: "x", words: Array.from({ length: 9 }, (_v, w) => ({ word: `we can look at it again ${index}${w}` })) }))
+      pronunciationTargets: monthlyPronunciationCatalog("B2").slice(4, 8).map((entry, index) => ({ id: `p${index}`, ipa: entry.notation, label: entry.labelEn, explanation: "x", words: Array.from({ length: 9 }, (_v, w) => ({ word: `we can do it ${String.fromCharCode(97 + index)}${String.fromCharCode(97 + w)}x` })) }))
     };
     const errors = validateMonthlyResourcePlanShape(plan, 0, "B2").filter((error) => error.includes("Pronunciation"));
     expect(errors).toEqual([]);
