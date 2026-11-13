@@ -127,6 +127,31 @@ export interface MonthlyPublicationPreviewView {
   nextMonth: string;
 }
 
+/** "Công bố lại": move a published month's publication date back to the current system date. */
+export interface MonthlyRepublicationPreviewView {
+  /** Current stored publication date. */
+  publishedOn: string;
+  /** The organisation system date the month would be republished on. */
+  republishOn: string;
+  /** false when the dates already match (nothing to do). */
+  needed: boolean;
+  /** Same readiness rule as the first publication (approved resources + 3 consecutive approved lessons from today). */
+  ready: boolean;
+  /** Lesson days in the readiness window that are not approved yet. */
+  missingDays: Array<{ lessonNumber: number; date: string }>;
+  /** Active learners of this level who can study from `republishOn`. */
+  affectedLearners: number;
+  /** Learners whose level start lies after `republishOn` and is moved back to it. */
+  shiftedLearners: number;
+}
+
+export interface MonthlyRepublicationResultView {
+  previousPublishedOn: string;
+  publishedOn: string;
+  changed: boolean;
+  shiftedLearners: number;
+}
+
 /**
  * Operator manual edit of a DRAFT monthly resource pool (VH-R30/VH-R35).
  * Core count and core IDs are fixed; a core word is replaced by editing its row.

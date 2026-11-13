@@ -21,6 +21,8 @@ import {
 import type {
   CefrLevel,
   MonthlyPublicationPreviewView,
+  MonthlyRepublicationPreviewView,
+  MonthlyRepublicationResultView,
   MonthlyOperatorOverviewView,
   MonthFrameworkView,
   SharedMonthBriefView,
@@ -31,6 +33,7 @@ import type {
 } from "@e4s/contracts";
 import { monthlyLearnerWindow } from "@e4s/domain/progression";
 import type { Client, Pool, PoolClient } from "pg";
+import { learnerLevelStartedOnSql } from "./learner-level-start.js";
 import { FROZEN_MONTHLY_ILLUSTRATIONS_SQL, withFrozenMonthlyIllustrations, type FrozenMonthlyIllustration } from "./monthly-illustration-projection.js";
 
 type Queryable = Pool | Client;
@@ -103,6 +106,85 @@ interface FrameworkReopenListRow extends FrameworkReopenRequestRow {
 /** Error with an HTTP status Fastify answers directly instead of a 500. */
 function httpError(statusCode: number, code: string, message: string): Error & { statusCode: number; code: string } {
   return Object.assign(new Error(message), { statusCode, code });
+}
+
+interface RepublicationFacts {
+  month: string; cefr: CefrLevel; today: string; publishedOn: string; ready: boolean; inWindow: boolean;
+  missingDays: Array<{ lessonNumber: number; date: string }>;
+}
+
+/**
+ * The published framework, today's system date and the readiness of the publication window. `ready`
+ * is `monthly_framework_ready_for_publication` itself; `missingDays` lists the window days it rejects
+ * (the same three upcoming lessons, or the last three once the month is over).
+ */
+async function republicationFacts(db: Queryable, organizationId: string, frameworkId: string, lock: boolean): Promise<RepublicationFacts> {
+  const { rows: [row] } = await db.query<{ month: string; cefr: CefrLevel; status: string; today: string; published_on: string | null; ready: boolean; in_window: boolean }>(
+    `select pm.month, mf.cefr, mf.status, organization_system_date(pm.organization_id)::text as today, mf.published_on::text,
+            monthly_framework_ready_for_publication(mf.id) as ready,
+            pm.month between to_char(organization_system_date(pm.organization_id), 'YYYY-MM')
+                         and to_char(organization_system_date(pm.organization_id) + interval '1 month', 'YYYY-MM') as in_window
+     from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+     where mf.id = $1 and pm.organization_id = $2 and mf.status <> 'retired'${lock ? " for update of mf" : ""}`,
+    [frameworkId, organizationId]
+  );
+  if (!row) throw httpError(404, "MONTHLY_FRAMEWORK_NOT_FOUND", "Không tìm thấy khung tháng.");
+  if (row.status !== "approved" || !row.published_on) throw httpError(409, "MONTHLY_REPUBLICATION_NOT_PUBLISHED", "Chỉ công bố lại tháng đã được công bố.");
+  const { rows: windowRows } = await db.query<{ lesson_number: number; lesson_date: string; ready: boolean }>(
+    `with framework as (
+       select mf.id, mf.scope_hash, mf.curriculum_contract, organization_system_date(pm.organization_id) as today
+       from month_frameworks mf join program_months pm on pm.id = mf.program_month_id where mf.id = $1
+     ),
+     upcoming as (
+       select ml.* from month_lessons ml, framework f
+       where ml.framework_id = f.id and ml.lesson_date >= f.today order by ml.lesson_number limit 3
+     ),
+     window_lessons as (
+       select * from upcoming
+       union all
+       select * from (
+         select ml.* from month_lessons ml, framework f
+         where ml.framework_id = f.id and not exists (select from upcoming) order by ml.lesson_number desc limit 3
+       ) tail
+     )
+     select wl.lesson_number, wl.lesson_date::text,
+            (wl.status = 'approved' and wl.scope_hash = f.scope_hash
+             and exists (
+               select from lessons l join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id and lsv.status = 'published'
+               where l.id = wl.lesson_id and exists (select from lesson_versions lv where lv.lesson_id = l.id and lv.status = 'published'))
+             and f.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', wl.lesson_number, 'date', wl.lesson_date::text))
+            ) as ready
+     from window_lessons wl, framework f order by wl.lesson_number`,
+    [frameworkId]
+  );
+  return {
+    month: row.month, cefr: row.cefr, today: row.today, publishedOn: row.published_on, ready: Boolean(row.ready), inWindow: Boolean(row.in_window),
+    missingDays: windowRows.filter((day) => !day.ready).map((day) => ({ lessonNumber: day.lesson_number, date: day.lesson_date }))
+  };
+}
+
+/** Active learners whose current approved level is `cefr`; `shifted` when their level start lies after `today`. */
+async function republicationLearners(db: Queryable, organizationId: string, cefr: CefrLevel, today: string) {
+  const { rows } = await db.query<{ enrollment_id: string; learner_id: string; level_started_on: string | null }>(
+    `select e.id as enrollment_id, e.learner_id, ${learnerLevelStartedOnSql("e", "e.learner_id")}::text as level_started_on
+     from enrollments e
+     join programs p on p.id = e.program_id and p.status = 'active'
+     join users learner on learner.id = e.learner_id and learner.role = 'learner' and learner.status = 'active' and learner.organization_id = $1
+     where e.cefr_approved and e.cefr = $2
+       and not exists (
+         select from enrollments newer join programs np on np.id = newer.program_id and np.status = 'active'
+         where newer.learner_id = e.learner_id and newer.cefr_approved and newer.cefr is not null and newer.enrolled_at > e.enrolled_at
+       )`,
+    [organizationId, cefr]
+  );
+  return rows.map((row) => ({ enrollmentId: row.enrollment_id, learnerId: row.learner_id, shifted: row.level_started_on !== null && row.level_started_on > today }));
+}
+
+/** "06/11 (Bài 4), 07/11 (Bài 5)": the exact days blocking a republication. */
+export function republicationIncompleteMessage(missingDays: Array<{ lessonNumber: number; date: string }>): string {
+  if (!missingDays.length) return "Chưa công bố lại được: tài nguyên, chủ đề hoặc lịch bài của tháng chưa đủ điều kiện công bố.";
+  const days = missingDays.map((day) => `${day.date.slice(8, 10)}/${day.date.slice(5, 7)} (Bài ${day.lessonNumber})`).join(", ");
+  return `Chưa công bố lại được: cần duyệt 3 bài liên tiếp tính từ hôm nay; còn thiếu ${days}.`;
 }
 
 interface MonthLessonRow {
@@ -1434,6 +1516,79 @@ export class MonthlyContentRepository {
       );
       await client.query("commit");
       return { publishedOn: row.today };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      if (pooledClient) (client as PoolClient).release();
+    }
+  }
+
+  /**
+   * "Công bố lại" preview: what moving a published month back to today's system date would do. Same
+   * readiness rule as the first publication; read-only, for Operators and Managers.
+   */
+  async previewMonthRepublication(actorId: string, frameworkId: string): Promise<MonthlyRepublicationPreviewView> {
+    const actor = await this.requireOperator(actorId);
+    const facts = await republicationFacts(this.database, actor.organization_id, frameworkId, false);
+    const learners = await republicationLearners(this.database, actor.organization_id, facts.cefr, facts.today);
+    return {
+      publishedOn: facts.publishedOn, republishOn: facts.today, needed: facts.publishedOn > facts.today,
+      ready: facts.ready, missingDays: facts.missingDays,
+      affectedLearners: learners.length, shiftedLearners: learners.filter((learner) => learner.shifted).length
+    };
+  }
+
+  /**
+   * "Công bố lại" (13/11): a month stamped with a later system date (published 13/11, test date moved
+   * back to 06/11) is moved to the current system date in one transaction: `published_on`, the level
+   * start of learners of this level that lies after it, and lesson-unlock dates of this month after it.
+   * `published_at` keeps the real moment of the publication; the audit event records the republication.
+   * Idempotent: when the dates already match nothing is written.
+   */
+  async republishMonth(actorId: string, frameworkId: string, confirmedOn: string): Promise<MonthlyRepublicationResultView> {
+    const actor = await this.requireOperator(actorId);
+    const pooledClient = "connect" in this.database;
+    const client = pooledClient ? await this.database.connect() : this.database;
+    try {
+      await client.query("begin");
+      const facts = await republicationFacts(client, actor.organization_id, frameworkId, true);
+      if (facts.publishedOn === facts.today) {
+        await client.query("commit");
+        return { previousPublishedOn: facts.publishedOn, publishedOn: facts.publishedOn, changed: false, shiftedLearners: 0 };
+      }
+      if (facts.publishedOn < facts.today) throw httpError(409, "MONTHLY_REPUBLICATION_NOT_NEEDED", "Ngày công bố đã trước ngày hệ thống; học viên đang học bình thường, không cần công bố lại.");
+      if (confirmedOn !== facts.today) throw httpError(409, "MONTHLY_PUBLICATION_DATE_CHANGED", "Ngày hệ thống đã đổi. Hãy kiểm tra lại ảnh hưởng trước khi công bố lại.");
+      if (!facts.inWindow) throw httpError(409, "MONTHLY_REPUBLICATION_OUTSIDE_WINDOW", "Ngày hệ thống quá xa tháng này; chỉ công bố lại trong tháng hiện tại hoặc tháng trước đó.");
+      if (!facts.ready) throw httpError(409, "MONTHLY_REPUBLICATION_INCOMPLETE", republicationIncompleteMessage(facts.missingDays));
+      const learners = await republicationLearners(client, actor.organization_id, facts.cefr, facts.today);
+      const shifted = learners.filter((learner) => learner.shifted);
+      if (shifted.length) {
+        await client.query("update enrollments set cefr_started_on = $2::date where id = any($1::uuid[])", [shifted.map((learner) => learner.enrollmentId), facts.today]);
+      }
+      // An approved lesson unlock of this month dated after the new date would otherwise keep moving the
+      // learner's first counted day forward with the system date.
+      const unlocks = learners.length ? await client.query<{ id: string }>(
+        `update learner_complaints complaint
+         set related_data = jsonb_set(coalesce(complaint.related_data, '{}'::jsonb), '{resolvedOn}', to_jsonb($2::text))
+         where complaint.learner_id = any($1::uuid[]) and complaint.kind = 'lesson_unlock' and complaint.status = 'approved'
+           and complaint.related_data->>'month' = $3
+           and coalesce(nullif(complaint.related_data->>'resolvedOn', '')::date, (complaint.resolved_at at time zone 'Asia/Ho_Chi_Minh')::date) > $2::date
+         returning complaint.id`,
+        [learners.map((learner) => learner.learnerId), facts.today, facts.month]
+      ) : { rows: [] };
+      await client.query("update month_frameworks set published_on = $2::date, updated_at = now() where id = $1", [frameworkId, facts.today]);
+      await client.query(
+        `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'monthly.framework_republished', 'monthly_framework', $4, $5::jsonb, $6)`,
+        [randomUUID(), actor.organization_id, actorId, frameworkId, JSON.stringify({
+          month: facts.month, cefr: facts.cefr, actorRole: actor.role, previousPublishedOn: facts.publishedOn, publishedOn: facts.today,
+          studyLearnerCount: learners.length, shiftedLearnerCount: shifted.length, shiftedLearnerIds: shifted.map((learner) => learner.learnerId),
+          unlockComplaintIds: unlocks.rows.map((row) => row.id)
+        }), randomUUID()]
+      );
+      await client.query("commit");
+      return { previousPublishedOn: facts.publishedOn, publishedOn: facts.today, changed: true, shiftedLearners: shifted.length };
     } catch (error) {
       await client.query("rollback");
       throw error;

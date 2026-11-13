@@ -9,6 +9,7 @@ import { buildMonthlyCalendar, formatMonthlyDayLabel, monthlyLessonDisplayTitle,
 import { FROZEN_MONTHLY_ILLUSTRATIONS_SQL, withFrozenMonthlyIllustrations, type FrozenMonthlyIllustration } from "./monthly-illustration-projection.js";
 import { generationFindingsFromPayload } from "./generation-findings.js";
 import { MonthlyContentRepository } from "./monthly-content-repository.js";
+import { learnerLevelStartedOnSql } from "./learner-level-start.js";
 import type {
   AccountRole,
   AudioArtifactInput,
@@ -3007,22 +3008,7 @@ export async function learnerMonthlyAccess(db: Pool | PoolClient, learnerId: str
        cross join lateral (select organization_system_date(learner.organization_id) as system_date,
          coalesce($2, to_char(organization_system_date(learner.organization_id), 'YYYY-MM')) as month) dates
        left join lateral (
-         select e.cefr, coalesce(e.cefr_started_on, greatest(
-           (e.enrolled_at at time zone 'Asia/Ho_Chi_Minh')::date,
-           (select max((change.effective_at at time zone 'Asia/Ho_Chi_Minh')::date)
-              from scheduled_level_changes change where change.learner_id = learner.id
-                and change.to_cefr = e.cefr and change.status = 'applied'),
-           (select max((event.created_at at time zone 'Asia/Ho_Chi_Minh')::date) from audit_events event
-              where event.entity_id = learner.id and event.action = 'assessment.learner.level_changed'
-                and event.payload->>'mode' = 'direct' and event.payload->>'targetLevel' = e.cefr
-                and event.payload->>'previousLevel' is distinct from e.cefr),
-           (select max((decision.decided_at at time zone 'Asia/Ho_Chi_Minh')::date)
-              from assessment_decisions decision join assessment_attempts attempt on attempt.id = decision.attempt_id
-              join assessment_versions version on version.id = attempt.assessment_version_id
-              join assessment_definitions definition on definition.id = version.definition_id
-              where attempt.learner_id = learner.id and definition.kind = 'placement'
-                and decision.status = 'approved' and decision.approved_level = e.cefr)
-         )) as level_started_on
+         select e.cefr, ${learnerLevelStartedOnSql("e", "learner.id")} as level_started_on
          from enrollments e join programs p on p.id = e.program_id and p.status = 'active'
          where e.learner_id = learner.id and e.cefr_approved and e.cefr is not null
          order by e.enrolled_at desc limit 1

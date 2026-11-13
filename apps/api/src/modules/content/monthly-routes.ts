@@ -143,6 +143,16 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const { confirmedOn } = z.object({ confirmedOn: z.iso.date() }).parse(request.body);
     return repositories.monthlyContent.publishMonth(request.e4sSession!.user.id, id, confirmedOn);
   });
+  // "Công bố lại": Operator or Manager moves a published month back to today's system date.
+  app.get("/api/v1/content/month-frameworks/:id/republication-preview", { preHandler: readers }, async (request) => {
+    const { id } = frameworkParams.parse(request.params);
+    return repositories.monthlyContent.previewMonthRepublication(request.e4sSession!.user.id, id);
+  });
+  app.post("/api/v1/content/month-frameworks/:id/republication", { preHandler: readers }, async (request) => {
+    const { id } = frameworkParams.parse(request.params);
+    const { confirmedOn } = z.object({ confirmedOn: z.iso.date() }).parse(request.body);
+    return repositories.monthlyContent.republishMonth(request.e4sSession!.user.id, id, confirmedOn);
+  });
 
   app.put("/api/v1/content/months/:month/brief", { preHandler: contentOperator }, async (request) => {
     const month = params.parse(request.params);

@@ -93,6 +93,9 @@ export interface OperatorApiClient {
   getCurrentContentMonth?(): Promise<MonthlyOperatorOverviewView>;
   previewContentMonthPublication?(id: string): Promise<import("@e4s/contracts").MonthlyPublicationPreviewView>;
   publishContentMonth?(id: string, confirmedOn: string): Promise<{ publishedOn: string }>;
+  /** "Công bố lại": effects of moving a published month back to the current system date (Operator and Manager). */
+  previewContentMonthRepublication?(id: string): Promise<import("@e4s/contracts").MonthlyRepublicationPreviewView>;
+  republishContentMonth?(id: string, confirmedOn: string): Promise<import("@e4s/contracts").MonthlyRepublicationResultView>;
   dismissExerciseWarning?(id: string): Promise<void>;
   correctExerciseWarning?(id: string, exerciseVersionId: string, correction: import("@e4s/contracts").LessonExerciseCorrectionInput): Promise<void>;
   suggestContentMonthBrief(month: string): Promise<SharedMonthBriefView>;
@@ -232,6 +235,8 @@ export const operatorApiClient: OperatorApiClient = {
   createManualContentMonthResources: (month, cefr, input) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/manual?cefr=${encodeURIComponent(cefr)}`, { method: "PUT", body: JSON.stringify(input) }),
   previewContentMonthPublication: (id) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/publication-preview`),
   publishContentMonth: (id, confirmedOn) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/publication`, { method: "POST", body: JSON.stringify({ confirmedOn }) }),
+  previewContentMonthRepublication: (id) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/republication-preview`),
+  republishContentMonth: (id, confirmedOn) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/republication`, { method: "POST", body: JSON.stringify({ confirmedOn }) }),
   dismissExerciseWarning: (id) => request(`/api/v1/content/review/exercise-warnings/${encodeURIComponent(id)}/no-issue`, { method: "POST", body: "{}" }),
   correctExerciseWarning: (id, exerciseVersionId, correction) => request(`/api/v1/content/review/exercise-warnings/${encodeURIComponent(id)}/correction`, { method: "PUT", body: JSON.stringify({ exerciseVersionId, correction }) }),
   getMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final`),

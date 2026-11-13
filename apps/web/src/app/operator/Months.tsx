@@ -46,6 +46,9 @@ export interface OperatorMonthsActions {
   onApproveFramework(id: string, options?: { confirmIllustrationsInProgress?: boolean }): Promise<void> | void;
   onPreviewPublication?(id: string): Promise<import("@e4s/contracts").MonthlyPublicationPreviewView>;
   onPublishMonth?(id: string, confirmedOn: string): Promise<void>;
+  /** "Công bố lại" (Operator and Manager): move a month published after the current system date back to it. */
+  onPreviewRepublication?(id: string): Promise<import("@e4s/contracts").MonthlyRepublicationPreviewView>;
+  onRepublishMonth?(id: string, confirmedOn: string): Promise<void>;
   /** Saves a hand-edited DRAFT resource pool (VH-R30/VH-R35); rejects with per-row `details.issues`. */
   onSaveResources?(id: string, input: MonthlyResourceEditInput): Promise<void>;
   onLoadManualResources?(month: string, cefr: CefrLevel): Promise<NonNullable<MonthlyOperatorOverviewView["frameworks"][number]["resources"]> & { theme: { version: number }; prefill?: MonthlyResourceCheckpointPrefillView }>;
@@ -223,6 +226,29 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       if (confirmed) await actions.onPublishMonth(framework.id, preview.publishOn);
     } catch (error) {
       showUnavailable(error instanceof Error ? error.message : "Không công bố được tháng.");
+    }
+  };
+  // The month was published on a later simulated date than today's (the test date was moved back).
+  const publishedAfterSystemDate = Boolean(publication?.publishedOn && publication.publishedOn > overview.systemDate);
+  const republishMonth = async () => {
+    if (!framework || !actions.onPreviewRepublication || !actions.onRepublishMonth) return;
+    try {
+      const preview = await actions.onPreviewRepublication(framework.id);
+      if (!preview.needed) { toast.show({ message: "Ngày công bố đã khớp ngày hệ thống.", tone: "ok" }); return; }
+      if (!preview.ready) return showUnavailable(republicationMissingMessage(preview.missingDays));
+      const from = dayMonth(preview.republishOn);
+      const confirmed = await modal.confirm({
+        title: `Công bố lại tháng ${month} · ${cefr}?`,
+        message: <ul className="monthly-republish-effects">
+          <li>Ngày công bố: {dayMonth(preview.publishedOn)} → {from}.</li>
+          <li>{preview.affectedLearners} học viên {cefr} học được từ {from}.{preview.shiftedLearners ? ` ${preview.shiftedLearners} học viên có ngày bắt đầu cấp độ được dời về ${from}.` : ""}</li>
+          <li>Ngày vắng tính từ {from}.</li>
+        </ul>,
+        confirmLabel: "Công bố lại"
+      });
+      if (confirmed) await actions.onRepublishMonth(framework.id, preview.republishOn);
+    } catch (error) {
+      showUnavailable(error instanceof Error && error.message ? error.message : "Không công bố lại được tháng.");
     }
   };
   const illustrationFrameworkId = framework?.resources ? framework.id : undefined;
@@ -479,7 +505,12 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
         </section>
         <section className="card monthly-publication" aria-label={`Tiến độ công bố ${cefr}`}>
           <h2>Công bố tháng · {cefr}</h2>
-          {publication?.publishedOn ? <p className="small muted">Đã công bố {publication.publishedOn}</p>
+          {publication?.publishedOn ? <>
+              <p className="small muted">Đã công bố {publication.publishedOn}</p>
+              {publishedAfterSystemDate ? <div className="banner warn monthly-republish-notice" role="note"><div className="body small">Ngày hệ thống ({dayMonth(overview.systemDate)}) sớm hơn ngày công bố ({dayMonth(publication.publishedOn)}). Học viên chưa vào học được. Bấm Công bố lại để mở theo ngày hiện tại.</div></div> : null}
+              {publishedAfterSystemDate && actions.onPreviewRepublication && actions.onRepublishMonth
+                ? <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void republishMonth()}>Công bố lại</button> : null}
+            </>
             : publication?.ready ? (canEdit && actions.onPreviewPublication && actions.onPublishMonth
               ? <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void publishMonth()}>Công bố tháng</button>
               : <p className="small muted">Sẵn sàng công bố</p>)
@@ -701,6 +732,17 @@ function MonthlyGenerationConfirmation({ dayNumber, kind, framework, busy, onCan
   const soundIds = isReview ? day?.reviewSoundIds ?? [] : day?.pronunciationPlan?.targetIds ?? (day?.soundId ? [day.soundId] : []);
   const sounds = resources.sounds.filter((sound) => soundIds.includes(sound.id));
   return <div className="monthly-lesson-preview-backdrop" role="presentation"><section className="monthly-generation-confirmation card" role="dialog" aria-modal="true" aria-label={isReview ? "Tài nguyên cho bài ôn" : `Tài nguyên cho bài ${dayNumber}`}><span className="eyebrow">Tài nguyên đã chốt</span><h2>{isReview ? "Sinh bài ôn?" : `Sinh ${teachingLabel}?`}</h2><p className="small muted">{isReview ? "Bài ôn chỉ dùng các tài nguyên đã phân bổ cho phần ôn." : "Bài sẽ dùng đúng tài nguyên của ngày này."}</p><dl>{day?.grammarPlan && <div><dt>Mục tiêu ngữ pháp</dt><dd>{withoutGrammarStepLabel(monthlyReadablePlanObjective(day.grammarPlan.objective, coreWords))}</dd></div>}{day?.pronunciationPlan && <div><dt>Mục tiêu phát âm</dt><dd>{monthlyReadablePlanObjective(day.pronunciationPlan.objective, coreWords)}</dd></div>}<div><dt>Từ vựng</dt><dd>{terms.map((term) => term.word).join(" · ") || "Chưa gán"}</dd></div><div><dt>Ngữ pháp</dt><dd>{grammar.map((step) => step.focus).join(" · ") || "Chưa gán"}</dd></div><div><dt>Phát âm</dt><dd>{sounds.map((sound) => `${sound.label} ${sound.ipa}`).join(" · ") || "Chưa gán"}</dd></div></dl><footer><button type="button" className="btn" disabled={busy} onClick={onCancel}>Quay lại</button><button type="button" className="btn btn-primary" disabled={busy} aria-busy={busy} aria-label={busy ? "Đang sinh bài" : "Sinh"} onClick={() => void onConfirm()}>{busy ? <span className="spinner" role="status" aria-label="Đang sinh bài" /> : "Sinh"}</button></footer></section></div>;
+}
+
+/** "2026-11-06" → "06/11". */
+function dayMonth(date: string): string {
+  return `${date.slice(8, 10)}/${date.slice(5, 7)}`;
+}
+
+/** The exact lesson days that keep a month from being republished (same rule as the first publication). */
+export function republicationMissingMessage(missingDays: Array<{ lessonNumber: number; date: string }>): string {
+  if (!missingDays.length) return "Chưa công bố lại được: tài nguyên, chủ đề hoặc lịch bài của tháng chưa đủ điều kiện công bố.";
+  return `Chưa công bố lại được: cần duyệt 3 bài liên tiếp tính từ hôm nay; còn thiếu ${missingDays.map((day) => `${dayMonth(day.date)} (Bài ${day.lessonNumber})`).join(", ")}.`;
 }
 
 function MonthlyReopenRequest({ label, onCancel, onSubmit }: { label: string; onCancel(): void; onSubmit(reason: string): void }) {

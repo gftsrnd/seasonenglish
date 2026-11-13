@@ -452,6 +452,13 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
           await run(() => client.publishContentMonth!(id, confirmedOn), "Đã công bố nội dung tháng.", true);
         }
       } : {}),
+      // "Công bố lại" is open to the Manager too (read-only Months view otherwise).
+      ...(client.previewContentMonthRepublication && client.republishContentMonth ? {
+        onPreviewRepublication: client.previewContentMonthRepublication,
+        onRepublishMonth: async (id: string, confirmedOn: string) => {
+          await run(() => client.republishContentMonth!(id, confirmedOn), "Đã công bố lại theo ngày hệ thống.", true);
+        }
+      } : {}),
       ...(!readOnly && client.getManualContentMonthResources && client.createManualContentMonthResources ? {
         onLoadManualResources: client.getManualContentMonthResources,
         onCreateManualResources: async (selectedMonth: string, selectedLevel: CefrLevel, input: import("@e4s/contracts").MonthlyResourceEditInput) => {
