@@ -125,6 +125,11 @@ function describeFinding(finding: MonthlyQualityFindingView, context: MonthlyFin
       return steps.length ? steps.map((step) => ({ where: `${section} · bước ${step}`, what })) : single(what);
     }
     case "MONTHLY_GRAMMAR_EXAMPLE_VOICE": return single("Có ví dụ ngữ pháp sai thể (chủ động/bị động); sửa thành câu tiếng Anh đúng.");
+    case "MONTHLY_COMBINED_PRONUNCIATION_POSITIONS": {
+      // The gate lists `"word" ×N` pairs; a word inside a listed phrase ("checked" in "checked it") counts for the phrase only.
+      const targets = [...message.matchAll(/"([^"]+)" ×(\d+)/gu)].map((match) => match[2] === "1" ? match[1] : `${match[1]} (${match[2]} lần)`);
+      return single(`Đoạn đọc to cần đủ 8 vị trí luyện âm, mỗi từ đúng 1 lần${targets.length ? `: ${targets.join(", ")}` : ""}. Từ nằm trong cụm nối âm (như "checked it") không tính riêng, nên cần thêm một lần đứng riêng.`);
+    }
     case "MONTHLY_EXERCISE_TRANSLATION": return single("Thêm bản dịch tiếng Việt ngắn cho câu hỏi và đáp án của từng bài tập.");
     case "MONTHLY_OBJECTIVE_CAN_DO": return single("Mục tiêu bài học chưa nói rõ học viên làm được gì; viết lại ngắn gọn, cụ thể.");
     case "MONTHLY_OFFENSIVE_WORD": {

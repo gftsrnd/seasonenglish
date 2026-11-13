@@ -11,4 +11,11 @@ describe("complete monthly pronunciation scope", () => {
  expect(hasExactTargetOccurrences("Think, think and thank them.",["think","thank"])).toBe(false);
  expect(hasExactTargetOccurrences("Thinking and thankful.",["think","thank"])).toBe(false);
  });
+ it("counts a word inside a linking phrase as the phrase's position, not an extra one (B1 23/12)", () => {
+ const words = ["asked","checked","called","planned","started","needed","checked it","called us"];
+ const passage = "Yesterday I asked the team to join a short call. Before the call, I checked the testing report and called us to confirm the details. We planned the next steps, and the team started the update at noon. Everyone needed a clear list, so I checked it again and finished the summary on time.";
+ expect(hasExactTargetOccurrences(passage, words)).toBe(false); // "called" appears only inside "called us"
+ expect(hasExactTargetOccurrences(passage.replace("and called us to confirm", "called the client, and called us to confirm"), words)).toBe(true);
+ expect(hasExactTargetOccurrences(passage.replace("I checked the testing report", "I read the testing report"), words)).toBe(false);
+ });
 });

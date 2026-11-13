@@ -409,6 +409,14 @@ function samePronunciationExamples(
 export function hasExactTargetOccurrences(passage: string, words: readonly string[]): boolean {
   const expected = new Map<string, number>();
   for (const raw of words) { const word = raw.trim().toLocaleLowerCase("en-US"); if (!word) return false; expected.set(word,(expected.get(word) ?? 0)+1); }
-  const spoken = passage.replace(/[’‘]/gu, "'");
-  return [...expected].every(([word,count]) => { const escaped = word.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"); return [...spoken.toLocaleLowerCase("en-US").matchAll(new RegExp("(?<![a-z])"+escaped+"(?![a-z])","g"))].length === count; });
+  // Longer targets first: a word inside a counted phrase ("checked" in "checked it") is that phrase's
+  // position, not an extra one, so it is blanked out before the shorter targets are counted.
+  let spoken = passage.replace(/[’‘]/gu, "'").toLocaleLowerCase("en-US");
+  const ordered = [...expected].sort(([a], [b]) => b.split(/\s+/u).length - a.split(/\s+/u).length || b.length - a.length);
+  return ordered.every(([word, count]) => {
+    const pattern = new RegExp("(?<![a-z])" + word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![a-z])", "g");
+    const found = [...spoken.matchAll(pattern)].length;
+    spoken = spoken.replace(pattern, (match) => "#".repeat(match.length));
+    return found === count;
+  });
 }
