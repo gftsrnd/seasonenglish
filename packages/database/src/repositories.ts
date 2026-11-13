@@ -2391,7 +2391,7 @@ class LearningRepository {
        )
        select pm.month, enrollment.level_started_at
        from current_enrollment enrollment join program_months pm on pm.organization_id = enrollment.organization_id
-       where pm.month between to_char(enrollment.level_started_at at time zone 'Asia/Ho_Chi_Minh', 'YYYY-MM')
+       where pm.month between to_char(least((enrollment.level_started_at at time zone 'Asia/Ho_Chi_Minh')::date, organization_system_date(enrollment.organization_id)), 'YYYY-MM')
                           and least(coalesce($3::text, '9999-12'), to_char(organization_system_date(enrollment.organization_id), 'YYYY-MM'))`,
       [learnerId, currentLevel, throughMonth ?? null]
     );
@@ -2402,7 +2402,8 @@ class LearningRepository {
     const result = await this.pool.query<MonthlyLevelRecord>(
       `with identity as (
          select u.organization_id, e.cefr, organization_system_date(u.organization_id)::date as system_date,
-                ($3::timestamptz at time zone 'Asia/Ho_Chi_Minh')::date as level_start_date
+                -- A level started after a rolled-back system date counts from the system date.
+                least(($3::timestamptz at time zone 'Asia/Ho_Chi_Minh')::date, organization_system_date(u.organization_id)::date) as level_start_date
          from users u join enrollments e on e.learner_id = u.id and e.cefr = $4 and e.cefr_approved = true
          join programs p on p.id = e.program_id and p.status = 'active'
          where u.id = $1 and u.role = 'learner'
@@ -2932,7 +2933,9 @@ export async function learnerMonthlyAttendanceDates(pool: Pool | PoolClient, lea
     )
   ]);
   const facts = context.rows[0];
-  const levelStartDate = scope?.from && new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" }).format(scope.from);
+  const levelStartLocal = scope?.from && new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" }).format(scope.from);
+  // A level started after a rolled-back system date counts from the system date.
+  const levelStartDate = levelStartLocal && facts?.system_date ? notAfterSystemDate(levelStartLocal, facts.system_date) : levelStartLocal;
   for (const month of months) {
     const examDate = facts?.exam_dates?.[month];
     try {
@@ -2972,6 +2975,14 @@ export async function learnerMonthlyLessonDates(pool: Pool | PoolClient, learner
   );
   for (const row of rows) result.get(row.month)?.add(row.lesson_date);
   return result;
+}
+
+/**
+ * A date stamped from the organisation system date (publication, level start, unlock) is never in
+ * the future in real time; after a simulated-date rollback it counts as the current system date.
+ */
+export function notAfterSystemDate(date: string | null, systemDate: string): string | null {
+  return date !== null && date > systemDate ? systemDate : date;
 }
 
 type LearnerMonthlyAccess = ReturnType<typeof monthlyLearnerWindow> & {
@@ -3024,11 +3035,16 @@ export async function learnerMonthlyAccess(db: Pool | PoolClient, learnerId: str
   );
   if (!row) return null;
   const examDate = row.exam_date ?? buildMonthlyCalendar(row.month).examDate;
-  const approvalDate = [`${row.month}-01`, row.level_started_on, row.published_on, row.unlocked_on]
+  // These dates are stamped from the system date of the moment. After a tester moves the simulated
+  // date backwards one can lie after it; published content and an approved level must stay open,
+  // so such a date counts as the system date (and no day before it is ever counted as missed).
+  const publishedOn = notAfterSystemDate(row.published_on, row.system_date);
+  const approvalDate = [`${row.month}-01`, notAfterSystemDate(row.level_started_on, row.system_date), publishedOn,
+    notAfterSystemDate(row.unlocked_on, row.system_date)]
     .filter((date): date is string => date !== null).sort().at(-1)!;
   const window = monthlyLearnerWindow(row.month, examDate, approvalDate);
   let state: LearnerMonthlyAccess["state"] = !row.cefr ? "unplaced"
-    : !row.published_on || row.published_on > row.system_date ? "waiting_content"
+    : !publishedOn || publishedOn > row.system_date ? "waiting_content"
     : !window.canStudy || approvalDate > row.system_date ? "waiting_next_month"
     : "active";
   if (row.cefr && !row.graduated && !row.unlocked_on && row.month === row.system_date.slice(0, 7)
