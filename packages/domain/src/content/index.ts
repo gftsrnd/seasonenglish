@@ -169,7 +169,7 @@ export function validateLessonPublication(
       if (!hasText(writing.prompt ?? writing.question)) add(lesson, "writing", "Bài tập Viết chưa có đề bài.");
       if (!hasText(writing.answer ?? writing.modelAnswer)) add(lesson, "writing", "Bài tập Viết chưa có đáp án hoặc câu mẫu.");
       const kind = text(writing.type).toLowerCase();
-      if (kind === "fill" && (text(writing.prompt ?? writing.question).match(/___/g)?.length ?? 0) !== 1) add(lesson, "writing", "Bài điền cần có đúng một chỗ trống ___.");
+      if (kind === "fill" && fillBlankCount(text(writing.prompt ?? writing.question)) !== 1) add(lesson, "writing", "Bài điền cần có đúng một chỗ trống ___.");
       if ((kind === "mcq" || kind === "choice") && !validChoice(writing)) add(lesson, "writing", "Bài tập Viết trắc nghiệm cần 4 lựa chọn khác nhau và đáp án trùng nguyên văn một lựa chọn.");
     }
 
@@ -376,6 +376,31 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 function text(value: unknown): string { return typeof value === "string" ? value.trim() : ""; }
+
+/**
+ * Fill-in blanks (23/12 B1 N14): the learner page draws any run of three or more
+ * "_" or "-" (spaces allowed inside) as ONE blank, so the gate counts blanks the
+ * same way: "____" or "______" is one blank, not one-plus-a-remainder or two.
+ */
+const FILL_BLANK_RUN = /(?:_\s*){2,}_|(?:-\s*){2,}-/gu;
+
+export function fillBlankCount(prompt: string): number {
+  return prompt.match(FILL_BLANK_RUN)?.length ?? 0;
+}
+
+/**
+ * Normalises the blank tokens an AI writes in a fill prompt to the house "____":
+ * underscore/dash runs of any length, "[blank]" / "(blank)" / "[gap]", and an
+ * ellipsis used as a gap (" … " or " ... " standing on its own between words).
+ * Text without such a token is returned unchanged.
+ */
+export function normalizeFillBlankPrompt(prompt: string): string {
+  return prompt
+    .replace(/[[(]\s*(?:blank|gap)\s*[\])]/giu, "____")
+    .replace(/(^|\s)(?:…|\.{3,})(?=\s+\p{L})/gu, "$1____")
+    .replace(FILL_BLANK_RUN, "____");
+}
+
 function hasText(value: unknown): boolean { return Boolean(text(value)); }
 function normalizeComparable(value: string): string { return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/\s+/g, " ").trim(); }
 function labelFor(code: "listening" | "reading" | "word_class" | "word_use"): string {

@@ -1,4 +1,4 @@
-import { MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH, monthlyGrammarFormulaExampleIssues, MONTHLY_ANSWER_TRANSLATION_RULE, MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS, monthlyLessonDisplayTitle, monthlyReadablePlanObjective, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, withoutAdvancedGrammarExampleTranslations, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
+import { fillBlankCount, MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH, monthlyGrammarFormulaExampleIssues, monthlyGrammarFormulaRows, normalizeFillBlankPrompt, MONTHLY_ANSWER_TRANSLATION_RULE, MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS, monthlyLessonDisplayTitle, monthlyReadablePlanObjective, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, withoutAdvancedGrammarExampleTranslations, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
 import { MONTHLY_LESSON_PART_CONTENT_CONTRACT, MONTHLY_REVIEW_CHOICE_SECTIONS, type AiTaskRunner, type MonthlyReviewChoiceSection } from "@e4s/ai";
 import { evaluateMonthlyLessonQuality, monthlyLockedPlanExpectations, normalizeFormula, type MonthlyLessonCandidate, type MonthlyLockedPlanExpectations, type MonthlyQualityReport, type MonthlyQualityFinding } from "./monthly-quality.js";
 import { rebalanceAnswerTextPositions, type AnswerTextChoice } from "../shared/answer-order.js";
@@ -8,7 +8,7 @@ import { collectMonthlyVerifiableItems, MONTHLY_ANSWER_VERIFICATION_PROMPT, mont
 
 const REVIEW_STUDY_COMPONENTS = ["objective", "instruction", "vocabulary", "grammar", "pronunciation"] as const;
 
-export function monthlyDailyTeachingContract(day: MonthlyDaySpec, cefr: string, coreWords: readonly string[] = [], targetPositionWords: readonly string[] = []): string {
+export function monthlyDailyTeachingContract(day: MonthlyDaySpec, cefr: string, coreWords: readonly string[] = [], targetPositionWords: readonly string[] = [], grammarSteps: readonly Pick<GrammarStep, "formula" | "focus">[] = []): string {
   const vietnamese = cefr === "A1" || cefr === "A2";
   const language = vietnamese ? "Vietnamese" : "simple English";
   const words = coreWords.length ? ` (${coreWords.join(", ")})` : "";
@@ -20,16 +20,65 @@ export function monthlyDailyTeachingContract(day: MonthlyDaySpec, cefr: string, 
     `Teach day N${day.newLessonNumber}, grammar code ${day.grammarPlan?.code}, mode ${day.grammarPlan?.mode}, objective: ${grammarObjective}. A shared formula does not mean repeating the same teaching lesson. Explain the planned focus in ${language}.`,
     vietnamese ? "" : "The locked objective above may be written in Vietnamese: copy it verbatim only into grammar.objective; never quote or translate it into the objective, instruction or any other learner-facing text, which stays in English.",
     `grammar: return {dailyCode, objective, formula, text, examples, items, steps?}. dailyCode and objective copy the locked daily plan. grammar.examples: at least 3 natural NEW workplace sentences (never copied from lockedScope.grammarStep examples) that together use at least two of today's core words${words}, each word spelled exactly as given. The pool's examples are references; do not copy the entire reference example list into the lesson. grammar.text is shown to learners as written: never put roadmap step labels in it (no "Bước 3 (Lỗi thường gặp):" or "Step 1 (Identify):"); write one or two short sentences for the rule, then at most one short tip sentence (for example how Vietnamese differs). Keep grammar.formula short: one pattern per line, or at most three patterns joined with " → " (the app shows each on its own line). ${MONTHLY_GRAMMAR_FORMULA_EXAMPLE_RULE}`,
+    monthlyGrammarFormulaRowsContract(grammarSteps),
     "grammar.items: 3–5 distinct questions, each {id,prompt,options:[4 different strings],answer,explanation,milestoneId}. Use the day's practice mode. Explain why each answer is correct. Do not add unrelated grammar formulas.",
     day.grammarPlan?.recallMilestoneIds.length ? `Include one recall question with milestoneId from ${day.grammarPlan.recallMilestoneIds.join(", ")} (previous topic A); the other questions teach the current topic.` : "",
     `pronunciation: teach stage ${day.pronunciationPlan?.stage}, objective ${pronunciationObjective}. Return stage and objective matching the plan. This is a ${cefr} target: advanced stress/linking/intonation targets remain advanced features, not isolated beginner phoneme lessons.`,
     "pronunciation.focus copies the first locked target. pronunciation.words contains exactly the three examples listed by daySpec.pronunciationExampleIds (the compact standard-format summary). Never substitute another three words from the pool.",
     (day.pronunciationPlan?.targetIds.length ?? 0) > 1 ? "Also return pronunciation.reviewTargets: [{soundId,focus,words:[{word,ipa}]}], in dailyTeachingPlan.pronunciation.targetIds order, including exactly the assigned dailyTeachingPlan.pronunciation.exampleIds for each target. The UI and listening gates use this complete multi-target scope." : "",
-    day.pronunciationPlan?.requiredPositions ? `For the read-aloud/mock task also return pronunciation.passage and pronunciation.targetPositions: [{soundId,exampleId}], exactly the eight requiredPositions from the plan, two per target; the passage must actually contain those eight example words.${targetPositionWords.length ? ` Write them in the passage exactly as spoken, each exactly once as a whole word or phrase, without notes such as (noun)/(verb): ${targetPositionWords.map((word) => `"${word}"`).join(", ")}.` : ""}` : "",
+    day.pronunciationPlan?.requiredPositions ? `For the read-aloud/mock task also return pronunciation.passage and pronunciation.targetPositions: [{soundId,exampleId}], exactly the eight requiredPositions from the plan, two per target; the passage must actually contain those eight example words.${targetPositionWords.length ? ` Write them in the passage exactly as spoken, each exactly once as a whole word or phrase, without notes such as (noun)/(verb): ${targetPositionWords.map((word) => `"${word}"`).join(", ")}. ${monthlyReadAloudPositionsContract(targetPositionWords, day.pronunciationPlan.requiredPositions)}` : ""}` : "",
     day.pronunciationPlan?.stage === "personalize" ? "Use recorded learner error evidence when supplied. With no error evidence, explicitly present this as a diagnostic over the taught targets; do not invent personal mistakes." : "",
     monthlyGrammarRoadmapDayContract(day, cefr),
+    MONTHLY_WRITING_FILL_RULE,
     "The speaking task must apply the day's pronunciation stage and grammar objective, using at least two daily core words."
   ].filter(Boolean).join("\n");
+}
+
+/**
+ * Read-aloud positions up front (23/12 B1 N14, three failed regenerations): the
+ * exact count per surface form, the targetPositions array, and - when a single
+ * target word is also inside a linking phrase target ("checked" and "checked it")
+ * - that the word is written once on its own AND once inside the phrase. Until now
+ * only the repair message said so, after the first failure.
+ */
+export function monthlyReadAloudPositionsContract(targetPositionWords: readonly string[], requiredPositions: readonly { soundId: string; exampleId: string }[] = []): string {
+  const words = targetPositionWords.map((word) => word.trim()).filter(Boolean);
+  if (!words.length) return "";
+  const counts = [...words.reduce((map, word) => map.set(word, (map.get(word) ?? 0) + 1), new Map<string, number>())];
+  const lower = (value: string) => value.toLocaleLowerCase("en-US");
+  const insidePhrase = (word: string, phrase: string) => phrase !== word && new RegExp(`(?<![a-z])${lower(word).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-z])`, "u").test(lower(phrase));
+  const overlaps = counts.flatMap(([word]) => counts.filter(([phrase]) => insidePhrase(word, phrase)).map(([phrase]) => ({ word, phrase })));
+  const overlapText = overlaps.length
+    ? ` A word inside a listed phrase counts only for that phrase, so ${overlaps.map(({ word, phrase }) => `"${word}" is written once on its own (in another clause, not as part of "${phrase}") AND "${phrase}" once`).join("; ")}.`
+    : "";
+  const positions = requiredPositions.length ? ` pronunciation.targetPositions is exactly [${requiredPositions.map((position) => `{"soundId":"${position.soundId}","exampleId":"${position.exampleId}"}`).join(",")}].` : "";
+  return `READ-ALOUD COUNT (checked word by word; any other count is rejected): the passage contains ${counts.map(([word, count]) => `"${word}" ×${count}`).join(", ")}, and no listed word or phrase occurs any other time (never repeat one, e.g. no second "${counts[counts.length - 1]![0]}").${overlapText} Other words with the same sounds may be used freely. Count every target in your passage before returning it.${positions}`;
+}
+
+/**
+ * Grammar rows up front (23/12 B1 N14): the examples follow each step's FORMULA rows,
+ * listed one by one, not the daily objective or the topic titles (the K2 objective
+ * says "present simple vs continuous" while the step formulas are error-check rows).
+ */
+export function monthlyGrammarFormulaRowsContract(steps: readonly Pick<GrammarStep, "formula" | "focus">[]): string {
+  const blocks = steps.map((step, index) => ({ index, focus: step.focus, rows: monthlyGrammarFormulaRows(step.formula) })).filter((block) => block.rows.length);
+  if (!blocks.length) return "";
+  const where = (index: number) => steps.length >= 2 ? `grammar.steps[${index}]` : "grammar";
+  const lines = blocks.map((block) => `${where(block.index)} (${block.focus ? `focus: ${block.focus}; ` : ""}at least ${Math.max(2, block.rows.length)} examples): ${block.rows.map((row, position) => `row ${position + 1} "${row}"`).join(", ")}`);
+  return `EXAMPLES FOLLOW THE FORMULA ROWS, NOT THE OBJECTIVE: the daily objective and the topic titles name the month's topics; the examples and the explanation text of each step teach only the rows of that step's formula.${steps.length >= 2 ? " Return grammar.steps with one entry per locked step, in this order, each { formula, text, examples }." : ""} Write at least one example per row, and no example of a structure no row lists: ${lines.join(" | ")}. Each step's text explains its own rows (its focus), never a different tense contrast.`;
+}
+
+/** Writing fill task (23/12 B1 N14: three blanks and a four-part answer, three attempts in a row). */
+export const MONTHLY_WRITING_FILL_RULE = "WRITING FILL: when writing.type is \"fill\", writing.prompt is one workplace sentence (an instruction before it is fine) with exactly ONE blank written as ____, and writing.answer is the single word or short phrase that fills it: no slashes, no list of answers. Never write two or more blanks, even when the grammar objective mentions filling the gaps in an email: that multi-gap practice belongs in grammar.items.";
+
+/** The repair text sent to the model for one finding: its message, plus a concrete English fix where the message is only the Operator's Vietnamese label. */
+export function monthlyRepairFindingText(finding: Pick<MonthlyQualityFinding, "code" | "component" | "message">, priorParts: readonly { code: string; content: Record<string, unknown> }[] = []): string {
+  if (finding.code === "MONTHLY_CONTENT_INVALID" && finding.component === "writing" && finding.message.startsWith("Bài điền cần có đúng một chỗ trống")) {
+    const prompt = priorParts.find((part) => part.code === "writing")?.content.prompt;
+    const blanks = typeof prompt === "string" ? fillBlankCount(normalizeFillBlankPrompt(prompt)) : null;
+    return `${finding.message} (writing.prompt ${blanks === null ? "does not have exactly one blank" : `has ${blanks} blank${blanks === 1 ? "" : "s"}`}; it needs exactly one blank ____. Rewrite writing as one workplace sentence with a single ____ and writing.answer as the one word or short phrase for it, no slashes or list of answers.)`;
+  }
+  return finding.message;
 }
 
 /**
@@ -154,7 +203,7 @@ ${MONTHLY_WORD_FORM_SCOPE_RULE}`;
           ...(kind === "review" ? { reviewListeningChecklist: coreTerms.map(term => ({ audioText: term.word, meaning: term.meaning })) } : {})
         }, { systemPrompt: `${note ? `${basePrompt}
 
-${note}` : basePrompt}${contract.planSchemaVersion === 2 && kind === "new" ? `\n${monthlyDailyTeachingContract(daySpec, contract.cefr, coreTerms.map((term) => term.word), monthlyLockedPlanExpectations(contract, daySpec).targetPositionWords)}` : ""}${repairFindings.length ? `\nREPAIR REQUIRED FOR REQUESTED COMPONENTS: ${repairFindings.map(finding => `${finding.component}: ${finding.message}`).join("; ")}. Correct every listed issue; do not repeat the same incomplete output. Preserve accepted components.` : ""}`, maxOutputTokens, temperature: 0.2, maxAttempts: 2 });
+${note}` : basePrompt}${contract.planSchemaVersion === 2 && kind === "new" ? `\n${monthlyDailyTeachingContract(daySpec, contract.cefr, coreTerms.map((term) => term.word), monthlyLockedPlanExpectations(contract, daySpec).targetPositionWords, grammarSteps)}` : ""}${repairFindings.length ? `\nREPAIR REQUIRED FOR REQUESTED COMPONENTS: ${repairFindings.map(finding => `${finding.component}: ${monthlyRepairFindingText(finding, priorParts)}`).join("; ")}. Correct every listed issue; do not repeat the same incomplete output. Preserve accepted components.` : ""}`, maxOutputTokens, temperature: 0.2, maxAttempts: 2 });
         } catch (error) {
           if (error && typeof error === "object") Object.assign(error, { monthlyComponents: [...requested] });
           throw error;
@@ -656,6 +705,11 @@ export function applyMonthlyLockedPlanFields<T extends LessonPartRecord>(contrac
     if (!isRecord(part.content)) return part;
     if (part.code === "grammar") return { ...part, content: lockedGrammar(part.content, expected) };
     if (part.code === "pronunciation") return { ...part, content: lockedPronunciation(part.content, expected) };
+    // A fill blank written as "______", "[blank]" or " … " is the same one gap: stored as the house "____".
+    if (part.code === "writing" && typeof part.content.type === "string" && part.content.type.toLowerCase() === "fill" && typeof part.content.prompt === "string") {
+      const prompt = normalizeFillBlankPrompt(part.content.prompt);
+      return prompt === part.content.prompt ? part : { ...part, content: { ...part.content, prompt } };
+    }
     return part;
   });
 }

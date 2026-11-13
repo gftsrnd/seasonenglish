@@ -174,7 +174,9 @@ export function evaluateMonthlyLessonQuality(
       const passage = asString(pronunciation?.passage).toLocaleLowerCase("en-US");
       const requiredWords = expected.targetPositionWords;
       if (JSON.stringify(actual) !== JSON.stringify(planned) || !hasExactTargetOccurrences(passage, requiredWords)) {
-        const counts = [...requiredWords.reduce((map, word) => map.set(word, (map.get(word) ?? 0) + 1), new Map<string, number>())].map(([word, count]) => `"${word}" ×${count}`).join(", ");
+        // 23/12 B1 N14: the repair also says what the passage has now ("called us" ×2 where ×1 is needed).
+        const found = targetOccurrenceCounts(passage, requiredWords);
+        const counts = [...requiredWords.reduce((map, word) => map.set(word, (map.get(word) ?? 0) + 1), new Map<string, number>())].map(([word, count]) => { const has = found.get(word.trim().toLocaleLowerCase("en-US")) ?? 0; return `"${word}" ×${count}${has === count ? "" : ` (your passage has ${has})`}`; }).join(", ");
         severe.push(finding("MONTHLY_COMBINED_PRONUNCIATION_POSITIONS", `Read-aloud needs exactly 8 taught target positions, two per monthly target, present in the passage. pronunciation.targetPositions must be exactly [${required.map(position => `{soundId "${position.soundId}", exampleId "${position.exampleId}"}`).join(", ")}] and pronunciation.passage must contain each of these words exactly this many times (whole words): ${counts}. A word inside a listed phrase counts only for that phrase, so a word that is also a phrase target (e.g. "called" and "called us") must appear once on its own AND once inside the phrase`, dayNumber, "pronunciation"));
       }
     }
@@ -408,15 +410,25 @@ function samePronunciationExamples(
 
 export function hasExactTargetOccurrences(passage: string, words: readonly string[]): boolean {
   const expected = new Map<string, number>();
-  for (const raw of words) { const word = raw.trim().toLocaleLowerCase("en-US"); if (!word) return false; expected.set(word,(expected.get(word) ?? 0)+1); }
-  // Longer targets first: a word inside a counted phrase ("checked" in "checked it") is that phrase's
-  // position, not an extra one, so it is blanked out before the shorter targets are counted.
+  for (const raw of words) { const word = raw.trim().toLocaleLowerCase("en-US"); if (!word) return false; expected.set(word, (expected.get(word) ?? 0) + 1); }
+  const found = targetOccurrenceCounts(passage, [...expected.keys()]);
+  return [...expected].every(([word, count]) => found.get(word) === count);
+}
+
+/**
+ * How often each read-aloud target occurs in the passage. Longer targets first: a word inside a
+ * counted phrase ("checked" in "checked it") is that phrase's position, not an extra one, so it is
+ * blanked out before the shorter targets are counted.
+ */
+export function targetOccurrenceCounts(passage: string, words: readonly string[]): Map<string, number> {
+  const unique = [...new Set(words.map((word) => word.trim().toLocaleLowerCase("en-US")).filter(Boolean))];
   let spoken = passage.replace(/[’‘]/gu, "'").toLocaleLowerCase("en-US");
-  const ordered = [...expected].sort(([a], [b]) => b.split(/\s+/u).length - a.split(/\s+/u).length || b.length - a.length);
-  return ordered.every(([word, count]) => {
+  const ordered = unique.sort((a, b) => b.split(/\s+/u).length - a.split(/\s+/u).length || b.length - a.length);
+  const found = new Map<string, number>();
+  for (const word of ordered) {
     const pattern = new RegExp("(?<![a-z])" + word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![a-z])", "g");
-    const found = [...spoken.matchAll(pattern)].length;
+    found.set(word, [...spoken.matchAll(pattern)].length);
     spoken = spoken.replace(pattern, (match) => "#".repeat(match.length));
-    return found === count;
-  });
+  }
+  return found;
 }

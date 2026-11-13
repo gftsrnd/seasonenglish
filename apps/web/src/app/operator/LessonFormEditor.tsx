@@ -429,7 +429,7 @@ function validateLesson(state: EditorState, vocabularyCount = 3, review = false)
   if (!review) {
     checkQuestion(problems, "Nghe", state.listeningScript, state.listeningQuestion, state.listeningOptions, state.listeningAnswer);
     checkQuestion(problems, "Đọc", state.readingPassage, state.readingQuestion, state.readingOptions, state.readingAnswer);
-    if (!state.writingPrompt.trim()) problems.push("thiếu phần Viết"); else if (!state.writingAnswer.trim()) problems.push("Viết: thiếu đáp án"); else if (state.writingType === "fill" && (state.writingPrompt.match(/___/g)?.length ?? 0) !== 1) problems.push("Viết dạng điền cần đúng một chỗ trống ___");
+    if (!state.writingPrompt.trim()) problems.push("thiếu phần Viết"); else if (!state.writingAnswer.trim()) problems.push("Viết: thiếu đáp án"); else if (state.writingType === "fill" && (state.writingPrompt.match(/(?:_\s*){2,}_|(?:-\s*){2,}-/gu)?.length ?? 0) !== 1) problems.push("Viết dạng điền cần đúng một chỗ trống ___");
     if (!state.speakingSample.trim()) problems.push("thiếu phần Nói (câu mẫu)");
   }
   const pronunciationWords = splitValues(state.pronunciationWords, /[,;\n]/);
