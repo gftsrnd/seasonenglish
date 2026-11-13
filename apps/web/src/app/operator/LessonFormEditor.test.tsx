@@ -411,7 +411,12 @@ describe("operator granular lesson editor", () => {
     await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)));
     expect(document.activeElement).toBe(screen.getByLabelText("Dùng từ – Lựa chọn 3"));
     // The chevron lists every finding; each one jumps to its section.
-    await user.click(screen.getByRole("button", { name: "Xem cả 2 mục" }));
+    const toggle = screen.getByRole("button", { name: "Mở danh sách cảnh báo" });
+    expect(toggle.querySelector("svg")).not.toBeNull();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAttribute("title", "Mở danh sách cảnh báo");
+    await user.click(toggle);
+    expect(screen.getByRole("button", { name: "Thu gọn danh sách cảnh báo" })).toHaveAttribute("aria-expanded", "true");
     await user.click(screen.getByRole("button", { name: /^Câu 1 · Nghe/ }));
     await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)));
     expect(document.activeElement).toBe(screen.getByLabelText("Nội dung nghe"));

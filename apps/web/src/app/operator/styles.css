@@ -4602,10 +4602,14 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 /* Quality findings stay in view while the lesson (day page) or the editor form scrolls.
    Day page: one row (title, status chip, count, chevron), then one line per problem ending in "Sửa". */
 .operator-monthly-findings { padding: 10px 16px; border-color: #ead19a; background: #fffaf0; }
-.operator-monthly-findings-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.operator-monthly-findings .operator-monthly-findings-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 0 !important; padding: 0; border: 0; background: none; box-shadow: none; font: inherit; color: var(--text); cursor: pointer; }
-.operator-monthly-findings-toggle[aria-expanded="false"] .operator-monthly-findings-chevron { transform: rotate(-90deg); }
-.operator-monthly-findings-chevron { flex: none; color: var(--muted); transition: transform .15s ease; }
+/* The whole header row is the toggle. The operator button reset (.app-operator button:not(.link-button), 0,2,1)
+   outranks plain two-class selectors and re-applied 9px 14px padding, which squeezed these controls' icon to 0 width;
+   so these use button.x.y (0,3,1) and pin the svg size. */
+.operator-monthly-findings button.operator-monthly-findings-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; width: 100%; min-height: 0 !important; padding: 2px 0; border: 0; border-radius: 8px; background: none; box-shadow: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+.operator-monthly-findings button.operator-monthly-findings-head:hover:not(:disabled) { background: rgba(138, 77, 8, .06); box-shadow: none; }
+.operator-monthly-findings button.operator-monthly-findings-head:focus-visible { outline: 3px solid var(--primary-glow, rgba(223, 129, 51, .4)); outline-offset: 2px; }
+.operator-monthly-findings-head[aria-expanded="true"] .operator-monthly-findings-chevron { transform: rotate(180deg); }
+.operator-monthly-findings-chevron { display: block; flex: none; width: 18px; height: 18px; margin-left: 2px; color: var(--brown, #8a4d08); transition: transform .15s ease; }
 .operator-monthly-findings-title { font-weight: 700; color: var(--text); }
 .operator-monthly-findings-count { margin-left: auto; }
 .operator-monthly-findings-body { max-height: min(34vh, 320px); margin-top: 8px; overflow-y: auto; overscroll-behavior: contain; }
@@ -4636,8 +4640,12 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 .operator-modal-scope .operator-editor-findings-first { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .operator-modal-scope .operator-editor-finding-link { padding: 0; border: 0; background: none; box-shadow: none; font: inherit; font-weight: 400; color: var(--text); text-align: left; cursor: pointer; min-height: 0 !important; }
 .operator-modal-scope .operator-editor-finding-link > strong { color: var(--brown, #8a4d08); text-decoration: underline; text-underline-offset: 2px; }
-.operator-modal-scope .operator-editor-findings-toggle { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 28px; height: 28px; min-height: 0 !important; margin-left: auto; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: none; color: var(--muted); cursor: pointer; }
-.operator-modal-scope .operator-editor-findings-toggle[aria-expanded="true"] > svg { transform: rotate(180deg); }
+.operator-modal-scope button.operator-editor-findings-toggle { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 28px; height: 28px; min-height: 0 !important; margin-left: auto; padding: 0; border: 1px solid #ead19a; border-radius: 8px; background: #fff; box-shadow: none; color: var(--brown, #8a4d08); cursor: pointer; }
+.operator-modal-scope button.operator-editor-findings-toggle:hover:not(:disabled) { background: #fdf1d6; border-color: #d9b56a; box-shadow: none; }
+.operator-modal-scope button.operator-editor-findings-toggle:focus-visible { outline: 3px solid var(--primary-glow, rgba(223, 129, 51, .4)); outline-offset: 2px; }
+.operator-modal-scope .operator-editor-findings.is-severe button.operator-editor-findings-toggle { border-color: #f0c2b4; }
+.operator-editor-findings-chevron { display: block; flex: none; width: 18px; height: 18px; transition: transform .15s ease; }
+.operator-modal-scope .operator-editor-findings-toggle[aria-expanded="true"] .operator-editor-findings-chevron { transform: rotate(180deg); }
 .operator-modal-scope .operator-editor-findings-list { display: grid; gap: 4px; max-height: min(26vh, 220px); margin: 6px 0 2px; padding: 0; overflow-y: auto; list-style: none; }
 .operator-modal-scope .operator-editor-findings-list[hidden] { display: none; }
 .operator-modal-scope .operator-editor-findings-list > li { display: flex; align-items: baseline; gap: 8px; }

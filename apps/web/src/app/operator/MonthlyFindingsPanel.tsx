@@ -10,6 +10,11 @@ export function monthlyFindingCount(lines: readonly MonthlyFindingLine[]): strin
   return [severe ? `${severe} lỗi nặng` : "", light ? `${light} cảnh báo` : ""].filter(Boolean).join(" · ") || "Không có mục nào";
 }
 
+/** Shared toggle label for both findings controls. */
+function toggleLabel(open: boolean): string {
+  return open ? "Thu gọn danh sách cảnh báo" : "Mở danh sách cảnh báo";
+}
+
 function SeverityChip({ line }: { line: MonthlyFindingLine }) {
   return <Badge tone={line.severity === "severe" ? "danger" : "warn"}>{line.severity === "severe" ? "Nặng" : "Nhẹ"}</Badge>;
 }
@@ -32,14 +37,12 @@ export function MonthlyFindingsPanel({ label, title, badge, lines, onEditLine, t
   const [open, setOpen] = useState(true);
   const bodyId = useId();
   return <section className={`card operator-monthly-findings ${className}`.trim()} aria-label={label} data-testid={testId}>
-    <div className="operator-monthly-findings-head">
-      <button type="button" className="operator-monthly-findings-toggle" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen((value) => !value)}>
-        <ChevronDown className="operator-monthly-findings-chevron" size={16} aria-hidden="true" />
-        <span className="operator-monthly-findings-title">{title}</span>
-      </button>
+    <button type="button" className="operator-monthly-findings-head" aria-expanded={open} aria-controls={bodyId} aria-label={toggleLabel(open)} title={toggleLabel(open)} onClick={() => setOpen((value) => !value)}>
+      <span className="operator-monthly-findings-title">{title}</span>
       {badge ? <Badge tone={badge.tone}>{badge.text}</Badge> : null}
       <span className="small muted operator-monthly-findings-count">{monthlyFindingCount(lines)}</span>
-    </div>
+      <ChevronDown className="operator-monthly-findings-chevron" size={18} aria-hidden="true" focusable="false" />
+    </button>
     <div className="operator-monthly-findings-body" id={bodyId} hidden={!open}>
       <ul className="small operator-monthly-findings-list">{lines.map((line) => <li key={line.key}>
         <SeverityChip line={line} /> <span className="operator-monthly-finding-text"><strong>{line.where}</strong>: {line.what}</span>
@@ -63,7 +66,7 @@ export function EditorFindingsStrip({ lines, onSelect }: { lines: readonly Month
     <div className="operator-editor-findings-row">
       <span className="operator-editor-findings-count">{monthlyFindingCount(lines)}</span>
       {!open ? <button type="button" className="link-button operator-editor-finding-link operator-editor-findings-first" onClick={() => onSelect(first)}><strong>{first.where}</strong>: {first.what}</button> : <span className="operator-editor-findings-first" />}
-      {lines.length > 1 ? <button type="button" className="operator-editor-findings-toggle" aria-expanded={open} aria-controls={listId} aria-label={open ? "Thu gọn danh sách lỗi" : `Xem cả ${lines.length} mục`} onClick={() => setOpen((value) => !value)}><ChevronDown size={16} aria-hidden="true" /></button> : null}
+      {lines.length > 1 ? <button type="button" className="operator-editor-findings-toggle" aria-expanded={open} aria-controls={listId} aria-label={toggleLabel(open)} title={toggleLabel(open)} onClick={() => setOpen((value) => !value)}><ChevronDown className="operator-editor-findings-chevron" size={18} aria-hidden="true" focusable="false" /></button> : null}
     </div>
     {lines.length > 1 ? <ul className="small operator-editor-findings-list" id={listId} hidden={!open}>{lines.map((line) => <li key={line.key}>
       <SeverityChip line={line} /> <button type="button" className="link-button operator-editor-finding-link" onClick={() => onSelect(line)}><strong>{line.where}</strong>: {line.what}</button>

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render as renderUi, screen, within, cleanup } from "@testing-library/react";
+import { render as renderUi, screen, within, cleanup, fireEvent } from "@testing-library/react";
 import type { ReactElement } from "react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -32,7 +32,13 @@ describe("Operator monthly day: failed AI generation (December 2026 N3)", () => 
     expect(within(section).getByText(/Đáp án đúng thường là lựa chọn dài nhất/)).toBeInTheDocument();
     // One compact row: title, status chip, count and a chevron; no generation timestamp or explanatory paragraph.
     expect(section).not.toHaveTextContent(/Sinh lúc|Bước tiếp theo|Bấm để/);
-    expect(within(section).getByRole("button", { name: /Lần sinh AI gần nhất chưa đạt/ })).toHaveAttribute("aria-expanded", "true");
+    const toggle = within(section).getByRole("button", { name: "Thu gọn danh sách cảnh báo" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveTextContent("Lần sinh AI gần nhất chưa đạt");
+    expect(toggle.querySelector("svg")).not.toBeNull();
+    fireEvent.click(toggle);
+    expect(within(section).getByRole("button", { name: "Mở danh sách cảnh báo" })).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
     // The findings sit in the sticky, collapsible dock above the lesson.
     expect(section.closest(".operator-monthly-findings-dock")).not.toBeNull();
     expect(within(section).getByText(/1 lỗi nặng · 1 cảnh báo/)).toBeInTheDocument();
