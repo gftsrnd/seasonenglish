@@ -408,8 +408,8 @@ function operatorLessonAnswer(part: OperatorLessonPart): string {
     : typeof rawAnswer === "string" && rawAnswer.trim() ? rawAnswer.trim() : "—";
 }
 
-function OperatorCorrectAnswer({ answer }: { answer: string }) {
-  return <div className="operator-correct-answer"><strong>Đáp án đúng:</strong><span>{answer}</span></div>;
+function OperatorCorrectAnswer({ answer, label = "Đáp án đúng:" }: { answer: string; label?: string }) {
+  return <div className="operator-correct-answer"><strong>{label}</strong><span>{answer}</span></div>;
 }
 
 export function OperatorPracticeReview({ sectionNumber, part, headingText }: { sectionNumber: number; part: OperatorLessonPart; /** Replaces "N. Section · English" (e.g. "Câu 1" inside a review section block). */ headingText?: string }) {
@@ -446,13 +446,12 @@ export function OperatorPracticeReview({ sectionNumber, part, headingText }: { s
 
   if (part.code === "speaking") {
     const instruction = text("instruction", "prompt") || "Nói theo câu mẫu bên dưới và thay đổi một chi tiết cho phù hợp.";
-    const model = conciseSpeakingModel(text("answer", "modelAnswer", "sample"));
+    // Speaking is graded by AI against the task (sound + required words + grammar), not the model text.
     return <>
       {heading}
       {source ? <div className="operator-reading-passage">{source}</div> : null}
       <p className="operator-speaking-instruction"><strong>Yêu cầu:</strong> <LessonPromptText value={instruction} /></p>
-      <div className="operator-speaking-model"><strong>{model}</strong></div>
-      {answerSummary}
+      <OperatorCorrectAnswer answer={answer} label="Câu trả lời mẫu:" />
     </>;
   }
 

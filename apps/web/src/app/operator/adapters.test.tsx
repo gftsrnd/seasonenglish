@@ -515,9 +515,11 @@ describe("lesson detail warnings", () => {
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /câu trả lời/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Ghi âm câu trả lời" })).not.toBeInTheDocument();
-    expect(screen.getAllByText("Đáp án đúng:")).toHaveLength(6);
+    expect(screen.getAllByText("Đáp án đúng:")).toHaveLength(5);
+    expect(screen.getByText("Câu trả lời mẫu:")).toBeInTheDocument();
+    expect(document.querySelector(".operator-speaking-model")).toBeNull();
     expect(screen.getByText("give")).toBeInTheDocument();
-    expect(screen.getAllByText("I give feedback.")).toHaveLength(2);
+    expect(screen.getAllByText("I give feedback.")).toHaveLength(1);
   });
 });
 
