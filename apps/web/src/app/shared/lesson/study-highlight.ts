@@ -1,5 +1,5 @@
 import type { CefrLevel } from "@e4s/contracts";
-import { findMonthlyGrammarCatalogTopic, monthlyGrammarCatalog, type MonthlyGrammarCatalogTopic } from "@e4s/domain/monthly";
+import { findMonthlyGrammarCatalogTopic, monthlyGrammarCatalog, monthlyGrammarMarkSpans, monthlyReadAloudTargetSpans, readMonthlyGrammarExampleMarks, type MonthlyGrammarCatalogTopic } from "@e4s/domain/monthly";
 
 /**
  * Study-block highlights (grammar formula slots, the matching words of the
@@ -482,6 +482,50 @@ export function grammarExampleSegments(sentence: string, matcher: GrammarExample
     const cut = text.search(/['’]/u);
     return [{ text: text.slice(0, cut), mark: false }, { text: text.slice(cut), mark: true }];
   }));
+}
+
+// ------------------------------------------------------------------ generated example marks
+
+/** Marks the given spans of a text. */
+function spanSegments(text: string, spans: ReadonlyArray<{ start: number; end: number }>): HighlightSegment[] {
+  const out: HighlightSegment[] = [];
+  let cursor = 0;
+  for (const span of spans) {
+    if (span.start < cursor) continue;
+    out.push({ text: text.slice(cursor, span.start), mark: false }, { text: text.slice(span.start, span.end), mark: true });
+    cursor = span.end;
+  }
+  out.push({ text: text.slice(cursor), mark: false });
+  return merge(out);
+}
+
+/**
+ * The words the lesson model marked for one example (`exampleMarks[index].marks`, generated since 13/11);
+ * undefined when the block stores no marks (older lessons keep the formula-based matcher).
+ */
+export function grammarExampleMarkWords(exampleMarks: unknown, index: number): string[] | undefined {
+  const marks = readMonthlyGrammarExampleMarks(exampleMarks);
+  if (!marks) return undefined;
+  return marks[index]?.marks ?? [];
+}
+
+/**
+ * An example sentence with exactly its generated marks highlighted (whole words, as the server checks them)
+ * and nothing else; a "Wrong: … Right: …" example only in its right sentence.
+ */
+export function grammarMarkedExampleSegments(sentence: string, marks: readonly string[]): HighlightSegment[] {
+  return spanSegments(sentence, monthlyGrammarMarkSpans(sentence, marks).spans);
+}
+
+// ------------------------------------------------------------------ read-aloud passage
+
+/**
+ * The read-aloud passage with its target words and phrases marked, each occurrence the server counts:
+ * longer targets first, whole words, a word inside a marked phrase not again. No targets → plain.
+ */
+export function readAloudPassageSegments(passage: string, targets: readonly string[] | undefined): HighlightSegment[] {
+  if (!targets?.length) return plain(passage);
+  return spanSegments(passage, monthlyReadAloudTargetSpans(passage, targets));
 }
 
 /** One formula line with its key slots (and the matching words of its own examples) marked. */

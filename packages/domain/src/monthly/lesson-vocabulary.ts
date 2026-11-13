@@ -6,7 +6,7 @@
  * them. AI output also uses plain strings for synonyms; cards need { word }.
  */
 import { monthlyRegisterLexicalDetails, monthlyRegisterTermsApply, validMonthlyRegisterTerms, type MonthlyRegisterTerm } from "./register-terms.js";
-import { checkMonthlyGrammarStep } from "./grammar-formula-examples.js";
+import { checkMonthlyGrammarStep, monthlyGrammarFormulaRows } from "./grammar-formula-examples.js";
 
 export interface MonthlyVocabularyCore {
   id: string; word: string; meaning?: string; type?: string; ipa?: string; imageUrl?: string;
@@ -313,11 +313,27 @@ export function withMonthlyExpandedTerms<T extends { code?: string; content?: Re
 
 export interface MonthlyGrammarStepSource { formula: string; usage?: string; focus?: string; examples?: readonly string[] }
 
-/** The model's top-level grammar examples that use a readable row of a step formula (in order). */
-function topLevelExamplesForStep(formula: string, examples: readonly string[]): string[] {
+/** The model's top-level grammar examples that use a readable row of a step formula (in order), with their indexes. */
+function topLevelExamplesForStep(formula: string, examples: readonly string[]): Array<{ example: string; index: number }> {
   if (!examples.length) return [];
   const used = new Set(checkMonthlyGrammarStep(formula, examples).rows.flatMap((row) => row.exampleIndexes));
-  return examples.filter((_, index) => used.has(index));
+  return examples.flatMap((example, index) => used.has(index) ? [{ example, index }] : []);
+}
+
+/**
+ * The top-level marks of examples moved into a step, renumbered to the step formula's rows (a row is
+ * matched by its text). Undefined unless every moved example keeps a mark whose row the step has.
+ */
+function stepMarksFromTopLevel(topFormula: unknown, stepFormula: string, marks: unknown, indexes: readonly number[]): unknown[] | undefined {
+  if (!Array.isArray(marks) || typeof topFormula !== "string" || !indexes.length) return undefined;
+  const topRows = monthlyGrammarFormulaRows(topFormula);
+  const stepRows = monthlyGrammarFormulaRows(stepFormula);
+  const moved = indexes.map((index) => {
+    const entry = marks[index] as { row?: unknown; marks?: unknown } | undefined;
+    const row = entry && typeof entry.row === "number" ? stepRows.indexOf(topRows[entry.row - 1] ?? "\u0000") + 1 : 0;
+    return row > 0 ? { ...entry, row } : undefined;
+  });
+  return moved.every(Boolean) ? moved : undefined;
 }
 
 /**
@@ -347,16 +363,23 @@ export function withMonthlyGrammarSteps<T extends { code?: string; content?: Rec
     const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
     const list = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : [];
     const topLevel = list(part.content.examples);
+    // Marks are index-aligned with the raw top-level list, blanks included.
+    const rawTopLevel = Array.isArray(part.content.examples) ? part.content.examples : [];
+    const rawIndex = rawTopLevel.flatMap((item, index) => typeof item === "string" && item.trim() ? [index] : []);
     return { ...part, content: { ...part.content, steps: steps.map((step, index) => {
       const own = fromModel ? existing[index]! : {};
       const ownExamples = list(own.examples);
       const fromTopLevel = ownExamples.length ? [] : topLevelExamplesForStep(step.formula, topLevel);
+      // The model's row/word marks (13/11) travel with its examples; plan reference examples carry none.
+      const marks = ownExamples.length ? (Array.isArray(own.exampleMarks) && Array.isArray(own.examples) ? own.examples.flatMap((item, at) => typeof item === "string" && item.trim() ? [(own.exampleMarks as unknown[])[at] ?? null] : []) : undefined)
+        : fromTopLevel.length ? stepMarksFromTopLevel(part.content!.formula, step.formula, part.content!.exampleMarks, fromTopLevel.map((item) => rawIndex[item.index]!)) : undefined;
       // Last resort (13/11, B1 24/12): a step must never render with no example at all, so when the model
       // gave none for it, the plan's reference examples (which cover every row) are shown instead.
       return {
         formula: step.formula,
         text: text(own.text) || text(own.usage) || step.usage || step.focus || "",
-        examples: ownExamples.length ? ownExamples : fromTopLevel.length ? fromTopLevel : [...(step.examples ?? [])]
+        examples: ownExamples.length ? ownExamples : fromTopLevel.length ? fromTopLevel.map((item) => item.example) : [...(step.examples ?? [])],
+        ...(marks ? { exampleMarks: marks } : {})
       };
     }) } };
   });

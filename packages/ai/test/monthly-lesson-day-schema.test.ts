@@ -10,7 +10,7 @@ describe("monthly lesson day output schema", () => {
     const fixture = { title:"Weekly review", parts:[{code:"instruction",content:{steps:["Read and answer."]}},{code:"grammar",content:{steps}}] };
     expect(monthlyLessonDayOutputSchema.parse(fixture).lesson.parts[1]?.content.steps).toEqual(steps);
     const schema = monthlyLessonDayOutputJsonSchema.properties.parts.items.properties.content.properties.steps.items.anyOf;
-    expect(schema).toEqual(expect.arrayContaining([expect.objectContaining({type:"object",required:["formula","text","examples"]}),{type:"string"}]));
+    expect(schema).toEqual(expect.arrayContaining([expect.objectContaining({type:"object",required:["formula","text","examples","exampleMarks"]}),{type:"string"}]));
   });
   it("declares review item variants in the tool schema and keeps them through parsing", () => {
     const itemSchema = monthlyLessonDayOutputJsonSchema.properties.parts.items.properties.content.properties.items.items.anyOf
@@ -95,6 +95,17 @@ describe("monthly lesson parts returned as a broken string (AI quality round 2, 
     expect(cut.data!.lesson.parts.map((part) => part.code)).toEqual(["listening"]);
     const wrapped = monthlyLessonDayOutputSchema.safeParse({ title: "Weekly review", parts: JSON.stringify({ parts: [{ code: "objective", content: { text: "Review the week." } }] }) });
     expect(wrapped.data!.lesson.parts[0]!.code).toBe("objective");
+  });
+
+  it("asks for each grammar example's row and marked words (13/11), top-level and per step", () => {
+    const content = monthlyLessonDayOutputJsonSchema.properties.parts.items.properties.content;
+    const step = content.properties.steps.items.anyOf[1] as { required: string[]; properties: Record<string, { items: { required: string[] } }> };
+    expect(step.required).toContain("exampleMarks");
+    expect(step.properties.exampleMarks!.items.required).toEqual(["row", "marks"]);
+    expect(content.properties.exampleMarks.items.required).toEqual(["row", "marks"]);
+    expect(content.description).toContain("exampleMarks has one { row, marks } entry per example");
+    const marked = { title: "Day 1", parts: [{ code: "grammar", content: { formula: "have got", examples: ["We have got a room."], exampleMarks: [{ row: 1, marks: ["have got"] }] } }] };
+    expect(monthlyLessonDayOutputSchema.parse(marked).lesson.parts[0]?.content.exampleMarks).toEqual([{ row: 1, marks: ["have got"] }]);
   });
 
   it("still rejects a string with no recoverable part", () => {

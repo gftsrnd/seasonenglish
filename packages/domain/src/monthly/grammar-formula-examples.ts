@@ -396,6 +396,89 @@ export function monthlyGrammarExampleUsesRow(example: string, row: MonthlyGramma
   return row.wrong.some((form) => { const tokens = grammarTokens(form).filter((token) => !/^(?:verb|v|ed|ing)$/u.test(token)); return tokens.length > 0 && wrong.includes(` ${tokens.join(" ")} `); });
 }
 
+// ------------------------------------------------------------------ marked examples (generated since 13/11)
+
+/**
+ * Generated grammar examples say which formula row they illustrate and which exact words realise it
+ * (`exampleMarks`, index-aligned with `examples`): `{ row, marks }`, `row` 1-based over
+ * {@link monthlyGrammarFormulaRows} of the example's own formula. The model knows the grammar ("knows",
+ * "wrote", "had", "have got"), so no word list is needed: the check below is exact, and the learner
+ * highlight shows exactly these words. Lessons stored without marks keep the heuristic check above.
+ */
+export interface MonthlyGrammarExampleMark { row: number; marks: string[] }
+
+/** The stored marks of a block: undefined when the block has none (older lessons); null entries are malformed. */
+export function readMonthlyGrammarExampleMarks(value: unknown): Array<MonthlyGrammarExampleMark | null> | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.map((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+    const record = entry as Record<string, unknown>;
+    const row = typeof record.row === "number" ? record.row : typeof record.row === "string" && /^\d+$/u.test(record.row.trim()) ? Number(record.row) : NaN;
+    const marks = Array.isArray(record.marks) ? record.marks.filter((mark): mark is string => typeof mark === "string" && Boolean(mark.trim())).map((mark) => mark.trim()) : [];
+    return Number.isInteger(row) ? { row, marks } : null;
+  });
+}
+
+const MARK_WORD_CHAR = /[\p{L}\p{N}'’-]/u;
+const markKey = (value: string) => value.replace(/[’‘]/gu, "'").toLocaleLowerCase("en-US");
+
+/**
+ * Where the marks occur in a sentence: each mark verbatim (case and curly apostrophes aside) as whole
+ * words, every occurrence, longer marks first and never overlapping. A "Wrong: … Right: …" example is
+ * searched in its right sentence only. `missing` lists the marks found nowhere.
+ */
+export function monthlyGrammarMarkSpans(sentence: string, marks: readonly string[]): { spans: Array<{ start: number; end: number }>; missing: string[] } {
+  const pair = examplePair(sentence);
+  const rightStart = pair ? sentence.lastIndexOf(pair.right) : 0;
+  const from = pair && rightStart >= 0 ? rightStart : 0;
+  const to = pair && rightStart >= 0 ? rightStart + pair.right.length : sentence.length;
+  const haystack = markKey(sentence);
+  const taken = new Array<boolean>(sentence.length).fill(false);
+  const spans: Array<{ start: number; end: number }> = [];
+  const missing: string[] = [];
+  const unique = [...new Set(marks.map((mark) => mark.trim()).filter(Boolean))].sort((a, b) => b.length - a.length);
+  for (const mark of unique) {
+    const needle = markKey(mark).replace(/\s+/gu, " ");
+    let found = false;
+    for (let index = haystack.indexOf(needle, from); index >= 0 && index + needle.length <= to; index = haystack.indexOf(needle, index + 1)) {
+      const end = index + needle.length;
+      if ((index > 0 && MARK_WORD_CHAR.test(sentence[index - 1]!)) || (end < sentence.length && MARK_WORD_CHAR.test(sentence[end]!))) continue;
+      found = true;
+      if (taken.slice(index, end).some(Boolean)) continue;
+      taken.fill(true, index, end);
+      spans.push({ start: index, end });
+    }
+    if (!found) missing.push(mark);
+  }
+  return { spans: spans.sort((a, b) => a.start - b.start), missing };
+}
+
+export interface MonthlyGrammarMarkedStepCheck {
+  /** Every row of the formula (readable or not) with the examples that say they illustrate it. */
+  rows: Array<{ text: string; exampleIndexes: number[] }>;
+  rowsWithoutExample: string[];
+  /** One line per example whose mark entry is missing, names no row of the formula, marks nothing or marks words it does not contain. */
+  exampleIssues: string[];
+}
+
+/** The exact row coverage of a block whose examples carry marks. */
+export function checkMonthlyGrammarMarkedStep(formula: string, examples: readonly string[], marks: ReadonlyArray<MonthlyGrammarExampleMark | null>): MonthlyGrammarMarkedStepCheck {
+  const rowTexts = monthlyGrammarFormulaRows(formula);
+  const rows = rowTexts.map((text) => ({ text, exampleIndexes: [] as number[] }));
+  const exampleIssues: string[] = [];
+  examples.forEach((example, index) => {
+    const entry = marks[index];
+    const label = `example ${index + 1} "${example}"`;
+    if (!entry) { exampleIssues.push(`${label} has no exampleMarks entry { row, marks }`); return; }
+    if (entry.row < 1 || entry.row > rows.length) { exampleIssues.push(`${label} names row ${entry.row}, but the formula has ${rows.length} row${rows.length === 1 ? "" : "s"}`); return; }
+    if (!entry.marks.length) { exampleIssues.push(`${label} marks no words of row ${entry.row}`); return; }
+    const { missing } = monthlyGrammarMarkSpans(example, entry.marks);
+    if (missing.length) { exampleIssues.push(`${label} marks ${missing.map((mark) => `"${mark}"`).join(", ")}, which ${missing.length === 1 ? "is" : "are"} not in its ${examplePair(example) ? "Right sentence" : "text"} as whole words`); return; }
+    rows[entry.row - 1]!.exampleIndexes.push(index);
+  });
+  return { rows, rowsWithoutExample: rows.filter((row) => !row.exampleIndexes.length).map((row) => row.text), exampleIssues };
+}
+
 // ------------------------------------------------------------------ step check
 
 export interface MonthlyGrammarStepCheck {
@@ -426,20 +509,37 @@ function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : [];
 }
 
-export interface MonthlyGrammarFormulaExampleIssue { step: number | null; formula: string; rowsWithoutExample: string[]; examplesWithoutRow: string[]; tooFewExamples: boolean }
+export interface MonthlyGrammarFormulaExampleIssue { step: number | null; formula: string; rowsWithoutExample: string[]; examplesWithoutRow: string[]; tooFewExamples: boolean; exampleMarkIssues?: string[] }
 
 /**
  * Formula/example mismatches of a lesson grammar part: one entry per step
  * (grammar.steps when there are two or more, as the learner sees them),
  * otherwise for the top-level formula and examples. Empty when everything matches.
+ *
+ * A block whose examples carry `exampleMarks` is checked exactly (every row has an
+ * example that names it, every example names a row and marks words it contains);
+ * a block without marks keeps the heuristic matcher, unless `requireMarks` (a new
+ * generation) asks for them.
  */
-export function monthlyGrammarFormulaExampleIssues(grammar: Record<string, unknown> | undefined): MonthlyGrammarFormulaExampleIssue[] {
+export function monthlyGrammarFormulaExampleIssues(grammar: Record<string, unknown> | undefined, options: { requireMarks?: boolean } = {}): MonthlyGrammarFormulaExampleIssue[] {
   if (!grammar) return [];
   const steps = Array.isArray(grammar.steps) ? grammar.steps.filter((step): step is Record<string, unknown> => Boolean(step) && typeof step === "object" && !Array.isArray(step) && typeof (step as Record<string, unknown>).formula === "string") : [];
   const blocks = steps.length >= 2
-    ? steps.map((step, index) => ({ step: index + 1 as number | null, formula: step.formula as string, examples: stringList(step.examples) }))
-    : typeof grammar.formula === "string" ? [{ step: null as number | null, formula: grammar.formula, examples: stringList(grammar.examples) }] : [];
+    ? steps.map((step, index) => ({ step: index + 1 as number | null, formula: step.formula as string, examples: stringList(step.examples), rawExamples: step.examples, marks: step.exampleMarks }))
+    : typeof grammar.formula === "string" ? [{ step: null as number | null, formula: grammar.formula, examples: stringList(grammar.examples), rawExamples: grammar.examples, marks: grammar.exampleMarks }] : [];
   return blocks.flatMap((block) => {
+    const marks = readMonthlyGrammarExampleMarks(block.marks);
+    if (marks || options.requireMarks) {
+      // Marks are index-aligned with the stored examples, blanks included.
+      const all = Array.isArray(block.rawExamples) ? block.rawExamples.map((example) => typeof example === "string" ? example.trim() : "") : [];
+      const indexed = all.flatMap((example, index) => example ? [{ example, mark: marks?.[index] ?? null }] : []);
+      const check = checkMonthlyGrammarMarkedStep(block.formula, indexed.map((item) => item.example), indexed.map((item) => item.mark));
+      const exampleMarkIssues = marks ? check.exampleIssues : indexed.length ? ["the examples have no exampleMarks: give one { row, marks } entry per example"] : [];
+      const tooFewExamples = indexed.length < Math.max(2, check.rows.length);
+      return check.rowsWithoutExample.length || exampleMarkIssues.length || tooFewExamples
+        ? [{ step: block.step, formula: block.formula, rowsWithoutExample: check.rowsWithoutExample, examplesWithoutRow: [], tooFewExamples, exampleMarkIssues }]
+        : [];
+    }
     const check = checkMonthlyGrammarStep(block.formula, block.examples);
     // A step left without examples (the model wrote none for it; resource examples are never copied in): every readable row lacks one.
     if (block.step !== null && !block.examples.length) {
@@ -452,6 +552,14 @@ export function monthlyGrammarFormulaExampleIssues(grammar: Record<string, unkno
   });
 }
 
+/** How much is wrong across the issues (rows without an example, examples without a row or valid marks, a short list): a repair must lower it. */
+export function monthlyGrammarFormulaExampleIssueCount(issues: readonly MonthlyGrammarFormulaExampleIssue[]): number {
+  return issues.reduce((total, issue) => total + issue.rowsWithoutExample.length + issue.examplesWithoutRow.length + (issue.exampleMarkIssues?.length ?? 0) + (issue.tooFewExamples ? 1 : 0), 0);
+}
+
+/** How the model marks its examples (prompt, schema description and repair message share it). */
+export const MONTHLY_GRAMMAR_EXAMPLE_MARKS_RULE = "EXAMPLE MARKS: next to examples (top-level grammar.examples and every grammar.steps entry) return exampleMarks, one entry per example in the same order: { row, marks }. row is the 1-based number of the formula row the example illustrates (the rows of that block's own formula, numbered in order: each pattern separated by \" / \" between two \"+\" patterns, \";\", \" vs \", \" → \" or a new line, as listed in the formula rows above when they are listed); marks lists the exact words of the example that realise that row, copied verbatim as whole words: the state verb (\"knows\", \"need\"), the past form (\"registered\", \"wrote\"), \"have got\" as one mark, \"had\" for past possession, \"is\", \"always\" and \"asking\" for always + continuous (each mark is one word or a run of adjacent words); never the subject or other words. Every example has at least one mark, and every row at least one example. In a \"Wrong: ... Right: ...\" example mark words of the Right sentence only.";
+
 /** English repair hint for the AI (also the light finding's message). */
 export function monthlyGrammarFormulaExampleMessage(issues: readonly MonthlyGrammarFormulaExampleIssue[]): string {
   const details = issues.map((issue) => {
@@ -459,9 +567,10 @@ export function monthlyGrammarFormulaExampleMessage(issues: readonly MonthlyGram
     const parts = [
       ...issue.rowsWithoutExample.map((row) => `formula row "${row}" has no example that uses it`),
       ...issue.examplesWithoutRow.map((example) => `example "${example}" uses no row of the formula`),
-      ...(issue.tooFewExamples ? ["it has fewer examples than formula rows"] : [])
+      ...(issue.tooFewExamples ? ["it has fewer examples than formula rows"] : []),
+      ...(issue.exampleMarkIssues ?? [])
     ];
     return `${where}: ${parts.join("; ")}`;
   });
-  return `Grammar formula and examples do not match (the formula is locked). Rewrite the examples (and the explanation text) so every formula row has at least one example using exactly that structure, every example uses a row of its own formula, and a step with N rows has at least N examples (never fewer than 2). ${details.join(" | ")}`;
+  return `Grammar formula and examples do not match (the formula is locked). Rewrite the examples (and the explanation text) so every formula row has at least one example using exactly that structure, every example uses a row of its own formula, and a step with N rows has at least N examples (never fewer than 2). ${MONTHLY_GRAMMAR_EXAMPLE_MARKS_RULE} ${details.join(" | ")}`;
 }

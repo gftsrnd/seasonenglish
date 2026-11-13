@@ -15,3 +15,4 @@ export * from "./exercise-translation.js";
 export * from "./register-terms.js";
 export * from "./grammar-day-topic.js";
 export * from "./grammar-formula-examples.js";
+export * from "./read-aloud-targets.js";

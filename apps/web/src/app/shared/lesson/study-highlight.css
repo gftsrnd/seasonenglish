@@ -5,6 +5,8 @@
 .lesson-study-formula-box .lesson-study-focus{margin:0}
 /* Key slot of a formula and the matching part of the examples: one accent from the palette. */
 .lesson-study-mark{color:var(--primary-dark,#2C5A8C)}
+/* Read-aloud passage: the target words and phrases the passage is checked for, bold in the same accent. */
+.lesson-read-aloud-passage .lesson-study-mark{font-weight:700}
 /* Grammar formula band: spans the card width, text centred like the template. */
 .lesson-study-formula-box.lesson-study-formula-band{display:block;width:100%;max-width:none;text-align:center;padding:10px 14px}
 .lesson-grammar-formula-row{display:flex;align-items:center;gap:10px}

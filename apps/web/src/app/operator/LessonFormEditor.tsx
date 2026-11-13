@@ -446,6 +446,19 @@ function checkQuestion(problems: string[], label: string, body: string, question
 
 const reviewStudyCodes: readonly string[] = ["objective", "instruction", "vocabulary", "grammar", "pronunciation"];
 
+/**
+ * Generated example marks (13/11: { row, marks } per example) belong to the exact formula and examples they were
+ * written for: once the Operator edits either, they are dropped and the formula-based highlight takes over.
+ */
+function withoutStaleExampleMarks(grammar: Record<string, unknown>, formula: string, examples: readonly string[]): Record<string, unknown> {
+  if (!("exampleMarks" in grammar)) return grammar;
+  const before = Array.isArray(grammar.examples) ? grammar.examples.map((example) => typeof example === "string" ? example.trim() : "") : [];
+  const unchanged = typeof grammar.formula === "string" && grammar.formula.trim() === formula && before.length === examples.length && before.every((example, index) => example === examples[index]);
+  if (unchanged) return grammar;
+  const { exampleMarks: _stale, ...rest } = grammar;
+  return rest;
+}
+
 function buildLesson(initial: ContentLessonDraftInput, state: EditorState, options: { monthly?: boolean; review?: ReviewContents | undefined; translations?: boolean } = {}): ContentLessonDraftInput {
   const prior = (code: LessonPartCode) => record(initial.parts.find(part => part.code === code)?.content);
   const priorVocabulary = prior("vocabulary");
@@ -461,7 +474,7 @@ function buildLesson(initial: ContentLessonDraftInput, state: EditorState, optio
     { code: "vocabulary", title: "Từ vựng", content: { ...priorVocabulary, items: state.vocabulary.map((row, index) => ({ ...record(priorVocabularyItems[index]), word: row.word.trim(), type: row.type.trim(), pronunciation: row.pronunciation.trim(), meaning: row.meaning.trim(), collocations: splitValues(row.examples, /[;\n]/), examples: splitValues(row.examples, /[;\n]/), collocationAudioUrls: alignedAudioUrls(row.examples, row.exampleAudioUrls), exampleAudioUrls: alignedAudioUrls(row.examples, row.exampleAudioUrls), family: parseStructuredEntries(row.family, ["type", "meaning"], row.familyAudioUrls), synonyms: parseStructuredEntries(row.synonyms, ["level", "note"], row.synonymAudioUrls), antonyms: parseStructuredEntries(row.antonyms, ["level", "note"], row.antonymAudioUrls), umbrella: buildUmbrella(row), imageUrl: row.imageUrl.trim(), audioUrl: row.audioUrl.trim(), ...(row.imageUrl.trim() && row.imageUrl.trim() !== stringValue(record(priorVocabularyItems[index]).imageUrl).trim() ? { imageAttribution: { creator: "Người vận hành", licence: "Nội dung nội bộ", licenceUrl: "", sourceUrl: row.imageUrl.trim() } } : {}) })) } },
     { code: "grammar", title: "Ngữ pháp", content: state.grammarUnavailable
       ? { status: "unavailable", hidden: true, reason: "no_suitable_content" }
-      : { ...prior("grammar"), status: "available", hidden: false, formula: state.grammar.trim(), usage: state.grammarUsage.trim(), examples: grammarExamples, exampleAudioUrls: grammarExampleAudioUrls, audioUrl: state.grammarAudioEnabled ? state.grammarAudioUrl.trim() : "" } },
+      : { ...withoutStaleExampleMarks(prior("grammar"), state.grammar.trim(), grammarExamples), status: "available", hidden: false, formula: state.grammar.trim(), usage: state.grammarUsage.trim(), examples: grammarExamples, exampleAudioUrls: grammarExampleAudioUrls, audioUrl: state.grammarAudioEnabled ? state.grammarAudioUrl.trim() : "" } },
     { code: "pronunciation", title: "Phát âm", content: { ...priorPronunciation, focus: state.pronunciationFocus.trim(), words: splitValues(state.pronunciationWords, /[,;\n]/).map(word => { const known = (Array.isArray(priorPronunciation.words) ? priorPronunciation.words : []).map(record).find(item => stringValue(item.word ?? item.w).trim().toLowerCase() === word.toLowerCase()); const ipa = known ? stringValue(known.ipa) : ""; return ipa ? { word, ipa } : word; }),wordAudioUrls: alignAudioUrls(splitValues(state.pronunciationWords, /[,;\n]/), state.pronunciationWordAudioUrls), instruction: state.pronunciationTip.trim(), audioUrl: "" } },
     { code: "listening", title: "Nghe", content: { ...prior("listening"), script: state.listeningScript.trim(), audioUrl: state.listeningAudioUrl.trim(), prompt: state.listeningQuestion.trim(), options: state.listeningOptions.map(value => value.trim()).filter(Boolean), answer: state.listeningOptions[state.listeningAnswer]?.trim() ?? "" } },
     { code: "reading", title: "Đọc", content: { ...prior("reading"), text: state.readingPassage.trim(), prompt: state.readingQuestion.trim(), options: state.readingOptions.map(value => value.trim()).filter(Boolean), answer: state.readingOptions[state.readingAnswer]?.trim() ?? "", audioUrl: "" } },

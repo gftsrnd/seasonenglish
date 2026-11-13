@@ -1808,7 +1808,7 @@ export const MONTHLY_LESSON_PART_CONTENT_CONTRACT = [
   "This component's fields as a JSON object (never a JSON-encoded string). Use at least these keys per code; when a DAILY TEACHING PLAN / dailyTeachingPlan is supplied, also return the extra keys it lists (grammar dailyCode, objective, items; pronunciation stage, objective and, when asked, reviewTargets, passage, targetPositions), copying locked plan values verbatim:",
   "objective { text, items } - text is one can-do sentence for the whole lesson; items is 2-3 short can-do statements (strings), each an action verb phrase plus a workplace context (e.g. \"Explain a delivery delay to a client.\"), shown as the bullets under \"By the end of this lesson, you will be able to:\"; written in Vietnamese for A1-A2 and in English from B1; never list core words, vocabulary cards, grammar names or headings as items and never start with an internal label such as \"Step B1 (Identify):\"; instruction { text, steps };",
   "vocabulary { items: [{ word, type, ipa, meaning, collocations, collocationTranslations, synonyms, antonyms }] } - collocations is exactly 3 short, natural English phrases that each contain the word (e.g. client: \"meet a client\", \"a new client\", \"client feedback\"); never empty; collocationTranslations (A1-A2 only, omit from B1) is one short Vietnamese meaning per collocation, same order, shown as a popup and never read aloud;",
-  "grammar { formula, text, examples } - formula copies the locked grammar step formula(s) verbatim; text is a concise usage note: 1-2 short sentences, at most 45 words, focused on the day's goal; do not repeat the formula or add a lecture. When lockedScope.grammarSteps has more than one step (review days), also return grammar.steps: [{ formula, text, examples }] with one entry per step in order, each with its own concise usage note and at least 2 examples (at least one per formula rule row, each using a row of that step's own formula; never a structure the formula does not list; only the formula is locked: write fresh examples of your own and never copy lockedScope.grammarSteps examples, which are style references only);",
+  "grammar { formula, text, examples, exampleMarks } - exampleMarks has one { row, marks } entry per example in the same order: row is the 1-based formula row the example illustrates and marks the exact words of that example that realise the row, verbatim as whole words (\"knows\", \"wrote\", \"have got\", \"had\"; in a Wrong: ... Right: ... example only words of the Right sentence); every example has at least one mark and every formula row at least one example; formula copies the locked grammar step formula(s) verbatim; text is a concise usage note: 1-2 short sentences, at most 45 words, focused on the day's goal; do not repeat the formula or add a lecture. When lockedScope.grammarSteps has more than one step (review days), also return grammar.steps: [{ formula, text, examples, exampleMarks }] with one entry per step in order, each with its own concise usage note and at least 2 examples (at least one per formula rule row, each using a row of that step's own formula; never a structure the formula does not list; only the formula is locked: write fresh examples of your own and never copy lockedScope.grammarSteps examples, which are style references only);",
   "pronunciation { focus: \"/IPA/\", words: [{ word, ipa }] x3 } (+ stage, objective with a daily teaching plan);",
   "listening { script, prompt, options x4, answer } (+ questionTranslation, answerTranslation at A1-A2) - script is the full spoken transcript, never empty;",
   "reading { text, prompt, options x4, answer } (+ questionTranslation, answerTranslation at A1-A2) - text is the reading passage, never empty;",
@@ -1820,6 +1820,13 @@ export const MONTHLY_LESSON_PART_CONTENT_CONTRACT = [
   "In every choice task each option is a real, correctly spelled English word or phrase of the same kind as the answer (never invented forms such as sended, maked, feedbacked), and options are similar in length so the answer is not simply the longest one.",
   "Learner-facing text never mentions internal planning terms (core term, expanded term, người học) and never pastes the theme's communication goal; for A1/A2 every prompt and instruction is written in Vietnamese."
 ].join(" ");
+
+/** Grammar example marks (13/11): which formula row each example illustrates and the exact words that realise it. */
+const monthlyGrammarExampleMarksJsonSchema = {
+  type: "array",
+  description: "One entry per example, same order: row = 1-based number of the formula row the example illustrates; marks = the exact words of the example that realise that row, copied verbatim as whole words (at least one).",
+  items: { type: "object", additionalProperties: false, required: ["row", "marks"], properties: { row: { type: "integer", minimum: 1 }, marks: { type: "array", minItems: 1, items: { type: "string" } } } }
+} as const;
 
 export const monthlyLessonDayOutputJsonSchema = {
   type: "object", additionalProperties: false, required: ["title", "parts"],
@@ -1860,12 +1867,14 @@ export const monthlyLessonDayOutputJsonSchema = {
                 ] } },
               steps: { type: "array", items: { anyOf: [
                 { type: "string" },
-                { type: "object", required: ["formula", "text", "examples"], additionalProperties: false, properties: {
-                  formula: { type: "string" }, text: { type: "string" }, examples: { type: "array", items: { type: "string" } }
+                { type: "object", required: ["formula", "text", "examples", "exampleMarks"], additionalProperties: false, properties: {
+                  formula: { type: "string" }, text: { type: "string" }, examples: { type: "array", items: { type: "string" } },
+                  exampleMarks: monthlyGrammarExampleMarksJsonSchema
                 } }
-              ] }, description: "instruction: strings; grammar review: one {formula,text,examples} object per locked grammar step." },
+              ] }, description: "instruction: strings; grammar: one {formula,text,examples,exampleMarks} object per locked grammar step." },
               formula: { type: "string", description: "grammar formula or sentence pattern." },
               examples: { type: "array", items: { type: "string" }, description: "grammar examples (English only: they are read aloud)." },
+              exampleMarks: { ...monthlyGrammarExampleMarksJsonSchema, description: "grammar: one { row, marks } entry per grammar.examples sentence, same order: the 1-based formula row the example illustrates and the exact words of the example that realise it (verbatim, whole words; Right sentence only in a Wrong/Right example)." },
               exampleTranslations: { type: "array", items: { type: "string" }, description: "A1–A2 grammar only: one short Vietnamese translation per grammar example, same order; shown as a popup, never read aloud. Omit from B1." },
               focus: { type: "string", description: "pronunciation target sound written as /IPA/." },
               words: { type: "array", description: "pronunciation: exactly 3 items [{ word, ipa }]." },

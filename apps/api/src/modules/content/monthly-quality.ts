@@ -1,5 +1,5 @@
 import type { MonthlyCurriculumContract, MonthlyDaySpec } from "@e4s/domain";
-import { MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH, monthlyGrammarFormulaExampleIssues, monthlyGrammarFormulaExampleMessage, monthlyCollocationTranslationIssues, monthlyExerciseTranslationIssues, monthlyExerciseTranslationsForLevel, monthlyRelationMeaningIssue, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPlanObjectivesMatch, monthlyPronunciationExampleText, monthlyReadablePlanObjective, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
+import { MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH, monthlyGrammarFormulaExampleIssues, monthlyReadAloudTargetCounts, monthlyGrammarFormulaExampleMessage, monthlyCollocationTranslationIssues, monthlyExerciseTranslationIssues, monthlyExerciseTranslationsForLevel, monthlyRelationMeaningIssue, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPlanObjectivesMatch, monthlyPronunciationExampleText, monthlyReadablePlanObjective, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
 import type { LessonPart } from "@e4s/contracts";
 import { monthlyGrammarRoadmapDayIssues } from "./monthly-grammar-roadmap.js";
 import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
@@ -40,7 +40,9 @@ export function evaluateMonthlyLessonQuality(
   contract: MonthlyCurriculumContract,
   dayNumber: number,
   lesson: MonthlyLessonCandidate,
-  priorGrammarExamples: readonly string[] = []
+  priorGrammarExamples: readonly string[] = [],
+  /** A new generation: grammar examples must carry exampleMarks (stored lessons without marks keep the heuristic check). */
+  options: { requireGrammarMarks?: boolean } = {}
 ): MonthlyQualityReport {
   const day = contract.daySpecs.find((candidate) => candidate.lessonNumber === dayNumber);
   if (!day) throw new Error(`Monthly day ${dayNumber} is not in the curriculum contract`);
@@ -127,7 +129,7 @@ export function evaluateMonthlyLessonQuality(
 
   // 24/12 Bài 15: every formula rule row needs an example that uses it, and every example a row.
   // Advisory light finding: shown to the Operator, never counted toward the two-light approval limit.
-  const formulaExampleIssues = monthlyGrammarFormulaExampleIssues(grammarContent);
+  const formulaExampleIssues = monthlyGrammarFormulaExampleIssues(grammarContent, { requireMarks: options.requireGrammarMarks === true });
   if (formulaExampleIssues.length) light.push({ severity: "light", code: MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH, message: monthlyGrammarFormulaExampleMessage(formulaExampleIssues), dayNumber, component: "grammar" });
 
   const pronunciation = parts.get("pronunciation")?.content;
@@ -434,18 +436,9 @@ export function hasExactTargetOccurrences(passage: string, words: readonly strin
 
 /**
  * How often each read-aloud target occurs in the passage. Longer targets first: a word inside a
- * counted phrase ("checked" in "checked it") is that phrase's position, not an extra one, so it is
- * blanked out before the shorter targets are counted.
+ * counted phrase ("checked" in "checked it") is that phrase's position, not an extra one. The
+ * learner passage bolds the same occurrences (domain monthlyReadAloudTargetSpans).
  */
 export function targetOccurrenceCounts(passage: string, words: readonly string[]): Map<string, number> {
-  const unique = [...new Set(words.map((word) => word.trim().toLocaleLowerCase("en-US")).filter(Boolean))];
-  let spoken = passage.replace(/[’‘]/gu, "'").toLocaleLowerCase("en-US");
-  const ordered = unique.sort((a, b) => b.split(/\s+/u).length - a.split(/\s+/u).length || b.length - a.length);
-  const found = new Map<string, number>();
-  for (const word of ordered) {
-    const pattern = new RegExp("(?<![a-z])" + word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![a-z])", "g");
-    found.set(word, [...spoken.matchAll(pattern)].length);
-    spoken = spoken.replace(pattern, (match) => "#".repeat(match.length));
-  }
-  return found;
+  return monthlyReadAloudTargetCounts(passage, words);
 }

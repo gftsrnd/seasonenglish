@@ -2,7 +2,7 @@ import { withoutGrammarStepLabel } from "../shared/lesson/presentation.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Eye, MessageSquareWarning, Pencil, Sparkles } from "lucide-react";
 import type { CefrLevel, MonthlyResourceEditInput, MonthlyFinalDraftView, MonthlyFinalUpdateInput, MonthlyOperatorOverviewView, MonthlyQualityFindingView } from "@e4s/contracts";
-import { buildMonthlyCalendar, monthlyDayKind, monthlyNewLessonOrdinal, recommendedMonthlyResourceCriteria, formatMonthlyDayLabel, monthlyDefaultLessonTitle, monthlyLessonDisplayTitle, withMonthlyExpandedTerms, withMonthlyGrammarSteps, withMonthlyGrammarTopicName, monthlyGrammarDayTopicName, monthlyReadablePlanObjective, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
+import { buildMonthlyCalendar, monthlyDayKind, monthlyNewLessonOrdinal, recommendedMonthlyResourceCriteria, formatMonthlyDayLabel, monthlyDefaultLessonTitle, monthlyLessonDisplayTitle, withMonthlyExpandedTerms, withMonthlyGrammarSteps, withMonthlyGrammarTopicName, withMonthlyReadAloudTargets, monthlyGrammarDayTopicName, monthlyReadablePlanObjective, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { useToast } from "../shared/design-system.js";
 import { useDialog, useModal } from "../shared/ModalProvider.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
@@ -675,7 +675,8 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
   const dayGrammarSteps = resources ? resources.grammarTopics.flatMap((topic) => topic.steps).filter((step) => dayGrammarIds.includes(step.id)) : [];
   // Grammar point name from the day plan, the same one the learner lesson API attaches.
   const dayGrammarName = resources ? monthlyGrammarDayTopicName(cefr, day, resources.grammarTopics) : undefined;
-  const toPreviewParts = (source: typeof parts) => (resources ? withMonthlyGrammarTopicName(withMonthlyGrammarSteps(withMonthlyExpandedTerms(source, resources.coreTerms.filter((term) => dayCoreIds.has(term.id)), resources.supportTerms.filter((term) => daySupportIds.has(term.id)), cefr), dayGrammarSteps), dayGrammarName) : source)
+  // The read-aloud targets the learner passage bolds, from the same plan positions as the learner lesson API.
+  const toPreviewParts = (source: typeof parts) => (resources ? withMonthlyReadAloudTargets(withMonthlyGrammarTopicName(withMonthlyGrammarSteps(withMonthlyExpandedTerms(source, resources.coreTerms.filter((term) => dayCoreIds.has(term.id)), resources.supportTerms.filter((term) => daySupportIds.has(term.id)), cefr), dayGrammarSteps), dayGrammarName), day?.pronunciationPlan, resources.sounds) : source)
     .map((part) => ({ code: part.code ?? "instruction", title: MONTHLY_PART_TITLES[part.code ?? ""] ?? part.title ?? part.code ?? "Nội dung", content: part.content ?? {} }));
   const reviewParts = toPreviewParts(parts);
   // N3 (December 2026): the last AI generation that failed every repair round, shown beside (never instead of) the draft.

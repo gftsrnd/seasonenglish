@@ -1,4 +1,4 @@
-import { fillBlankCount, MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH, monthlyGrammarFormulaExampleIssues, monthlyGrammarFormulaRows, normalizeFillBlankPrompt, MONTHLY_ANSWER_TRANSLATION_RULE, MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS, monthlyLessonDisplayTitle, monthlyReadablePlanObjective, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, withoutAdvancedGrammarExampleTranslations, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
+import { fillBlankCount, MONTHLY_GRAMMAR_EXAMPLE_MARKS_RULE, MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH, monthlyGrammarFormulaExampleIssueCount, monthlyGrammarFormulaExampleIssues, monthlyGrammarFormulaRows, normalizeFillBlankPrompt, MONTHLY_ANSWER_TRANSLATION_RULE, MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS, monthlyLessonDisplayTitle, monthlyReadablePlanObjective, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, withoutAdvancedGrammarExampleTranslations, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
 import { MONTHLY_LESSON_PART_CONTENT_CONTRACT, MONTHLY_REVIEW_CHOICE_SECTIONS, type AiTaskRunner, type MonthlyReviewChoiceSection } from "@e4s/ai";
 import { evaluateMonthlyLessonQuality, monthlyLockedPlanExpectations, normalizeFormula, type MonthlyLessonCandidate, type MonthlyLockedPlanExpectations, type MonthlyQualityReport, type MonthlyQualityFinding } from "./monthly-quality.js";
 import { rebalanceAnswerTextPositions, type AnswerTextChoice } from "../shared/answer-order.js";
@@ -19,7 +19,7 @@ export function monthlyDailyTeachingContract(day: MonthlyDaySpec, cefr: string, 
     "DAILY TEACHING PLAN V2 overrides generic daily/review shape instructions for grammar and pronunciation only. Keep every other component's existing contract.",
     `Teach day N${day.newLessonNumber}, grammar code ${day.grammarPlan?.code}, mode ${day.grammarPlan?.mode}, objective: ${grammarObjective}. A shared formula does not mean repeating the same teaching lesson. Explain the planned focus in ${language}.`,
     vietnamese ? "" : "The locked objective above may be written in Vietnamese: copy it verbatim only into grammar.objective; never quote or translate it into the objective, instruction or any other learner-facing text, which stays in English.",
-    `grammar: return {dailyCode, objective, formula, text, examples, items, steps?}. dailyCode and objective copy the locked daily plan. grammar.examples: at least 3 natural NEW workplace sentences (never copied from lockedScope.grammarStep examples) that together use at least two of today's core words${words}, each word spelled exactly as given. The pool's examples are references; do not copy the entire reference example list into the lesson. grammar.text is shown to learners as written: never put roadmap step labels in it (no "Bước 3 (Lỗi thường gặp):" or "Step 1 (Identify):"); write one or two short sentences for the rule, then at most one short tip sentence (for example how Vietnamese differs). Keep grammar.formula short: one pattern per line, or at most three patterns joined with " → " (the app shows each on its own line). ${MONTHLY_GRAMMAR_FORMULA_EXAMPLE_RULE}`,
+    `grammar: return {dailyCode, objective, formula, text, examples, exampleMarks, items, steps?}. dailyCode and objective copy the locked daily plan. grammar.examples: at least 3 natural NEW workplace sentences (never copied from lockedScope.grammarStep examples) that together use at least two of today's core words${words}, each word spelled exactly as given. The pool's examples are references; do not copy the entire reference example list into the lesson. grammar.text is shown to learners as written: never put roadmap step labels in it (no "Bước 3 (Lỗi thường gặp):" or "Step 1 (Identify):"); write one or two short sentences for the rule, then at most one short tip sentence (for example how Vietnamese differs). Keep grammar.formula short: one pattern per line, or at most three patterns joined with " → " (the app shows each on its own line). ${MONTHLY_GRAMMAR_FORMULA_EXAMPLE_RULE}`,
     monthlyGrammarFormulaRowsContract(grammarSteps),
     "grammar.items: 3–5 distinct questions, each {id,prompt,options:[4 different strings],answer,explanation,milestoneId}. Use the day's practice mode. Explain why each answer is correct. Do not add unrelated grammar formulas.",
     day.grammarPlan?.recallMilestoneIds.length ? `Include one recall question with milestoneId from ${day.grammarPlan.recallMilestoneIds.join(", ")} (previous topic A); the other questions teach the current topic.` : "",
@@ -65,7 +65,7 @@ export function monthlyGrammarFormulaRowsContract(steps: readonly Pick<GrammarSt
   if (!blocks.length) return "";
   const where = (index: number) => steps.length >= 2 ? `grammar.steps[${index}]` : "grammar";
   const lines = blocks.map((block) => `${where(block.index)} (${block.focus ? `focus: ${block.focus}; ` : ""}at least ${Math.max(2, block.rows.length)} examples): ${block.rows.map((row, position) => `row ${position + 1} "${row}"`).join(", ")}`);
-  return `EXAMPLES FOLLOW THE FORMULA ROWS, NOT THE OBJECTIVE: the daily objective and the topic titles name the month's topics; the examples and the explanation text of each step teach only the rows of that step's formula.${steps.length >= 2 ? " Return grammar.steps with one entry per locked step, in this order, each { formula, text, examples }." : ""} Write at least one example per row, and no example of a structure no row lists: ${lines.join(" | ")}. Each step's text explains its own rows (its focus), never a different tense contrast.`;
+  return `EXAMPLES FOLLOW THE FORMULA ROWS, NOT THE OBJECTIVE: the daily objective and the topic titles name the month's topics; the examples and the explanation text of each step teach only the rows of that step's formula.${steps.length >= 2 ? " Return grammar.steps with one entry per locked step, in this order, each { formula, text, examples, exampleMarks }." : ""} Write at least one example per row, and no example of a structure no row lists: ${lines.join(" | ")}. Each example's exampleMarks entry { row, marks } names one of these row numbers of its own block and the exact words that realise it. Each step's text explains its own rows (its focus), never a different tense contrast.`;
 }
 
 /** Writing fill task (23/12 B1 N14: three blanks and a four-part answer, three attempts in a row). */
@@ -132,7 +132,7 @@ export type MonthlyDayComponent = (typeof MONTHLY_DAY_COMPONENTS)[number];
  * Formula and examples (24/12 Bài 15): the locked formula decides what the examples teach. Shared by the daily
  * teaching contract, the review study call and the grammar repair request.
  */
-export const MONTHLY_GRAMMAR_FORMULA_EXAMPLE_RULE = "FORMULA AND EXAMPLES MATCH: the formula of grammar (and of each grammar.steps entry) is locked; its text and examples teach exactly the structures that formula lists. A formula rule row is each pattern separated by \" / \" between two \"+\" patterns, \";\", \" vs \" or a new line. Every rule row gets at least one example that uses exactly that structure, so a formula with N rows has at least N examples (never fewer than 2), and every example uses a row of its own formula: never an example of a structure the formula does not list (no routine-vs-now examples under a state-verb or always + continuous formula, no past continuous under a have / have got formula). Error-check (common errors) formulas keep their (NOT ...) notes and their examples illustrate those same rules; a \"Wrong: ... Right: ...\" example counts for the rule it corrects, and common-errors steps keep that Wrong: ... Right: ... style. Only the formula and the step structure are locked: lockedScope.grammarStep(s) examples are style references only. Never copy them; write your own fresh, natural workplace sentences, using today's core words where they fit.";
+export const MONTHLY_GRAMMAR_FORMULA_EXAMPLE_RULE = `FORMULA AND EXAMPLES MATCH: the formula of grammar (and of each grammar.steps entry) is locked; its text and examples teach exactly the structures that formula lists. A formula rule row is each pattern separated by \" / \" between two \"+\" patterns, \";\", \" vs \" or a new line. Every rule row gets at least one example that uses exactly that structure, so a formula with N rows has at least N examples (never fewer than 2), and every example uses a row of its own formula: never an example of a structure the formula does not list (no routine-vs-now examples under a state-verb or always + continuous formula, no past continuous under a have / have got formula). Error-check (common errors) formulas keep their (NOT ...) notes and their examples illustrate those same rules; a \"Wrong: ... Right: ...\" example counts for the rule it corrects, and common-errors steps keep that Wrong: ... Right: ... style. Only the formula and the step structure are locked: lockedScope.grammarStep(s) examples are style references only. Never copy them; write your own fresh, natural workplace sentences, using today's core words where they fit. ${MONTHLY_GRAMMAR_EXAMPLE_MARKS_RULE}`;
 
 /** `verifyAnswers`: run the independent answer check (monthly_answer_verification) once the deterministic gate passes. */
 export interface MonthlyAiGenerationOptions {
@@ -187,6 +187,8 @@ ${MONTHLY_SINGLE_ANSWER_RULE}${monthlyAnswerTranslationRule(contract.cefr)}
 
 ${MONTHLY_WORD_FORM_SCOPE_RULE}`;
       // Review exercise sections have their own task: its schema requires a retry variant on every choice item.
+      // The daily teaching plan lists the formula rows itself; review study calls (and older plans) get them here, so exampleMarks rows are numbered the same way.
+      const grammarRowsNote = (requested: readonly string[], taskId: string) => taskId === "monthly_lesson_day" && requested.includes("grammar") && !(contract.planSchemaVersion === 2 && kind === "new") ? `\n${monthlyGrammarFormulaRowsContract(grammarSteps)}` : "";
       const call = async (requested: readonly string[], note: string, maxOutputTokens: number, taskId: "monthly_lesson_day" | "monthly_review_exercises" = "monthly_lesson_day") => {
         let result;
         try { result = await runner.runTask(taskId, {
@@ -203,7 +205,7 @@ ${MONTHLY_WORD_FORM_SCOPE_RULE}`;
           ...(kind === "review" ? { reviewListeningChecklist: coreTerms.map(term => ({ audioText: term.word, meaning: term.meaning })) } : {})
         }, { systemPrompt: `${note ? `${basePrompt}
 
-${note}` : basePrompt}${contract.planSchemaVersion === 2 && kind === "new" ? `\n${monthlyDailyTeachingContract(daySpec, contract.cefr, coreTerms.map((term) => term.word), monthlyLockedPlanExpectations(contract, daySpec).targetPositionWords, grammarSteps)}` : ""}${repairFindings.length ? `\nREPAIR REQUIRED FOR REQUESTED COMPONENTS: ${repairFindings.map(finding => `${finding.component}: ${monthlyRepairFindingText(finding, priorParts)}`).join("; ")}. Correct every listed issue; do not repeat the same incomplete output. Preserve accepted components.` : ""}`, maxOutputTokens, temperature: 0.2, maxAttempts: 2 });
+${note}` : basePrompt}${grammarRowsNote(requested, taskId)}${contract.planSchemaVersion === 2 && kind === "new" ? `\n${monthlyDailyTeachingContract(daySpec, contract.cefr, coreTerms.map((term) => term.word), monthlyLockedPlanExpectations(contract, daySpec).targetPositionWords, grammarSteps)}` : ""}${repairFindings.length ? `\nREPAIR REQUIRED FOR REQUESTED COMPONENTS: ${repairFindings.map(finding => `${finding.component}: ${monthlyRepairFindingText(finding, priorParts)}`).join("; ")}. Correct every listed issue; do not repeat the same incomplete output. Preserve accepted components.` : ""}`, maxOutputTokens, temperature: 0.2, maxAttempts: 2 });
         } catch (error) {
           if (error && typeof error === "object") Object.assign(error, { monthlyComponents: [...requested] });
           throw error;
@@ -266,6 +268,8 @@ ${MONTHLY_REVIEW_ITEM_REPAIR_RULE}`;
     } } : {}),
     // One grammar-only repair round when the formula rows and examples do not match (bounded: one extra call per lesson).
     repairGrammarExamples: { ...(options.isBudgetExhausted ? { isBudgetExhausted: options.isBudgetExhausted } : {}) },
+    // The model marks every grammar example's row and words (13/11): a new generation without marks is repaired like a row mismatch.
+    requireGrammarMarks: true,
     ...(options.verifyAnswers ? { verifyAnswers: async ({ daySpec, parts }: { daySpec: MonthlyDaySpec; parts: MonthlyLessonCandidate["parts"] }) => monthlyAnswerVerification(contract, daySpec, parts, runner) } : {})
   });
   return generated;
@@ -535,6 +539,8 @@ export async function generateMonthlyDay(input: {
    * Skipped when the AI-call budget is exhausted.
    */
   repairGrammarExamples?: { isBudgetExhausted?: () => boolean };
+  /** Grammar examples must carry exampleMarks { row, marks } (AI generation); a fake generator in a test may leave it off. */
+  requireGrammarMarks?: boolean;
   maxAttempts?: number;
   priorGrammarExamples?: readonly string[];
 }): Promise<MonthlyDayGenerationResult> {
@@ -561,6 +567,7 @@ export async function generateMonthlyDay(input: {
   let title = "";
   let requestedComponents: MonthlyDayComponent[] = daySpec.kind === "review" ? [...MONTHLY_REVIEW_COMPONENTS] : [...MONTHLY_DAY_COMPONENTS];
   let report: MonthlyQualityReport = { severe: [], light: [], contractVersion: input.contract.version };
+  const qualityOptions = { requireGrammarMarks: input.requireGrammarMarks === true };
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const generated = await input.generate({ contract: input.contract, dayNumber: input.dayNumber, components: requestedComponents, daySpec, coreTerms, grammarStep, grammarSteps, sound, sounds, pronunciationExamples, priorParts: parts, repairFindings: report.severe });
     // The model sees the raw calendar slot (daySpec.lessonNumber, which counts review days); a "Bài N"
@@ -569,19 +576,19 @@ export async function generateMonthlyDay(input: {
     // D1 (approved 11/11): the plan, not the model, owns the locked fields; the gate below still verifies them.
     parts = applyMonthlyLockedPlanFields(input.contract, daySpec, keepMeaningfulVocabularyRelations(input.contract, dropSupportTermVocabularyCards(input.contract, mergeParts(parts, generated.parts, requestedComponents, kind === "review"))));
     const candidate = { title, parts };
-    report = evaluateMonthlyLessonQuality(input.contract, input.dayNumber, candidate, input.priorGrammarExamples);
+    report = evaluateMonthlyLessonQuality(input.contract, input.dayNumber, candidate, input.priorGrammarExamples, qualityOptions);
     if (report.severe.length === 0 && input.verifyAnswers) {
       const disputed = await input.verifyAnswers({ daySpec, parts });
       if (disputed.length) report = { ...report, severe: disputed };
     }
     if (report.severe.length === 0) {
       if (input.repairGrammarExamples && !input.repairGrammarExamples.isBudgetExhausted?.()) {
-        ({ parts, report } = await repairMonthlyGrammarFormulaExamples(input.contract, input.dayNumber, title, parts, report, input.priorGrammarExamples, async (finding) => {
+        ({ parts, report } = await repairMonthlyGrammarFormulaExamples(input.contract, input.dayNumber, title, parts, report, input.priorGrammarExamples, qualityOptions, async (finding) => {
           const generated = await input.generate({ contract: input.contract, dayNumber: input.dayNumber, components: ["grammar"], daySpec, coreTerms, grammarStep, grammarSteps, sound, sounds, pronunciationExamples, priorParts: parts, repairFindings: [finding] });
           return generated.parts.find((part) => part.code === "grammar")?.content ?? null;
         }));
       }
-      if (input.repairLight) ({ parts, report } = await repairMonthlyLightFindings(input.contract, input.dayNumber, title, parts, report, input.priorGrammarExamples, (current) => input.repairLight!({ daySpec, coreTerms, grammarSteps, parts: current.parts, report: current.report })));
+      if (input.repairLight) ({ parts, report } = await repairMonthlyLightFindings(input.contract, input.dayNumber, title, parts, report, input.priorGrammarExamples, qualityOptions, (current) => input.repairLight!({ daySpec, coreTerms, grammarSteps, parts: current.parts, report: current.report })));
       return { status: "ready", lesson: { title, parts: shuffleMonthlyAnswerOrder(parts, scopeHash, input.dayNumber) }, report, scopeHash, attempts: attempt };
     }
     requestedComponents = componentsToRepair(report, daySpec.kind === "review");
@@ -614,6 +621,8 @@ export function mergeMonthlyGrammarExampleRepair(accepted: Record<string, unknow
       target.examples = examples;
       const translations = strings(source.exampleTranslations);
       if (translations) target.exampleTranslations = translations; else delete target.exampleTranslations;
+      // The row/word marks belong to these examples: never keep the old ones next to new sentences.
+      if (Array.isArray(source.exampleMarks)) target.exampleMarks = source.exampleMarks; else delete target.exampleMarks;
     }
   };
   take(next, repaired);
@@ -643,6 +652,7 @@ async function repairMonthlyGrammarFormulaExamples(
   parts: MonthlyLessonCandidate["parts"],
   report: MonthlyQualityReport,
   priorGrammarExamples: readonly string[] | undefined,
+  qualityOptions: { requireGrammarMarks?: boolean },
   repair: (finding: MonthlyQualityFinding) => Promise<Record<string, unknown> | null>
 ): Promise<{ parts: MonthlyLessonCandidate["parts"]; report: MonthlyQualityReport }> {
   const finding = report.light.find((candidate) => candidate.code === MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH);
@@ -656,9 +666,11 @@ async function repairMonthlyGrammarFormulaExamples(
   const merged = mergeMonthlyGrammarExampleRepair(accepted.content, repaired);
   if (JSON.stringify(merged) === JSON.stringify(accepted.content)) return { parts, report };
   const trial = applyMonthlyLockedPlanFields(contract, day, parts.map((part, position) => position === index ? { ...part, content: merged } : part));
-  const trialReport = evaluateMonthlyLessonQuality(contract, dayNumber, { title, parts: trial }, priorGrammarExamples);
+  const trialReport = evaluateMonthlyLessonQuality(contract, dayNumber, { title, parts: trial }, priorGrammarExamples, qualityOptions);
   const others = (light: readonly MonthlyQualityFinding[]) => light.filter((candidate) => candidate.code !== MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH).length;
-  const better = monthlyGrammarFormulaExampleIssues(trial[index]!.content).length < monthlyGrammarFormulaExampleIssues(accepted.content).length;
+  // Counted per row and example, not per step: a single-formula part (one issue at most) still improves when one row gains an example.
+  const issueCount = (content: Record<string, unknown>) => monthlyGrammarFormulaExampleIssueCount(monthlyGrammarFormulaExampleIssues(content, { requireMarks: qualityOptions.requireGrammarMarks === true }));
+  const better = issueCount(trial[index]!.content) < issueCount(accepted.content);
   return !trialReport.severe.length && others(trialReport.light) <= others(report.light) && better ? { parts: trial, report: trialReport } : { parts, report };
 }
 
@@ -670,6 +682,7 @@ async function repairMonthlyLightFindings(
   parts: MonthlyLessonCandidate["parts"],
   report: MonthlyQualityReport,
   priorGrammarExamples: readonly string[] | undefined,
+  qualityOptions: { requireGrammarMarks?: boolean },
   repair: (current: { parts: MonthlyLessonCandidate["parts"]; report: MonthlyQualityReport }) => Promise<MonthlyLessonCandidate["parts"] | null>
 ): Promise<{ parts: MonthlyLessonCandidate["parts"]; report: MonthlyQualityReport }> {
   let current = { parts, report };
@@ -683,7 +696,7 @@ async function repairMonthlyLightFindings(
       const index = current.parts.findIndex((candidate) => candidate.code === part.code);
       if (index < 0 || JSON.stringify(current.parts[index]!.content) === JSON.stringify(part.content)) continue;
       const trial = current.parts.map((candidate, position) => position === index ? part : candidate);
-      const trialReport = evaluateMonthlyLessonQuality(contract, dayNumber, { title, parts: trial }, priorGrammarExamples);
+      const trialReport = evaluateMonthlyLessonQuality(contract, dayNumber, { title, parts: trial }, priorGrammarExamples, qualityOptions);
       if (!trialReport.severe.length && trialReport.light.length < current.report.light.length) current = { parts: trial, report: trialReport };
     }
     if (current.report.light.length >= before) break;

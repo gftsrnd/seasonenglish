@@ -127,8 +127,10 @@ describe("monthly day generation", () => {
     }} as unknown as import("@e4s/ai").AiTaskRunner;
     const result=await generateMonthlyReviewWithAi(scope,5,runner,"Review prompt");
     expect(result.status,JSON.stringify(result.report.severe)).toBe("ready");
-    // The model wrote no step examples: the plan's reference examples fill the steps (never an empty step), so no extra repair call.
-    expect(calls).toHaveLength(2);
+    // The model wrote no step examples: the plan's reference examples fill the steps (never an empty step); they carry no
+    // row/word marks, so the one grammar repair asks the model for its own marked examples (13/11).
+    expect(calls).toHaveLength(3);
+    expect(calls[2]).toEqual(["grammar"]);
     // Study tab on the lesson task; exercises on the review task whose schema requires variants.
     expect(tasks.slice(0,2).sort()).toEqual(["monthly_lesson_day","monthly_review_exercises"]);
     const grammar=result.lesson!.parts.find(part=>part.code==="grammar")!;
@@ -241,7 +243,7 @@ describe("monthly day generation – AI quality plan 11/11 (WP1/D1, WP2)", () =>
     return scope;
   };
   const v2Parts = (components: readonly string[]) => components.map((code) => code === "grammar"
-    ? { code, content: { formula: "The cost is high + adj", dailyCode: "X9", objective: "Paraphrased objective", text: "Dùng để mô tả chi phí.", examples: ["Our budget is small this month.", "The cost of the forecast is high.", "This budget is new."], items: [1, 2, 3].map((i) => ({ id: `g${i}`, prompt: `Chọn đáp án đúng ${i}: The cost ____ high.`, options: ["is", "are", "be", "am"], answer: "is", explanation: "Chủ ngữ số ít dùng is.", milestoneId: "step" })) } }
+    ? { code, content: { formula: "The cost is high + adj", dailyCode: "X9", objective: "Paraphrased objective", text: "Dùng để mô tả chi phí.", examples: ["Our budget is small this month.", "The cost of the forecast is high.", "This budget is new."], exampleMarks: [{ row: 1, marks: ["is small"] }, { row: 1, marks: ["is high"] }, { row: 1, marks: ["is new"] }], items: [1, 2, 3].map((i) => ({ id: `g${i}`, prompt: `Chọn đáp án đúng ${i}: The cost ____ high.`, options: ["is", "are", "be", "am"], answer: "is", explanation: "Chủ ngữ số ít dùng is.", milestoneId: "step" })) } }
     : code === "pronunciation" ? { code, content: { focus: "k", stage: "sentence", objective: "Other", words: [{ word: "Cost", ipa: "/kost/", tip: "Bật hơi" }, { word: "car", ipa: "/kɑː/" }, { word: "key", ipa: "/kiː/" }] } }
       : part(code));
 
@@ -640,6 +642,31 @@ describe("grammar formula rows vs examples (24/12 Bài 15)", () => {
 
   it("asks every daily lesson for one example per formula row", () => {
     expect(monthlyDailyTeachingContract(contract().daySpecs[0]!, "B1")).toContain("FORMULA AND EXAMPLES MATCH");
+    expect(monthlyDailyTeachingContract(contract().daySpecs[0]!, "B1")).toContain("EXAMPLE MARKS");
+  });
+
+  // 13/11: the model marks each example's row and words; the check is exact.
+  const marks = [{ row: 1, marks: ["will send"] }, { row: 2, marks: ["must check"] }];
+  const markedLesson = (exampleMarks: unknown) => (components: readonly string[]) => components.map((code) => code === "grammar" ? { code, content: { formula: FORMULA, text: "Dùng will để hứa và must để nói việc bắt buộc.", examples: matched, ...(exampleMarks ? { exampleMarks } : {}) } } : part(code));
+
+  it("a new generation without exampleMarks is repaired once; the repaired marks are kept with their examples", async () => {
+    const calls: string[][] = [];
+    const result = await generateMonthlyDay({
+      contract: scope(), dayNumber: 1, repairGrammarExamples: {}, requireGrammarMarks: true,
+      generate: async (input) => { calls.push([...input.components]); return { title: "Budget", parts: markedLesson(calls.length === 1 ? undefined : marks)(input.components) }; }
+    });
+    expect(calls).toEqual([components, ["grammar"]]);
+    expect(result.lesson!.parts.find((candidate) => candidate.code === "grammar")!.content).toMatchObject({ examples: matched, exampleMarks: marks });
+    expect(result.report.light.map((finding) => finding.code)).not.toContain("MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH");
+  });
+
+  it("checks stored marks exactly, and leaves a stored lesson without marks to the heuristic check", () => {
+    const wrongRow = evaluateMonthlyLessonQuality(scope(), 1, { title: "Budget", parts: markedLesson([{ row: 1, marks: ["will send"] }, { row: 1, marks: ["must check"] }])(components) });
+    expect(wrongRow.light.find((finding) => finding.code === "MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH")?.message).toContain('formula row "must + base verb (obligation)" has no example');
+    expect(evaluateMonthlyLessonQuality(scope(), 1, { title: "Budget", parts: markedLesson(marks)(components) }).light.map((finding) => finding.code)).not.toContain("MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH");
+    // Backward compatible: matching examples stored before marks existed still pass.
+    expect(evaluateMonthlyLessonQuality(scope(), 1, { title: "Budget", parts: markedLesson(undefined)(components) }).light.map((finding) => finding.code)).not.toContain("MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH");
+    expect(evaluateMonthlyLessonQuality(scope(), 1, { title: "Budget", parts: markedLesson(undefined)(components) }, [], { requireGrammarMarks: true }).light.map((finding) => finding.code)).toContain("MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH");
   });
 });
 
@@ -651,6 +678,11 @@ describe("review grammar steps write their own examples (live B1 2026-12, framew
   const OWN = [
     ["Wrong: I am knowing the new budget. Right: I know the new budget.", "Our supplier is always changing the cost, so we cannot plan the forecast."],
     ["Wrong: Did the client approved the budget? Right: Did the client approve the budget?", "Our team has a new forecast this quarter.", "We have got a clear cost report for the next project."]
+  ];
+  // The model's own row/word marks for OWN (13/11): Right sentence only in a Wrong/Right example.
+  const OWN_MARKS = [
+    [{ row: 1, marks: ["know"] }, { row: 2, marks: ["is", "always", "changing"] }],
+    [{ row: 1, marks: ["approve"] }, { row: 2, marks: ["has"] }, { row: 3, marks: ["have got"] }]
   ];
   const scope = () => {
     const value = contract();
@@ -688,7 +720,7 @@ describe("review grammar steps write their own examples (live B1 2026-12, framew
   const stepsOf = (lesson: { parts: Array<{ code: string; content: Record<string, unknown> }> }) => lesson.parts.find((item) => item.code === "grammar")!.content.steps as Array<{ formula: string; examples: string[] }>;
 
   it("keeps the AI's own per-row examples under the locked formulas: no mismatch, no repair call, no resource example", async () => {
-    const { result, prompts, studyCalls } = await run(() => ({ steps: OWN.map((examples) => ({ formula: "rewritten", text: "Fix the common error.", examples })) }));
+    const { result, prompts, studyCalls } = await run(() => ({ steps: OWN.map((examples, index) => ({ formula: "rewritten", text: "Fix the common error.", examples, exampleMarks: OWN_MARKS[index] })) }));
     expect(result.status, JSON.stringify(result.report.severe)).toBe("ready");
     const steps = stepsOf(result.lesson!);
     expect(steps.map((step) => step.formula)).toEqual([STEP_A3.formula, STEP_B3.formula]);
@@ -696,10 +728,13 @@ describe("review grammar steps write their own examples (live B1 2026-12, framew
     expect(result.report.light.map((finding) => finding.code)).not.toContain("MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH");
     expect(studyCalls()).toBe(1);
     expect(prompts[0]).toContain("style references only");
+    // The review study call lists each step's rows, numbered as exampleMarks names them, and asks for the marks.
+    expect(prompts[0]).toContain('grammar.steps[1] (focus: Common errors with past tenses; have vs have got; at least 3 examples): row 1 "[subject] + verb-ed/irregular (NOT did + verb-ed)", row 2 "have/has + noun (I have two projects)", row 3 "have got (I have got a new laptop)"');
+    expect(prompts[0]).toContain("EXAMPLE MARKS");
   });
 
   it("never copies the resource examples; the one grammar repair writes the missing per-row examples", async () => {
-    const { result, prompts, studyCalls } = await run((call) => call === 1 ? {} : { steps: OWN.map((examples) => ({ formula: "x", text: "Fix the common error.", examples })) });
+    const { result, prompts, studyCalls } = await run((call) => call === 1 ? {} : { steps: OWN.map((examples, index) => ({ formula: "x", text: "Fix the common error.", examples, exampleMarks: OWN_MARKS[index] })) });
     expect(result.status, JSON.stringify(result.report.severe)).toBe("ready");
     expect(studyCalls()).toBe(2);
     expect(prompts[1]).toContain("FORMULA AND EXAMPLES MATCH");
@@ -710,7 +745,7 @@ describe("review grammar steps write their own examples (live B1 2026-12, framew
   });
 
   it("an already-approved lesson whose steps copied the first two resource examples stays valid (advisory finding only)", async () => {
-    const { value, result } = await run(() => ({ steps: OWN.map((examples) => ({ formula: "x", text: "Fix the common error.", examples })) }));
+    const { value, result } = await run(() => ({ steps: OWN.map((examples, index) => ({ formula: "x", text: "Fix the common error.", examples, exampleMarks: OWN_MARKS[index] })) }));
     const lesson = result.lesson!;
     const old = { title: lesson.title, parts: lesson.parts.map((item) => item.code !== "grammar" ? item : { ...item, content: { ...item.content, steps: [STEP_A3, STEP_B3].map((step) => ({ formula: step.formula, text: step.usage, examples: step.examples.slice(0, 2) })) } }) };
     const report = evaluateMonthlyLessonQuality(value, 5, old);

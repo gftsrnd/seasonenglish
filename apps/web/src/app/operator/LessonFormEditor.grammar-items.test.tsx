@@ -43,6 +43,33 @@ describe("daily grammar practice in the manual editor (4175 A1 day 13)", () => {
     expect(items[0]).toMatchObject({ id: "b5-1", answerTranslation: "Bàn của Anna" });
   });
 
+  it("keeps the generated example marks on a save that leaves the examples alone, and drops them once an example is edited", async () => {
+    const marked = (): ContentLessonDraftInput => {
+      const lesson = initial();
+      const grammar = lesson.parts.find((part) => part.code === "grammar")!;
+      const examples = (grammar.content.examples as string[]);
+      grammar.content = { ...grammar.content, exampleMarks: examples.map(() => ({ row: 1, marks: ["is"] })) };
+      return lesson;
+    };
+    const save = async (edit: boolean) => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A1" monthly initial={marked()} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
+      if (edit) { const first = screen.getByLabelText("Câu ví dụ ngữ pháp 1"); await user.clear(first); await user.type(first, "This is my new desk."); }
+      const question = screen.getByRole("group", { name: "Câu luyện tập 4" });
+      const option = within(question).getByLabelText("Câu 4 – Lựa chọn 1");
+      await user.clear(option); await user.type(option, "his");
+      await user.selectOptions(within(question).getByLabelText("Câu 4 – Đáp án đúng"), "his");
+      await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
+      await user.click(screen.getAllByRole("button", { name: "Kiểm tra & lưu" }).at(-1)!);
+      const saved = onSave.mock.calls[0]![0] as ContentLessonDraftInput;
+      cleanup();
+      return saved.parts.find((part) => part.code === "grammar")!.content;
+    };
+    expect(await save(false)).toHaveProperty("exampleMarks");
+    expect(await save(true)).not.toHaveProperty("exampleMarks");
+  });
+
   it("names the question in the findings strip once the gate reports it", () => {
     const lines = describeMonthlyFindings([{ severity: "severe", code: "MONTHLY_DAILY_GRAMMAR_QUESTION", component: "grammar", dayNumber: 13, message: 'Every grammar question needs a prompt, 4 distinct options, an answer copied from them, and an explanation. grammar item 4: answer "his" is not one of the options' }], { kind: "new", parts: initial().parts });
     expect(lines).toEqual([expect.objectContaining({ where: "Ngữ pháp · câu 4", item: 4, what: "Đáp án “his” không nằm trong 4 lựa chọn; sửa câu này trong Sửa tay." })]);
