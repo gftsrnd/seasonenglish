@@ -89,6 +89,19 @@ export function formatMonthlyDayLabel(day: { kind: "new" | "review"; newLessonNu
   return day.newLessonNumber ? `Bài ${day.newLessonNumber}` : "Bài học mới";
 }
 
+const MONTHLY_ENGLISH_TITLE_LEVELS = new Set(["B1", "B2", "C1"]);
+
+/**
+ * Default learner-facing title of a monthly day before the Operator or the model names it.
+ * B1+ lessons are English-only (the content gate rejects a Vietnamese title), so their
+ * defaults are "Lesson N" / "Week N review"; A1-A2 keep "Bài N" / "Bài ôn tuần N".
+ */
+export function monthlyDefaultLessonTitle(day: { kind: "new" | "review"; newLessonNumber?: number | null | undefined; reviewWeekNumber?: number | null | undefined }, cefr?: string | null): string | undefined {
+  const english = MONTHLY_ENGLISH_TITLE_LEVELS.has(cefr ?? "");
+  if (day.kind === "review") return day.reviewWeekNumber ? (english ? `Week ${day.reviewWeekNumber} review` : `Bài ôn tuần ${day.reviewWeekNumber}`) : (english ? "Weekly review" : "Bài ôn tập");
+  return day.newLessonNumber ? `${english ? "Lesson" : "Bài"} ${day.newLessonNumber}` : undefined;
+}
+
 const MONTHLY_TITLE_NUMBER_PREFIX = /^\s*(Bài học|Bài|Lesson)\s*#?\s*(\d+)(?!\d)\s*(?:[:\-–—·.|]\s*)?/iu;
 
 /**
@@ -104,7 +117,9 @@ export function monthlyLessonDisplayTitle(title: string | null | undefined, day:
   if (!match) return text;
   const rest = text.slice(match[0].length).trim();
   if (day.kind === "review") {
-    const label = day.reviewWeekNumber ? `Ôn tuần ${day.reviewWeekNumber}` : "Ôn tập";
+    // Keep the title's language: an English "Lesson N" title (B1+) must not turn Vietnamese.
+    const english = match[1]!.toLowerCase() === "lesson";
+    const label = english ? (day.reviewWeekNumber ? `Week ${day.reviewWeekNumber} review` : "Weekly review") : day.reviewWeekNumber ? `Ôn tuần ${day.reviewWeekNumber}` : "Ôn tập";
     return rest ? `${label}: ${rest}` : label;
   }
   if (!day.newLessonNumber) return text;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { monthlyLessonDisplayTitle } from "../src/monthly/daily-progression.js";
+import { monthlyDefaultLessonTitle, monthlyLessonDisplayTitle } from "../src/monthly/daily-progression.js";
+import { containsVietnameseLearnerText } from "../src/content/index.js";
 import { buildMonthlyCalendar, monthlyNewLessonOrdinal } from "../src/monthly/curriculum.js";
 
 describe("monthlyLessonDisplayTitle", () => {
@@ -14,6 +15,12 @@ describe("monthlyLessonDisplayTitle", () => {
     expect(monthlyLessonDisplayTitle("Bài 5", { kind: "review", reviewWeekNumber: 1 })).toBe("Ôn tuần 1");
     expect(monthlyLessonDisplayTitle("Bài 5: Weekly words", { kind: "review" })).toBe("Ôn tập: Weekly words");
     expect(monthlyLessonDisplayTitle("Bài ôn tuần 1", { kind: "review", reviewWeekNumber: 1 })).toBe("Bài ôn tuần 1");
+  });
+
+  it("keeps an English (B1+) title English when relabelling a review day", () => {
+    expect(monthlyLessonDisplayTitle("Lesson 5", { kind: "review", reviewWeekNumber: 1 })).toBe("Week 1 review");
+    expect(monthlyLessonDisplayTitle("Lesson 5: Weekly words", { kind: "review" })).toBe("Weekly review: Weekly words");
+    expect(monthlyLessonDisplayTitle("Week 2 review", { kind: "review", reviewWeekNumber: 2 })).toBe("Week 2 review");
   });
 
   it("leaves titles without a number prefix, or without a known ordinal, untouched", () => {
@@ -32,5 +39,26 @@ describe("monthlyLessonDisplayTitle", () => {
     const ordinal = monthlyNewLessonOrdinal(afterReview, calendar)!;
     expect(ordinal).toBe(afterReview - 1);
     expect(monthlyLessonDisplayTitle(`Bài ${afterReview}`, { kind: "new", newLessonNumber: ordinal })).toBe(`Bài ${ordinal}`);
+  });
+});
+
+describe("monthlyDefaultLessonTitle", () => {
+  it("defaults B1-C1 titles to English so the B1+ title gate passes", () => {
+    for (const cefr of ["B1", "B2", "C1"]) {
+      expect(monthlyDefaultLessonTitle({ kind: "review", reviewWeekNumber: 2 }, cefr)).toBe("Week 2 review");
+      expect(monthlyDefaultLessonTitle({ kind: "review" }, cefr)).toBe("Weekly review");
+      expect(monthlyDefaultLessonTitle({ kind: "new", newLessonNumber: 3 }, cefr)).toBe("Lesson 3");
+    }
+    for (const title of ["Week 2 review", "Weekly review", "Lesson 3"]) expect(containsVietnameseLearnerText(title)).toBe(false);
+    expect(containsVietnameseLearnerText("Bài ôn tuần 2")).toBe(true);
+  });
+
+  it("keeps Vietnamese defaults for A1-A2", () => {
+    for (const cefr of ["A1", "A2"]) {
+      expect(monthlyDefaultLessonTitle({ kind: "review", reviewWeekNumber: 2 }, cefr)).toBe("Bài ôn tuần 2");
+      expect(monthlyDefaultLessonTitle({ kind: "review" }, cefr)).toBe("Bài ôn tập");
+      expect(monthlyDefaultLessonTitle({ kind: "new", newLessonNumber: 3 }, cefr)).toBe("Bài 3");
+    }
+    expect(monthlyDefaultLessonTitle({ kind: "new" }, "B1")).toBeUndefined();
   });
 });

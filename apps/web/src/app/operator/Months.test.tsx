@@ -412,17 +412,17 @@ describe("Operator monthly planner", () => {
       expect(ids.every((id) => /^monthly-day-2026-11-[0-3][0-9]$/.test(id))).toBe(true);
     });
 
-    it("passes the calendar's new-lesson ordinal and review label as the editor title", async () => {
+    it("passes the calendar's new-lesson ordinal and review label as the editor title (English at B1+)", async () => {
       const user = userEvent.setup();
       const { container, onComposeDay } = renderCalendar();
       const ordinal = monthlyNewLessonOrdinal(afterReview, calendar)!;
       expect(ordinal).toBeLessThan(afterReview);
       const newCell = container.querySelector<HTMLElement>(`#monthly-day-${calendar.effectiveDays[afterReview - 1]}`)!;
       await user.click(within(newCell).getByRole("button", { name: `Soạn tay bài ${ordinal}` }));
-      expect(onComposeDay).toHaveBeenLastCalledWith("framework-b1", afterReview, { kind: "new", date: calendar.effectiveDays[afterReview - 1], title: `Bài ${ordinal}` });
+      expect(onComposeDay).toHaveBeenLastCalledWith("framework-b1", afterReview, { kind: "new", date: calendar.effectiveDays[afterReview - 1], title: `Lesson ${ordinal}` });
       const reviewCell = container.querySelector<HTMLElement>(`#monthly-day-${calendar.effectiveDays[firstReview - 1]}`)!;
       await user.click(within(reviewCell).getByRole("button", { name: "Soạn tay bài ôn" }));
-      expect(onComposeDay).toHaveBeenLastCalledWith("framework-b1", firstReview, { kind: "review", date: calendar.effectiveDays[firstReview - 1], title: "Bài ôn tuần 1" });
+      expect(onComposeDay).toHaveBeenLastCalledWith("framework-b1", firstReview, { kind: "review", date: calendar.effectiveDays[firstReview - 1], title: "Week 1 review" });
     });
   });
 

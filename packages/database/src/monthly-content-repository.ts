@@ -114,6 +114,7 @@ interface MonthLessonRow {
   quality_report: { severe: MonthlyQualityFindingView[]; light: MonthlyQualityFindingView[]; contractVersion: number };
   quality_acknowledgement: OperatorAcknowledgementView | null;
   content?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> };
+  lesson_title?: string | null;
   generation_error?: unknown;
 }
 
@@ -1493,6 +1494,7 @@ export class MonthlyContentRepository {
     const result = await this.database.query<MonthLessonRow>(
       `select ml.lesson_number, ml.lesson_date::text, ml.status, ml.scope_hash, ml.quality_report, ml.quality_acknowledgement, ml.generation_error,
               (select lv.content from lesson_versions lv where lv.lesson_id = ml.lesson_id order by lv.version desc limit 1) as content,
+              (select l.title from lessons l where l.id = ml.lesson_id) as lesson_title,
               (select count(*) from month_lesson_corrections mlc where mlc.month_lesson_id = ml.id)::text as correction_count
        from month_lessons ml where ml.framework_id = $1 order by ml.lesson_number`,
       [framework.id]
@@ -1506,7 +1508,9 @@ export class MonthlyContentRepository {
       scopeHash: lesson.scope_hash,
       locked: lesson.status === "approved",
       correctionCount: Number(lesson.correction_count),
-      ...(lesson.content ? { content: lesson.content } : {}),
+      // The saved title lives on lessons.title, not in the version content: without it the editor reopens with the
+      // calendar default title and a later save reverts the Operator's title fix.
+      ...(lesson.content ? { content: { ...lesson.content, ...(!lesson.content.title && lesson.lesson_title ? { title: lesson.lesson_title } : {}) } } : {}),
       quality: { ...lesson.quality_report, ...(lesson.quality_acknowledgement ? { acknowledged: lesson.quality_acknowledgement } : {}) },
       ...(lesson.status !== "approved" && isGenerationFailure(lesson.generation_error) ? { generationFailure: {
         failedAt: lesson.generation_error.failedAt, attempts: lesson.generation_error.attempts,

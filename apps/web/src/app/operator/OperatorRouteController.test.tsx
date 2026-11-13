@@ -96,6 +96,78 @@ describe("OperatorRouteController", () => {
     expect(await screen.findByLabelText("Tiêu đề bài")).toHaveValue(`Bài ${ordinal}`);
   });
 
+  it("defaults a B1 monthly day to an English title the B1+ title gate accepts", async () => {
+    const user = userEvent.setup();
+    const calendar = buildMonthlyCalendar("2026-11");
+    const firstReview = calendar.effectiveDays.findIndex((_date, index) => monthlyDayKind(index + 1, calendar) === "review") + 1;
+    const afterReview = firstReview + 1;
+    const ordinal = monthlyNewLessonOrdinal(afterReview, calendar)!;
+    const overview = {
+      systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true },
+      brief: { month: "2026-11", title: "Updates", brief: "Project updates", context: "Office", communicationGoal: "Report", version: 1, status: "approved" },
+      calendar: calendar.effectiveDays.map((date, index) => ({ date, kind: monthlyDayKind(index + 1, calendar), lessonNumber: index + 1, ...(monthlyDayKind(index + 1, calendar) === "new" ? { newLessonNumber: monthlyNewLessonOrdinal(index + 1, calendar)! } : { reviewWeekNumber: 1 }) })),
+      frameworks: (["A1", "A2", "B1", "B2", "C1"] as const).map((cefr) => ({ id: `framework-${cefr}`, cefr, version: 1, status: "approved", scopeHash: "scope", lessons: [], quality: { severe: [], light: [] }, resources: { coreTerms: [], supportTerms: [], grammarTopics: [], sounds: [] }, publication: { ready: false, publishedOn: null } }))
+    };
+    const client = { getContentMonth: vi.fn().mockResolvedValue(overview), getContentMonthResourceCheckpoint: vi.fn().mockResolvedValue(undefined), saveContentMonthDay: vi.fn(), uploadContentMedia: vi.fn() };
+    const { container } = render(<ToastProvider><MemoryRouter initialEntries={["/op/months"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
+    await screen.findByRole("heading", { name: "Tài nguyên tháng" });
+    await user.click(screen.getByRole("tab", { name: "B1" }));
+
+    const reviewCell = await waitFor(() => container.querySelector<HTMLElement>(`#monthly-day-${calendar.effectiveDays[firstReview - 1]}`)!);
+    await user.click(within(reviewCell).getByRole("button", { name: "Soạn tay bài ôn" }));
+    expect(await screen.findByLabelText("Tiêu đề bài")).toHaveValue("Week 1 review");
+    await user.click(screen.getByRole("button", { name: /Hủy|Huỷ/ }));
+
+    const newCell = container.querySelector<HTMLElement>(`#monthly-day-${calendar.effectiveDays[afterReview - 1]}`)!;
+    await user.click(within(newCell).getByRole("button", { name: `Soạn tay bài ${ordinal}` }));
+    expect(await screen.findByLabelText("Tiêu đề bài")).toHaveValue(`Lesson ${ordinal}`);
+  });
+
+  it("reopens a saved B1 review draft with the saved title and edits, not the failed AI candidate or the calendar default", async () => {
+    const user = userEvent.setup();
+    const date = "2026-11-06";
+    const steps = (items: string[]) => ({ code: "instruction", title: "Hướng dẫn", content: { steps: items } });
+    let lesson: Record<string, unknown> = {
+      lessonNumber: 5, lessonDate: date, kind: "review", status: "pending", scopeHash: "scope", locked: false, correctionCount: 0, quality: { severe: [], light: [] },
+      generationFailure: { failedAt: "2026-11-05T12:00:00.000Z", attempts: 3, report: { severe: [{ severity: "severe", code: "MONTHLY_ENGLISH_ONLY", component: "title", dayNumber: 5, message: "B1+ requires the learner-facing lesson title to be in English." }], light: [] }, candidate: { title: "Bài ôn tuần 1", parts: [steps(["AI step"])] } }
+    };
+    const overview = () => ({
+      systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true },
+      brief: { month: "2026-11", title: "Updates", brief: "Project updates", context: "Office", communicationGoal: "Report", version: 1, status: "approved" },
+      calendar: [{ date, kind: "review", lessonNumber: 5, reviewWeekNumber: 1 }],
+      frameworks: (["A1", "B1"] as const).map((cefr) => ({ id: `framework-${cefr}`, cefr, version: 1, status: "approved", scopeHash: "scope", lessons: cefr === "B1" ? [lesson] : [], quality: { severe: [], light: [] }, resources: { coreTerms: [], supportTerms: [], grammarTopics: [], sounds: [] }, publication: { ready: false, publishedOn: null } }))
+    });
+    // The API stores the draft (title included) and drops the failed candidate once a draft is saved.
+    const saveContentMonthDay = vi.fn(async (_id: string, _day: number, input: { title: string; parts: unknown[] }) => {
+      lesson = { ...lesson, status: "draft", content: { title: input.title, parts: input.parts }, generationFailure: undefined };
+      return { severe: [], light: [], contractVersion: 1 };
+    });
+    const client = { getContentMonth: vi.fn(async () => overview()), getContentMonthResourceCheckpoint: vi.fn().mockResolvedValue(undefined), saveContentMonthDay, uploadContentMedia: vi.fn() };
+    render(<ToastProvider><MemoryRouter initialEntries={["/op/months/lesson/framework-B1/5?month=2026-11"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
+
+    await user.click(await screen.findByRole("button", { name: "Sửa tay" }));
+    const title = await screen.findByLabelText("Tiêu đề bài");
+    expect(title).toHaveValue("Bài ôn tuần 1");
+    await user.clear(title);
+    await user.type(title, "Week 1 review: project updates");
+    const save = async () => {
+      await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
+      if (screen.queryByRole("button", { name: "Lưu dù còn thiếu" })) await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+      const dialog = await screen.findByRole("dialog", { name: /Lưu tạm bài học\?|Kiểm tra và lưu bài\?/ });
+      await user.click(within(dialog).getByRole("button", { name: /Lưu tạm|Kiểm tra & lưu/ }));
+      await waitFor(() => expect(screen.queryByLabelText("Tiêu đề bài")).not.toBeInTheDocument());
+    };
+    await save();
+    expect(saveContentMonthDay).toHaveBeenLastCalledWith("framework-B1", 5, expect.objectContaining({ title: "Week 1 review: project updates" }));
+
+    // Second fix in another field: the first fix (title) must still be there.
+    await user.click(await screen.findByRole("button", { name: "Sửa tay" }));
+    expect(await screen.findByLabelText("Tiêu đề bài")).toHaveValue("Week 1 review: project updates");
+    await save();
+    expect(saveContentMonthDay).toHaveBeenCalledTimes(2);
+    expect(saveContentMonthDay).toHaveBeenLastCalledWith("framework-B1", 5, expect.objectContaining({ title: "Week 1 review: project updates" }));
+  });
+
   it("uses the sidebar without repeating an operational navigation bar on Operator screens", async () => {
     const client = { getContentWeeks: vi.fn().mockResolvedValue({ pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [] }) };
     render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);

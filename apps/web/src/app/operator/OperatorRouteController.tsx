@@ -1,6 +1,6 @@
 import { monthlyManualSeed } from "./monthly-manual-seed.js";
 import { describeMonthlyFindings, MONTHLY_PART_TITLES, type MonthlyFindingLine } from "./monthly-failure-findings.js";
-import { monthlyLessonDisplayTitle } from "@e4s/domain/monthly";
+import { monthlyDefaultLessonTitle, monthlyLessonDisplayTitle } from "@e4s/domain/monthly";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import "./styles.css";
@@ -308,11 +308,9 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     const slot = overview?.calendar?.find((item) => item.lessonNumber === dayNumber && (item.kind === "new" || item.kind === "review"));
     const kind = seed?.kind ?? cellSlot?.kind ?? savedLesson?.kind ?? (slot?.kind === "review" ? "review" : slot?.kind === "new" ? "new" : undefined);
     const date = seed?.date ?? savedLesson?.lessonDate ?? cellSlot?.date ?? slot?.date;
-    // Default title follows the calendar label ("Bài 7", "Bài ôn tuần 2"), not the slot number (lessonNumber 8 is "Bài 7" after a review day).
+    // Default title follows the calendar numbering ("Bài 7", "Bài ôn tuần 2"; B1+ "Lesson 7", "Week 2 review"), not the slot number (lessonNumber 8 is the 7th lesson after a review day).
     const calendarDay = overview?.calendar?.find((item) => (date ? item.date === date : item.lessonNumber === dayNumber) && (item.kind === "new" || item.kind === "review"));
-    const defaultTitle = cellSlot?.title ?? (kind === "review"
-      ? (calendarDay?.reviewWeekNumber ? `Bài ôn tuần ${calendarDay.reviewWeekNumber}` : "Bài ôn tập")
-      : calendarDay?.newLessonNumber ? `Bài ${calendarDay.newLessonNumber}` : undefined);
+    const defaultTitle = cellSlot?.title ?? (kind ? monthlyDefaultLessonTitle({ kind, newLessonNumber: calendarDay?.newLessonNumber, reviewWeekNumber: calendarDay?.reviewWeekNumber }, framework?.cefr ?? cefr) : undefined);
     // The day's own level: the preview route does not carry the months page's selected level (it starts at A1).
     const meta = { ...(kind ? { kind } : {}), ...(date ? { date } : {}), ...(seed ? { vocabularyCount: seed.vocabularyCount } : {}), ...(defaultTitle ? { defaultTitle } : {}), ...(framework ? { cefr: framework.cefr } : {}) };
     // A saved title "Bài 8" taken from the raw slot is shown (and re-saved) with the calendar's number.
