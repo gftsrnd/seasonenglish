@@ -1,4 +1,5 @@
 import type { MonthlyOperatorOverviewView } from "@e4s/contracts";
+import { monthlyReadablePlanObjective } from "@e4s/domain/monthly";
 
 type Framework = MonthlyOperatorOverviewView["frameworks"][number];
 type Part = { code: string; title: string; content: Record<string, unknown> };
@@ -58,11 +59,11 @@ export function monthlyManualSeed(framework: Framework, lessonNumber: number): {
       { code: "objective", title: "Mục tiêu bài học", content: { items: [] } },
       { code: "instruction", title: "Hướng dẫn làm bài", content: {} },
       { code: "vocabulary", title: "Từ vựng", content: { items } },
-      { code: "grammar", title: "Ngữ pháp", content: steps.length ? { formula: steps.map((step) => step.formula).join("\n"), usage: steps.map((step) => step.usage || step.focus).filter(Boolean).join("\n"), examples: day.grammarPlan ? [] : steps.flatMap((step) => step.examples ?? []).slice(0, 3), ...(day.grammarPlan ? { dailyCode: day.grammarPlan.code, objective: day.grammarPlan.objective, items: [], milestoneIds: day.grammarPlan.milestoneIds, recallMilestoneIds: day.grammarPlan.recallMilestoneIds } : {}) } : {} },
+      { code: "grammar", title: "Ngữ pháp", content: steps.length ? { formula: steps.map((step) => step.formula).join("\n"), usage: steps.map((step) => step.usage || step.focus).filter(Boolean).join("\n"), examples: day.grammarPlan ? [] : steps.flatMap((step) => step.examples ?? []).slice(0, 3), ...(day.grammarPlan ? { dailyCode: day.grammarPlan.code, objective: monthlyReadablePlanObjective(day.grammarPlan.objective, words), items: [], milestoneIds: day.grammarPlan.milestoneIds, recallMilestoneIds: day.grammarPlan.recallMilestoneIds } : {}) } : {} },
       { code: "pronunciation", title: "Phát âm", content: first ? {
         focus: first.ipa,
         words: (review ? examplesFor(first).slice(0, 3) : (first.examples ?? []).filter(example => (day.pronunciationExampleIds ?? []).includes(example.id))).map((example) => ({ word: example.word, ipa: example.ipa })),
-        ...(day.pronunciationPlan ? { stage: day.pronunciationPlan.stage, objective: day.pronunciationPlan.objective, ...(day.pronunciationPlan.requiredPositions ? { targetPositions: day.pronunciationPlan.requiredPositions, passage: "" } : {}) } : {}),
+        ...(day.pronunciationPlan ? { stage: day.pronunciationPlan.stage, objective: monthlyReadablePlanObjective(day.pronunciationPlan.objective, words), ...(day.pronunciationPlan.requiredPositions ? { targetPositions: day.pronunciationPlan.requiredPositions, passage: "" } : {}) } : {}),
         ...(review || sounds.length > 1 ? { reviewTargets: sounds.map((sound) => ({ soundId: sound.id, focus: sound.ipa, words: examplesFor(sound).map((example) => ({ word: example.word, ipa: example.ipa })) })) } : {})
       } : {} },
       { code: "listening", title: "Nghe", content: withFocus("listening") },

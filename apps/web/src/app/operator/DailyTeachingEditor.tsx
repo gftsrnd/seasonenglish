@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { monthlyReadablePlanObjective } from "@e4s/domain/monthly";
 import { withoutGrammarStepLabel } from "../shared/lesson/presentation.js";
 import { EditorSection, Field, OptionFields } from "./LessonEditorFields.js";
 import { Button } from "./primitives.js";
@@ -41,8 +42,9 @@ export function DailyTeachingEditor({ grammar, pronunciation, disabled, onChange
   const labels = milestoneLabels(milestones, strings(grammar.recallMilestoneIds), grammarStepLabels);
   const update = (next: Item[]) => { setItems(next); onChange(next, passage); };
   const patch = (index: number, change: (row: Item) => Item) => update(items.map((row, i) => i === index ? change(row) : row));
-  const grammarObjective = withoutGrammarStepLabel(text(grammar.objective));
-  const pronunciationObjective = text(pronunciation.objective).trim();
+  // Lessons saved before 13/11 store the objective with an internal code and the word list; show the readable wording.
+  const grammarObjective = withoutGrammarStepLabel(monthlyReadablePlanObjective(text(grammar.objective)));
+  const pronunciationObjective = monthlyReadablePlanObjective(text(pronunciation.objective));
   return <EditorSection title="Luyện tập theo ngày" disabled={disabled}>
     {grammarObjective ? <p className="small operator-daily-objective"><b>Mục tiêu ngữ pháp:</b> {grammarObjective}</p> : null}
     {items.map((item, index) => <div className="operator-daily-question" role="group" aria-label={`Câu luyện tập ${index + 1}`} key={item.id}>

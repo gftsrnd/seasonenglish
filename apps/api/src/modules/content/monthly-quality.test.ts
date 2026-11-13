@@ -269,6 +269,21 @@ describe("monthly lesson quality – AI quality plan 11/11 (WP1, WP3, WP7, WP8)"
     expect(codes(evaluateMonthlyLessonQuality(plan, 1, drifted))).toEqual(expect.arrayContaining(["MONTHLY_CONTENT_INVALID", "MONTHLY_DAILY_GRAMMAR_OBJECTIVE"]));
   });
 
+  it("1a: accepts a grammar objective saved with the pre-13/11 wording (word list in brackets) and its readable form", () => {
+    const { plan, day, candidate } = v2Day();
+    const words = plan.coreTerms.filter((term) => day.coreTermIds.includes(term.id)).map((term) => term.word).join(", ");
+    const grammar = candidate.parts.find((item) => item.code === "grammar")!.content;
+    const objectiveCodes = (value: ReturnType<typeof lesson>) => codes(evaluateMonthlyLessonQuality(plan, 1, value)).filter((code) => code === "MONTHLY_DAILY_GRAMMAR_OBJECTIVE");
+    // Plan stored with the old wording, lesson saved with the same old text.
+    day.grammarPlan!.objective = `Dùng quá khứ đơn để kể lại việc đã làm (${words}).`;
+    expect(objectiveCodes(withPart(candidate, "grammar", { ...grammar, objective: day.grammarPlan!.objective }))).toEqual([]);
+    // Plan stored with the old wording, lesson written with the readable wording.
+    expect(objectiveCodes(withPart(candidate, "grammar", { ...grammar, objective: "Dùng quá khứ đơn để kể lại việc đã làm." }))).toEqual([]);
+    // A different objective still fails, and the repair message gives the readable wording.
+    const drifted = evaluateMonthlyLessonQuality(plan, 1, withPart(candidate, "grammar", { ...grammar, objective: "Paraphrased" }));
+    expect(drifted.severe.find((row) => row.code === "MONTHLY_DAILY_GRAMMAR_OBJECTIVE")?.message).toContain("\"Dùng quá khứ đơn để kể lại việc đã làm.\"");
+  });
+
   it("1b: repair messages state the exact expected plan strings", () => {
     const { plan, candidate } = v2Day();
     const grammar = candidate.parts.find((item) => item.code === "grammar")!.content;

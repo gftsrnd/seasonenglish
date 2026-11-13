@@ -1,5 +1,5 @@
 import type { MonthlyCurriculumContract, MonthlyDaySpec } from "@e4s/domain";
-import { monthlyCollocationTranslationIssues, monthlyExerciseTranslationIssues, monthlyExerciseTranslationsForLevel, monthlyRelationMeaningIssue, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPronunciationExampleText, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
+import { monthlyCollocationTranslationIssues, monthlyExerciseTranslationIssues, monthlyExerciseTranslationsForLevel, monthlyRelationMeaningIssue, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPlanObjectivesMatch, monthlyPronunciationExampleText, monthlyReadablePlanObjective, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
 import type { LessonPart } from "@e4s/contracts";
 import { monthlyGrammarRoadmapDayIssues } from "./monthly-grammar-roadmap.js";
 import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
@@ -53,7 +53,7 @@ export function evaluateMonthlyLessonQuality(
   }
 
   const expected = monthlyLockedPlanExpectations(contract, day);
-  const lockedPlanValues = monthlyLockedPlanValues(expected);
+  const lockedPlanValues = monthlyLockedPlanValues(expected, lesson.parts);
   const contentValidation = validateLessonPublication([{
     dayNumber,
     title: lesson.title,
@@ -142,7 +142,8 @@ export function evaluateMonthlyLessonQuality(
   }
   if (contract.planSchemaVersion === 2 && day.kind === "new") {
     const grammar = grammarContent ?? {};
-    if (grammar.dailyCode !== day.grammarPlan?.code || grammar.objective !== day.grammarPlan?.objective) severe.push(finding("MONTHLY_DAILY_GRAMMAR_OBJECTIVE", `Grammar must identify and teach the locked daily objective/code. Set grammar.dailyCode to "${day.grammarPlan?.code ?? ""}" and grammar.objective to exactly "${day.grammarPlan?.objective ?? ""}" (copy verbatim, do not translate)`, dayNumber, "grammar"));
+    // A lesson saved before the 13/11 objective wording change keeps its old objective text: accepted as the same objective.
+    if (grammar.dailyCode !== day.grammarPlan?.code || !monthlyPlanObjectivesMatch(grammar.objective, day.grammarPlan?.objective, expected.coreWords)) severe.push(finding("MONTHLY_DAILY_GRAMMAR_OBJECTIVE", `Grammar must identify and teach the locked daily objective/code. Set grammar.dailyCode to "${day.grammarPlan?.code ?? ""}" and grammar.objective to exactly "${expected.grammarObjective ?? ""}" (copy verbatim, do not translate)`, dayNumber, "grammar"));
     const examples = Array.isArray(grammar.examples) ? grammar.examples.filter((value): value is string => typeof value === "string" && Boolean(value.trim())) : [];
     const references = new Set(grammarSteps.flatMap(step => step.examples).map(normalize));
     if (examples.length < 3 || examples.every(example => references.has(normalize(example)))) severe.push(finding("MONTHLY_DAILY_GRAMMAR_EXAMPLES", "Write at least 3 new examples for today's objective instead of copying the monthly references", dayNumber, "grammar"));
@@ -159,7 +160,7 @@ export function evaluateMonthlyLessonQuality(
     }
     if (day.grammarPlan?.recallMilestoneIds.length && !questions.some(question => day.grammarPlan!.recallMilestoneIds.includes(asString(question.milestoneId)))) severe.push(finding("MONTHLY_DAILY_GRAMMAR_RECALL", "Include the locked topic A recall question (every topic B day)", dayNumber, "grammar"));
     for (const issue of monthlyGrammarRoadmapDayIssues(day, contract.cefr, grammar, dayWords)) severe.push(finding(issue.code, issue.message, dayNumber, "grammar"));
-    if (pronunciation?.stage !== day.pronunciationPlan?.stage || pronunciation?.objective !== day.pronunciationPlan?.objective) severe.push(finding("MONTHLY_DAILY_PRONUNCIATION_STAGE", `Pronunciation must teach the locked daily stage and objective. Set pronunciation.stage to "${day.pronunciationPlan?.stage ?? ""}" and pronunciation.objective to exactly "${day.pronunciationPlan?.objective ?? ""}" (copy verbatim)`, dayNumber, "pronunciation"));
+    if (pronunciation?.stage !== day.pronunciationPlan?.stage || !monthlyPlanObjectivesMatch(pronunciation?.objective, day.pronunciationPlan?.objective, expected.coreWords)) severe.push(finding("MONTHLY_DAILY_PRONUNCIATION_STAGE", `Pronunciation must teach the locked daily stage and objective. Set pronunciation.stage to "${day.pronunciationPlan?.stage ?? ""}" and pronunciation.objective to exactly "${expected.pronunciationObjective ?? ""}" (copy verbatim)`, dayNumber, "pronunciation"));
     const required = day.pronunciationPlan?.requiredPositions;
     if (required) {
       const positions = Array.isArray(pronunciation?.targetPositions) ? pronunciation.targetPositions.filter(isRecord) : [];
@@ -203,6 +204,8 @@ export interface MonthlyLockedPlanExpectations {
   grammarFormulas: string[];
   /** v2 new lessons only. */
   grammarCode: string | null;
+  /** The day's core words (spelling as planned), used to recognise objectives saved with the pre-13/11 word list. */
+  coreWords: string[];
   grammarObjective: string | null;
   pronunciationStage: string | null;
   pronunciationObjective: string | null;
@@ -219,6 +222,7 @@ export interface MonthlyLockedPlanExpectations {
 export function monthlyLockedPlanExpectations(contract: MonthlyCurriculumContract, day: MonthlyDaySpec): MonthlyLockedPlanExpectations {
   const review = day.kind === "review";
   const daily = contract.planSchemaVersion === 2 && !review;
+  const coreWords = contract.coreTerms.filter((term) => day.coreTermIds.includes(term.id)).map((term) => term.word);
   const grammarIds = review ? day.reviewGrammarStepIds ?? [] : day.grammarStepIds ?? [day.grammarStepId];
   const allSteps = contract.grammarTopics.flatMap((topic) => topic.steps);
   const grammarFormulas = grammarIds.map((id) => allSteps.find((step) => step.id === id)?.formula).filter((value): value is string => Boolean(value));
@@ -239,9 +243,11 @@ export function monthlyLockedPlanExpectations(contract: MonthlyCurriculumContrac
   return {
     grammarFormulas,
     grammarCode: daily ? day.grammarPlan?.code ?? null : null,
-    grammarObjective: daily ? day.grammarPlan?.objective ?? null : null,
+    coreWords,
+    // Objectives in the current readable wording (no internal code, no word list), also for plans stored before 13/11.
+    grammarObjective: daily && day.grammarPlan ? monthlyReadablePlanObjective(day.grammarPlan.objective, coreWords) : null,
     pronunciationStage: daily ? day.pronunciationPlan?.stage ?? null : null,
-    pronunciationObjective: daily ? day.pronunciationPlan?.objective ?? null : null,
+    pronunciationObjective: daily && day.pronunciationPlan ? monthlyReadablePlanObjective(day.pronunciationPlan.objective, coreWords) : null,
     sounds,
     soundScopeResolved: Boolean(sounds.length) && sounds.length === soundIds.length && exampleIds.length > 0 && exampleIds.every((id) => soundByExampleId.has(id)) && Boolean(primarySound),
     focus: primarySound?.ipa ?? null,
@@ -253,13 +259,18 @@ export function monthlyLockedPlanExpectations(contract: MonthlyCurriculumContrac
 }
 
 /** Locked strings exempt from the B1+ English-only check and the internal-term check (WP1 1a). */
-export function monthlyLockedPlanValues(expected: MonthlyLockedPlanExpectations): Record<string, Record<string, string>> | undefined {
+export function monthlyLockedPlanValues(expected: MonthlyLockedPlanExpectations, parts: ReadonlyArray<{ code: string; content: Record<string, unknown> }> = []): Record<string, Record<string, string>> | undefined {
   const grammar: Record<string, string> = {};
   const pronunciation: Record<string, string> = {};
+  // A lesson saved with the pre-13/11 wording of its objective keeps that text exempt, like the current wording.
+  const stored = (code: string, planned: string) => {
+    const value = parts.find((part) => part.code === code)?.content?.objective;
+    return typeof value === "string" && monthlyPlanObjectivesMatch(value, planned, expected.coreWords) ? value : planned;
+  };
   if (expected.grammarCode) grammar.dailyCode = expected.grammarCode;
-  if (expected.grammarObjective) grammar.objective = expected.grammarObjective;
+  if (expected.grammarObjective) grammar.objective = stored("grammar", expected.grammarObjective);
   if (expected.pronunciationStage) pronunciation.stage = expected.pronunciationStage;
-  if (expected.pronunciationObjective) pronunciation.objective = expected.pronunciationObjective;
+  if (expected.pronunciationObjective) pronunciation.objective = stored("pronunciation", expected.pronunciationObjective);
   const values: Record<string, Record<string, string>> = {};
   if (Object.keys(grammar).length) values.grammar = grammar;
   if (Object.keys(pronunciation).length) values.pronunciation = pronunciation;

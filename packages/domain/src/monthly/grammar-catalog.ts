@@ -20,6 +20,10 @@ export interface MonthlyGrammarCatalogTopic {
   titleVi: string;
   /** Common English name, used as the topic title from B1 upwards. */
   titleEn: string;
+  /** Short Vietnamese label for operator text such as a day objective ("thì hiện tại", "to be"). */
+  shortVi: string;
+  /** Short English label for operator text such as a day objective ("present tenses", "pronouns"). */
+  shortEn: string;
   /** The roadmap "Nội dung" list the six scaffolding steps must cover, in roadmap wording. */
   contents: readonly string[];
 }
@@ -152,6 +156,46 @@ const C1_SEEDS: readonly Seed[] = [
     "complement", "viết và nói mạch lạc, nhấn mạnh đúng ý", "writing and speaking coherently with the right emphasis"]
 ];
 
+/**
+ * Short topic labels (product decision 13/11), hand-written: the full roadmap
+ * titles are long comparisons ("Past simple vs past continuous and past
+ * habits"), so day objectives name each topic by this label instead.
+ * Keyed by pair ID; [topic A, topic B], each [shortVi, shortEn].
+ */
+type ShortNames = readonly [a: readonly [vi: string, en: string], b: readonly [vi: string, en: string]];
+const SHORT_NAMES: Readonly<Record<string, ShortNames>> = {
+  "a1-p1": [["to be", "to be"], ["đại từ & sở hữu", "pronouns"]],
+  "a1-p2": [["hiện tại đơn", "present simple"], ["hiện tại tiếp diễn", "present continuous"]],
+  "a1-p3": [["danh từ & mạo từ", "nouns and articles"], ["this/that & lượng từ", "this/that and quantifiers"]],
+  "a1-p4": [["there is/are & have got", "there is/are and have got"], ["giới từ thời gian & nơi chốn", "prepositions of time and place"]],
+  "a1-p5": [["quá khứ đơn", "past simple"], ["câu hỏi", "questions"]],
+  "a1-p6": [["can & would like", "can and would like"], ["so sánh", "comparison"]],
+  "a2-p1": [["quá khứ tiếp diễn & used to", "past continuous and used to"], ["liên từ", "linking words"]],
+  "a2-p2": [["hiện tại hoàn thành với just/yet", "present perfect with just/yet"], ["hiện tại hoàn thành với for/since", "present perfect with for/since"]],
+  "a2-p3": [["thì tương lai", "future forms"], ["must/have to/should", "must, have to and should"]],
+  "a2-p4": [["câu hỏi nâng cao", "question forms"], ["đại từ bất định & lượng từ", "some-/any- words and quantifiers"]],
+  "a2-p5": [["V-ing & to-V", "-ing and to-infinitive"], ["câu tường thuật", "reported speech"]],
+  "a2-p6": [["câu điều kiện loại 1 & 2", "first and second conditionals"], ["mệnh đề quan hệ", "relative clauses"]],
+  "b1-p1": [["thì hiện tại", "present tenses"], ["thì quá khứ", "past tenses"]],
+  "b1-p2": [["hiện tại hoàn thành", "present perfect"], ["quá khứ đơn & quá khứ hoàn thành", "past simple and past perfect"]],
+  "b1-p3": [["thì tương lai", "future forms"], ["modal khả năng & suy luận", "modals of ability and deduction"]],
+  "b1-p4": [["nghĩa vụ & đề nghị lịch sự", "obligation and polite requests"], ["câu điều kiện & wish", "conditionals and wish"]],
+  "b1-p5": [["bị động", "the passive"], ["câu tường thuật", "reported speech"]],
+  "b1-p6": [["mạo từ & danh từ", "articles and nouns"], ["tính từ & so sánh", "adjectives and comparison"]],
+  "b2-p1": [["modal + have V3", "past modals"], ["câu điều kiện loại 3 & hỗn hợp", "third and mixed conditionals"]],
+  "b2-p2": [["động từ + V-ing/to-V", "verb + -ing or to-infinitive"], ["V-ing sau giới từ", "-ing after prepositions"]],
+  "b2-p3": [["bị động nâng cao", "advanced passive"], ["mệnh đề quan hệ", "relative clauses"]],
+  "b2-p4": [["liên từ & mệnh đề trạng ngữ", "conjunctions"], ["trật tự từ & trạng từ", "word order and adverbs"]],
+  "b2-p5": [["lượng từ & mạo từ", "quantifiers and articles"], ["giới từ & kết hợp từ", "prepositions and collocations"]],
+  "b2-p6": [["phrasal verbs với in/out/on/off", "phrasal verbs with in/out/on/off"], ["phrasal verbs với up/down/away/back", "phrasal verbs with up/down/away/back"]],
+  "c1-p1": [["sắc thái của thì", "tense nuance"], ["tương lai nâng cao", "advanced future forms"]],
+  "c1-p2": [["modal nâng cao", "advanced modals"], ["câu điều kiện nâng cao", "advanced conditionals"]],
+  "c1-p3": [["bị động & động từ tường thuật", "the passive and reporting verbs"], ["giả định cách", "the subjunctive"]],
+  "c1-p4": [["hòa hợp chủ – vị", "subject-verb agreement"], ["mệnh đề quan hệ & phân từ", "relative and participle clauses"]],
+  "c1-p5": [["tính từ & trạng từ nâng cao", "advanced adjectives and adverbs"], ["từ nối lập luận", "linking words"]],
+  "c1-p6": [["thay thế & tỉnh lược", "substitution and ellipsis"], ["nhấn mạnh", "emphasis"]]
+};
+
 const SEEDS: Readonly<Record<CefrLevel, { seeds: readonly Seed[]; firstMonth: number }>> = {
   A1: { seeds: A1_SEEDS, firstMonth: 1 },
   A2: { seeds: A2_SEEDS, firstMonth: 7 },
@@ -171,10 +215,13 @@ function buildCatalog(cefr: CefrLevel): MonthlyGrammarCatalogPair[] {
   const { seeds, firstMonth } = SEEDS[cefr];
   return seeds.map(([titleEnA, rowA, titleEnB, rowB, pairType, situationVi, situationEn], index) => {
     const id = `${cefr.toLowerCase()}-p${index + 1}`;
+    const short = SHORT_NAMES[id];
+    if (!short) throw new RangeError(`Grammar roadmap pair ${id} has no short topic names`);
+    const [[shortViA, shortEnA], [shortViB, shortEnB]] = short;
     return {
       id, cefr, order: index + 1, roadmapMonth: firstMonth + index, pairType, situationVi, situationEn,
-      topicA: { id: `${id}-a`, side: "A", titleEn: titleEnA, ...splitRow(rowA) },
-      topicB: { id: `${id}-b`, side: "B", titleEn: titleEnB, ...splitRow(rowB) }
+      topicA: { id: `${id}-a`, side: "A", titleEn: titleEnA, shortVi: shortViA, shortEn: shortEnA, ...splitRow(rowA) },
+      topicB: { id: `${id}-b`, side: "B", titleEn: titleEnB, shortVi: shortViB, shortEn: shortEnB, ...splitRow(rowB) }
     };
   });
 }
@@ -191,6 +238,11 @@ export function monthlyGrammarCatalog(cefr: CefrLevel): readonly MonthlyGrammarC
 /** Topic title stored on the generated topic: roadmap Vietnamese name at A1–A2, English name from B1. */
 export function monthlyGrammarTopicTitle(cefr: CefrLevel, topic: MonthlyGrammarCatalogTopic): string {
   return cefr === "A1" || cefr === "A2" ? topic.titleVi : topic.titleEn;
+}
+
+/** Short topic label for operator text (day objectives): Vietnamese at A1–A2, English from B1. */
+export function monthlyGrammarTopicShortName(cefr: CefrLevel, topic: MonthlyGrammarCatalogTopic): string {
+  return cefr === "A1" || cefr === "A2" ? topic.shortVi : topic.shortEn;
 }
 
 const normalizeTitle = (value: string) => value.trim().toLocaleLowerCase("vi").replace(/[\s\p{P}]+/gu, " ").trim();
@@ -313,12 +365,12 @@ export const MONTHLY_GRAMMAR_STAGE_GUIDE: Readonly<Record<MonthlyGrammarDayStage
   meaning_use: { vi: "Ý nghĩa & cách dùng", en: "Meaning and use", exercise: "choose the sentence that fits a situation or match situations to sentences; teach when to use it and its signal words", support: "medium" },
   common_errors: { vi: "Lỗi hay gặp", en: "Common errors", exercise: "find and correct the error or decide true/false, prioritising typical Vietnamese-influenced errors (missing to be, missing -s/-ed, wrong tense because Vietnamese has no tense, articles, prepositions)", support: "low: give a hint when wrong" },
   application: { vi: "Vận dụng", en: "Application", exercise: "complete an open sentence or write 1–2 sentences about the learner's own work, using the day's words when natural", support: "low: only a model sentence for reference" },
-  link: { vi: "K1 Nối / phân biệt A–B", en: "K1 Link or contrast A–B", exercise: "contrast pair: choose A or B for each situation; complement or extension pair: join A and B in one sentence", support: "medium" },
-  mixed_practice: { vi: "K2 Luyện trộn", en: "K2 Mixed practice", exercise: "one workplace email or message of 4–6 sentences with gaps that need both topic A and topic B", support: "medium" },
-  workplace_task: { vi: "K3 Task công sở", en: "K3 Workplace task", exercise: "a workplace situation (for example reporting progress to the manager) where the learner writes 2–3 sentences using both A and B, with a model answer to compare", support: "low: model answer to compare" },
-  error_review: { vi: "M1 Sửa lỗi hay gặp", en: "M1 Error review", exercise: "true/false or find-and-correct items on the most common A and B errors", support: "low" },
-  long_context: { vi: "M2 Ngữ cảnh dài", en: "M2 Longer context", exercise: "a longer workplace dialogue (6–8 turns) or email, with comprehension questions and choosing the right A/B form", support: "low" },
-  mock_test: { vi: "M3 Thi thử", en: "M3 Mock test", exercise: "a short mock in the monthly exam format, with new content (never the real exam items)", support: "none: exam conditions" }
+  link: { vi: "Nối / phân biệt hai chủ điểm", en: "Link or contrast the two topics", exercise: "contrast pair: choose A or B for each situation; complement or extension pair: join A and B in one sentence", support: "medium" },
+  mixed_practice: { vi: "Luyện trộn", en: "Mixed practice", exercise: "one workplace email or message of 4–6 sentences with gaps that need both topic A and topic B", support: "medium" },
+  workplace_task: { vi: "Tình huống công sở", en: "Workplace task", exercise: "a workplace situation (for example reporting progress to the manager) where the learner writes 2–3 sentences using both A and B, with a model answer to compare", support: "low: model answer to compare" },
+  error_review: { vi: "Sửa lỗi hay gặp", en: "Error review", exercise: "true/false or find-and-correct items on the most common A and B errors", support: "low" },
+  long_context: { vi: "Đoạn dài", en: "Longer text", exercise: "a longer workplace dialogue (6–8 turns) or email, with comprehension questions and choosing the right A/B form", support: "low" },
+  mock_test: { vi: "Thi thử", en: "Mock test", exercise: "a short mock in the monthly exam format, with new content (never the real exam items)", support: "none: exam conditions" }
 };
 
 // ---------------------------------------------------------------------------

@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { CefrLevel } from "@e4s/contracts";
 import { planMonthlyResourcePool, validateMonthlyCurriculum, type MonthlyResourcePoolContract } from "../src/index.js";
 import { buildMonthlyTeachingCalendar } from "../src/monthly/calendar.js";
-import { dailyTeachingPlan } from "../src/monthly/daily-progression.js";
+import { dailyTeachingPlan, monthlyPlanObjectivesMatch, monthlyReadablePlanObjective } from "../src/monthly/daily-progression.js";
 import {
   findMonthlyGrammarCatalogTopic, monthlyGrammarCatalog, monthlyGrammarExampleTranslationIssues, monthlyGrammarContentMarkers, monthlyGrammarCoverageIssues, monthlyGrammarDayCode,
-  monthlyGrammarDayStage, monthlyGrammarMonthCodes, monthlyGrammarPairOf, monthlyGrammarTopicTitle, monthlyGrammarUncoveredContents, selectMonthlyGrammarPair, withoutAdvancedGrammarExampleTranslations
+  monthlyGrammarDayStage, monthlyGrammarMonthCodes, monthlyGrammarPairOf, monthlyGrammarTopicShortName, monthlyGrammarTopicTitle, monthlyGrammarUncoveredContents, selectMonthlyGrammarPair, withoutAdvancedGrammarExampleTranslations
 } from "../src/monthly/grammar-catalog.js";
 
 const LEVELS: readonly CefrLevel[] = ["A1", "A2", "B1", "B2", "C1"];
@@ -173,14 +173,14 @@ describe("grammar roadmap day mapping", () => {
     expect(days.slice(12).every((day) => day.grammarPlan?.recallMilestoneIds.length === 0)).toBe(true);
     expect(days.slice(12).every((day) => day.grammarStepIds?.length === 2)).toBe(true);
     if (count === 18) expect(days.at(-1)!.grammarPlan?.code).toBe("M3");
-    // K1 of an extension pair joins A and B.
-    expect(days[12]!.grammarPlan?.objective).toMatch(/^K1 Nối A–B/u);
+    // K1 of an extension pair joins A and B (no internal code in the objective text).
+    expect(days[12]!.grammarPlan?.objective).toMatch(/^Nối hai chủ điểm \(/u);
   });
 
   it("K1 contrasts A and B for a contrast pair and B1+ objectives are English", () => {
     const contract = planMonthlyResourcePool(roadmapPool("B1", "2026-11", 0));
     const k1 = contract.daySpecs.find((day) => day.grammarPlan?.code === "K1")!;
-    expect(k1.grammarPlan?.objective).toMatch(/^K1 Contrast A–B: choose Present simple vs present continuous or Past simple/u);
+    expect(k1.grammarPlan?.objective).toBe("Contrast (describing your current and previous jobs): choose present tenses or past tenses for each situation.");
     expect(k1.grammarPlan?.mode).toBe("contrast");
   });
 
@@ -193,6 +193,68 @@ describe("grammar roadmap day mapping", () => {
     expect(dailyTeachingPlan(8, pool.grammarTopics, pool.sounds, "A1").grammarPlan.recallMilestoneIds).toEqual(["g0s0"]);
     expect(monthlyGrammarPairOf("A1", pool.grammarTopics)).toBeUndefined();
     expect(validateMonthlyCurriculum(planMonthlyResourcePool(pool))).toEqual([]);
+  });
+});
+
+describe("readable daily objectives (13/11)", () => {
+  it("gives every catalog topic at every level a short Vietnamese and English name", () => {
+    for (const cefr of LEVELS) for (const pair of monthlyGrammarCatalog(cefr)) for (const topic of [pair.topicA, pair.topicB]) {
+      expect(topic.shortVi.trim().length).toBeGreaterThan(1);
+      expect(topic.shortEn.trim().length).toBeGreaterThan(1);
+      expect(monthlyGrammarTopicShortName(cefr, topic)).toBe(cefr === "A1" || cefr === "A2" ? topic.shortVi : topic.shortEn);
+    }
+  });
+
+  it("writes combination-day objectives without codes, full titles or the word list", () => {
+    const words = ["testing", "attendee", "shortage"];
+    for (const cefr of LEVELS) for (const [pairIndex, pair] of monthlyGrammarCatalog(cefr).entries()) {
+      const pool = roadmapPool(cefr, "2026-11", pairIndex);
+      for (let n = 13; n <= 18; n += 1) {
+        const { grammarPlan, pronunciationPlan } = dailyTeachingPlan(n, pool.grammarTopics, pool.sounds, cefr, words);
+        for (const objective of [grammarPlan.objective, pronunciationPlan.objective]) {
+          expect(objective).not.toMatch(/\b[ABKM][1-6]\b|testing|eight|tám vị trí|Speaking [AB]/u);
+        }
+        expect(grammarPlan.objective).not.toContain(monthlyGrammarTopicTitle(cefr, pair.topicA));
+        expect(grammarPlan.objective).toContain(monthlyGrammarTopicShortName(cefr, pair.topicB));
+      }
+    }
+    const b1 = roadmapPool("B1", "2026-11", 0);
+    expect(dailyTeachingPlan(14, b1.grammarTopics, b1.sounds, "B1", words).grammarPlan.objective).toBe("Mixed practice: fill the gaps in a 4–6 sentence email using both present tenses and past tenses.");
+    expect(dailyTeachingPlan(14, b1.grammarTopics, b1.sounds, "B1", words).pronunciationPlan.objective).toBe("Read a short passage using each of the month's 4 sounds twice");
+    const a1 = roadmapPool("A1", "2026-11", 0);
+    expect(dailyTeachingPlan(14, a1.grammarTopics, a1.sounds, "A1", words).grammarPlan.objective).toBe("Luyện trộn: điền chỗ trống trong email 4–6 câu, dùng cả to be và đại từ & sở hữu.");
+    expect(dailyTeachingPlan(14, a1.grammarTopics, a1.sounds, "A1", words).pronunciationPlan.objective).toBe("Đọc đoạn ngắn có đủ 4 âm của tháng, mỗi âm 2 lần");
+    expect(dailyTeachingPlan(1, a1.grammarTopics, a1.sounds, "A1", words).grammarPlan.objective).toBe("Nhận diện: Focus 0.0.");
+  });
+
+  it("reads pre-13/11 stored objectives in the current wording", () => {
+    const words = ["testing", "attendee", "shortage"];
+    expect(monthlyReadablePlanObjective("K2 Mixed practice: fill the gaps in a 4–6 sentence email or message that needs both Present simple vs present continuous and Past simple vs past continuous and past habits (testing, attendee, shortage).", words))
+      .toBe("Mixed practice: fill the gaps in a 4–6 sentence email using both present tenses and past tenses.");
+    expect(monthlyReadablePlanObjective("M3 Thi thử: bài thi thử theo cấu trúc đề tháng với Động từ to be và Đại từ & sở hữu (month, clear, result)."))
+      .toBe("Thi thử: bài thi ngắn theo dạng đề cuối tháng với to be và đại từ & sở hữu.");
+    expect(monthlyReadablePlanObjective("Read a short passage with exactly eight target positions, two per target")).toBe("Read a short passage using each of the month's 4 sounds twice");
+    expect(monthlyReadablePlanObjective("Identify: Focus 0.0 (testing, attendee, shortage).", words)).toBe("Identify: Focus 0.0.");
+    // Current wording and other brackets are left alone.
+    expect(monthlyReadablePlanObjective("Identify: was/were (past of be).")).toBe("Identify: was/were (past of be).");
+    expect(monthlyPlanObjectivesMatch("K2 Luyện trộn: điền chỗ trống trong email/tin nhắn 4–6 câu cần cả Động từ to be và Đại từ & sở hữu (month, clear, result).", "Luyện trộn: điền chỗ trống trong email 4–6 câu, dùng cả to be và đại từ & sở hữu.", ["month", "clear", "result"])).toBe(true);
+    expect(monthlyPlanObjectivesMatch("Another objective", "Luyện trộn: điền chỗ trống trong email 4–6 câu, dùng cả to be và đại từ & sở hữu.")).toBe(false);
+  });
+
+  it("keeps a month plan stored with the pre-13/11 objective wording valid", () => {
+    const contract = planMonthlyResourcePool(roadmapPool("B1", "2026-11", 0));
+    const legacy = structuredClone(contract);
+    for (const day of legacy.daySpecs) {
+      if (day.kind !== "new" || !day.grammarPlan || !day.pronunciationPlan) continue;
+      const words = legacy.coreTerms.filter((term) => day.coreTermIds.includes(term.id)).map((term) => term.word).join(", ");
+      if (day.grammarPlan.code === "K2") day.grammarPlan.objective = `K2 Mixed practice: fill the gaps in a 4–6 sentence email or message that needs both Present simple vs present continuous and Past simple vs past continuous and past habits (${words}).`;
+      else day.grammarPlan.objective = day.grammarPlan.objective.replace(/\.$/u, ` (${words}).`);
+      if (day.pronunciationPlan.stage === "read_aloud") day.pronunciationPlan.objective = "Read a short passage with exactly eight target positions, two per target";
+    }
+    expect(validateMonthlyCurriculum(legacy)).toEqual([]);
+    const wrong = structuredClone(contract);
+    wrong.daySpecs.find((day) => day.grammarPlan?.code === "K2")!.grammarPlan!.objective = "Mixed practice: something else.";
+    expect(validateMonthlyCurriculum(wrong).join(" ")).toContain("invalid daily grammar progression");
   });
 });
 

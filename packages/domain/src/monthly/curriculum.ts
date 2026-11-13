@@ -1,5 +1,5 @@
 import type { CefrLevel, MonthlyGrammarDayPlan, MonthlyPronunciationDayPlan } from "@e4s/contracts";
-import { dailyTeachingPlan } from "./daily-progression.js";
+import { dailyTeachingPlan, monthlyPlanObjectivesMatch } from "./daily-progression.js";
 import { validMonthlyRegisterTerms, type MonthlyRegisterTerm } from "./register-terms.js";
 
 export interface MonthlyCalendar {
@@ -712,8 +712,12 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
     const expectedSound = planned ? contract.sounds.find(sound => sound.id === planned.pronunciationPlan.targetIds[0]) : contract.sounds[pronunciationSoundIndex(roadmapOrdinal)];
     if (day.soundId !== expectedSound?.id || day.pronunciationSlot !== pronunciationSlotFor(roadmapOrdinal)) errors.push(`Lesson ${day.lessonNumber} does not follow the pronunciation roadmap`);
     if (planned && day.kind === "new") {
-      if (day.newLessonNumber !== newLessonOrdinal || canonicalJson(day.grammarPlan) !== canonicalJson(planned.grammarPlan)) errors.push(`Lesson ${day.lessonNumber} has an invalid daily grammar progression`);
-      if (canonicalJson(day.pronunciationPlan) !== canonicalJson(planned.pronunciationPlan)) errors.push(`Lesson ${day.lessonNumber} has an invalid daily pronunciation progression`);
+      // Plans approved before the 13/11 wording change keep their stored objective text: compare it by meaning, everything else exactly.
+      const dayWords = contract.coreTerms.filter(core => day.coreTermIds.includes(core.id)).map(core => core.word);
+      const samePlan = <T extends { objective: string }>(stored: T | undefined, expected: T) => canonicalJson(stored) === canonicalJson(expected)
+        || (stored !== undefined && monthlyPlanObjectivesMatch(stored.objective, expected.objective, dayWords) && canonicalJson({ ...stored, objective: expected.objective }) === canonicalJson(expected));
+      if (day.newLessonNumber !== newLessonOrdinal || !samePlan(day.grammarPlan, planned.grammarPlan)) errors.push(`Lesson ${day.lessonNumber} has an invalid daily grammar progression`);
+      if (!samePlan(day.pronunciationPlan, planned.pronunciationPlan)) errors.push(`Lesson ${day.lessonNumber} has an invalid daily pronunciation progression`);
       const examples = planned.pronunciationPlan.targetIds.length === 1 ? planned.pronunciationPlan.exampleIds : expectedSound?.examples.slice(0, 3).map(example => example.id);
       if (JSON.stringify(day.pronunciationExampleIds) !== JSON.stringify(examples)) errors.push(`Lesson ${day.lessonNumber} repeats or skips its assigned pronunciation example set`);
     }
