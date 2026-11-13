@@ -34,6 +34,12 @@ describe("game surface layout guardrails", () => {
     expect(stylesheet).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*?\.typing-scene\s*\{[^}]*padding:\s*14px\s+12px/s);
   });
 
+  it("centres a single, bounded Typing race backspace key instead of a full-width Enter/backspace pair", () => {
+    expect(stylesheet).toMatch(/\.keyboard-row\s*\{[^}]*justify-content:\s*center/s);
+    expect(stylesheet).toMatch(/\.keyboard-row--actions button\.is-backspace\s*\{[^}]*flex:\s*0 1 180px/s);
+    expect(stylesheet).not.toMatch(/\.is-enter/);
+  });
+
   it("disables failure and loading animation when reduced motion is requested", () => {
     expect(stylesheet).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.game-ending span,[\s\S]*?\.game-ending \.dino \.jaw[\s\S]*?animation:\s*none/s);
   });

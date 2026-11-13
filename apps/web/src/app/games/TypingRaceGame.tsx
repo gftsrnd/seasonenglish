@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { ContentImageView, GameAnswerInput, GameEvidenceEventInput } from "@e4s/contracts";
-import { CornerDownLeft, Delete, Volume2 } from "lucide-react";
+import { Delete, Volume2 } from "lucide-react";
 import { isTypingWord, normalize, prepareGameAttempt, TYPING_ROUND_SIZE, type FinishGame, type GameWord } from "./types.js";
 import { typingMaximum } from "@e4s/domain/engagement";
 import { useExperience } from "../../features/experience/Experience.js";
@@ -69,14 +69,17 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, image
       transitioning.current = false;
     }, correct ? 500 : 1_200);
   };
-  const submit = () => { if (!word || busy) return; void next(typed, normalize(typed) === target); };
+  // No submit key: the word is checked as it is typed. A match advances at
+  // once; a wrong word only counts once every slot is filled (as a wrong
+  // Enter used to), so mid-word typos are never penalised.
   const press = (key: string) => {
     if (!word || busy || locked) return;
-    if (key === "enter") { submit(); return; }
     if (key === "backspace") { setTyped((value) => value.slice(0, -1)); return; }
     if (typed.length >= target.length) return;
     const nextTyped = typed + key;
     setTyped(nextTyped);
+    if (normalize(nextTyped) === target) void next(nextTyped, true);
+    else if (nextTyped.length >= target.length) void next(nextTyped, false);
   };
 
   useEffect(() => {
@@ -109,7 +112,8 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, image
       if (!scene || !scene.contains(document.activeElement)) return;
       // Browser/application shortcuts must never become game answers.
       if (event.ctrlKey || event.metaKey || event.altKey) return;
-      if (event.key === "Enter") { event.preventDefault(); press("enter"); }
+      // Enter is no longer needed (answers are checked as they are typed); swallow it harmlessly.
+      if (event.key === "Enter") event.preventDefault();
       else if (event.key === "Backspace") { event.preventDefault(); press("backspace"); }
       else if (event.key === " " || /^[a-z'-]$/i.test(event.key)) press(event.key.toLowerCase());
     };
@@ -142,7 +146,7 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, image
       <div className="typing-clue">{hasDirectImage || imageSetId && resolveImage ? <div className="typing-clue-image"><ContentImage term={word.english} load={loadImage} unavailable="hide" /></div> : null}<button type="button" className="typing-clue-speak" aria-label={`Nghe ${word.english}`} onClick={() => speak(word.english)}><Volume2 className="game-control-icon" size={18} strokeWidth={2} aria-hidden="true" /></button><div className="typing-clue-copy"><span className="eyebrow">Gợi ý</span><strong>{word.vietnamese}</strong><small>{word.definition} · {target.replace(/\s/g, "").length} chữ cái{target.includes(" ") ? ", có dấu cách" : ""}</small></div></div>
       <div className="typing-timer" role="progressbar" aria-label="Thời gian còn lại" aria-valuemin={0} aria-valuemax={maximum} aria-valuenow={Math.round(remaining)}><i key={index} data-testid="typing-timer-fill" className={busy || locked ? "is-paused" : undefined} style={{ "--typing-time-limit": `${maximum}ms`, "--typing-time-left": `${Math.max(0, Math.min(100, remaining / maximum * 100))}%` } as CSSProperties} /></div>
       <div className="typing-word" aria-label="Từ đang gõ" aria-live="polite">{target.split("").map((character, characterIndex) => { const value = typed[characterIndex]; const state = value === undefined ? "" : value === character ? "is-correct" : "is-wrong"; return <span data-testid="typing-character" className={state} key={characterIndex}>{character === " " ? " " : value?.toUpperCase() ?? ""}</span>; })}</div>
-      <div className="virtual-keyboard" role="group" aria-label="Bàn phím ảo">{keyboardRows.map((row) => <div className="keyboard-row" key={row}>{row.split("").map((letter) => <button type="button" disabled={busy || locked} key={letter} onClick={() => press(letter)}>{letter}</button>)}</div>)}<div className="keyboard-row keyboard-row--actions">{target.includes("-") ? <button type="button" aria-label="Dấu gạch nối" disabled={busy || locked} onClick={() => press("-")}>-</button> : null}{target.includes("'") ? <button type="button" aria-label="Dấu nháy đơn" disabled={busy || locked} onClick={() => press("'")}>′</button> : null}{target.includes(" ") ? <button type="button" data-key="space" disabled={busy || locked} onClick={() => press(" ")}>Dấu cách</button> : null}<button type="button" aria-label="Xoá ký tự cuối" disabled={busy || locked} onClick={() => press("backspace")}><Delete className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" /></button><button className="is-enter" type="button" aria-label="Nhập" disabled={busy || locked} onClick={() => press("enter")}><CornerDownLeft className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" /></button></div></div>
+      <div className="virtual-keyboard" role="group" aria-label="Bàn phím ảo">{keyboardRows.map((row) => <div className="keyboard-row" key={row}>{row.split("").map((letter) => <button type="button" disabled={busy || locked} key={letter} onClick={() => press(letter)}>{letter}</button>)}</div>)}<div className="keyboard-row keyboard-row--actions">{target.includes("-") ? <button type="button" aria-label="Dấu gạch nối" disabled={busy || locked} onClick={() => press("-")}>-</button> : null}{target.includes("'") ? <button type="button" aria-label="Dấu nháy đơn" disabled={busy || locked} onClick={() => press("'")}>′</button> : null}{target.includes(" ") ? <button type="button" data-key="space" disabled={busy || locked} onClick={() => press(" ")}>Dấu cách</button> : null}<button className="is-backspace" type="button" aria-label="Xoá ký tự cuối" disabled={busy || locked} onClick={() => press("backspace")}><Delete className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" /></button></div></div>
       {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
       <GameFeedback message={notice} tone={noticeTone === "is-success" ? "success" : noticeTone === "is-error" ? "error" : noticeTone === "is-warning" ? "warning" : "info"} />
     </div>

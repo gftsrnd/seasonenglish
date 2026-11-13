@@ -359,16 +359,75 @@ describe("learner game visual and interaction regressions", () => {
     }
   });
 
-  it("does not score or advance Typing race until the learner explicitly submits", () => {
+  it("advances Typing race as soon as the word is typed correctly, without Enter", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "performance", "Date"] });
+    try {
+      const onFinish = vi.fn();
+      const { container } = render(<TypingRaceGame words={[
+        { id: "role", english: "role", vietnamese: "vai trò", definition: "a job function", partOfSpeech: "noun" },
+        { id: "menu", english: "menu", vietnamese: "thực đơn", definition: "a list of food", partOfSpeech: "noun" }
+      ]} onFinish={onFinish} />);
+      const first = screen.queryByText("vai trò") ? "role" : "menu";
+      const second = first === "role" ? "menu" : "role";
+      for (const key of first.slice(0, -1)) fireEvent.keyDown(window, { key });
+      expect(screen.queryByText(/^Đúng/)).not.toBeInTheDocument();
+      fireEvent.keyDown(window, { key: first.slice(-1).toUpperCase() });
+      expect(screen.getByText(`Đúng · ${first}`)).toBeInTheDocument();
+      expect(container.querySelector(".game-hud strong")).toHaveTextContent(/^10\//);
+      act(() => { vi.advanceTimersByTime(500); });
+      expect(screen.getByRole("heading", { name: "Từ 2/2" })).toBeInTheDocument();
+      expect(screen.getByText("Combo ×2")).toBeInTheDocument();
+      for (const key of second) fireEvent.keyDown(window, { key });
+      act(() => { vi.advanceTimersByTime(500); });
+      expect(onFinish).toHaveBeenCalledWith({ answers: [
+        expect.objectContaining({ wordId: first, answer: first, combo: 1 }),
+        expect.objectContaining({ wordId: second, answer: second, combo: 2 })
+      ] });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows wrong feedback only once every Typing race slot is filled with a wrong word", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "performance", "Date"] });
+    try {
+      const onFinish = vi.fn();
+      const { container } = render(<TypingRaceGame words={[{ id: "role", english: "role", vietnamese: "vai trò", definition: "a job function", partOfSpeech: "noun" }]} onFinish={onFinish} />);
+      for (const key of "rol") fireEvent.keyDown(window, { key });
+      expect(screen.queryByText(/Chưa đúng/)).not.toBeInTheDocument();
+      fireEvent.keyDown(window, { key: "x" });
+      expect(screen.getByText(/Chưa đúng · Thử lại từ/)).toBeInTheDocument();
+      expect(container.querySelectorAll('[data-testid="typing-character"]:not(:empty)')).toHaveLength(0);
+      act(() => { vi.advanceTimersByTime(1_500); });
+      expect(onFinish).not.toHaveBeenCalled();
+      // The learner can retry the same word and it still auto-advances when right.
+      for (const key of "role") fireEvent.keyDown(window, { key });
+      fireEvent.keyDown(window, { key: "Enter" });
+      act(() => { vi.advanceTimersByTime(500); });
+      expect(onFinish).toHaveBeenCalledTimes(1);
+      expect(onFinish).toHaveBeenCalledWith({ answers: [expect.objectContaining({ wordId: "role", answer: "role", combo: 1 })] });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("has no on-screen Enter key and keeps a centred backspace key that still deletes", () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    const onFinish = vi.fn();
-    render(<TypingRaceGame words={[{ id: "role", english: "role", vietnamese: "vai trò", definition: "a job function", partOfSpeech: "noun" }]} onFinish={onFinish} />);
-    for (const key of "role") fireEvent.keyDown(window, { key });
-    expect(screen.getAllByTestId("typing-character").map((item) => item.textContent).join("")).toBe("ROLE");
-    expect(onFinish).not.toHaveBeenCalled();
-    fireEvent.keyDown(window, { key: "Enter" });
-    expect(onFinish).not.toHaveBeenCalled();
+    const { container } = render(<TypingRaceGame words={[{ id: "role", english: "role", vietnamese: "vai trò", definition: "a job function", partOfSpeech: "noun" }]} onFinish={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Nhập" })).not.toBeInTheDocument();
+    expect(container.querySelector(".is-enter")).toBeNull();
+    const actionsRow = container.querySelector(".keyboard-row--actions")!;
+    const backspace = within(actionsRow as HTMLElement).getByRole("button", { name: "Xoá ký tự cuối" });
+    expect(backspace).toHaveClass("is-backspace");
+    expect(actionsRow.children).toHaveLength(1);
+    const typedText = () => screen.getAllByTestId("typing-character").map((item) => item.textContent).join("");
+    fireEvent.keyDown(window, { key: "r" });
+    fireEvent.keyDown(window, { key: "o" });
+    fireEvent.click(backspace);
+    expect(typedText()).toBe("R");
+    fireEvent.keyDown(window, { key: "Backspace" });
+    expect(typedText()).toBe("");
   });
 
   it("keeps one exit choice on a completed game result", async () => {
@@ -378,7 +437,6 @@ describe("learner game visual and interaction regressions", () => {
     render(<LearnerGame descriptor={descriptor("typing", [])} wordSet={oneWordSet} result={{ score: 10, maxScore: 10 }} actions={actions} />);
     fireEvent.click(screen.getByRole("button", { name: "Bắt đầu chơi" }));
     for (const key of "role") fireEvent.keyDown(window, { key });
-    fireEvent.keyDown(window, { key: "Enter" });
     await screen.findByRole("heading", { name: "Điểm của bạn" });
     expect(screen.getByRole("link", { name: "Chọn trò khác" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Thoát" })).not.toBeInTheDocument();

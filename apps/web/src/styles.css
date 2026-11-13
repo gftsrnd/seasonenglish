@@ -895,7 +895,6 @@ dd { margin: 0; font-weight: 650; }
 .virtual-keyboard button { min-width: 34px; border-radius: 6px; background: #fff; padding: 7px; text-transform: uppercase; }
 .keyboard-row--actions button:first-child { flex: 3; }
 .keyboard-row--actions button { flex: 1; }
-.keyboard-row--actions button.is-enter { border-color: var(--primary); background: var(--primary-soft); }
 .game-notice { margin: -4px 0 6px; color: var(--primary-dark); text-align: center; font-weight: 700; }
 .game-over-card { display: flex; align-items: flex-start; gap: 16px; margin-top: 12px; border-radius: 13px; background: var(--surface-soft); padding: 15px; }
 .game-over-card.is-record { background: #e9f0d7; }
