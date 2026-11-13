@@ -217,8 +217,12 @@ export function AppGuide({ role, pathname, compact }: { role: GuideRole; pathnam
       const hidden = rect.top < top - 1 || (fits ? rect.bottom > bottom + 1 : rect.top > bottom - 72);
       if (!hidden) return;
       engineScrollUntil.current = Date.now() + 2000;
-      if (typeof scroller.scrollBy === "function") scroller.scrollBy({ top: rect.top - top, behavior });
-      else scroller.scrollTop += rect.top - top;
+      // A card that fits is centred in the visible band (minimal movement, the cards around it stay in view);
+      // only a card taller than the band is aligned to its top. Aligning every card to the top pushed short
+      // cards near the page end up against the header with a large empty area below.
+      const delta = fits ? rect.top - (top + (bottom - top - rect.height) / 2) : rect.top - top;
+      if (typeof scroller.scrollBy === "function") scroller.scrollBy({ top: delta, behavior });
+      else scroller.scrollTop += delta;
     };
     const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     // Right after opening, jump instantly (the page lock starts now); later step changes may glide.

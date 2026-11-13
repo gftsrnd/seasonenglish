@@ -286,7 +286,7 @@ describe("AppGuide", () => {
     expect(document.querySelector(".app-guide-blocker")).toBeNull();
   });
 
-  it("scrolls the page up or down so the highlighted card sits just below the header, above the guide box", () => {
+  it("scrolls the page up or down so a highlighted card that fits is centred between the header and the guide box", () => {
     const root = document.scrollingElement ?? document.documentElement;
     let cardTop = -300;
     vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockImplementation(function (this: HTMLElement) {
@@ -300,13 +300,14 @@ describe("AppGuide", () => {
     // Opened after scrolling to the bottom: the first card is above the screen, so the page scrolls up.
     root.scrollTop = 500;
     fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
-    expect(root.scrollTop).toBe(500 + (-300 - 64));
+    // Band: header 64 → guide box 590; a 120px card is centred at 64 + (526 - 120) / 2 = 267.
+    expect(root.scrollTop).toBe(500 + (-300 - 267));
     fireEvent.keyDown(document, { key: "Escape" });
     // Opened with the card under the guide box: the page scrolls down until its top is below the header.
     cardTop = 650;
     root.scrollTop = 0;
     fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
-    expect(root.scrollTop).toBe(650 - 64);
+    expect(root.scrollTop).toBe(650 - 267);
   });
 
   it("blocks user scrolling while open and restores it on close", () => {
