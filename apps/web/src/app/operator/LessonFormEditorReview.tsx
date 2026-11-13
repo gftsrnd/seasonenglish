@@ -1,4 +1,4 @@
-import { EditorSection, Field, OptionFields } from "./LessonEditorFields.js";
+import { EditorSection, Field, LineField, OptionFields } from "./LessonEditorFields.js";
 import { MONTHLY_REVIEW_SECTIONS } from "./monthly-failure-findings.js";
 
 /**
@@ -138,7 +138,7 @@ function QuestionEditor({ code, label, question, onChange }: { code: string; lab
   const answer = question.answer;
   const hasTranslation = typeof question.questionTranslation === "string" || typeof question.answerTranslation === "string";
   return <>
-    {typeof question.audioText === "string" ? <Field label="Từ app đọc" hint="Học viên chỉ nghe, không thấy chữ."><input aria-label={`${label} – Từ app đọc`} value={question.audioText} onChange={(event) => set("audioText", event.target.value)} /></Field> : null}
+    {typeof question.audioText === "string" ? <Field label="Từ app đọc" hint="Học viên chỉ nghe, không thấy chữ."><LineField aria-label={`${label} – Từ app đọc`} value={question.audioText} onChange={(event) => set("audioText", event.target.value)} /></Field> : null}
     <Field label="Câu hỏi"><textarea aria-label={`${label} – Câu hỏi`} value={text(question.prompt)} onChange={(event) => set("prompt", event.target.value)} /></Field>
     {code !== "reading" && typeof question.passage === "string" ? <Field label="Câu đọc to"><textarea aria-label={`${label} – Câu đọc to`} value={question.passage} onChange={(event) => set("passage", event.target.value)} /></Field> : null}
     {options ? <OptionFields prefix={label} options={options} count={Math.max(options.length, 1)} onChange={(next) => onChange((current) => withOptions(current, next))} /> : null}
@@ -146,16 +146,16 @@ function QuestionEditor({ code, label, question, onChange }: { code: string; lab
       <option value={-1}>{answer ? `Không khớp lựa chọn nào: ${answer}` : "Chọn đáp án"}</option>
       {options.map((option, index) => <option key={index} value={index}>{String.fromCharCode(65 + index)}. {option || `Lựa chọn ${index + 1}`}</option>)}
     </select></Field> : null}
-    {!options && typeof answer === "string" ? <Field label="Đáp án"><input aria-label={`${label} – Đáp án`} value={answer} onChange={(event) => set("answer", event.target.value)} /></Field> : null}
+    {!options && typeof answer === "string" ? <Field label="Đáp án"><LineField aria-label={`${label} – Đáp án`} value={answer} onChange={(event) => set("answer", event.target.value)} /></Field> : null}
     {isStringList(answer) ? <p className="xs muted">Đáp án chấp nhận: {answer.join(" / ")}</p> : null}
     {isStringList(question.requiredWords) ? <div className={typeof question.minRequiredWords === "number" ? "grid cols-2" : undefined}>
-      <Field label="Từ bắt buộc" hint="Từ của tuần, cách nhau bằng dấu phẩy."><input aria-label={`${label} – Từ bắt buộc`} defaultValue={question.requiredWords.join(", ")} onBlur={(event) => { const next = event.target.value.split(",").map((word) => word.trim()).filter(Boolean); if (next.join("\n") !== (question.requiredWords as string[]).join("\n")) set("requiredWords", next); }} /></Field>
+      <Field label="Từ bắt buộc" hint="Từ của tuần, cách nhau bằng dấu phẩy."><LineField aria-label={`${label} – Từ bắt buộc`} defaultValue={question.requiredWords.join(", ")} onBlur={(event) => { const next = event.target.value.split(",").map((word) => word.trim()).filter(Boolean); if (next.join("\n") !== (question.requiredWords as string[]).join("\n")) set("requiredWords", next); }} /></Field>
       {typeof question.minRequiredWords === "number" ? <Field label="Số từ tối thiểu"><input type="number" min={1} aria-label={`${label} – Số từ tối thiểu`} value={question.minRequiredWords} onChange={(event) => set("minRequiredWords", Number(event.target.value))} /></Field> : null}
     </div> : null}
     {typeof question.explanation === "string" || options ? <Field label="Giải thích"><textarea aria-label={`${label} – Giải thích`} value={text(question.explanation)} onChange={(event) => set("explanation", event.target.value)} /></Field> : null}
     {hasTranslation ? <div className="grid cols-2">
-      <Field label="Dịch câu hỏi"><input aria-label={`${label} – Dịch câu hỏi`} value={text(question.questionTranslation)} onChange={(event) => set("questionTranslation", event.target.value)} /></Field>
-      <Field label="Dịch đáp án"><input aria-label={`${label} – Dịch đáp án`} value={text(question.answerTranslation)} onChange={(event) => set("answerTranslation", event.target.value)} /></Field>
+      <Field label="Dịch câu hỏi"><LineField aria-label={`${label} – Dịch câu hỏi`} value={text(question.questionTranslation)} onChange={(event) => set("questionTranslation", event.target.value)} /></Field>
+      <Field label="Dịch đáp án"><LineField aria-label={`${label} – Dịch đáp án`} value={text(question.answerTranslation)} onChange={(event) => set("answerTranslation", event.target.value)} /></Field>
     </div> : null}
   </>;
 }
