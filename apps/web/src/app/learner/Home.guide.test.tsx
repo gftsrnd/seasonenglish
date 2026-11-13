@@ -67,13 +67,13 @@ function resolvedTitles(home: LearnerHomeView) {
 }
 
 describe("learner home guide", () => {
-  it("walks the active month home through the progress rings and every level-up condition", () => {
+  it("walks the active month home with one step per card", () => {
     expect(resolvedTitles(fixtures.activeMonth!)).toEqual([
       "Bài học hôm nay",
-      "Bài theo lịch", "Bài ôn", "Điểm danh", "Điểm huy hiệu", "Ngày vắng",
+      "Tiến độ học tập",
       "Lịch học tháng",
       "Season và bài tháng",
-      "6 tháng hợp lệ", "Kết quả bài thi tháng", "Season đạt chỉ tiêu", "Chuyên cần cả level",
+      "Đường lên mức",
       "Hồ sơ và đầu vào"
     ]);
   });
