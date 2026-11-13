@@ -5,3 +5,15 @@
 .lesson-study-formula-box .lesson-study-focus{margin:0}
 /* Key slot of a formula and the matching part of the examples: one accent from the palette. */
 .lesson-study-mark{color:var(--primary-dark,#2C5A8C)}
+/* Grammar formula band: spans the card width, text centred like the template. */
+.lesson-study-formula-box.lesson-study-formula-band{display:block;width:100%;max-width:none;text-align:center;padding:10px 14px}
+.lesson-grammar-formula-row{display:flex;align-items:center;gap:10px}
+.lesson-grammar-formula-row>.lesson-study-formula-band,.lesson-grammar-formula-row>.lesson-study-formula-compare{flex:1 1 auto;min-width:0}
+/* Correct vs wrong pattern, or two compared structures: two boxes side by side, stacked on narrow screens. */
+.lesson-study-formula-compare{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:8px;width:100%}
+.lesson-study-formula-label{display:block;margin-bottom:4px;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted,#6b645b)}
+.lesson-study-formula-box--correct{background:#e9f1d5;border:1px solid #b6cc82}
+.lesson-study-formula-box--correct .lesson-study-formula-label{color:#294414}
+.lesson-study-formula-box--wrong{background:#f8e3de;border:1px solid #e6b7ad}
+.lesson-study-formula-box--wrong .lesson-study-formula-label,.lesson-study-formula-box--wrong .lesson-study-focus{color:#7d271b}
+.lesson-study-formula-box--wrong .lesson-study-focus strong{text-decoration:line-through;text-decoration-thickness:1px}

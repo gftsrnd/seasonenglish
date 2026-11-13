@@ -36,10 +36,8 @@ export interface MonthlyPronunciationRule {
   caution?: string;
 }
 
-const S_RULE_VI = "Đuôi -s/-es: /s/ sau âm vô thanh /p t k f θ/; /ɪz/ sau âm xuýt /s z ʃ ʒ tʃ dʒ/; /z/ sau nguyên âm và các âm hữu thanh còn lại. Chỉ /ɪz/ thêm một âm tiết.";
-const S_RULE_EN = "-s/-es is /s/ after the voiceless sounds /p t k f θ/; /ɪz/ after the hissing sounds /s z ʃ ʒ tʃ dʒ/; /z/ after vowels and other voiced sounds. Only /ɪz/ adds a syllable.";
-const ED_RULE_VI = "Đuôi -ed: /t/ sau âm vô thanh /p k f s ʃ tʃ θ/ (trừ /t/); /d/ sau nguyên âm và âm hữu thanh (trừ /d/); /ɪd/ sau /t/ hoặc /d/. Chỉ /ɪd/ thêm một âm tiết.";
-const ED_RULE_EN = "-ed is /t/ after the voiceless sounds /p k f s ʃ tʃ θ/ (not /t/); /d/ after vowels and voiced sounds (not /d/); /ɪd/ after /t/ or /d/. Only /ɪd/ adds a syllable.";
+// Split topics (-s/-es into /s/ /z/ /ɪz/, -ed into /t/ /d/ /ɪd/): each day's item explains ONLY its own
+// sub-case — no shared rule listing every case and no "This item: …" tail (product decision 13/11).
 const ENDING_CAUTION = "Decide the ending from the LAST SOUND of the base word, not its spelling (laugh ends in /f/ → laughed /lɑːft/; fix ends in /s/ → fixes /ˈfɪksɪz/). Every example must show the target ending only.";
 const CLUSTER_CAUTION = "Transcribe the cluster with no vowel between its consonants; use common workplace words; do not invent rare words to fit the cluster.";
 const STRESS_CAUTION = "Stress rules are strong tendencies with exceptions: choose words that follow the pattern in standard British dictionaries and avoid words whose stress differs between British and American English unless both are accepted.";
@@ -48,8 +46,8 @@ const PROSODY_CAUTION = "Prosody is a tendency, not a fixed rule: do not present
 export const MONTHLY_PRONUNCIATION_RULES: Readonly<Record<string, MonthlyPronunciationRule>> = {
   // ---------------------------------------------------------------- B1
   "b1-s-s": {
-    ruleVi: `${S_RULE_VI} Bài này: /s/ — tasks, helps, reports.`,
-    ruleEn: `${S_RULE_EN} This item: /s/ — tasks, helps, reports.`,
+    ruleVi: "Đuôi -s đọc /s/ sau âm vô thanh /p t k f θ/; không thêm âm tiết (report → reports).",
+    ruleEn: "-s is /s/ after the voiceless sounds /p t k f θ/; it adds no syllable (report → reports).",
     rememberVi: "Đặt tay lên cổ họng: âm cuối không rung (p, t, k, f) thì -s cũng không rung → /s/.",
     rememberEn: "Hand on your throat: if the last sound does not buzz (p, t, k, f), the -s does not buzz either → /s/.",
     mistakeVi: "Bỏ hẳn đuôi -s (\"two report\") hoặc đọc thành \"xờ\" kéo dài thêm âm tiết.",
@@ -58,8 +56,8 @@ export const MONTHLY_PRONUNCIATION_RULES: Readonly<Record<string, MonthlyPronunc
     caution: ENDING_CAUTION
   },
   "b1-s-z": {
-    ruleVi: `${S_RULE_VI} Bài này: /z/ — calls, plans, files.`,
-    ruleEn: `${S_RULE_EN} This item: /z/ — calls, plans, files.`,
+    ruleVi: "Đuôi -s đọc /z/ sau nguyên âm và âm hữu thanh (/b d g v l m n/…); không thêm âm tiết (plan → plans).",
+    ruleEn: "-s is /z/ after vowels and voiced sounds (/b d g v l m n/…); it adds no syllable (plan → plans).",
     rememberVi: "Âm cuối rung (nguyên âm, l, n, m, d, g, v…) thì -s cũng rung → /z/.",
     rememberEn: "If the last sound buzzes (a vowel, l, n, m, d, g, v…), the -s buzzes too → /z/.",
     mistakeVi: "Đọc mọi đuôi -s thành /s/ (plans → /plæns/) hoặc bỏ mất đuôi.",
@@ -68,8 +66,8 @@ export const MONTHLY_PRONUNCIATION_RULES: Readonly<Record<string, MonthlyPronunc
     caution: ENDING_CAUTION
   },
   "b1-s-iz": {
-    ruleVi: `${S_RULE_VI} Bài này: /ɪz/ — offices, changes, pushes.`,
-    ruleEn: `${S_RULE_EN} This item: /ɪz/ — offices, changes, pushes.`,
+    ruleVi: "Đuôi -s/-es đọc /ɪz/ sau âm xuýt /s z ʃ ʒ tʃ dʒ/; thêm một âm tiết (office → offices).",
+    ruleEn: "-s/-es is /ɪz/ after the hissing sounds /s z ʃ ʒ tʃ dʒ/; it adds a syllable (office → offices).",
     rememberVi: "Từ đã kết thúc bằng âm \"xì\" (s, z, sh, ch, j) thì phải thêm một âm tiết /ɪz/ mới nghe được đuôi.",
     rememberEn: "When the word already ends in a hissing sound (s, z, sh, ch, j), add a whole syllable /ɪz/.",
     mistakeVi: "Không thêm âm tiết (offices đọc như office) hoặc thêm /ɪz/ cả sau từ không có âm xuýt (works → /wɜːkɪz/).",
@@ -87,8 +85,8 @@ export const MONTHLY_PRONUNCIATION_RULES: Readonly<Record<string, MonthlyPronunc
     caution: "Contractions are normal in speech but not obligatory; do not mark every is/has as contracted."
   },
   "b1-ed-t": {
-    ruleVi: `${ED_RULE_VI} Bài này: /t/ — helped, asked, finished.`,
-    ruleEn: `${ED_RULE_EN} This item: /t/ — helped, asked, finished.`,
+    ruleVi: "Đuôi -ed đọc /t/ sau âm vô thanh /p k f s ʃ tʃ θ/; không thêm âm tiết (help → helped).",
+    ruleEn: "-ed is /t/ after the voiceless sounds /p k f s ʃ tʃ θ/; it adds no syllable (help → helped).",
     rememberVi: "Âm cuối không rung (p, k, f, s, sh, ch) → -ed cũng không rung → /t/, không thêm âm tiết.",
     rememberEn: "If the last sound does not buzz (p, k, f, s, sh, ch), -ed does not buzz → /t/, with no extra syllable.",
     mistakeVi: "Đọc mọi -ed thành /ɪd/ (helped → \"hel-pid\") hoặc nuốt mất /t/ cuối.",
@@ -97,8 +95,8 @@ export const MONTHLY_PRONUNCIATION_RULES: Readonly<Record<string, MonthlyPronunc
     caution: `${ENDING_CAUTION} Never use a verb whose base ends in /t/ or /d/ (wanted, needed) for the /t/ item.`
   },
   "b1-ed-d": {
-    ruleVi: `${ED_RULE_VI} Bài này: /d/ — called, planned, delivered.`,
-    ruleEn: `${ED_RULE_EN} This item: /d/ — called, planned, delivered.`,
+    ruleVi: "Đuôi -ed đọc /d/ sau nguyên âm và âm hữu thanh (/b g v z l m n/…); không thêm âm tiết (call → called).",
+    ruleEn: "-ed is /d/ after vowels and voiced sounds (/b g v z l m n/…); it adds no syllable (call → called).",
     rememberVi: "Âm cuối rung (nguyên âm, l, n, m, b, g, v, z) → -ed rung → /d/, không thêm âm tiết.",
     rememberEn: "If the last sound buzzes (a vowel, l, n, m, b, g, v, z), -ed buzzes → /d/, with no extra syllable.",
     mistakeVi: "Thêm âm tiết (planned → \"plan-nid\") hoặc đọc thành /t/ mạnh.",
@@ -107,8 +105,8 @@ export const MONTHLY_PRONUNCIATION_RULES: Readonly<Record<string, MonthlyPronunc
     caution: `${ENDING_CAUTION} Never use a verb whose base ends in /t/ or /d/ for the /d/ item.`
   },
   "b1-ed-id": {
-    ruleVi: `${ED_RULE_VI} Bài này: /ɪd/ — started, needed, updated.`,
-    ruleEn: `${ED_RULE_EN} This item: /ɪd/ — started, needed, updated.`,
+    ruleVi: "Đuôi -ed đọc /ɪd/ sau /t/ hoặc /d/; thêm một âm tiết (start → started).",
+    ruleEn: "-ed is /ɪd/ after /t/ or /d/; it adds a syllable (start → started).",
     rememberVi: "Chỉ khi từ gốc tận cùng bằng âm /t/ hoặc /d/ mới thêm âm tiết /ɪd/.",
     rememberEn: "Only a base word ending in the sound /t/ or /d/ gets the extra syllable /ɪd/.",
     mistakeVi: "Dùng /ɪd/ cho mọi động từ (worked → \"wơ-kid\").",

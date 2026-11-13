@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SharedLessonPartContent } from "./Learning.js";
 import { OperatorLessonPreview } from "../operator/adapters.js";
 import { learnerLessonCopy } from "../shared/lesson/language.js";
-import { grammarExampleMatcher, grammarExampleSegments, grammarFormulaSegments, grammarPointName, pronunciationEndingSegments, type HighlightSegment } from "../shared/lesson/study-highlight.js";
+import { grammarExampleMatcher, grammarExampleSegments, grammarFormulaBoxes, grammarFormulaSegments, grammarPointName, pronunciationEndingSegments, pronunciationTargetSegments, type HighlightSegment } from "../shared/lesson/study-highlight.js";
 
 afterEach(cleanup);
 
@@ -142,5 +142,135 @@ describe("study block layout", () => {
     expect(container.querySelector(".lesson-grammar-name")).toHaveTextContent("Present simple vs present continuous");
     expect(container.querySelector(".lesson-pronunciation-formula")).toHaveTextContent("→ /t/");
     expect(container.querySelector("img")).toBeNull();
+  });
+});
+
+// Real A1 lesson (13/11): stored content has no topic; the API attaches it from the day plan.
+const BE_FORMULA = "I am / He is / She is / We are / They are + danh từ hoặc tính từ";
+const a1BeGrammar = {
+  code: "grammar", title: "Ngữ pháp",
+  content: {
+    topicTitle: "The verb to be", topicTitleVi: "Động từ to be",
+    objective: "Ghi nhớ cấu trúc khẳng định với am, is, are.",
+    formula: BE_FORMULA,
+    usage: "Dùng am với I, is với he/she/it. Câu khẳng định luôn có động từ to be đứng sau chủ ngữ.",
+    examples: ["I am the staff member at the front desk.", "She is our new staff leader.", "We are ready for the meeting."]
+  }
+};
+
+describe("grammar name from the day plan, be-form highlights and the full-width band", () => {
+  it("prefers the planned topic name: A1–A2 with Vietnamese, B1+ English only", () => {
+    expect(grammarPointName("A1", { topicTitle: "The verb to be", topicTitleVi: "Động từ to be" })).toBe("The verb to be (Động từ to be)");
+    expect(grammarPointName("A2", { topicTitle: "Động từ to be (am / is / are)" })).toBe("Động từ to be (am / is / are)");
+    expect(grammarPointName("B1", { topicTitle: "Present simple vs present continuous", topicTitleVi: "Hiện tại đơn vs tiếp diễn" })).toBe("Present simple vs present continuous");
+    expect(grammarPointName("A1", { topicTitle: "The verb to be · Pronouns and possessives", topicTitleVi: "Động từ to be · Đại từ & sở hữu" })).toBe("The verb to be (Động từ to be) · Pronouns and possessives (Đại từ & sở hữu)");
+  });
+
+  it("marks the be forms of 'pronoun + form' pieces, not the pronouns or the placeholder", () => {
+    const segments = grammarFormulaSegments(BE_FORMULA);
+    expect(joined(segments)).toBe(BE_FORMULA);
+    expect(marked(segments)).toEqual(["am", "is", "is", "are", "are"]);
+    expect(marked(grammarFormulaSegments("I'm / You're / He's + adjective"))).toEqual(["I'm", "You're", "He's"]);
+    expect(marked(grammarFormulaSegments("I can / She will + base verb"))).toEqual(["can", "will", "base verb"]);
+    const matcher = grammarExampleMatcher([BE_FORMULA]);
+    expect(marked(grammarExampleSegments("I am the staff member at the front desk.", matcher))).toEqual(["am"]);
+    expect(marked(grammarExampleSegments("She is our new staff leader.", matcher))).toEqual(["is"]);
+    expect(marked(grammarExampleSegments("We are ready for the meeting.", matcher))).toEqual(["are"]);
+    // Unsure pieces stay plain.
+    expect(marked(grammarFormulaSegments("Anna works / The team meets + noun"))).toEqual([]);
+  });
+
+  it("renders the A1 card: label, bold name with Vietnamese, grey usage, full-width band with be forms, marked chips", () => {
+    const { container } = show(a1BeGrammar, "A1");
+    const name = container.querySelector(".lesson-grammar-name")!;
+    expect(name).toHaveTextContent("The verb to be (Động từ to be)");
+    expect(name.querySelector("strong")).not.toBeNull();
+    const band = container.querySelector(".lesson-study-formula-band")!;
+    expect(band).toHaveClass("lesson-study-formula-box");
+    expect(band).toHaveTextContent(BE_FORMULA);
+    expect(Array.from(band.querySelectorAll(".lesson-study-mark")).map((node) => node.textContent)).toEqual(["am", "is", "is", "are", "are"]);
+    const chip = screen.getByRole("button", { name: "Nghe câu ví dụ: She is our new staff leader." });
+    expect(chip.querySelector(".lesson-study-mark")).toHaveTextContent("is");
+    expect(follows(name, band)).toBe(true);
+    expect(follows(band, chip)).toBe(true);
+  });
+
+  it("renders the B1 name in English only from the planned topic", () => {
+    const { container } = show({ ...b1Grammar, content: { ...b1Grammar.content, dailyCode: undefined, objective: "Notice routines.", topicTitle: "Present simple vs present continuous", topicTitleVi: "Hiện tại đơn vs tiếp diễn" } });
+    expect(container.querySelector(".lesson-grammar-name")).toHaveTextContent(/^Present simple vs present continuous$/u);
+  });
+});
+
+describe("grammar formula boxes", () => {
+  const lines = (value: string) => [value.trim()];
+  it("keeps a single correct formula in one box", () => {
+    expect(grammarFormulaBoxes(BE_FORMULA, "vi", lines)).toEqual([{ tone: "neutral", lines: [BE_FORMULA] }]);
+  });
+
+  it("splits correct vs wrong patterns into a green and a red box", () => {
+    expect(grammarFormulaBoxes("✓ I am a manager / ✗ I a manager", "vi", lines)).toEqual([
+      { tone: "correct", label: "Đúng", lines: ["I am a manager"] },
+      { tone: "wrong", label: "Sai", lines: ["I a manager"] }
+    ]);
+    expect(grammarFormulaBoxes("She works here (not: She work here)", "en", lines)).toEqual([
+      { tone: "correct", label: "Correct", lines: ["She works here"] },
+      { tone: "wrong", label: "Incorrect", lines: ["She work here"] }
+    ]);
+    expect(grammarFormulaBoxes("Đúng: He is busy. Sai: He busy.", "vi", lines).map((box) => box.tone)).toEqual(["correct", "wrong"]);
+  });
+
+  it("shows two compared structures as two boxes, named from the topic", () => {
+    expect(grammarFormulaBoxes("Subject + V/V-s vs Subject + am/is/are + V-ing", "en", lines, ["Present simple", "present continuous"])).toEqual([
+      { tone: "neutral", label: "Present simple", lines: ["Subject + V/V-s"] },
+      { tone: "neutral", label: "present continuous", lines: ["Subject + am/is/are + V-ing"] }
+    ]);
+    expect(grammarFormulaBoxes("Was/Were + subject + V-ing? ; past continuous + when + simple past", "en", lines)).toHaveLength(2);
+  });
+
+  it("keeps one box when unsure", () => {
+    expect(grammarFormulaBoxes("Subject + am/is/are + V-ing; Subject + am not + V-ing", "en", lines)).toHaveLength(1);
+    expect(grammarFormulaBoxes("Use not only… but also for emphasis", "en", lines)).toHaveLength(1);
+    expect(grammarFormulaBoxes("✗ I a manager", "vi", lines)).toHaveLength(1);
+  });
+
+  it("renders correct vs wrong side by side with tones and labels, slots still marked", () => {
+    const { container } = show({ code: "grammar", title: "Ngữ pháp", content: { formula: "✓ I am / He is + noun ✗ I + noun", examples: ["I am a manager."] } }, "A1");
+    const compare = container.querySelector(".lesson-study-formula-compare")!;
+    const boxes = compare.querySelectorAll(".lesson-study-formula-box");
+    expect(boxes).toHaveLength(2);
+    expect(boxes[0]).toHaveClass("lesson-study-formula-box--correct");
+    expect(boxes[0]).toHaveTextContent("Đúng");
+    expect(Array.from(boxes[0]!.querySelectorAll(".lesson-study-mark")).map((node) => node.textContent)).toEqual(["am", "is"]);
+    expect(boxes[1]).toHaveClass("lesson-study-formula-box--wrong");
+    expect(boxes[1]).toHaveTextContent("Sai");
+  });
+});
+
+describe("pronunciation target sound in the IPA", () => {
+  it("marks the target sound inside each example IPA", () => {
+    expect(marked(pronunciationTargetSegments("/siː/", "/iː/"))).toEqual(["iː"]);
+    expect(joined(pronunciationTargetSegments("/kliːn/", "/iː/"))).toBe("/kliːn/");
+    expect(marked(pronunciationTargetSegments("/friː/", "/iː/"))).toEqual(["iː"]);
+    expect(marked(pronunciationTargetSegments("/ˈθɪŋk/", "/θ/"))).toEqual(["θ"]);
+  });
+
+  it("skips occurrences that are only part of a longer symbol, and marks nothing when absent", () => {
+    expect(marked(pronunciationTargetSegments("/tʃeɪndʒ/", "/t/"))).toEqual([]);
+    expect(marked(pronunciationTargetSegments("/meɪk/", "/e/"))).toEqual([]);
+    expect(marked(pronunciationTargetSegments("/siː/", "/ɪ/"))).toEqual([]);
+    expect(marked(pronunciationTargetSegments("/siː/", "/i/"))).toEqual([]);
+    expect(marked(pronunciationTargetSegments("/bɪg/", "/iː/"))).toEqual([]);
+  });
+
+  it("renders the A1 chips with the target sound marked in the IPA", () => {
+    show({ code: "pronunciation", title: "Phát âm", content: { focus: "/iː/", words: [{ word: "see", ipa: "/siː/" }, { word: "free", ipa: "/friː/" }, { word: "clean", ipa: "/kliːn/" }] } }, "A1");
+    const chip = screen.getByRole("button", { name: "Nghe từ phát âm: clean" });
+    expect(chip).toHaveTextContent("clean /kliːn/");
+    expect(Array.from(chip.querySelectorAll(".lesson-study-mark")).map((node) => node.textContent)).toEqual(["iː"]);
+  });
+
+  it("marks the target at B1 too", () => {
+    show({ code: "pronunciation", title: "Pronunciation", content: { focus: "/θ/", words: [{ word: "think", ipa: "/θɪŋk/" }] } });
+    expect(screen.getByRole("button", { name: "Listen to pronunciation word: think" }).querySelector(".lesson-study-mark")).toHaveTextContent("θ");
   });
 });

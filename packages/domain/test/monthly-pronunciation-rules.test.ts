@@ -38,4 +38,19 @@ describe("B1–C1 pronunciation rules", () => {
     expect(monthlyPronunciationPhenomenonExampleIssue(item("B1", "b1-s-z"), { word: "changes", ipa: "/tʃeɪndʒz/" })).toMatch(/ɪz/u);
     expect(monthlyPronunciationPhenomenonExampleIssue(item("B1", "b1-s-s"), { word: "tasks", ipa: "/tɑːsks/" })).toBeUndefined();
   });
+
+  it("explains only the day's own sub-case for split -s/-es and -ed items (no shared all-cases rule, no \"This item\" tail)", () => {
+    const id = MONTHLY_PRONUNCIATION_RULES["b1-ed-id"]!;
+    expect(id.ruleEn).toBe("-ed is /ɪd/ after /t/ or /d/; it adds a syllable (start → started).");
+    expect(id.ruleVi).toBe("Đuôi -ed đọc /ɪd/ sau /t/ hoặc /d/; thêm một âm tiết (start → started).");
+    for (const key of ["b1-s-s", "b1-s-z", "b1-s-iz", "b1-ed-t", "b1-ed-d", "b1-ed-id"]) {
+      const rule = MONTHLY_PRONUNCIATION_RULES[key]!;
+      for (const text of [rule.ruleEn, rule.ruleVi, rule.rememberEn, rule.rememberVi, rule.mistakeEn, rule.mistakeVi]) expect(text).not.toMatch(/This item|Bài này|Compare:|So sánh:|Only \/ɪ[dz]\/|Chỉ \/ɪ[dz]\//u);
+    }
+    expect(id.ruleEn).not.toMatch(/\/t\/ after the voiceless/u);
+    expect(MONTHLY_PRONUNCIATION_RULES["b1-ed-t"]!.ruleEn).not.toMatch(/\/ɪd\//u);
+    expect(MONTHLY_PRONUNCIATION_RULES["b1-s-z"]!.ruleEn).not.toMatch(/\/ɪz\/|\/s\/ after/u);
+    // Items that are not split keep their text.
+    expect(MONTHLY_PRONUNCIATION_RULES["b1-s-contraction"]!.ruleEn).toMatch(/^Contracted 's/u);
+  });
 });

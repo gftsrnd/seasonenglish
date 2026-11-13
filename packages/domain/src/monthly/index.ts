@@ -13,3 +13,4 @@ export * from "./pronunciation-contrast.js";
 export * from "./grammar-catalog.js";
 export * from "./exercise-translation.js";
 export * from "./register-terms.js";
+export * from "./grammar-day-topic.js";

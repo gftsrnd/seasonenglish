@@ -410,3 +410,12 @@ describe("exercise translations stay hidden until the question is finished (12/1
     expect(finishedAttemptTranslation({ content: { prompt: "Old question", answer: "x" } }, "correct")).toBeUndefined();
   });
 });
+
+describe("learnerLessonView grammar topic name", () => {
+  it("serves the topicTitle / topicTitleVi the repository attached from the day plan", () => {
+    const base = lesson("Bài 1", "I am the staff member.");
+    const record = { ...base, cefr: "A1", content: { ...base.content, parts: base.content.parts.map((part) => part.code === "grammar" ? { ...part, content: { ...part.content, topicTitle: "The verb to be", topicTitleVi: "Động từ to be" } } : part) } } as LearnerLessonRecord;
+    const grammar = learnerLessonView(record).content.parts.find((part) => part.code === "grammar")?.content;
+    expect(grammar).toMatchObject({ topicTitle: "The verb to be", topicTitleVi: "Động từ to be" });
+  });
+});

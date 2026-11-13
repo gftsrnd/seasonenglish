@@ -5,7 +5,7 @@ import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublicatio
 import { lessonCompletionActivity } from "@e4s/domain/learning";
 import { longestScheduledLessonStreak, nextRewardSeason, rewardBadgeDescription, rewardBadgeThreshold, rewardSeasonFor, rewardSeasonLabel, REWARD_BADGE_KEYS, REWARD_SEASONS, pickGameWordExample, type RewardSeason } from "@e4s/domain/engagement";
 import { formatDisplayScore } from "./score-format.js";
-import { buildMonthlyCalendar, formatMonthlyDayLabel, monthlyLessonDisplayTitle, evaluateMonthlyLessonAccess, monthlyAttendanceDates, mergedVietnamHolidays, withMonthlyExpandedTerms, type MonthlyLessonAccess, type MonthlyVocabularyCore } from "@e4s/domain/monthly";
+import { buildMonthlyCalendar, formatMonthlyDayLabel, monthlyLessonDisplayTitle, evaluateMonthlyLessonAccess, monthlyAttendanceDates, mergedVietnamHolidays, withMonthlyExpandedTerms, monthlyGrammarDayTopicName, withMonthlyGrammarTopicName, type MonthlyGrammarTopicSource, type MonthlyLessonAccess, type MonthlyVocabularyCore } from "@e4s/domain/monthly";
 import { FROZEN_MONTHLY_ILLUSTRATIONS_SQL, withFrozenMonthlyIllustrations, type FrozenMonthlyIllustration } from "./monthly-illustration-projection.js";
 import { generationFindingsFromPayload } from "./generation-findings.js";
 import { MonthlyContentRepository } from "./monthly-content-repository.js";
@@ -379,6 +379,7 @@ type LearnerLessonQueryRow = {
   progress_updated_at: Date | null;
   monthly_kind?: "new" | "review";
   monthly_day_spec?: import("@e4s/domain").MonthlyDaySpec;
+  monthly_grammar_topics?: MonthlyGrammarTopicSource[] | null;
   monthly_new_ordinal?: number;
   monthly_review_ordinal?: number;
   lesson_date?: string;
@@ -1438,7 +1439,7 @@ class LearningRepository {
     let row = result.rows[0];
     if (!row) {
       const monthly = await this.pool.query<LearnerLessonQueryRow & { monthly_month: string }>(
-        `select pm.month as monthly_month, l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content, lv.id as exercise_version_id, mf.curriculum_contract->'coreTerms' as monthly_core_terms,
+        `select pm.month as monthly_month, l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content, lv.id as exercise_version_id, mf.curriculum_contract->'coreTerms' as monthly_core_terms, mf.curriculum_contract->'grammarTopics' as monthly_grammar_topics,
               ${FROZEN_MONTHLY_ILLUSTRATIONS_SQL} as frozen_illustrations, (select lesson_spec.item from jsonb_array_elements(mf.curriculum_contract->'daySpecs') as lesson_spec(item) where (lesson_spec.item->>'lessonNumber')::int = ml.lesson_number limit 1) as monthly_day_spec,
               (select count(*)::int from jsonb_array_elements(mf.curriculum_contract->'daySpecs') as ordinal_spec(item) where ordinal_spec.item->>'kind' = 'new' and (ordinal_spec.item->>'lessonNumber')::int <= ml.lesson_number) as monthly_new_ordinal,
               (select count(*)::int from jsonb_array_elements(mf.curriculum_contract->'daySpecs') as ordinal_spec(item) where ordinal_spec.item->>'kind' = 'review' and (ordinal_spec.item->>'lessonNumber')::int <= ml.lesson_number) as monthly_review_ordinal, case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'review' else 'new' end as monthly_kind, ml.lesson_date::text as lesson_date, organization_system_date((select organization_id from users where id = e.learner_id))::text as system_date,
@@ -2816,6 +2817,7 @@ function mapLessonRow(row: {
   progress_updated_at: Date | null;
   monthly_kind?: "new" | "review";
   monthly_day_spec?: import("@e4s/domain").MonthlyDaySpec;
+  monthly_grammar_topics?: MonthlyGrammarTopicSource[] | null;
   monthly_new_ordinal?: number;
   monthly_review_ordinal?: number;
   lesson_date?: string;
@@ -2831,9 +2833,11 @@ function mapLessonRow(row: {
     weekNumber: row.week_number,
     weekTopic: row.week_topic,
     cefr: row.cefr,
-    content: { ...row.content, parts: normalizeLessonParts(row.monthly_core_terms
+    content: { ...row.content, parts: normalizeLessonParts(withMonthlyGrammarTopicName(row.monthly_core_terms
       ? withMonthlyExpandedTerms(row.content.parts ?? [], withFrozenMonthlyIllustrations(row.monthly_core_terms, row.frozen_illustrations), [])
-      : row.content.parts ?? [], row.cefr) },
+      : row.content.parts ?? [],
+      // Grammar point name from the approved day plan (stored lessons carry none).
+      row.monthly_kind && row.monthly_day_spec ? monthlyGrammarDayTopicName(row.cefr, { ...row.monthly_day_spec, kind: row.monthly_kind }, row.monthly_grammar_topics) : undefined), row.cefr) },
     progress: mapProgress(
       row.progress_status ?? "not_started",
       row.progress_score,
