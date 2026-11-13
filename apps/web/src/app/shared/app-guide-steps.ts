@@ -53,18 +53,41 @@ const learnerSteps: Record<string, readonly GuideStep[]> = {
     ["#gm-board:has(.game-result.is-error)", "Chưa lưu kết quả", "Kết quả lượt này chưa được lưu. Kiểm tra kết nối rồi bấm **Thử gửi lại** để giữ lượt chơi."],
     ["#gm-board:has(.game-result.is-complete)", "Kết quả lượt chơi", "Xem điểm của lượt vừa chơi. Bấm **Chơi lại** để bắt đầu lượt mới với cùng bộ từ."],
   ],
+  // Một bước cho mỗi thẻ bài học, theo thứ tự trên màn. Hướng dẫn chỉ đi qua tab đang mở (Học hoặc Luyện tập):
+  // thẻ của tab kia không có trong trang nên bước của nó tự bị bỏ; engine không tự đổi tab.
+  // Kiểm tra trên bài thật dựng từ dữ liệu mẫu: apps/web/src/app/learner/Learning.guide.test.tsx.
   "/lesson/*": [
-    [":not(:has(> .lesson-part .lesson-example-wrap)) > .lesson-part:not(:has(.lesson-answer))", "Phần học", "Mỗi thẻ là một phần học: **từ vựng**, **ngữ pháp** hoặc **phát âm**. Đọc hết và bấm biểu tượng loa để nghe mẫu."],
-    // With translate icons (A1–A2 grammar examples, synonym/antonym chips with a meaning) the same step sits on the
-    // first card that has them: the vocabulary card, else the grammar card.
-    [".lesson-part:is(.lesson-part--vocabulary:has(.lesson-example-wrap--chip, .lesson-example-wrap--phrase), .lesson-part--grammar:has(.lesson-example-wrap:not(.lesson-example-wrap--chip)))", "Phần học", "Mỗi thẻ là **từ vựng**, **ngữ pháp** hoặc **phát âm**; bấm loa nghe mẫu. Chạm **biểu tượng dịch** trong câu ví dụ, cụm từ, từ đồng nghĩa, trái nghĩa để xem **nghĩa**."],
-    [".lesson-part:has(.lesson-answer)", "Phần luyện tập", "Trả lời rồi bấm **Nộp bài** (**Submit**). Làm đúng hoặc hết lượt, **bản dịch** câu hỏi và đáp án hiện ra; câu sai đề, bấm **Báo lỗi câu này** (**Report an issue**)."],
+    [".app-learner-page > div.card:has(.eyebrow)", "Bài chưa mở", "Bài chưa đến ngày hoặc cần xong **bài trước**; dòng chữ ghi lý do và ngày mở. Bấm nút chính để làm bài đang chặn hoặc **Luyện với Season**."],
+    [".lesson-heading", "Đầu bài học", "Tên bài, **chủ đề tuần** và **trạng thái** học. Bài có hai bước: **Học** trước, **Luyện tập** mở khi bạn học xong."],
+    [".lesson-part--objective", "Mục tiêu bài", "Những việc bạn **làm được** sau bài này. Đọc trước để biết cần chú ý gì khi học và làm bài tập."],
+    [".lesson-part--instruction", "Hướng dẫn", "Các bước nên làm **theo thứ tự** cho tab đang mở; nội dung đổi theo tab **Học** hay **Luyện tập**."],
+    [".lesson-part--vocabulary:not(:has(.vocabulary-card-phrases .lesson-example-wrap--phrase))", "Từ vựng", "Mỗi thẻ từ có **phiên âm**, **nghĩa** và ảnh minh hoạ. Bấm **loa** để nghe từ, bấm từng **cụm từ hay dùng** để nghe cả cụm."],
+    [".lesson-part--vocabulary:has(.vocabulary-card-phrases .lesson-example-wrap--phrase)", "Từ vựng", "Mỗi thẻ từ có **phiên âm**, **nghĩa** và ảnh minh hoạ. Bấm **loa** hoặc **cụm từ hay dùng** để nghe; chạm **biểu tượng dịch** cạnh cụm từ để xem **nghĩa**."],
+    [".lesson-vocabulary-group", "Nhóm từ bao trùm", "Các từ cùng nhóm nghĩa xếp dưới một **từ bao trùm** chung. Học cả nhóm để nhớ từ theo ngữ cảnh và phân biệt sắc thái."],
+    [".lesson-part--vocabulary:not(:has(.vocabulary-card-relations .lesson-example-wrap--chip)) .vocabulary-card-relations", "Từ liên quan", "Chip **Từ bao trùm**, **Họ từ** mở nhóm từ; **=** là đồng nghĩa, **≠** là trái nghĩa, **Khẩu ngữ**, **Văn chương** là sắc thái. Bấm chip để nghe hoặc xem thêm."],
+    [".lesson-part--vocabulary .vocabulary-card-relations:has(.lesson-example-wrap--chip)", "Từ liên quan", "Chip **Từ bao trùm**, **Họ từ** mở nhóm từ; **=** là đồng nghĩa, **≠** là trái nghĩa. Bấm chip để nghe, chạm **biểu tượng dịch** cuối chip để xem **nghĩa**."],
+    [".lesson-part--grammar:not(:has(.lesson-example-wrap))", "Ngữ pháp", "**Công thức** của cấu trúc, cách dùng và câu ví dụ. Bấm từng **câu ví dụ** để nghe cách nói."],
+    [".lesson-part--grammar:has(.lesson-example-wrap)", "Ngữ pháp", "**Công thức** của cấu trúc, cách dùng và câu ví dụ. Bấm **câu ví dụ** để nghe, chạm **biểu tượng dịch** để xem **nghĩa tiếng Việt**."],
+    [".lesson-part--pronunciation", "Phát âm", "Âm mục tiêu kèm **khẩu hình** và các **từ mẫu**. Bấm loa nghe hết từng từ mẫu, vì phần **Nói** chỉ mở khi đã nghe đủ."],
+    [".lesson-study-cta", "Xong phần Học", "Học hết các thẻ phía trên rồi bấm **Đã học xong → Làm bài tập** để mở **Luyện tập**. Thẻ ghi luôn **số phần bài tập** cần làm."],
+    [".lesson-part--listening", "Nghe", "Bấm **loa** hoặc trình phát để nghe đoạn audio, nghe lại nếu cần, rồi chọn đáp án đúng."],
+    // Vùng trả lời của bài tập đầu tiên; nút báo lỗi chỉ có sau khi học xong và khi câu chưa bị báo lỗi.
+    [".lesson-parts:has(.lesson-answer > button[aria-expanded]) .lesson-answer", "Trả lời và nộp", "Chọn hoặc viết câu trả lời rồi bấm **Nộp bài**; sai thì **làm lại** kèm gợi ý. Câu sai đề thì bấm **Báo lỗi câu này** để Vận hành xem lại."],
+    [".lesson-parts:not(:has(.lesson-answer > button[aria-expanded])) .lesson-answer", "Trả lời và nộp", "Chọn hoặc viết câu trả lời rồi bấm **Nộp bài**. Sai thì được **làm lại** kèm gợi ý; hết lượt thì **đáp án đúng** hiện ra."],
+    ['[data-testid="lesson-exercise-translation"]', "Bản dịch câu hỏi", "Làm đúng hoặc hết lượt thì **bản dịch** câu hỏi và đáp án hiện ra để bạn kiểm tra lại nghĩa."],
+    [".lesson-part--reading", "Đọc", "Đọc đoạn văn ngắn rồi trả lời câu hỏi bên dưới theo **nội dung bài đọc**."],
+    [".lesson-part--writing", "Viết", "Điền hoặc viết câu theo yêu cầu, dùng **từ** và **cấu trúc** vừa học ở tab Học."],
+    [".lesson-part--word_class", "Từ loại", "Chọn **dạng từ** đúng, như danh từ, động từ hay tính từ, cho chỗ trống trong câu."],
+    [".lesson-part--word_use", "Dùng từ", "Chọn từ đi đúng với cụm cho sẵn, tức **cách dùng từ** tự nhiên trong câu tiếng Anh."],
+    [".lesson-part--speaking:has(.lesson-speaking-gate)", "Mở phần Nói", "Phần Nói đang khóa: nghe lần lượt các **từ mẫu** ở thẻ **Phát âm** bên tab Học. Dòng **Đã nghe** cho biết còn thiếu từ nào."],
+    [".lesson-part--speaking:not(:has(.lesson-speaking-gate))", "Nói", "Nghe **câu mẫu**, rồi ghi âm câu của bạn và đổi một chi tiết cho hợp với bạn. Ghi xong thì bấm **Kiểm tra nói**."],
     [".lesson-appeal-form", "Báo lỗi phần bài", "Ghi rõ câu hoặc nội dung bạn cho là sai, đính kèm ảnh nếu có, rồi gửi để **Vận hành** xem lại.", true],
-    [".lesson-study-cta", "Xong phần Học", "Học hết các phần phía trên rồi bấm nút ở thẻ này để mở **Luyện tập**."],
-    [".lesson-completion", "Hoàn thành bài", "Làm xong các phần bắt buộc thì nút **Hoàn thành bài học** (**Complete lesson**) mở. Bấm để lưu tiến độ học hoặc lượt ôn lại."],
+    [".lesson-completion", "Hoàn thành bài", "Dòng chữ ghi **số phần đã xong**; đủ phần thì bấm **Hoàn thành bài** để lưu và mở bài tiếp. **Luyện với Season** mở trò chuyện luyện nói."],
+    ['.app-learner-page > .row:has(> .lesson-back)', "Bài ôn thứ Sáu", "Bài ôn lại **từ** và **cấu trúc** đã học trong tuần. Làm lần lượt từng phần cho tới hết bài."],
     [".weekly-review-sections", "Các phần bài ôn", "Bài ôn cuối tuần đi lần lượt từng phần. Mỗi dòng ghi **số câu đúng** trên tổng số câu của phần đó."],
     ["section.card:has(button.card.flat[aria-pressed])", "Khởi động lật thẻ", "Bấm từng thẻ để lật xem nghĩa. Phần này **không chấm điểm**, bỏ qua hoặc bắt đầu phần 1 khi sẵn sàng."],
     ['.app-learner-page:has(> .weekly-review-sections, .weekly-review-sections) section.card.stack:has([role="group"], textarea, .weekly-review-read-aloud)', "Câu đang làm", "Chọn đáp án, viết hoặc ghi âm theo yêu cầu của câu. Câu sai sẽ được **hỏi lại**; bấm biểu tượng loa để nghe."],
+    ['[data-testid="review-exercise-translation"]', "Bản dịch câu vừa làm", "Sau mỗi câu, **bản dịch** câu hỏi và đáp án hiện ở đây để bạn đối chiếu nghĩa trước khi sang câu tiếp."],
     ['section.card:is([aria-label="Đã xong bài ôn"], [aria-label="Review complete"])', "Đã xong bài ôn", "Kết quả bài ôn đã được lưu. **Bài đầu tuần sau** mở đúng ngày của nó; bấm nút trong thẻ để về Trang chủ."],
   ],
   "/onboard": [

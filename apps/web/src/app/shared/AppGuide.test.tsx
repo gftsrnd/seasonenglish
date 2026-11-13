@@ -169,54 +169,56 @@ describe("AppGuide", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("guides the lesson by its cards before practice unlocks", () => {
+  it("guides the lesson card by card before practice unlocks", () => {
     render(<><AppGuide role="learner" pathname="/lesson/1" compact={false} />
-      <ol><li className="card lesson-part">Từ vựng</li></ol>
+      <ol><li className="card lesson-part lesson-part--vocabulary">Từ vựng</li></ol>
       <section className="card lesson-study-cta"><button>Học xong</button></section>
       <section className="card lesson-completion"><button disabled>Hoàn thành</button></section>
     </>);
-    expect(walkSteps()).toEqual(["Phần học", "Xong phần Học", "Hoàn thành bài"]);
+    expect(walkSteps()).toEqual(["Từ vựng", "Xong phần Học", "Hoàn thành bài"]);
   });
 
-  it("folds the A1–A2 translate icon into the lesson part step on the grammar card", () => {
+  it("mentions the A1–A2 translate icon on the grammar card that has it", () => {
     render(<><AppGuide role="learner" pathname="/lesson/1" compact={false} />
       <ol><li className="card lesson-part lesson-part--vocabulary">Từ vựng</li>
         <li className="card lesson-part lesson-part--grammar"><span className="lesson-example-wrap"><button>I have sent it.</button><button aria-label="Xem nghĩa tiếng Việt" /><span role="tooltip" hidden>Tôi đã gửi.</span></span></li></ol>
       <section className="card lesson-study-cta"><button>Học xong</button></section>
     </>);
+    expect(walkSteps()).toEqual(["Từ vựng", "Ngữ pháp", "Xong phần Học"]);
     fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Tiếp theo" }));
     expect(within(screen.getByRole("dialog")).getByText(/biểu tượng dịch/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Đóng hướng dẫn" }));
-    expect(walkSteps()).toEqual(["Phần học", "Xong phần Học"]);
   });
 
-  it("folds the synonym/antonym meaning icon into the same lesson part step on the vocabulary card", () => {
+  it("mentions the synonym/antonym meaning icon on the relation chips", () => {
     render(<><AppGuide role="learner" pathname="/lesson/1" compact={false} />
-      <ol><li className="card lesson-part lesson-part--vocabulary"><span className="lesson-example-wrap lesson-example-wrap--chip"><button className="chip synonym">= assist</button><button aria-label="Xem nghĩa" /><span role="tooltip" hidden>hỗ trợ</span></span></li>
+      <ol><li className="card lesson-part lesson-part--vocabulary"><div className="vocabulary-card-relations"><span className="lesson-example-wrap lesson-example-wrap--chip"><button className="chip synonym">= assist</button><button aria-label="Xem nghĩa" /><span role="tooltip" hidden>hỗ trợ</span></span></div></li>
         <li className="card lesson-part lesson-part--grammar"><button>I have sent it.</button></li></ol>
     </>);
+    expect(walkSteps()).toEqual(["Từ vựng", "Từ liên quan", "Ngữ pháp"]);
     fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
-    expect(within(screen.getByRole("dialog")).getByText(/từ đồng nghĩa, trái nghĩa/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Đóng hướng dẫn" }));
-    expect(walkSteps()).toEqual(["Phần học"]);
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Tiếp theo" }));
+    expect(within(screen.getByRole("dialog")).getByText(/biểu tượng dịch/)).toBeTruthy();
   });
 
-  it("tells the learner the exercise translation appears once a question is finished", () => {
+  it("explains retry and the answer reveal on the first exercise's answer area", () => {
     render(<><AppGuide role="learner" pathname="/lesson/1" compact={false} />
-      <ol><li className="card lesson-part lesson-part--reading"><div className="lesson-answer"><button>Nộp bài</button></div></li></ol>
+      <ol className="lesson-parts"><li className="card lesson-part lesson-part--reading"><div className="lesson-answer"><button>Nộp bài</button></div></li></ol>
     </>);
+    expect(walkSteps()).toEqual(["Đọc", "Trả lời và nộp"]);
     fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Tiếp theo" }));
     expect(within(screen.getByRole("dialog")).getByText(/hết lượt/)).toBeTruthy();
   });
 
-  it("keeps the plain lesson part step when examples have no translation (B1+, older lessons)", () => {
+  it("keeps the plain grammar step when examples have no translation (B1+, older lessons)", () => {
     render(<><AppGuide role="learner" pathname="/lesson/1" compact={false} />
       <ol><li className="card lesson-part lesson-part--grammar"><button>I have sent it.</button></li></ol>
     </>);
     fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
     expect(within(screen.getByRole("dialog")).queryByText(/biểu tượng dịch/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Đóng hướng dẫn" }));
-    expect(walkSteps()).toEqual(["Phần học"]);
+    expect(walkSteps()).toEqual(["Ngữ pháp"]);
   });
 
   it("walks through the current screen, skipping missing targets", () => {
