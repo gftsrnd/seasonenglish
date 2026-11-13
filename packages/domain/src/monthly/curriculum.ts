@@ -56,11 +56,17 @@ export interface SupportTerm {
    */
   cefr?: CefrLevel;
   /**
-   * B1–C1 synonym/antonym only (12/11): a short simple-English definition the
-   * learner card shows instead of the Vietnamese `meaning`. Absent on A1–A2,
-   * on other relations and on pools generated before the field existed.
+   * B1–C1 (12/11): a short simple-English definition the learner card shows
+   * instead of the Vietnamese `meaning`. Required for synonym/antonym; from
+   * 13/11 also requested for umbrella / word-family words (their modal card).
+   * Absent on A1–A2 and on pools generated before the field existed.
    */
   definition?: string;
+  /**
+   * British IPA of the support word (13/11), shown on the umbrella / word-family
+   * modal card. Optional: pools generated before 13/11 carry none.
+   */
+  ipa?: string;
 }
 
 export const MONTHLY_SUPPORT_RELATIONS = ["umbrella", "synonym", "antonym", "word_family", "collocation"] as const;
@@ -518,7 +524,8 @@ export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): Mont
     dayNumber: dayByCoreId.get(term.relatedCoreTermId)!,
     ...(term.cefr ? { cefr: term.cefr } : {}),
     // B1–C1 synonym/antonym English definitions must survive planning, or lessons have nothing to attach.
-    ...(term.definition ? { definition: term.definition } : {})
+    ...(term.definition ? { definition: term.definition } : {}),
+    ...(term.ipa ? { ipa: term.ipa } : {})
   }));
   return buildMonthlyCurriculum({
     month: pool.month,

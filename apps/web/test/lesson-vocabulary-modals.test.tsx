@@ -5,6 +5,7 @@ import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LessonPart, LessonView } from "@e4s/contracts";
 import { LearnerLesson } from "../src/app/learner/Learning.js";
+import { OperatorLessonPreview } from "../src/app/operator/adapters.js";
 import type { LearnerCallbacks } from "../src/app/learner/contracts.js";
 
 afterEach(cleanup);
@@ -185,4 +186,83 @@ describe("lesson vocabulary relation modals", () => {
     expect(screen.queryByRole("button", { name: /workmate/u })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /fellow worker/u })).not.toBeInTheDocument();
   });
+});
+
+/**
+ * 13/11 complaint (B1 December, ATTENDEE / IMPROVEMENT): the learner lesson and
+ * the operator lesson preview share one Umbrella word / Word family modal.
+ * A1–A2 read the Vietnamese meaning; B1+ never see Vietnamese — the English
+ * definition when the entry has one, otherwise no meaning line.
+ */
+describe("umbrella / word-family modal cards by level (learner and operator preview)", () => {
+  const relationItem = {
+    word: "attendee", type: "noun", pronunciation: "/ˌætenˈdiː/", meaning: "người tham dự",
+    examples: ["Every attendee got a badge."], collocations: ["meeting attendee", "event attendee", "conference attendee"],
+    family: [
+      { word: "improve", type: "verb", pronunciation: "/ɪmˈpruːv/", meaning: "cải thiện", definition: "make something better" },
+      { word: "improved", type: "adjective", meaning: "được cải thiện" }
+    ],
+    umbrella: {
+      word: "meeting participant", type: "noun", meaning: "người tham gia cuộc họp",
+      siblings: [{ word: "speaker", type: "noun", meaning: "diễn giả", definition: "a person who gives a talk" }]
+    }
+  };
+  const partsFor = () => [{ code: "vocabulary", title: "Vocabulary", content: { items: [relationItem] } }] as LessonPart[];
+  const lessonAt = (cefr: "A1" | "B1"): LessonView => ({ ...lesson, cefr, content: { parts: partsFor() } });
+  const renderers = {
+    learner: (cefr: "A1" | "B1") => render(<LearnerLesson view={{ lesson: lessonAt(cefr) }} actions={actions()} />),
+    "operator preview": (cefr: "A1" | "B1") => render(<OperatorLessonPreview cefr={cefr} lessonId="lesson-1" parts={partsFor() as never} />)
+  } as const;
+
+  for (const [name, renderAt] of Object.entries(renderers)) {
+    it(`${name}: B1 shows word · type, IPA and the English definition only — no Vietnamese, no meaning line without a definition`, async () => {
+      const user = userEvent.setup();
+      renderAt("B1");
+      await user.click(screen.getByRole("button", { name: "Umbrella word: meeting participant" }));
+      let modal = screen.getByTestId("modal.vocab-umbrella");
+      expect(modal).toHaveTextContent("Vocabulary · attendee");
+      let cards = within(modal).getAllByRole("article");
+      expect(cards).toHaveLength(2);
+      expect(cards[0]).toHaveTextContent("meeting participant · noun");
+      // No English definition stored: word, part of speech and Listen only — never the Vietnamese meaning.
+      expect(cards[0]!.querySelector("p")).toBeNull();
+      expect(cards[1]).toHaveTextContent("speaker · noun");
+      expect(cards[1]).toHaveTextContent("a person who gives a talk");
+      expect(modal).not.toHaveTextContent(/người tham gia cuộc họp|diễn giả/u);
+      await user.click(within(modal).getByRole("button", { name: "Close" }));
+
+      await user.click(screen.getByRole("button", { name: "Word family (2)" }));
+      modal = screen.getByTestId("modal.vocab-family");
+      cards = within(modal).getAllByRole("article");
+      expect(cards).toHaveLength(2);
+      expect(cards[0]).toHaveTextContent("improve · verb");
+      expect(cards[0]).toHaveTextContent("/ɪmˈpruːv/");
+      expect(cards[0]).toHaveTextContent("make something better");
+      expect(cards[1]).toHaveTextContent("improved · adjective");
+      expect(cards[1]!.querySelector("p")).toBeNull();
+      expect(modal).not.toHaveTextContent(/cải thiện|được cải thiện/u);
+    });
+
+    it(`${name}: A1 shows the Vietnamese meaning on the same cards`, async () => {
+      const user = userEvent.setup();
+      renderAt("A1");
+      await user.click(screen.getByRole("button", { name: "Từ bao trùm: meeting participant" }));
+      let modal = screen.getByTestId("modal.vocab-umbrella");
+      let cards = within(modal).getAllByRole("article");
+      expect(cards[0]).toHaveTextContent("meeting participant · noun");
+      expect(cards[0]).toHaveTextContent("người tham gia cuộc họp");
+      expect(cards[1]).toHaveTextContent("diễn giả");
+      expect(modal).not.toHaveTextContent("a person who gives a talk");
+      await user.click(within(modal).getByRole("button", { name: "Đóng" }));
+
+      await user.click(screen.getByRole("button", { name: "Word family (2)" }));
+      modal = screen.getByTestId("modal.vocab-family");
+      cards = within(modal).getAllByRole("article");
+      expect(cards[0]).toHaveTextContent("improve · verb");
+      expect(cards[0]).toHaveTextContent("/ɪmˈpruːv/");
+      expect(cards[0]).toHaveTextContent("cải thiện");
+      expect(cards[0]).not.toHaveTextContent("make something better");
+      expect(cards[1]).toHaveTextContent("được cải thiện");
+    });
+  }
 });

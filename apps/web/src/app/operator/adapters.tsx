@@ -8,6 +8,7 @@ import type {
   ContentLessonMatrixView,
   ContentLessonSetVersionView,
   ContentImageView,
+  LessonVocabularyFamilyWord,
   LessonVocabularyItem,
   ContentPromptSettingsView,
   ContentReviewView,
@@ -655,13 +656,14 @@ function OperatorRecordingPreview() {
   return <div className="operator-speaking-recorder"><button className="btn-sm btn-ghost" type="button" aria-label="Ghi âm câu trả lời" onClick={() => void toggle()}>{recording ? <><Square size={15} aria-hidden="true" /> Dừng ghi</> : <><Mic size={16} aria-hidden="true" /> Ghi âm câu trả lời</>}</button>{error ? <p className="operator-recording-error">{error}</p> : null}{audioUrl ? <audio controls preload="metadata" src={audioUrl} aria-label="Nghe lại câu trả lời" /> : null}</div>;
 }
 
-function OperatorVocabularyCard({ item, index, media, hideUmbrella = false }: { item: Record<string, unknown>; index: number; media?: { lessonId: string; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined } | undefined; hideUmbrella?: boolean }) {
-  const [detail, setDetail] = useState<{ kind?: "umbrella" | "family"; title: string; currentWord?: string; umbrellaMeaning?: string; umbrellaAudioUrl?: string; description?: string; words: Array<{ word: string; meaning?: string; audioUrl?: string; current?: boolean }> } | null>(null);
+function OperatorVocabularyCard({ item, index, media, hideUmbrella = false }: { item: Record<string, unknown>; index: number; media?: { cefr?: string | undefined; lessonId: string; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined } | undefined; hideUmbrella?: boolean }) {
+  const [modal, setModal] = useState<VocabularyModalState | null>(null);
+  const language = learnerLessonLanguageForCefr(media?.cefr ?? "A1");
   const word = String(item.word ?? "—");
   const phrases = (asArray(item.collocations ?? item.phrases ?? item.examples) ?? (typeof item.collocations === "string" ? [item.collocations] : []))
     .filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim()))
     .slice(0, 3);
-  const family = relationEntries(item.family);
+  const family = modalWordEntries(item.family);
   const synonyms = relationEntries(item.synonyms);
   const antonyms = relationEntries(item.antonyms);
   const umbrella = asRecord(item.umbrella);
@@ -674,17 +676,17 @@ function OperatorVocabularyCard({ item, index, media, hideUmbrella = false }: { 
     ...(Array.isArray(item.collocationAudioUrls) ? { collocationAudioUrls: item.collocationAudioUrls.filter((value): value is string => typeof value === "string") } : {}),
     ...(Array.isArray(item.collocationTranslations) && Array.isArray(item.collocations) ? { collocationTranslations: item.collocationTranslations.map((value) => typeof value === "string" ? value : "") } : {}),
     ...(Array.isArray(item.exampleAudioUrls) ? { exampleAudioUrls: item.exampleAudioUrls.filter((value): value is string => typeof value === "string") } : {}),
-    ...(typeof item.audioUrl === "string" && item.audioUrl.trim() ? { audioUrl: item.audioUrl.trim() } : {})
+    ...(typeof item.audioUrl === "string" && item.audioUrl.trim() ? { audioUrl: item.audioUrl.trim() } : {}),
+    ...(family.length ? { family } : {}),
+    ...(umbrella && typeof umbrella.word === "string" && umbrella.word.trim() ? { umbrella: { ...modalWordEntries([umbrella])[0]!, meaning: typeof umbrella.meaning === "string" ? umbrella.meaning.trim() : "", siblings: modalWordEntries(umbrella.siblings) } } : {})
   };
-  const umbrellaWord = typeof umbrella?.word === "string" ? umbrella.word : "";
-  const umbrellaMeaning = typeof umbrella?.meaning === "string" ? umbrella.meaning.trim() : "";
-  const siblingEntries = relationEntries(umbrella?.siblings);
-  const umbrellaWords = umbrella ? [{ word, ...(typeof item.meaning === "string" && item.meaning.trim() ? { meaning: item.meaning.trim() } : {}), audioUrl: operatorVocabularyAudioSource(word, item.audioUrl), current: true }, ...siblingEntries] : [];
+  const umbrellaWord = vocabularyItem.umbrella?.word ?? "";
+  const siblingCount = (vocabularyItem.umbrella?.siblings ?? []).filter((sibling) => sibling.word.trim().toLocaleLowerCase() !== word.trim().toLocaleLowerCase()).length;
   const relations: VocabularyRelationChip[] = [
-    ...(!hideUmbrella && umbrellaWord ? [{ label: `TỪ BAO TRÙM ${umbrellaWord}`, ariaLabel: `Từ bao trùm: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: Math.max(0, umbrellaWords.length - 1), onClick: () => setDetail({ kind: "umbrella", title: umbrellaWord, currentWord: word, umbrellaMeaning, umbrellaAudioUrl: operatorVocabularyAudioSource(umbrellaWord, umbrella?.audioUrl), words: umbrellaWords }) }] : []),
+    ...(!hideUmbrella && umbrellaWord ? [{ label: `TỪ BAO TRÙM ${umbrellaWord}`, ariaLabel: `Từ bao trùm: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: siblingCount, onClick: () => setModal({ kind: "umbrella", item: vocabularyItem }) }] : []),
     ...synonyms.map(value => ({ label: value.word, ariaLabel: value.audioUrl ? `Nghe từ đồng nghĩa: ${value.word}` : value.word, tone: "synonym" as const, onClick: value.audioUrl ? () => playOperatorWord(value.word, value.audioUrl) : undefined })),
     ...antonyms.map(value => ({ label: value.word, ariaLabel: value.audioUrl ? `Nghe từ trái nghĩa: ${value.word}` : value.word, tone: "antonym" as const, onClick: value.audioUrl ? () => playOperatorWord(value.word, value.audioUrl) : undefined })),
-    ...(family.length ? [{ label: `Word family (${family.length})`, ariaLabel: `Word family (${family.length})`, icon: "family" as const, tone: "family" as const, onClick: () => setDetail({ kind: "family", title: "Word family", words: family }) }] : [])
+    ...(family.length ? [{ label: `Word family (${family.length})`, ariaLabel: `Word family (${family.length})`, icon: "family" as const, tone: "family" as const, onClick: () => setModal({ kind: "family", item: vocabularyItem }) }] : [])
   ];
   const loadImage = () => {
     const imageUrl = typeof item.imageUrl === "string" ? item.imageUrl.trim() : "";
@@ -693,8 +695,8 @@ function OperatorVocabularyCard({ item, index, media, hideUmbrella = false }: { 
     if (media?.resolveVocabularyImage) return media.resolveVocabularyImage(media.lessonId, index);
     return Promise.resolve({ status: "unavailable" } as const);
   };
-  const modal = detail && typeof document !== "undefined" ? createPortal(<div className="modal-backdrop vocabulary-relation-modal" role="presentation"><section className="dialog wide" role="dialog" aria-modal="true" aria-label={detail.kind === "umbrella" ? "Từ bao quát" : detail.title}><div className="row between vocabulary-relation-modal-header">{detail.kind === "umbrella" ? <div><div className="eyebrow">Từ vựng · {detail.currentWord}</div><h2>Từ bao quát</h2></div> : <strong className="vocabulary-relation-title">{detail.title}</strong>}<button className="btn-sm" type="button" aria-label="Đóng" onClick={() => setDetail(null)}>Đóng</button></div>{detail.kind === "umbrella" ? <div className="stack vocabulary-umbrella-content" style={{ gap: 12 }} aria-label="Từ bao quát"><article className="card flat vocabulary-umbrella-summary" aria-label={`Từ bao quát ${detail.title}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">Từ bao quát</div><h3>{detail.title}</h3><p>{detail.umbrellaMeaning}</p></div>{detail.umbrellaAudioUrl ? <button className="btn-sm btn-ghost operator-audio-button" type="button" aria-label={`Nghe từ bao trùm: ${detail.title}`} onClick={() => playOperatorWord(detail.title, detail.umbrellaAudioUrl)}><Volume2 size={16} aria-hidden="true" />Nghe</button> : null}</div></article><div><div className="small muted">Từ hiện tại và các từ cùng nhóm</div><div className="vocabulary-relation-audio-list">{detail.words.map(value => value.audioUrl ? <button className="btn-sm btn-ghost operator-audio-button vocabulary-relation-audio-item" type="button" aria-label={`Nghe từ cùng nhóm: ${value.word}`} onClick={() => playOperatorWord(value.word, value.audioUrl)} key={`${value.word}-${value.meaning ?? ""}`}><span><strong>{value.word}</strong>{value.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{value.meaning ? <small>{value.meaning}</small> : null}</span><Volume2 size={16} aria-hidden="true" /></button> : <div className="vocabulary-relation-audio-item" key={`${value.word}-${value.meaning ?? ""}`}><span><strong>{value.word}</strong>{value.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{value.meaning ? <small>{value.meaning}</small> : null}</span></div>)}</div></div></div> : <>{detail.description ? <p className="muted vocabulary-relation-description">{detail.description}</p> : null}<div className="vocabulary-relation-audio-list">{detail.words.map(value => value.audioUrl ? <button className="btn-sm btn-ghost operator-audio-button vocabulary-relation-audio-item" type="button" aria-label={`Nghe từ cùng họ: ${value.word}`} onClick={() => playOperatorWord(value.word, value.audioUrl)} key={`${value.word}-${value.meaning ?? ""}`}><span><strong>{value.word}</strong>{value.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{value.meaning ? <small>{value.meaning}</small> : null}</span><Volume2 size={16} aria-hidden="true" /></button> : <div className="vocabulary-relation-audio-item" key={`${value.word}-${value.meaning ?? ""}`}><span><strong>{value.word}</strong>{value.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{value.meaning ? <small>{value.meaning}</small> : null}</span></div>)}</div></>}</section></div>, document.body) : null;
-  return <><SharedVocabularyCard item={vocabularyItem} loadImage={loadImage} speak={speakOperatorText} relations={relations} />{modal}</>;
+  // Same Umbrella word / Word family modal as the learner and the operator lesson preview (slang-poetic cards).
+  return <><SharedVocabularyCard item={vocabularyItem} loadImage={loadImage} speak={speakOperatorText} relations={relations} />{modal ? <SharedVocabularyModal state={modal} speak={operatorLessonSpeak} language={language} close={() => setModal(null)} /> : null}</>;
 }
 
 function speakOperatorText(text: string) {
@@ -724,6 +726,19 @@ function relationEntries(value: unknown): Array<{ word: string; meaning?: string
     if (!record || typeof record.word !== "string" || !record.word.trim()) return [];
     const word = record.word.trim();
     return [{ word, ...(typeof record.meaning === "string" && record.meaning.trim() ? { meaning: record.meaning.trim() } : {}), audioUrl: operatorVocabularyAudioSource(word, record.audioUrl) }];
+  });
+}
+
+/** Family / umbrella entries for the shared modal: word, part of speech, IPA, meaning, English definition, audio. */
+function modalWordEntries(value: unknown): LessonVocabularyFamilyWord[] {
+  const text = (candidate: unknown) => typeof candidate === "string" && candidate.trim() ? candidate.trim() : undefined;
+  return (asArray(value) ?? []).flatMap((entry) => {
+    if (typeof entry === "string") return entry.trim() ? [{ word: entry.trim() }] : [];
+    const record = asRecord(entry);
+    const word = text(record?.word);
+    if (!record || !word) return [];
+    const type = text(record.type); const pronunciation = text(record.pronunciation) ?? text(record.ipa); const meaning = text(record.meaning); const definition = text(record.definition); const audioUrl = text(record.audioUrl);
+    return [{ word, ...(type ? { type } : {}), ...(pronunciation ? { pronunciation } : {}), ...(meaning ? { meaning } : {}), ...(definition ? { definition } : {}), ...(audioUrl ? { audioUrl } : {}) }];
   });
 }
 

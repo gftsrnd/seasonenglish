@@ -229,6 +229,8 @@ export const monthlyResourcePlanSchema = {
           },
           relatesToCoreId: { type: "string" },
           example: { type: "string" },
+          ipa: { type: "string", description: "British RP IPA of the support word in slashes, for umbrella, synonym, antonym and word_family items (omit for collocations)." },
+          definition: { type: "string", description: "B1-C1 only: a short simple-English definition (no Vietnamese) for synonym, antonym, umbrella and word_family items; omit at A1-A2 and for collocations." },
           cefr: { enum: ["A1", "A2", "B1", "B2", "C1"], description: "The support word's own CEFR level: the month's level or one adjacent level; word-family items may be any lower level or up to two levels above the month." },
         },
       },

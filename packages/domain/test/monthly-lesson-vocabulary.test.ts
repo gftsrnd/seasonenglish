@@ -227,3 +227,38 @@ describe("collocation translations (12/11)", () => {
     expect(monthlyCollocationTranslationIssues("C1", phrases, undefined)).toEqual([]);
   });
 });
+
+describe("umbrella / word-family card data from the plan (13/11)", () => {
+  const cores = [{ id: "c1", word: "attendee", type: "noun", ipa: "/ˌætenˈdiː/" }, { id: "c2", word: "improvement", type: "noun", ipa: "/ɪmˈpruːvmənt/" }];
+  const supports = [
+    { id: "u1", word: "meeting participant", type: "noun", meaning: "người tham gia cuộc họp", definition: "a person who takes part in a meeting", ipa: "/ˈmiːtɪŋ pɑːˈtɪsɪpənt/", relation: "umbrella", relatedCoreTermId: "c1" },
+    { id: "f1", word: "improve", type: "verb", meaning: "cải thiện", definition: "make something better", ipa: "/ɪmˈpruːv/", relation: "word_family", relatedCoreTermId: "c2" },
+    // Plans before 13/11: type and Vietnamese meaning only.
+    { id: "f2", word: "improved", type: "adjective", meaning: "được cải thiện", relation: "word_family", relatedCoreTermId: "c2" }
+  ];
+  const items = [{ word: "attendee", meaning: "người tham dự" }, { word: "improvement", meaning: "sự cải thiện" }];
+
+  it("B1+: umbrella keeps its part of speech, IPA and English definition; family words too", () => {
+    const [attendee, improvement] = attachMonthlyExpandedTerms(items, cores, supports, "B1");
+    expect(attendee!.umbrella).toMatchObject({ word: "meeting participant", type: "noun", pronunciation: "/ˈmiːtɪŋ pɑːˈtɪsɪpənt/", definition: "a person who takes part in a meeting" });
+    expect(improvement!.family).toEqual([
+      { word: "improve", type: "verb", pronunciation: "/ɪmˈpruːv/", meaning: "cải thiện", definition: "make something better" },
+      { word: "improved", type: "adjective", meaning: "được cải thiện" }
+    ]);
+  });
+
+  it("A1–A2: no English definition is attached; type and IPA still are", () => {
+    const [attendee, improvement] = attachMonthlyExpandedTerms(items, cores, supports, "A2");
+    expect(attendee!.umbrella).toMatchObject({ word: "meeting participant", type: "noun", pronunciation: "/ˈmiːtɪŋ pɑːˈtɪsɪpənt/", meaning: "người tham gia cuộc họp" });
+    expect((attendee!.umbrella as Record<string, unknown>).definition).toBeUndefined();
+    expect(improvement!.family).toEqual([
+      { word: "improve", type: "verb", pronunciation: "/ɪmˈpruːv/", meaning: "cải thiện" },
+      { word: "improved", type: "adjective", meaning: "được cải thiện" }
+    ]);
+  });
+
+  it("a model-written umbrella with the planned word gains the plan's missing fields", () => {
+    const [attendee] = attachMonthlyExpandedTerms([{ word: "attendee", umbrella: { word: "meeting participant", meaning: "người dự họp" } }], cores, supports, "B1");
+    expect(attendee!.umbrella).toMatchObject({ word: "meeting participant", meaning: "người dự họp", type: "noun", definition: "a person who takes part in a meeting" });
+  });
+});

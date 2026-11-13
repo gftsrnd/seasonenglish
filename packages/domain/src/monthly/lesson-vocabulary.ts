@@ -15,8 +15,10 @@ export interface MonthlyVocabularyCore {
 }
 export interface MonthlyVocabularySupport {
   id: string; word: string; meaning?: string; type?: string; relation: string; relatedCoreTermId?: string;
-  /** B1–C1 synonym/antonym only: a short simple-English definition shown on the card instead of the Vietnamese meaning. */
+  /** B1–C1 synonym/antonym (required) and umbrella/word-family (when the plan has it): a short simple-English definition shown instead of the Vietnamese meaning. */
   definition?: string;
+  /** British IPA of the support word when the plan has it (plans before 13/11 carry none). */
+  ipa?: string;
 }
 
 type Item = Record<string, unknown>;
@@ -61,8 +63,22 @@ function mergeEntries(
 function relationEntry(term: MonthlyVocabularySupport, cefr: string | undefined): Record<string, unknown> {
   const englishOnly = cefr === "B1" || cefr === "B2" || cefr === "C1";
   const definition = term.definition?.trim();
-  if (englishOnly) return { word: term.word, ...(definition ? { definition } : {}) };
-  return { word: term.word, ...(term.meaning ? { note: term.meaning } : {}) };
+  const ipa = term.ipa?.trim();
+  if (englishOnly) return { word: term.word, ...(definition ? { definition } : {}), ...(ipa ? { pronunciation: ipa } : {}) };
+  return { word: term.word, ...(term.meaning ? { note: term.meaning } : {}), ...(ipa ? { pronunciation: ipa } : {}) };
+}
+
+/**
+ * A planned word-family / umbrella word for the shared slang-style modal card
+ * (13/11): word, part of speech, IPA and the Vietnamese meaning; B1–C1 also the
+ * plan's English definition (learners from B1 read only that, never the
+ * Vietnamese meaning). Plans without IPA / definition simply leave them out.
+ */
+function relationWordEntry(term: MonthlyVocabularySupport, cefr: string | undefined): Record<string, unknown> {
+  const englishOnly = cefr === "B1" || cefr === "B2" || cefr === "C1";
+  const definition = term.definition?.trim();
+  const ipa = term.ipa?.trim();
+  return { word: term.word, ...(term.type ? { type: term.type } : {}), ...(ipa ? { pronunciation: ipa } : {}), ...(term.meaning ? { meaning: term.meaning } : {}), ...(englishOnly && definition ? { definition } : {}) };
 }
 
 /**
@@ -169,7 +185,7 @@ export function attachMonthlyExpandedTerms(
     const umbrellaWord = String(umbrella.word ?? "").toLocaleLowerCase();
     const siblings = Array.isArray(umbrella.siblings) && umbrella.siblings.length ? withCoreIpa(asWordEntries(umbrella.siblings), cores) : enriched
       .filter((other) => other !== item && other && typeof other.umbrella === "object" && String((other.umbrella as Item | null)?.word ?? "").toLocaleLowerCase() === umbrellaWord)
-      .map((other) => ({ word: other.word, ...(other.type ? { type: other.type } : {}), ...(other.pronunciation ? { pronunciation: other.pronunciation } : {}), ...(other.meaning ? { meaning: other.meaning } : {}) }));
+      .map((other) => ({ word: other.word, ...(other.type ? { type: other.type } : {}), ...(other.pronunciation ? { pronunciation: other.pronunciation } : {}), ...(other.meaning ? { meaning: other.meaning } : {}), ...(typeof other.definition === "string" && other.definition.trim() ? { definition: other.definition.trim() } : {}) }));
     return { ...item, umbrella: { ...umbrella, siblings } };
   });
 }
@@ -206,7 +222,7 @@ function attachTerms(
     const unplanned = (relation: "synonym" | "antonym") => core && cefr && MONTHLY_CARD_LEVELS.has(cefr) ? (entry: Item) => monthlyModelRelationEntry(entry, relation, cefr) : undefined;
     item.synonyms = mergeEntries(item.synonyms, linked("synonym").map((term) => relationEntry(term, cefr)), unplanned("synonym"));
     item.antonyms = mergeEntries(item.antonyms, linked("antonym").map((term) => relationEntry(term, cefr)), unplanned("antonym"));
-    item.family = withCoreIpa(mergeEntries(item.family, linked("word_family").map((term) => ({ word: term.word, ...(term.type ? { type: term.type } : {}), ...(term.meaning ? { meaning: term.meaning } : {}) }))), cores);
+    item.family = withCoreIpa(mergeEntries(item.family, linked("word_family").map((term) => relationWordEntry(term, cefr))), cores);
     const plannedCollocations = linked("collocation");
     const collocations = plannedCollocations.map((term) => term.word);
     // A1–A2: one Vietnamese line per phrase, aligned with collocations (planned phrases take the plan's meaning).
@@ -245,7 +261,15 @@ function attachTerms(
       else delete item.collocationTranslations;
     }
     const umbrella = linked("umbrella")[0];
-    if (umbrella && !(item.umbrella && typeof item.umbrella === "object")) item.umbrella = { word: umbrella.word, ...(umbrella.meaning ? { meaning: umbrella.meaning } : {}) };
+    if (umbrella && !(item.umbrella && typeof item.umbrella === "object")) item.umbrella = relationWordEntry(umbrella, cefr);
+    else if (umbrella && item.umbrella && typeof item.umbrella === "object") {
+      // The model wrote its own umbrella: keep it, add the plan's type / IPA / definition it lacks.
+      const current = item.umbrella as Item;
+      if (String(current.word ?? "").trim().toLocaleLowerCase() === umbrella.word.trim().toLocaleLowerCase()) {
+        const planned = relationWordEntry(umbrella, cefr);
+        item.umbrella = { ...current, ...Object.fromEntries(Object.entries(planned).filter(([field]) => current[field] === undefined)) };
+      }
+    }
     if (item.umbrella && typeof item.umbrella === "object") item.umbrella = withCoreIpa([item.umbrella as Item], cores)[0];
     if (core) {
       // The month's frozen illustration (AI or uploaded) replaces any searched photo.

@@ -1324,3 +1324,46 @@ describe("L-042 register alternatives in the resource pool", () => {
     expect(isCurrentMonthlyResourceCheckpointCategory("registerTerms", { schemaVersion: CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS.registerTerms })).toBe(true);
   });
 });
+
+describe("13/11: umbrella / word-family / synonym supports carry type, IPA and (B1+) an English definition", () => {
+  const withCardData = (cefr: "A2" | "B1") => {
+    const plan = planFor();
+    if (cefr === "B1") {
+      const catalog = monthlyPronunciationCatalog("B1");
+      plan.pronunciationTargets.forEach((target, index) => { target.ipa = catalog[index]!.notation; });
+    }
+    // index 0 umbrella, 1 synonym, 3 word_family, 4 collocation (see planFor).
+    Object.assign(plan.expandedTerms[0]!, { ipa: "/ˈmiːtɪŋ/", definition: "a person who takes part in a meeting" });
+    Object.assign(plan.expandedTerms[1]!, { ipa: "/ˈwɝkɚ/" });
+    Object.assign(plan.expandedTerms[3]!, { ipa: "/ɪmˈpruːv/", definition: "làm cho tốt hơn" });
+    Object.assign(plan.expandedTerms[4]!, { ipa: "/ˈkɒl/" });
+    return plan;
+  };
+
+  it("asks for IPA on every relation but collocations, and for umbrella / word-family definitions from B1", () => {
+    expect(buildMonthlySupportLevelGuidance("B1")).toContain("Every synonym, antonym, umbrella and word_family item also carries definition");
+    expect(buildMonthlySupportLevelGuidance("B1")).toContain("Every umbrella, synonym, antonym and word_family item also carries ipa");
+    expect(buildMonthlySupportLevelGuidance("A1")).toContain("do not return a definition field");
+    expect(buildMonthlySupportLevelGuidance("A1")).toContain("also carries ipa");
+  });
+
+  it("B1 keeps a valid British IPA and English definition, drops an American IPA, a Vietnamese definition and a collocation IPA; planning keeps them", () => {
+    const pool = buildMonthlyResourcesFromAiPlan(month, "B1", theme, criteria, withCardData("B1"));
+    const [umbrella, synonym, , family, collocation] = pool.supportTerms;
+    expect(umbrella).toMatchObject({ relation: "umbrella", type: "noun", ipa: "/ˈmiːtɪŋ/", definition: "a person who takes part in a meeting" });
+    expect(synonym!.ipa).toBeUndefined();
+    expect(family).toMatchObject({ relation: "word_family", ipa: "/ɪmˈpruːv/" });
+    expect(family!.definition).toBeUndefined();
+    expect(collocation!.ipa).toBeUndefined();
+    const contract = planMonthlyResourcePool(pool);
+    expect(contract.supportTerms[0]).toMatchObject({ ipa: "/ˈmiːtɪŋ/", definition: "a person who takes part in a meeting" });
+  });
+
+  it("A2 keeps the IPA but no definition; old plans without the fields stay valid", () => {
+    const pool = buildMonthlyResourcesFromAiPlan(month, "A2", theme, criteria, withCardData("A2"));
+    expect(pool.supportTerms[0]).toMatchObject({ ipa: "/ˈmiːtɪŋ/" });
+    expect(pool.supportTerms[0]!.definition).toBeUndefined();
+    const old = buildMonthlyResourcesFromAiPlan(month, "A2", theme, criteria, planFor());
+    expect(old.supportTerms.every((term) => term.ipa === undefined && term.definition === undefined)).toBe(true);
+  });
+});

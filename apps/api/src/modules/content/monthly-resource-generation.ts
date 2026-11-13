@@ -2,7 +2,7 @@ import { MONTHLY_RELATION_DEFINITION_MAX_WORDS, monthlyRelationMeaningIssue, sel
 import type { CefrLevel } from "@e4s/contracts";
 import { monthlyResourcePlanOutputSchema, type MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.js";
-import { MONTHLY_BRITISH_IPA_RULE } from "./monthly-british-ipa.js";
+import { MONTHLY_BRITISH_IPA_RULE, monthlyBritishIpaIssue } from "./monthly-british-ipa.js";
 import { buildMonthlyCoreCefrGuidance, buildMonthlyOtherLevelCoreExclusionText, buildMonthlyPronunciationExampleRules, getMonthlyCoreLevelIssue, getMonthlyPronunciationCatalogExampleIssue, getMonthlyPronunciationExampleQualityIssue } from "./monthly-resource-quality-gates.js";
 
 /**
@@ -21,10 +21,25 @@ export function buildMonthlySupportLevelGuidance(cefr: string): string {
  * What a synonym/antonym support must say about its meaning (12/11): learners
  * see it next to the word on the vocabulary card. A1–A2 read the Vietnamese
  * meaning; B1–C1 read a short English definition and no Vietnamese.
+ * 13/11: umbrella / word-family words are shown as cards too ("word · part of
+ * speech", IPA, meaning), so they carry a British IPA and, from B1, the same
+ * kind of English definition.
  */
 export function buildMonthlyRelationMeaningGuidance(cefr: string): string {
-  if (cefr === "A1" || cefr === "A2") return "Every synonym and antonym item's meaning is its own short Vietnamese meaning (learners at this level read it next to the word); do not return a definition field.";
-  return `Every synonym and antonym item also carries definition: a short simple-English definition of that support word in this sense (2-${MONTHLY_RELATION_DEFINITION_MAX_WORDS} words, vocabulary easier than CEFR ${cefr}, no Vietnamese, never using the word itself), e.g. assist: "help someone do something"; reject: "say no to something". Learners at this level read it next to the word; the Vietnamese meaning field stays for staff. Other relations take no definition.`;
+  const ipa = "Every umbrella, synonym, antonym and word_family item also carries ipa: the British RP IPA of that support word in slashes (e.g. /ˈmiːtɪŋ/); collocations take no ipa.";
+  if (cefr === "A1" || cefr === "A2") return `Every synonym and antonym item's meaning is its own short Vietnamese meaning (learners at this level read it next to the word); do not return a definition field. ${ipa}`;
+  return `Every synonym, antonym, umbrella and word_family item also carries definition: a short simple-English definition of that support word in this sense (2-${MONTHLY_RELATION_DEFINITION_MAX_WORDS} words, vocabulary easier than CEFR ${cefr}, no Vietnamese, never using the word itself), e.g. assist: "help someone do something"; reject: "say no to something"; meeting participant: "a person who takes part in a meeting". Learners at this level read it next to the word and never see Vietnamese; the Vietnamese meaning field stays for staff. Collocations take no definition. ${ipa}`;
+}
+
+/**
+ * The optional umbrella / word-family English definition (13/11) is kept only
+ * when it passes the same check as a synonym definition; otherwise the card
+ * shows no meaning line at B1+ (never the Vietnamese meaning).
+ */
+function optionalRelationDefinition(cefr: string, word: string, definition: string | undefined): string | undefined {
+  const value = definition?.trim();
+  if (!value || cefr === "A1" || cefr === "A2") return undefined;
+  return monthlyRelationMeaningIssue(cefr, { word, relation: "synonym", definition: value }) ? undefined : value;
 }
 
 /** Core level rule shared by the core candidate prompts. */
@@ -1175,8 +1190,11 @@ export function buildMonthlyResourcesFromAiPlan(
       component: "expanded" as const,
       relatedCoreTermId: coreIdMap.get(term.relatesToCoreId) ?? term.relatesToCoreId,
       ...(term.cefr ? { cefr: term.cefr } : {}),
-      // B1–C1 synonym/antonym definitions only; A1–A2 learners read the Vietnamese meaning.
-      ...(term.definition?.trim() && (term.relation === "synonym" || term.relation === "antonym") && !["A1", "A2"].includes(cefr) ? { definition: term.definition.trim() } : {})
+      // B1–C1 synonym/antonym definitions (gated), umbrella/word-family ones when valid (13/11); A1–A2 learners read the Vietnamese meaning.
+      ...(term.definition?.trim() && (term.relation === "synonym" || term.relation === "antonym") && !["A1", "A2"].includes(cefr) ? { definition: term.definition.trim() } : {}),
+      ...((term.relation === "umbrella" || term.relation === "word_family") && optionalRelationDefinition(cefr, term.word, term.definition) ? { definition: optionalRelationDefinition(cefr, term.word, term.definition)! } : {}),
+      // 13/11: British IPA for the modal card; a malformed or American transcription is dropped, never repaired or invented.
+      ...(term.relation !== "collocation" && term.ipa?.trim() && !monthlyBritishIpaIssue(term.word, term.ipa) ? { ipa: term.ipa.trim() } : {})
     }));
   const grammarTopics = plan.grammarTopics.map((topic, index) => ({
     id: `${cefr.toLowerCase()}-grammar-${index + 1}`,

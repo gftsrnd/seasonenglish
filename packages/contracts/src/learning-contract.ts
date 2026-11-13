@@ -94,6 +94,8 @@ export interface LessonVocabularyFamilyWord {
   word: string;
   type?: string;
   meaning?: string;
+  /** B1–C1: short simple-English definition; B1+ learners see it instead of the Vietnamese meaning (never a Vietnamese fallback). */
+  definition?: string;
   pronunciation?: string;
   audioUrl?: string;
 }
@@ -112,7 +114,10 @@ export interface LessonVocabularySynonym {
 export interface LessonVocabularyUmbrella {
   word: string;
   meaning: string;
-  /** IPA, only when the umbrella word is also one of the month's core words (never invented). */
+  type?: string;
+  /** B1–C1: short simple-English definition (see LessonVocabularyFamilyWord.definition). */
+  definition?: string;
+  /** IPA from the plan's support term, or the month's core word with the same spelling (never invented). */
   pronunciation?: string;
   audioUrl?: string;
   siblings: LessonVocabularyFamilyWord[];

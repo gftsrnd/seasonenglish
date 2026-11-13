@@ -1237,9 +1237,11 @@ function UmbrellaModal({ item, speak, language }: { item: LessonVocabularyItem; 
 /**
  * One word of the umbrella / word-family modals, in the Slang & poetic card
  * layout (13/11): "word · part of speech", IPA when the data has it, Listen,
- * then its meaning. A1–A2 show the Vietnamese meaning; B1+ the English
- * definition when the entry carries one, otherwise the stored meaning as before.
- * No kind tag and no usage / source line.
+ * then its meaning. A1–A2 show the Vietnamese meaning; B1+ only the English
+ * definition — no Vietnamese from B1: without a definition the card shows the
+ * word, part of speech and IPA with no meaning line.
+ * No kind tag and no usage / source line. Used by the learner lesson, the
+ * operator lesson preview and the operator vocabulary card alike.
  */
 function RelationWordCard({ word, listenLabel, speak, language, className, ariaLabel }: {
   word: { word: string; type?: string | undefined; meaning?: string | undefined; definition?: string | undefined; pronunciation?: string | undefined; audioUrl?: string | undefined };
@@ -1250,7 +1252,7 @@ function RelationWordCard({ word, listenLabel, speak, language, className, ariaL
   ariaLabel?: string;
 }) {
   const copy = learnerLessonCopy[language];
-  const meaning = ((language === "en" ? word.definition : undefined) ?? word.meaning)?.trim();
+  const meaning = (language === "en" ? word.definition : word.meaning)?.trim();
   const ipa = word.pronunciation?.trim();
   return <article className={`card flat vocabulary-relation-word-card${className ? ` ${className}` : ""}`} style={{ minWidth: 0 }} {...(ariaLabel ? { "aria-label": ariaLabel } : {})}>
     <div className="row between" style={{ gap: 12, alignItems: "flex-start" }}>

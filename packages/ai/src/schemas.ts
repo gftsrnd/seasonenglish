@@ -967,10 +967,14 @@ const monthlyResourceExpandedTermSchema = z.object({
   // VH-R33: the support word's own CEFR level (month level or ±1). Optional so
   // older checkpoints validate; an unusable label is dropped, not fatal.
   cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]).optional().catch(undefined),
-  // 12/11: B1–C1 synonym/antonym only, a short simple-English definition shown
-  // to learners instead of the Vietnamese meaning. Optional for other relations,
-  // A1–A2 and older checkpoints; the API gate requires it where it applies.
-  definition: z.string().trim().max(200).optional()
+  // 12/11: B1–C1 synonym/antonym, a short simple-English definition shown
+  // to learners instead of the Vietnamese meaning; 13/11 also umbrella and
+  // word-family words (their modal card). Optional for A1–A2 and older
+  // checkpoints; the API gate requires it only for synonym/antonym.
+  definition: z.string().trim().max(200).optional(),
+  // 13/11: British IPA of the support word (umbrella / word-family / synonym /
+  // antonym modal cards). Optional so older checkpoints validate unchanged.
+  ipa: z.string().trim().max(120).optional()
 }).strict();
 const monthlyResourceGrammarStepSchema = z.object({
   id: z.string().trim().min(1).max(100), focus: z.string().trim().min(1).max(200),
@@ -1009,7 +1013,7 @@ export const monthlyResourcePlanOutputJsonSchema = {
   type: "object", additionalProperties: false, required: ["coreTerms", "expandedTerms", "grammarTopics", "pronunciationTargets"],
   properties: {
     coreTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "ipa"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, ipa: { type: "string" }, cefr: { type: "string", enum: ["A1", "A2", "B1", "B2", "C1"] } } } },
-    expandedTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "relation", "relatesToCoreId"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, relation: { type: "string", enum: ["umbrella", "synonym", "antonym", "word_family", "collocation"] }, relatesToCoreId: { type: "string" }, cefr: { type: "string", enum: ["A1", "A2", "B1", "B2", "C1"] }, definition: { type: "string", description: "B1-C1 synonym/antonym only: a short simple-English definition (2-14 words, easier than the month level, no Vietnamese, not using the word itself). Omit at A1-A2 and for other relations." } } } },
+    expandedTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "relation", "relatesToCoreId"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, relation: { type: "string", enum: ["umbrella", "synonym", "antonym", "word_family", "collocation"] }, relatesToCoreId: { type: "string" }, cefr: { type: "string", enum: ["A1", "A2", "B1", "B2", "C1"] }, definition: { type: "string", description: "B1-C1 synonym, antonym, umbrella and word_family items: a short simple-English definition (2-14 words, easier than the month level, no Vietnamese, not using the word itself). Omit at A1-A2 and for collocations." }, ipa: { type: "string", description: "British IPA of the support word in slashes, e.g. /ˈmiːtɪŋ/, for umbrella, synonym, antonym and word_family items. Omit for collocations." } } } },
     grammarTopics: { type: "array", maxItems: 2, items: { type: "object", additionalProperties: false, required: ["id", "title", "steps"], properties: { id: { type: "string" }, title: { type: "string" }, steps: { type: "array", minItems: 3, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["id", "focus", "formula", "usage", "examples", "dailyObjectives"], properties: { dailyObjectives: { type: "array", minItems: 2, maxItems: 2, items: { type: "string" } }, id: { type: "string" }, focus: { type: "string" }, formula: { type: "string" }, usage: { type: "string" }, examples: { type: "array", minItems: 3, items: { type: "string" } } } } } } } },
     pronunciationTargets: { type: "array", maxItems: 4, items: { type: "object", additionalProperties: false, required: ["id", "ipa", "label", "explanation", "words"], properties: { id: { type: "string" }, ipa: { type: "string" }, label: { type: "string" }, explanation: { type: "string" }, words: { type: "array", minItems: 9, items: { type: "object", additionalProperties: false, required: ["word", "ipa"], properties: { word: { type: "string" }, ipa: { type: "string" } } } } } } }
   }
