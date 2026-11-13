@@ -16,7 +16,7 @@ import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerLea
 import { gradeLessonAnswer, SENSITIVE_NAME_MESSAGE_VI, sensitiveTextIssue, validateGeneratedFeedback } from "@e4s/domain/content";
 import { evaluateMonthlyExamEligibility, learnerMonthlySeasonTarget, monthlyAttendanceCountedDates, MONTHLY_EXAM_ENTRY_CUTOFF, monthlyExamEntryState } from "@e4s/domain/progression";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
-import { exerciseTranslationRevealed, readExerciseTranslation, withoutExerciseTranslations } from "@e4s/domain/monthly";
+import { exerciseTranslationRevealed, monthlyExerciseTranslationsForLevel, readExerciseTranslation, withoutExerciseTranslations } from "@e4s/domain/monthly";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
@@ -598,7 +598,7 @@ export function registerLearningRoutes(
     }
     if (!result) return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
     if (result.evidence.aiGrading === "pending") productiveGrading?.kick();
-    const translation = finishedAttemptTranslation(part, result.evidence.status);
+    const translation = finishedAttemptTranslation(part, result.evidence.status, lesson.monthlyKind ? lesson.cefr : undefined);
     return translation ? { ...result, translation } : result;
   });
 
@@ -911,11 +911,13 @@ function canonicalPartOfSpeech(value: string | undefined): string | undefined {
  * finished: a correct answer or the attempt limit reached (wrong_exhausted).
  * Friday reviews never send them in the lesson view (the review answer result
  * carries them). Legacy weekly lessons keep the explicit "view translation" step.
+ * 13/11: a B1+ monthly lesson never sends them, even when older content has them.
  */
 function learnerSafeTranslations(lesson: LearnerLessonRecord, part: LearnerLessonRecord["content"]["parts"][number]): LearnerLessonRecord["content"]["parts"][number] {
   const content = part.content as Record<string, unknown>;
   const hasTranslation = JSON.stringify(content).includes("Translation\"");
   if (!hasTranslation) return part;
+  if (lesson.monthlyKind && !monthlyExerciseTranslationsForLevel(lesson.cefr)) return { ...part, content: withoutExerciseTranslations(content) };
   const evidence = lesson.progress.evidence[part.code];
   const revealed = lesson.monthlyKind === "review" ? false
     : exerciseTranslationRevealed(evidence?.status) || (!lesson.monthlyKind && (evidence?.status === "translated" || Boolean(evidence?.translationViewed)));
@@ -923,9 +925,10 @@ function learnerSafeTranslations(lesson: LearnerLessonRecord, part: LearnerLesso
   return { ...part, content: withoutExerciseTranslations(content) };
 }
 
-/** The translation a finished attempt hands to the learner, or undefined before the question is finished. */
-export function finishedAttemptTranslation(part: { content: Record<string, unknown> } | undefined, status: string | undefined): { question: string; answer: string } | undefined {
+/** The translation a finished attempt hands to the learner, or undefined before the question is finished (and always from B1, 13/11). */
+export function finishedAttemptTranslation(part: { content: Record<string, unknown> } | undefined, status: string | undefined, cefr?: string | null): { question: string; answer: string } | undefined {
   if (!part || !exerciseTranslationRevealed(status)) return undefined;
+  if (cefr !== undefined && !monthlyExerciseTranslationsForLevel(cefr)) return undefined;
   return readExerciseTranslation(part.content) ?? undefined;
 }
 

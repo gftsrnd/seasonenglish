@@ -931,7 +931,14 @@ export class MonthlyContentRepository {
     await this.audit(actor, "monthly.day_quality_acknowledged", day.id, { frameworkId, dayNumber, findingKeys, currentDayLightCount });
   }
 
-  async approveMonthlyDay(actorId: string, frameworkId: string, dayNumber: number): Promise<void> {
+  /**
+   * Approves a saved day draft. `acknowledgeSevereFindings` (13/11, "Vẫn duyệt")
+   * lets the Operator approve while severe findings remain: every remaining
+   * finding is accepted at once and the override is recorded on the day
+   * (quality_acknowledgement) and in audit_events. `integrityIssues` checks the
+   * stored lesson can still render and play; any issue keeps the day blocked.
+   */
+  async approveMonthlyDay(actorId: string, frameworkId: string, dayNumber: number, options: MonthlyDayApprovalOptions = {}): Promise<void> {
     const actor = await this.requireContentOperator(actorId);
     const frameworkMonth = await this.monthForFramework(frameworkId, actor.organization_id);
     if (!frameworkMonth) throw new Error("Monthly framework was not found");
@@ -944,20 +951,46 @@ export class MonthlyContentRepository {
       [frameworkId, dayNumber, actor.organization_id]
     );
     const day = result.rows[0];
-    if (!day || !day.lesson_id) throw httpError(404, "MONTHLY_DAY_DRAFT_NOT_FOUND", "Không tìm thấy bản nháp bài học.");
-    day.quality_report = activeQualityReport(day.quality_report);
-    if (day.status !== "draft" || day.quality_report.severe.length) throw httpError(409, "MONTHLY_DAY_QUALITY_BLOCKED", "Bài chưa thể duyệt. Hãy mở bản nháp và sửa các mục chất lượng trước khi duyệt lại.");
-    if (day.quality_report.light.length > 2) throw httpError(409, "MONTHLY_DAY_QUALITY_BLOCKED", "Bài có quá hai cảnh báo. Hãy sửa bớt cảnh báo trước khi duyệt bài.");
-    const expectedKeys = day.quality_report.light.map(qualityFindingKey);
-    const acknowledged = new Set(day.quality_acknowledgement?.findingCodes ?? []);
-    if (expectedKeys.some((key) => !acknowledged.has(key))) throw httpError(409, "MONTHLY_DAY_QUALITY_ACK_REQUIRED", "Hãy kiểm tra và xác nhận từng cảnh báo trước khi duyệt.");
-    await this.database.query("update lesson_versions set status = 'published' where lesson_id in (select id from lessons where id = $1) and status = 'draft'", [day.lesson_id]);
-    await this.database.query("update lesson_set_versions set status = 'published', published_at = now() where id = (select lesson_set_version_id from lessons where id = $1)", [day.lesson_id]);
-    await this.database.query(
-      "update month_lessons set status = 'approved', approved_by = $2, approved_at = now(), updated_at = now() where id = $1",
-      [day.id, actorId]
-    );
-    await this.audit(actor, "monthly.day_approved", day.id, { frameworkId, dayNumber, scopeHash: day.scope_hash });
+    if (day) day.quality_report = activeQualityReport(day.quality_report);
+    const decision = monthlyDayApprovalDecision(day ?? null, options.acknowledgeSevereFindings === true);
+    if (!decision.ok) throw httpError(decision.status, decision.code, decision.message);
+    const lessonId = day!.lesson_id!;
+    const override = decision.override;
+    if (override) {
+      // Never past a broken lesson: the stored draft must still render and play.
+      const stored = await this.database.query<{ content: { parts?: Array<{ code: string; content: unknown }> } }>(
+        "select content from lesson_versions where lesson_id = $1 order by version desc limit 1",
+        [lessonId]
+      );
+      const issues = options.integrityIssues?.(stored.rows[0]?.content?.parts ?? []) ?? [];
+      if (issues.length) throw httpError(409, "MONTHLY_DAY_INTEGRITY_BLOCKED", `Không thể duyệt: bài đang hỏng cấu trúc nên học viên không mở hoặc không làm được. Hãy sửa trước: ${issues.join("; ")}.`);
+    }
+    await this.database.query("update lesson_versions set status = 'published' where lesson_id in (select id from lessons where id = $1) and status = 'draft'", [lessonId]);
+    await this.database.query("update lesson_set_versions set status = 'published', published_at = now() where id = (select lesson_set_version_id from lessons where id = $1)", [lessonId]);
+    const approvedAt = new Date().toISOString();
+    if (override) {
+      const acknowledgement: OperatorAcknowledgementView = { actorId, acknowledgedAt: approvedAt, findingCodes: override.findingKeys, severeOverride: true, severeFindingCodes: override.severeCodes };
+      await this.database.query(
+        "update month_lessons set status = 'approved', approved_by = $2, approved_at = $3::timestamptz, quality_acknowledgement = $4::jsonb, updated_at = now() where id = $1",
+        [day!.id, actorId, approvedAt, JSON.stringify(acknowledgement)]
+      );
+      await this.database.query(
+        `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'monthly.day_approved_with_severe_findings', 'monthly_framework', $4, $5::jsonb, $6)`,
+        [randomUUID(), actor.organization_id, actorId, day!.id, JSON.stringify({
+          frameworkId, dayNumber, scopeHash: day!.scope_hash, approvedBy: actorId, approvedAt,
+          severeFindingCodes: override.severeCodes,
+          severeFindings: day!.quality_report.severe.map((finding) => ({ code: finding.code, component: finding.component ?? null })),
+          lightFindingCodes: day!.quality_report.light.map((finding) => finding.code)
+        }), randomUUID()]
+      );
+    } else {
+      await this.database.query(
+        "update month_lessons set status = 'approved', approved_by = $2, approved_at = now(), updated_at = now() where id = $1",
+        [day!.id, actorId]
+      );
+    }
+    await this.audit(actor, "monthly.day_approved", day!.id, { frameworkId, dayNumber, scopeHash: day!.scope_hash, ...(override ? { severeOverride: true, approvedBy: actorId, severeFindingCodes: override.severeCodes } : {}) });
   }
 
   async createMonthlyCorrection(actorId: string, frameworkId: string, dayNumber: number, reason: string): Promise<string> {
@@ -1837,6 +1870,41 @@ function dayKind(spec: MonthlyDaySpec | undefined): "new" | "review" {
 
 function qualityFindingKey(finding: MonthlyQualityFindingView): string {
   return `${finding.code}:${finding.dayNumber ?? 0}:${finding.component ?? ""}`;
+}
+
+export interface MonthlyDayApprovalOptions {
+  /** 13/11 "Vẫn duyệt": approve although severe findings remain (Operator only, recorded). */
+  acknowledgeSevereFindings?: boolean;
+  /** Structural problems of the stored draft parts that would break the learner lesson; never overridable. */
+  integrityIssues?: (parts: ReadonlyArray<{ code: string; content: unknown }>) => string[];
+}
+
+export type MonthlyDayApprovalDecision =
+  | { ok: true; override: { severeCodes: string[]; findingKeys: string[] } | null }
+  | { ok: false; status: 404 | 409; code: string; message: string };
+
+/**
+ * Whether a saved day draft may be approved. Without the override the gate is
+ * unchanged: a draft with no severe finding, at most two light ones, each
+ * acknowledged. With `acknowledgeSevereFindings` and severe findings present,
+ * the saved draft (status draft, or failed because of those findings) is
+ * approved with every remaining finding accepted at once.
+ */
+export function monthlyDayApprovalDecision(
+  day: { lesson_id: string | null; status: MonthLessonRow["status"]; quality_report: MonthLessonRow["quality_report"]; quality_acknowledgement: OperatorAcknowledgementView | null } | null,
+  acknowledgeSevereFindings: boolean
+): MonthlyDayApprovalDecision {
+  if (!day || !day.lesson_id) return { ok: false, status: 404, code: "MONTHLY_DAY_DRAFT_NOT_FOUND", message: "Không tìm thấy bản nháp bài học." };
+  const severe = day.quality_report?.severe ?? [];
+  const light = day.quality_report?.light ?? [];
+  if (acknowledgeSevereFindings && severe.length && (day.status === "draft" || day.status === "failed")) {
+    return { ok: true, override: { severeCodes: [...new Set(severe.map((finding) => finding.code))], findingKeys: [...severe, ...light].map(qualityFindingKey) } };
+  }
+  if (day.status !== "draft" || severe.length) return { ok: false, status: 409, code: "MONTHLY_DAY_QUALITY_BLOCKED", message: "Bài chưa thể duyệt. Hãy mở bản nháp và sửa các mục chất lượng trước khi duyệt lại." };
+  if (light.length > 2) return { ok: false, status: 409, code: "MONTHLY_DAY_QUALITY_BLOCKED", message: "Bài có quá hai cảnh báo. Hãy sửa bớt cảnh báo trước khi duyệt bài." };
+  const acknowledged = new Set(day.quality_acknowledgement?.findingCodes ?? []);
+  if (light.map(qualityFindingKey).some((key) => !acknowledged.has(key))) return { ok: false, status: 409, code: "MONTHLY_DAY_QUALITY_ACK_REQUIRED", message: "Hãy kiểm tra và xác nhận từng cảnh báo trước khi duyệt." };
+  return { ok: true, override: null };
 }
 
 export interface MonthlyIllustrationContext {

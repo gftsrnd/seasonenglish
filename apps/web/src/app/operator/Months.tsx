@@ -622,7 +622,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
   </main>;
 }
 
-export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPart, busy = false, onClose, onRequestReopen, onApprove, onEdit, onRegenerate }: { date: string; cefr: CefrLevel; lesson: MonthlyOperatorOverviewView["frameworks"][number]["lessons"][number]; resources?: MonthlyOperatorOverviewView["frameworks"][number]["resources"]; focusedPart?: string | null; busy?: boolean; onClose(): void; onRequestReopen?(reason: string): Promise<void>; onApprove?(): Promise<void> | void; onEdit?(findingKey?: string): void; onRegenerate?(): Promise<void> | void }) {
+export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPart, busy = false, onClose, onRequestReopen, onApprove, onApproveAnyway, onEdit, onRegenerate }: { date: string; cefr: CefrLevel; lesson: MonthlyOperatorOverviewView["frameworks"][number]["lessons"][number]; resources?: MonthlyOperatorOverviewView["frameworks"][number]["resources"]; focusedPart?: string | null; busy?: boolean; onClose(): void; onRequestReopen?(reason: string): Promise<void>; onApprove?(): Promise<void> | void; /** 13/11 "Vẫn duyệt": approve a saved draft although severe findings remain (asks for confirmation first). */ onApproveAnyway?(): Promise<void> | void; onEdit?(findingKey?: string): void; onRegenerate?(): Promise<void> | void }) {
   const isDraft = lesson.status !== "approved";
   const [requestingReopen, setRequestingReopen] = useState(false);
   const parts = lesson.content?.parts ?? [];
@@ -656,6 +656,10 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
   // Same shell as the weekly lesson-set page so the legacy lesson styles (.app-operator) apply.
   return <OperatorPage title={`${kindLabel} ${dateLabel}`} hideRouteBack><PageTitle actions={<div className="row operator-page-title-actions">
     {onApprove && <Button primary className="operator-lesson-approve-button" disabled={busy} onClick={() => void onApprove()}><Check className="operator-button-icon" size={16} strokeWidth={2.5} aria-hidden="true" />Duyệt bài</Button>}
+    {/* Severe findings keep the normal approval blocked; the Operator may still approve on purpose, after a warning. */}
+    {!onApprove && onApproveAnyway && <Button primary className="operator-lesson-approve-button" disabled aria-describedby={`monthly-approve-blocked-${lesson.lessonNumber}`}><Check className="operator-button-icon" size={16} strokeWidth={2.5} aria-hidden="true" />Duyệt bài</Button>}
+    {!onApprove && onApproveAnyway && <Button className="operator-lesson-approve-anyway-button" disabled={busy} onClick={() => void onApproveAnyway()}>Vẫn duyệt (còn {draftSevere} lỗi nặng)</Button>}
+    {!onApprove && onApproveAnyway && <span id={`monthly-approve-blocked-${lesson.lessonNumber}`} className="sr-only">Còn {draftSevere} lỗi nặng nên chưa duyệt bình thường được.</span>}
     {onRegenerate && <Button danger disabled={busy} onClick={() => void onRegenerate()}><Sparkles className="operator-button-icon" size={16} aria-hidden="true" />{busy ? "Đang sinh…" : "Sinh lại bằng AI"}</Button>}
     {onEdit && <Button className="operator-lesson-edit-button" disabled={busy} onClick={() => onEdit()}><Pencil className="operator-button-icon" size={16} aria-hidden="true" />Sửa tay</Button>}
     {onRequestReopen && <Button className="operator-lesson-reopen-button" disabled={busy} onClick={() => setRequestingReopen(true)}>Yêu cầu mở lại</Button>}

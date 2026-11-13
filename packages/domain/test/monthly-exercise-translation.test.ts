@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LessonPart } from "@e4s/contracts";
-import { MONTHLY_ANSWER_TRANSLATION_RULE, exerciseTranslationRevealed, isSingleTokenAnswer, monthlyExerciseTranslationIssues, readExerciseTranslation, withoutExerciseTranslations } from "../src/monthly/exercise-translation.js";
+import { MONTHLY_ANSWER_TRANSLATION_RULE, exerciseTranslationRevealed, isSingleTokenAnswer, monthlyExerciseTranslationIssues, monthlyExerciseTranslationsForLevel, readExerciseTranslation, withoutExerciseTranslations } from "../src/monthly/exercise-translation.js";
 import { answerWeeklyReviewItem, currentWeeklyReviewSection, resumeWeeklyReviewSession, weeklyReviewSectionsFromParts } from "../src/monthly/weekly-review-session.js";
 
 const question = { prompt: "What does Lan check?", options: ["A report", "An email", "A meeting", "A call"], answer: "A report" };
@@ -63,9 +63,23 @@ describe("exercise question/answer translations (12/11)", () => {
     const sections = weeklyReviewSectionsFromParts(parts);
     const state = resumeWeeklyReviewSession(null, sections);
     const itemId = currentWeeklyReviewSection(state)!.queue[0]!.itemId;
-    const wrong = answerWeeklyReviewItem({ state, sections, sectionCode: "reading", itemId, answer: "An email", cefr: "B1" });
+    const wrong = answerWeeklyReviewItem({ state, sections, sectionCode: "reading", itemId, answer: "An email", cefr: "A2" });
     expect(wrong.ok && wrong.translation).toBeFalsy();
-    const right = answerWeeklyReviewItem({ state, sections, sectionCode: "reading", itemId, answer: "A report", cefr: "B1" });
+    const right = answerWeeklyReviewItem({ state, sections, sectionCode: "reading", itemId, answer: "A report", cefr: "A2" });
     expect(right.ok && right.translation).toEqual({ question: "Lan kiểm tra gì?", answer: "Một báo cáo" });
+  });
+
+  it("from B1 no translation is handed over, even when old content has one (13/11)", () => {
+    const parts: LessonPart[] = [{ code: "reading", title: "Reading", content: { items: [{ id: "r1", ...translated }] } }];
+    const sections = weeklyReviewSectionsFromParts(parts);
+    const state = resumeWeeklyReviewSession(null, sections);
+    const itemId = currentWeeklyReviewSection(state)!.queue[0]!.itemId;
+    for (const cefr of ["B1", "B2", "C1"] as const) {
+      const right = answerWeeklyReviewItem({ state, sections, sectionCode: "reading", itemId, answer: "A report", cefr });
+      expect(right.ok && right.correct).toBe(true);
+      expect(right.ok && right.translation).toBeUndefined();
+    }
+    expect(["A1", "A2"].map(monthlyExerciseTranslationsForLevel)).toEqual([true, true]);
+    expect(["B1", "B2", "C1", null].map(monthlyExerciseTranslationsForLevel)).toEqual([false, false, false, false]);
   });
 });

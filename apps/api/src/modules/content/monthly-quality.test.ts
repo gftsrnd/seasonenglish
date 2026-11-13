@@ -21,6 +21,22 @@ describe("monthly lesson quality", () => {
     expect(reviewFindings.map((row) => row.component)).toEqual(["word_use"]);
     expect(reviewFindings[0]!.message).toContain("word_use.items[0].variants[0]");
   });
+  it("requires exercise translations at A1 only; B1 and B2 never raise MONTHLY_EXERCISE_TRANSLATION (13/11)", () => {
+    const untranslated = (content: Record<string, unknown>): Record<string, unknown> => JSON.parse(JSON.stringify(content, (key, value) => key === "questionTranslation" || key === "answerTranslation" ? undefined : value));
+    const daily = lesson();
+    daily.parts = daily.parts.map((item) => ({ code: item.code, content: untranslated(item.content) }));
+    const translationCodes = (cefr: "A1" | "B1" | "B2", dayNumber: number, candidate: ReturnType<typeof lesson>) => {
+      const plan = contract(); plan.cefr = cefr;
+      return evaluateMonthlyLessonQuality(plan, dayNumber, candidate).severe.filter((row) => row.code === "MONTHLY_EXERCISE_TRANSLATION").map((row) => row.component);
+    };
+    expect(translationCodes("A1", 1, daily)).toEqual(["listening", "reading", "writing", "word_class", "word_use"]);
+    expect(translationCodes("B1", 1, daily)).toEqual([]);
+    expect(translationCodes("B2", 1, daily)).toEqual([]);
+    const review = lesson({ parts: reviewParts().map((item) => ({ code: item.code, content: untranslated(item.content) })) });
+    expect(translationCodes("A1", 2, review).length).toBeGreaterThan(0);
+    expect(translationCodes("B1", 2, review)).toEqual([]);
+    expect(translationCodes("B2", 2, review)).toEqual([]);
+  });
   it("supports a v2 combined review whose first target has only two assigned examples", () => {
     const plan = contract(); plan.planSchemaVersion = 2;
     const day = plan.daySpecs[1]!;

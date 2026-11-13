@@ -59,3 +59,13 @@ describe("monthly review exercise schema (12/11)", () => {
     expect(requests.map((request) => request.outputJsonSchema)).toEqual([monthlyReviewExercisesOutputJsonSchema, monthlyReviewItemRepairOutputJsonSchema]);
   });
 });
+
+describe("review item schema and exercise translations (13/11: A1-A2 only)", () => {
+  it("no longer requires questionTranslation/answerTranslation, so a B1+ review can leave them out", () => {
+    const listening = monthlyReviewExercisesOutputJsonSchema.properties.sections.properties.listening.properties.items.items as { required: string[]; properties: { variants: { items: { required: string[] } }; questionTranslation: { description: string } } };
+    expect(listening.required).not.toContain("questionTranslation");
+    expect(listening.required).not.toContain("answerTranslation");
+    expect(listening.properties.variants.items.required).not.toContain("questionTranslation");
+    expect(listening.properties.questionTranslation.description).toContain("A1-A2 only");
+  });
+});

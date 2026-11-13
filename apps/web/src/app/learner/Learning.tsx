@@ -20,7 +20,7 @@ import { lessonInstructionSteps } from "../shared/lesson/instructions.js";
 import { PronunciationMouthPanel } from "./PronunciationMouthForm.js";
 import { grammarExampleMatcher, grammarExampleSegments, grammarFormulaBoxes, grammarFormulaSegments, grammarPointName, pronunciationEndingSegments, pronunciationTargetSegments, type GrammarExampleMatcher, type HighlightSegment } from "../shared/lesson/study-highlight.js";
 import "../shared/lesson/study-highlight.css";
-import { monthlyPronunciationLessonRule, monthlyPronunciationRuleCopy, type MonthlyPronunciationRuleCopy } from "@e4s/domain/monthly";
+import { monthlyExerciseTranslationsForLevel, monthlyPronunciationLessonRule, monthlyPronunciationRuleCopy, type MonthlyPronunciationRuleCopy } from "@e4s/domain/monthly";
 import { WeeklyReview } from "./WeeklyReview.js";
 import { learnerLessonCopy, learnerLessonLanguageForCefr, lessonGuidanceOrFallback, type LearnerLessonLanguage, type LearnerLessonCopy } from "../shared/lesson/language.js";
 import { lessonPartsForTab, lessonPracticeCodes, sharedLessonGrammarAvailable } from "../shared/lesson/structure.js";
@@ -354,7 +354,8 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
         // Monthly lessons: the translation appears once the question is finished (correct, or every attempt used).
         // Older weekly lessons keep their explicit "View translation" step.
         const monthlyLesson = Boolean(lesson.kind);
-        const translationVisible = Boolean(translations) && (exerciseFinished(partEvidence) || (!monthlyLesson && (partEvidence?.status === "translated" || Boolean(partEvidence?.translationViewed))));
+        // 13/11: a B1+ monthly learner sees no Vietnamese exercise translation, even when older content has one.
+        const translationVisible = Boolean(translations) && !(monthlyLesson && !monthlyExerciseTranslationsForLevel(lesson.cefr)) && (exerciseFinished(partEvidence) || (!monthlyLesson && (partEvidence?.status === "translated" || Boolean(partEvidence?.translationViewed))));
         const statusNotice = partStatusNotice(part, partEvidence, copy);
         const displayPart = part.code === "instruction"
           ? { ...part, content: { ...part.content, steps: lessonInstructionSteps(lesson.content.parts, tab, language) } }

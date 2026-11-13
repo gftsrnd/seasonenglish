@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MonthlyCurriculumContract } from "@e4s/domain";
-import { applyMonthlyLockedPlanFields, dropSupportTermVocabularyCards, generateMonthlyDay, generateMonthlyDayWithAi, generateMonthlyReviewWithAi, keepMeaningfulVocabularyRelations, monthlyCheckpointKey, monthlyDailyTeachingContract, monthlyLearnerLanguageContract, monthlyReviewExerciseContract, monthlyReviewWordFormCandidates, monthlyVocabularyRelationContract } from "./monthly-day-generation.js";
+import { applyMonthlyLockedPlanFields, monthlyAnswerTranslationRule, dropSupportTermVocabularyCards, generateMonthlyDay, generateMonthlyDayWithAi, generateMonthlyReviewWithAi, keepMeaningfulVocabularyRelations, monthlyCheckpointKey, monthlyDailyTeachingContract, monthlyLearnerLanguageContract, monthlyReviewExerciseContract, monthlyReviewWordFormCandidates, monthlyVocabularyRelationContract } from "./monthly-day-generation.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 
 const components = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"];
@@ -217,11 +217,16 @@ function monthlyExercises(resourceIds: string[]) {
 }
 
 describe("exercise translations in the generation prompts (12/11)", () => {
-  it("asks every level for questionTranslation/answerTranslation and allows them as the only extra Vietnamese from B1", () => {
-    expect(monthlyReviewExerciseContract(3, 1, "B2")).toContain("questionTranslation / answerTranslation (every level)");
+  it("asks A1-A2 for questionTranslation/answerTranslation and never asks B1+ for them (13/11)", () => {
     expect(monthlyReviewExerciseContract(3, 1, "A1")).toContain("items: [{ id, prompt, options, answer, explanation, questionTranslation, answerTranslation, variants }]");
-    expect(monthlyLearnerLanguageContract("C1")).toContain("questionTranslation / answerTranslation fields");
+    expect(monthlyReviewExerciseContract(3, 1, "A2")).toContain("questionTranslation / answerTranslation (A2)");
+    expect(monthlyReviewExerciseContract(3, 1, "B2")).toContain("items: [{ id, prompt, options, answer, explanation, variants }]");
+    expect(monthlyReviewExerciseContract(3, 1, "B2")).toContain("No questionTranslation / answerTranslation (B2)");
+    expect(monthlyReviewExerciseContract(3, 1, "B2")).not.toContain("\"questionTranslation\":");
+    expect(monthlyLearnerLanguageContract("C1")).toContain("Do not return questionTranslation or answerTranslation");
     expect(monthlyLearnerLanguageContract("A2")).toContain("goes only in questionTranslation / answerTranslation");
+    expect(monthlyAnswerTranslationRule("A1")).toContain("answerTranslation:");
+    expect(monthlyAnswerTranslationRule("B1")).toBe("");
   });
 });
 

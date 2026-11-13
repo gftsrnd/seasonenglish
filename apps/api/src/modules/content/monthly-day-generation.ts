@@ -41,7 +41,7 @@ export function monthlyLearnerLanguageContract(cefr: string): string {
     "Options, answers, scripts, passages, sample answers and example sentences stay in English; the Vietnamese translation of a question and its answer goes only in questionTranslation / answerTranslation."
   ].join(" ");
   return [
-    `LEARNER LANGUAGE (${cefr}): write every learner-facing string in English - lesson title, objective, instruction, prompts, questions, explanations, scripts, passages, samples and grammar/pronunciation notes. Only vocabulary meanings and the exercise questionTranslation / answerTranslation fields (shown after the question is finished) may be Vietnamese.`,
+    `LEARNER LANGUAGE (${cefr}): write every learner-facing string in English - lesson title, objective, instruction, prompts, questions, explanations, scripts, passages, samples and grammar/pronunciation notes. Only vocabulary meanings may be Vietnamese. Do not return questionTranslation or answerTranslation on any exercise, item or variant: from B1 the learner sees no Vietnamese translation.`,
     "Plan notes you receive (daySpec.skillExercises[].focus, the grammar and pronunciation objectives, the theme's communication goal) may be written in Vietnamese: they are guidance for you, never copy or translate them into learner text. The only exception is the locked grammar.objective / pronunciation.objective fields, copied verbatim."
   ].join(" ");
 }
@@ -60,6 +60,11 @@ export function monthlyVocabularyRelationContract(cefr: string): string {
     : `VOCABULARY COLLOCATIONS (${cefr}): collocations are English only; do not return collocationTranslations (no Vietnamese translations from B1).`;
   return `VOCABULARY SYNONYMS/ANTONYMS (${cefr}): the plan's synonyms and antonyms (lockedScope.supportTerms) are attached to each card automatically with their meaning; you may list them by word. Any other synonym or antonym you add must be a genuine one in the card's sense and written as ${shape}; a plain string or an entry without it is removed from the card.
 ${collocations}`;
+}
+
+/** The answerTranslation rule (A1–A2 only, 13/11); empty from B1, which takes no exercise translations. */
+export function monthlyAnswerTranslationRule(cefr: string): string {
+  return cefr === "A1" || cefr === "A2" ? `\n\n${MONTHLY_ANSWER_TRANSLATION_RULE}` : "";
 }
 
 /** daySpec.lessonNumber is the calendar slot (review days included); it is never the learner-facing lesson number. */
@@ -106,9 +111,7 @@ ${monthlyVocabularyRelationContract(contract.cefr)}
 
 ${MONTHLY_LESSON_TITLE_RULE}
 
-${MONTHLY_SINGLE_ANSWER_RULE}
-
-${MONTHLY_ANSWER_TRANSLATION_RULE}` : `${systemPrompt}
+${MONTHLY_SINGLE_ANSWER_RULE}${monthlyAnswerTranslationRule(contract.cefr)}` : `${systemPrompt}
 
 Part content field contract: ${MONTHLY_LESSON_PART_CONTENT_CONTRACT}
 
@@ -118,9 +121,7 @@ ${monthlyVocabularyRelationContract(contract.cefr)}
 
 ${MONTHLY_LESSON_TITLE_RULE}
 
-${MONTHLY_SINGLE_ANSWER_RULE}
-
-${MONTHLY_ANSWER_TRANSLATION_RULE}
+${MONTHLY_SINGLE_ANSWER_RULE}${monthlyAnswerTranslationRule(contract.cefr)}
 
 ${MONTHLY_WORD_FORM_SCOPE_RULE}`;
       // Review exercise sections have their own task: its schema requires a retry variant on every choice item.
@@ -241,7 +242,7 @@ export async function monthlyAnswerVerification(contract: MonthlyCurriculumContr
 export const MONTHLY_REVIEW_ITEM_REPAIR_RULE = [
   "REVIEW ITEM REPAIR (only the items in repairItems; every other part of the review is accepted and unchanged):",
   "Return items = one entry per repairItems entry: { section, id, item }, with section and id copied. item is the complete item: the same id, audioText (listening), prompt intent and answer text, plus exactly 1 entry in variants.",
-  "issue variant_missing: add variants = [one retry item with the same fields (prompt, options x4, answer, explanation, questionTranslation, answerTranslation)] that tests the same point in a different context and is never a copy. listening: the SAME audioText (the same core word) and the same correct meaning, with 3 different distractor meanings; word_use / grammar: the same word or grammar point in a new workplace sentence; word_class: the same week word in a new sentence; reading: a different question about the same passage.",
+  "issue variant_missing: add variants = [one retry item with the same fields (prompt, options x4, answer, explanation, and at A1-A2 only questionTranslation, answerTranslation)] that tests the same point in a different context and is never a copy. listening: the SAME audioText (the same core word) and the same correct meaning, with 3 different distractor meanings; word_use / grammar: the same word or grammar point in a new workplace sentence; word_class: the same week word in a new sentence; reading: a different question about the same passage.",
   "Follow the learner-language rule above for prompts and explanations."
 ].join("\n");
 
@@ -349,9 +350,11 @@ export function monthlyReviewExerciseContract(coreCount: number, grammarStepCoun
     "Friday review exercise contract (overrides the daily single-question shape for listening, word_use, word_class, grammar, reading, speaking; do not return a writing part):",
     `EXACT ITEM COUNTS (each section is { items: [...] } with all of its items in this one response; never a single question, never a partial list): listening ${target.listening}, word_use ${target.wordUse}, word_class ${target.wordForm}, grammar ${target.grammar} (+1 previous-week item when there is one), reading 3, speaking 4 (2 minimal pairs, 1 read-aloud, 1 free response).`,
     "Keep objective, instruction, vocabulary (every core word of the week as a card with collocations), grammar (formula, text, examples, steps) and pronunciation as the study tab.",
-    `Each exercise section's content has items: [{ id, prompt, options, answer, explanation, questionTranslation, answerTranslation, variants }]. explanation: at most 2 sentences in ${explain}, why the answer is right. Never copy daily-lesson sentences verbatim.`,
-    `VARIANTS ARE REQUIRED on every listening, word_use, word_class, grammar and reading item (an item without variants is incomplete and is sent back): variants = [exactly 1 retry item] with the item's fields { id, prompt, options (4), answer, explanation, questionTranslation, answerTranslation }, testing the same point in a different context, never a copy. listening: the SAME audioText (the same core word: the retry tests the word the learner missed) and the same correct meaning as answer, with 3 different distractor meanings; word_use / grammar: the same word or grammar point in a new workplace sentence; word_class: the same week word in a new sentence; reading: a different question about the same passage. Example listening item: {"id":"l1","audioText":"client","prompt":"${listeningPrompt}","options":["khách hàng","báo cáo","cuộc họp","hạn chót"],"answer":"khách hàng","explanation":"…","questionTranslation":"Nghe rồi chọn nghĩa của từ","answerTranslation":"khách hàng","variants":[{"id":"l1-v1","audioText":"client","prompt":"${listeningPrompt}","options":["đồng nghiệp","khách hàng","công ty","nhiệm vụ"],"answer":"khách hàng","explanation":"…","questionTranslation":"Nghe rồi chọn nghĩa của từ","answerTranslation":"khách hàng"}]}.`,
-    "questionTranslation / answerTranslation (every level): on every item and variant that has an answer, a short natural Vietnamese translation of its prompt (the English sentence translated too, the blank kept as ____) and of its correct answer (${MONTHLY_ANSWER_TRANSLATION_RULE}) They are shown only after the learner answers correctly and never read aloud; the read-aloud and free-response speaking items (no answer) take none.",
+    `Each exercise section's content has items: [{ id, prompt, options, answer, explanation, ${vietnamese ? "questionTranslation, answerTranslation, " : ""}variants }]. explanation: at most 2 sentences in ${explain}, why the answer is right. Never copy daily-lesson sentences verbatim.`,
+    `VARIANTS ARE REQUIRED on every listening, word_use, word_class, grammar and reading item (an item without variants is incomplete and is sent back): variants = [exactly 1 retry item] with the item's fields { id, prompt, options (4), answer, explanation${vietnamese ? ", questionTranslation, answerTranslation" : ""} }, testing the same point in a different context, never a copy. listening: the SAME audioText (the same core word: the retry tests the word the learner missed) and the same correct meaning as answer, with 3 different distractor meanings; word_use / grammar: the same word or grammar point in a new workplace sentence; word_class: the same week word in a new sentence; reading: a different question about the same passage. Example listening item: {"id":"l1","audioText":"client","prompt":"${listeningPrompt}","options":["khách hàng","báo cáo","cuộc họp","hạn chót"],"answer":"khách hàng","explanation":"…",${vietnamese ? `"questionTranslation":"Nghe rồi chọn nghĩa của từ","answerTranslation":"khách hàng",` : ""}"variants":[{"id":"l1-v1","audioText":"client","prompt":"${listeningPrompt}","options":["đồng nghiệp","khách hàng","công ty","nhiệm vụ"],"answer":"khách hàng","explanation":"…"${vietnamese ? `,"questionTranslation":"Nghe rồi chọn nghĩa của từ","answerTranslation":"khách hàng"` : ""}}]}.`,
+    vietnamese
+      ? `questionTranslation / answerTranslation (${cefr}): on every item and variant that has an answer, a short natural Vietnamese translation of its prompt (the English sentence translated too, the blank kept as ____) and of its correct answer (${MONTHLY_ANSWER_TRANSLATION_RULE}) They are shown only after the learner answers correctly and never read aloud; the read-aloud and free-response speaking items (no answer) take none.`
+      : `No questionTranslation / answerTranslation (${cefr}): from B1 the learner sees no Vietnamese translation, so items and variants never carry these fields.`,
     vietnamese
       ? "Every prompt the learner reads is written in Vietnamese (e.g. \"Chọn dạng đúng của từ để điền vào chỗ trống: …\", \"Đọc tin nhắn và chọn đáp án đúng.\"); only the English target sentence, options and answers stay in English."
       : "Every prompt, question, instruction and explanation is written in English; only the listening options/answers (word meanings) are Vietnamese.",

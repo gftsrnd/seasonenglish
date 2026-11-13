@@ -20,10 +20,11 @@ const choiceFields = {
   options: { type: "array", minItems: 4, maxItems: 4, items: { type: "string" }, description: "exactly 4 different options of similar length" },
   answer: str("copied exactly from options"),
   explanation: str("at most 2 sentences: why the answer is right"),
-  questionTranslation: str("short Vietnamese translation of the prompt (blank kept as ____); hidden until answered"),
-  answerTranslation: str("short Vietnamese translation of the answer; hidden until answered")
+  questionTranslation: str("A1-A2 only (omit from B1): short Vietnamese translation of the prompt (blank kept as ____); hidden until answered"),
+  answerTranslation: str("A1-A2 only (omit from B1): short Vietnamese translation of the answer; hidden until answered")
 };
-const choiceRequired = ["prompt", "options", "answer", "explanation", "questionTranslation", "answerTranslation"];
+/** 13/11: the translations are A1–A2 only, so the shared schema no longer requires them (the A1–A2 quality gate does). */
+const choiceRequired = ["prompt", "options", "answer", "explanation"];
 
 function choiceVariantJsonSchema(listening: boolean) {
   return {

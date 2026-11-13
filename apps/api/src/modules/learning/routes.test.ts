@@ -409,6 +409,15 @@ describe("exercise translations stay hidden until the question is finished (12/1
     expect(finishedAttemptTranslation(part, "wrong_retry")).toBeUndefined();
     expect(finishedAttemptTranslation({ content: { prompt: "Old question", answer: "x" } }, "correct")).toBeUndefined();
   });
+
+  it("never sends a B1+ learner a translation, even when old content has one (13/11)", () => {
+    for (const cefr of ["B1", "B2", "C1"]) {
+      const record = { ...monthly("correct"), cefr } as LearnerLessonRecord;
+      expect(readingContent(record)).not.toMatch(/Translation/u);
+      expect(finishedAttemptTranslation({ content: reading as Record<string, unknown> }, "correct", cefr)).toBeUndefined();
+    }
+    expect(finishedAttemptTranslation({ content: reading as Record<string, unknown> }, "correct", "A2")).toEqual({ question: "Lan kiểm tra gì?", answer: "Một báo cáo" });
+  });
 });
 
 describe("learnerLessonView grammar topic name", () => {

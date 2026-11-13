@@ -8,6 +8,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
+import { monthlyLessonIntegrityIssues } from "./monthly-integrity.js";
 import { previousMonthlyLessonAudioIndex, withLessonListeningAudio, type ListeningAudioService } from "../assessment/listening-audio.js";
 import { generateMonthlyDayWithAi, generateMonthlyReviewWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
 import { buildMonthlyCatalogPronunciationPrompt, getMonthlyPronunciationTextIssues, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, describeMonthlyResourceCheckpointProgress, MONTHLY_RESOURCE_ATTEMPTS_LINEAGE_KEY, monthlyResourcePartialProgressMessage, readMonthlyResourceFailedAttempts, getMonthlyGrammarPhaseIssues, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyAiCallBudgetError, monthlyResourceAiCallLimit, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
@@ -63,6 +64,10 @@ const lessonInput = z.object({
   parts: z.array(z.object({ code: z.enum(MONTHLY_DAY_COMPONENTS), title: z.string().optional(), content: z.record(z.string(), z.unknown()) }))
 });
 const qualityAcknowledgementInput = z.object({ findingKeys: z.array(z.string().min(1)).max(2) });
+/** 13/11 "Vẫn duyệt": approve a saved draft although severe findings remain. Without the flag the gate is unchanged. */
+const approveDayInput = z.object({ acknowledgeSevereFindings: z.boolean().optional() }).passthrough();
+/** Roles that may approve with remaining severe findings (the route itself admits content Operators only). */
+const SEVERE_OVERRIDE_ROLES = new Set(["operator", "manager"]);
 const correctionInput = z.object({ reason: z.string().trim().min(5).max(1000) });
 const retireFrameworkInput = z.object({ reason: z.string().trim().min(10).max(1000) });
 const reopenDecisionInput = z.object({ reason: z.string().trim().min(5).max(1000) });
@@ -1214,7 +1219,21 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
 
   app.post("/api/v1/content/month-frameworks/:id/days/:dayNumber/approve", { preHandler: contentOperator }, async (request, reply) => {
     const { id, dayNumber } = dayParams.parse(request.params);
-    await repositories.monthlyContent.approveMonthlyDay(request.e4sSession!.user.id, id, dayNumber);
+    const input = approveDayInput.parse(request.body ?? {});
+    if (!input.acknowledgeSevereFindings) {
+      await repositories.monthlyContent.approveMonthlyDay(request.e4sSession!.user.id, id, dayNumber);
+      return reply.code(204).send();
+    }
+    if (!SEVERE_OVERRIDE_ROLES.has(request.e4sSession!.role)) return reply.code(403).send({ code: "FORBIDDEN" });
+    let contract;
+    try { contract = await repositories.monthlyContent.getFrameworkContract(request.e4sSession!.user.id, id); }
+    catch (error) { const response = invalidMonthlyPlanReply(reply, error); if (response) return response; throw error; }
+    const kind = contract.daySpecs.find((day) => day.lessonNumber === dayNumber)?.kind === "review" ? "review" : "new";
+    // The override accepts quality findings only: a lesson that would not render or play stays blocked.
+    await repositories.monthlyContent.approveMonthlyDay(request.e4sSession!.user.id, id, dayNumber, {
+      acknowledgeSevereFindings: true,
+      integrityIssues: (parts) => monthlyLessonIntegrityIssues(kind, parts).map((issue) => issue.message)
+    });
     return reply.code(204).send();
   });
 

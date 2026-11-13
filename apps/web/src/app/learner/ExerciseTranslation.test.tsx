@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WeeklyReviewSessionView } from "@e4s/contracts";
@@ -58,16 +58,15 @@ describe("exercise translation after a finished question (12/11)", () => {
     expect(block.querySelector(".banner.info")).not.toBeNull();
   });
 
-  it("shows it after the last attempt is used, together with the correct answer", () => {
+  it("never shows it to a B1 learner, even after the last attempt and with old content that has one (13/11)", () => {
     const exhausted = monthlyLesson("B1", { listening: { attempts: 2, status: "wrong_exhausted", answer: "No", feedback: "Not quite." } }, { questionTranslation: translation.question, answerTranslation: translation.answer });
     exhausted.progress.completedPartCodes = ["objective", "listening"];
     render(<LearnerLesson view={{ lesson: exhausted, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), submitLessonPartAttempt: vi.fn() } as any} />);
     fireEvent.click(screen.getByRole("tab", { name: /2\. practice/i }));
     expect(screen.getByText("Answer: Yes")).toBeInTheDocument();
-    const block = screen.getByRole("region", { name: "Vietnamese translation · Listening" });
-    expect(block).toHaveTextContent("Question: Báo cáo đã sẵn sàng chưa?");
-    expect(block).toHaveTextContent("Answer: Rồi");
-    expect(within(block).getByText(translation.question)).toHaveAttribute("lang", "vi");
+    expect(screen.queryByRole("region", { name: "Vietnamese translation · Listening" })).toBeNull();
+    expect(screen.queryByTestId("lesson-exercise-translation")).toBeNull();
+    expect(screen.queryByText(translation.question)).toBeNull();
   });
 
   it("never sends the Vietnamese translation to text-to-speech", async () => {

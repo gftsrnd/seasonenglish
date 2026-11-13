@@ -50,7 +50,7 @@ export function WeeklyReview({ title, cefr, actions }: { title: string; cefr: Ce
       const result = await actions.answerWeeklyReview({ sectionCode: question.sectionCode, itemId: question.itemId, ...(value.trim() ? { answer: value } : {}), ...(artifactKey ? { artifactKey } : {}) });
       setRecordedAudio(undefined);
       // A correctly answered (finished) item comes back with its Vietnamese question/answer translation.
-      setFeedback({ correct: result.correct, text: result.feedback, willRetry: result.willRetry, translation: result.correct ? result.translation : undefined });
+      setFeedback({ correct: result.correct, text: result.feedback, willRetry: result.willRetry, translation: result.correct && !english ? result.translation : undefined });
       setSession(result.session);
       setAnswer("");
     } catch {

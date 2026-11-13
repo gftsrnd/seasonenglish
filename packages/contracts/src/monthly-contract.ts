@@ -50,6 +50,12 @@ export interface OperatorAcknowledgementView {
   actorId: string;
   acknowledgedAt: string;
   findingCodes: string[];
+  /**
+   * 13/11: the day was approved while severe findings remained ("Vẫn duyệt").
+   * `severeFindingCodes` lists the severe codes the Operator accepted.
+   */
+  severeOverride?: boolean;
+  severeFindingCodes?: string[];
 }
 
 export interface MonthLessonCellView {

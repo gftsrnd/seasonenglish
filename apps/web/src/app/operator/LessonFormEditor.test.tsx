@@ -556,3 +556,34 @@ async function saveLesson(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getAllByRole("button", { name: "Kiểm tra & lưu" }).at(-1)!);
   }
 }
+
+describe("daily exercise translations in the manual editor (13/11, A1-A2 only)", () => {
+  const withReading = () => {
+    const lesson = emptyLesson(0);
+    return { ...lesson, parts: lesson.parts.map(part => part.code === "reading" ? { ...part, content: { ...part.content, text: "The cost is high.", prompt: "Đọc và chọn: What is high?", options: ["The cost", "The room", "The plan", "The date"], answer: "The cost", questionTranslation: "Cái gì cao?" } } : part) };
+  };
+
+  it("lets an A1 Operator fill the question and answer translation of a daily exercise", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A1" monthly initial={withReading()} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
+    for (const prefix of ["Nghe", "Đọc", "Viết", "Từ loại", "Dùng từ"]) {
+      expect(screen.getByLabelText(`${prefix} – Dịch câu hỏi`)).toBeInTheDocument();
+      expect(screen.getByLabelText(`${prefix} – Dịch đáp án`)).toBeInTheDocument();
+    }
+    expect(screen.getByLabelText("Đọc – Dịch câu hỏi")).toHaveValue("Cái gì cao?");
+    await user.type(screen.getByLabelText("Đọc – Dịch đáp án"), "Chi phí");
+    await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu tạm" }));
+    const saved = onSave.mock.calls[0]![0] as { parts: Array<{ code: string; content: Record<string, unknown> }> };
+    expect(saved.parts.find(part => part.code === "reading")!.content).toMatchObject({ questionTranslation: "Cái gì cao?", answerTranslation: "Chi phí" });
+    expect(saved.parts.find(part => part.code === "listening")!.content).not.toHaveProperty("questionTranslation");
+  });
+
+  it("shows no translation fields from B1", () => {
+    render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="B1" monthly initial={withReading()} onSave={vi.fn()} onCancel={() => undefined} /></ModalProvider>);
+    expect(screen.queryByLabelText("Đọc – Dịch câu hỏi")).toBeNull();
+    expect(screen.queryByText("Dịch đáp án")).toBeNull();
+  });
+});

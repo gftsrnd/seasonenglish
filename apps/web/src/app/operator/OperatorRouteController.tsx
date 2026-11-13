@@ -220,7 +220,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
   const [resourceGenerationActive,setResourceGenerationActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> }; kind?: "new" | "review"; date?: string; vocabularyCount?: number; defaultTitle?: string; cefr?: CefrLevel; findings?: { title: string; lines: MonthlyFindingLine[] }; grammarStepLabels?: Record<string, string>; focusFinding?: string }>();
+  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> }; kind?: "new" | "review"; date?: string; vocabularyCount?: number; defaultTitle?: string; cefr?: CefrLevel; findings?: { title: string; lines: MonthlyFindingLine[] }; grammarStepLabels?: Record<string, string>; focusFinding?: string; severeCount?: number }>();
   const systemMonthInitialized = useRef(false);
   useEffect(() => { if (linkedMonth) setMonth(linkedMonth); }, [linkedMonth]);
   const pendingScrollRestore = useRef<number | null>(null);
@@ -297,6 +297,27 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     const day = overview?.calendar?.find((item) => item.lessonNumber === dayNumber && (item.kind === "new" || item.kind === "review"));
     return day?.kind === "review" ? "bài ôn" : day?.newLessonNumber ? `bài ${day.newLessonNumber}` : "bài học";
   };
+  type OverviewLesson = import("@e4s/contracts").MonthlyOperatorOverviewView["frameworks"][number]["lessons"][number];
+  /** 13/11: a saved draft that still has severe findings may be approved on purpose ("Vẫn duyệt"). */
+  const canApproveDayAnyway = (lesson: OverviewLesson | undefined): boolean => Boolean(lesson?.content?.parts?.length && (lesson.status === "draft" || lesson.status === "failed") && lesson.quality.severe.length);
+  /** Warns with the remaining severe findings (same wording as the findings strip), then approves with the override. */
+  const approveDayAnyway = async (frameworkId: string, dayNumber: number): Promise<boolean> => {
+    const lesson = overview?.frameworks.find((item) => item.id === frameworkId)?.lessons.find((item) => item.lessonNumber === dayNumber);
+    if (!lesson || !canApproveDayAnyway(lesson)) return false;
+    const lines = describeMonthlyFindings(lesson.quality.severe, { kind: lesson.kind === "review" ? "review" : "new", parts: lesson.content?.parts ?? [] });
+    const message = <div className="stack" data-testid="monthly-approve-anyway-findings">
+      <p>Bài còn {lesson.quality.severe.length} lỗi nặng:</p>
+      <ul>{lines.map((line) => <li key={line.key}><strong>{line.where}:</strong> {line.what}</li>)}</ul>
+      <p>Học viên sẽ thấy bài như hiện tại. Các lỗi trên chưa được sửa.</p>
+    </div>;
+    if (!await modal.confirm({ title: lesson.kind === "review" ? "Vẫn duyệt bài ôn?" : "Vẫn duyệt bài học?", message, confirmLabel: "Vẫn duyệt", cancelLabel: "Quay lại sửa" })) return false;
+    let approved = false;
+    await run(async () => {
+      await client.approveContentMonthDay(frameworkId, dayNumber, { acknowledgeSevereFindings: true });
+      approved = true;
+    }, `Đã duyệt ${monthDayLabel(dayNumber)} (còn lỗi nặng chưa sửa).`);
+    return approved;
+  };
   const openDayEditor = (frameworkId: string, dayNumber: number, cellSlot?: { kind: "new" | "review"; date?: string | undefined; title?: string | undefined }, focusFinding?: string) => {
     const framework = overview?.frameworks.find((item) => item.id === frameworkId);
     const savedLesson = framework?.lessons.find((item) => item.lessonNumber === dayNumber);
@@ -328,13 +349,18 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     // Daily practice questions name their grammar step by its short title, never by its id.
     const carryoverTopics = framework?.resources?.carryoverReviews?.find((item) => item.lessonNumber === dayNumber)?.grammarTopics ?? [];
     const grammarStepLabels = Object.fromEntries([...(framework?.resources?.grammarTopics ?? []), ...carryoverTopics].flatMap((topic) => topic.steps).map((step) => [step.id, step.focus || step.formula]));
-    const editorMeta = { ...meta, grammarStepLabels, ...(findingSource && findingLines.length ? { findings: { title: findingSource.title, lines: findingLines } } : {}), ...(focusFinding ? { focusFinding } : {}) };
+    const editorMeta = { ...meta, grammarStepLabels, ...(findingSource && findingLines.length ? { findings: { title: findingSource.title, lines: findingLines } } : {}), ...(focusFinding ? { focusFinding } : {}), ...(saved?.parts?.length && canApproveDayAnyway(savedLesson) ? { severeCount: savedLesson!.quality.severe.length } : {}) };
     setEditor(saved?.parts?.length ? { frameworkId, dayNumber, initial: { ...saved, ...(savedTitle ? { title: savedTitle } : {}) }, ...editorMeta }
       : candidate?.parts?.length ? { frameworkId, dayNumber, initial: { ...(candidateTitle ? { title: candidateTitle } : {}), parts: candidate.parts.map((part) => ({ ...part, title: part.title || MONTHLY_PART_TITLES[part.code ?? ""] || part.code || "Nội dung" })) }, ...editorMeta }
       : seed ? { frameworkId, dayNumber, initial: { title: seed.title, parts: seed.parts }, ...editorMeta } : { frameworkId, dayNumber, ...editorMeta });
   };
   const editorCefr = editor?.cefr ?? cefr;
-  const dayEditor = !readOnly && editor ? <LessonFormEditor weekNumber={0} cefr={editorCefr} initial={editor.initial?.parts?.length ? { dayNumber: editor.dayNumber - 1, title: editor.initial.title || editor.defaultTitle || `Bài ${editor.dayNumber}`, durationMinutes: 10, parts: editor.initial.parts.map((part) => ({ code: (part.code || "instruction") as import("@e4s/contracts").LessonPartCode, title: part.title || part.code || "Nội dung", content: part.content || {} })) } : { ...emptyLesson(editor.dayNumber - 1), ...(editor.defaultTitle ? { title: editor.defaultTitle } : {}) }} vocabularyCount={editor.vocabularyCount ?? 3} kind={editor.kind === "review" ? "review" : "lesson"} monthly grammarStepLabels={editor.grammarStepLabels} findings={editor.findings} focusFinding={editor.focusFinding} onSave={async (lesson) => {
+  const dayEditor = !readOnly && editor ? <LessonFormEditor weekNumber={0} cefr={editorCefr} initial={editor.initial?.parts?.length ? { dayNumber: editor.dayNumber - 1, title: editor.initial.title || editor.defaultTitle || `Bài ${editor.dayNumber}`, durationMinutes: 10, parts: editor.initial.parts.map((part) => ({ code: (part.code || "instruction") as import("@e4s/contracts").LessonPartCode, title: part.title || part.code || "Nội dung", content: part.content || {} })) } : { ...emptyLesson(editor.dayNumber - 1), ...(editor.defaultTitle ? { title: editor.defaultTitle } : {}) }} vocabularyCount={editor.vocabularyCount ?? 3} kind={editor.kind === "review" ? "review" : "lesson"} monthly grammarStepLabels={editor.grammarStepLabels} findings={editor.findings} focusFinding={editor.focusFinding} approveAnyway={editor.severeCount ? { severeCount: editor.severeCount, onApprove: async () => {
+    const target = editor;
+    if (!await approveDayAnyway(target.frameworkId, target.dayNumber)) return;
+    setEditor(undefined);
+    navigate(paths.months);
+  } } : undefined} onSave={async (lesson) => {
     const label = monthDayLabel(editor.dayNumber);
     const report = await run(() => client.saveContentMonthDay(editor.frameworkId, editor.dayNumber, { title: lesson.title, parts: lesson.parts }));
     if (!report) return;
@@ -371,6 +397,8 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
           }, `Đã duyệt ${monthDayLabel(lesson.lessonNumber)}.`);
           if (approved) navigate(paths.months);
         } } : {}),
+        // 13/11 "Vẫn duyệt": a saved draft that still has severe findings may be approved on purpose, after a warning.
+        ...(canApproveDayAnyway(lesson) ? { onApproveAnyway: async () => { if (await approveDayAnyway(framework.id, lesson.lessonNumber)) navigate(paths.months); } } : {}),
         onEdit: (findingKey?: string) => openDayEditor(framework.id, lesson.lessonNumber, undefined, findingKey),
         // VH-R44: no per-day regenerate; generate once, then edit by hand. Hidden until the rule changes.
         ...(SHOW_MONTHLY_DAY_REGENERATE && framework.status === "approved" ? { onRegenerate: async () => {

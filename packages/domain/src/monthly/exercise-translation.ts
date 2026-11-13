@@ -1,6 +1,8 @@
 /**
  * Vietnamese translation of exercise questions and answers (product decision
- * 12/11, all levels A1–C1). Every monthly exercise question that has a correct
+ * 12/11; from 13/11 A1–A2 only: a B1+ learner sees no Vietnamese anywhere,
+ * except the English definition popup of synonym/antonym chips, so B1–C1
+ * lessons neither need nor show these fields). Every A1–A2 monthly exercise question that has a correct
  * answer carries `questionTranslation` (the question/prompt) and
  * `answerTranslation` (the correct answer), both short Vietnamese. They are
  * shown only once the question is finished — answered correctly, or every
@@ -35,6 +37,11 @@ function text(value: unknown): string {
 function answerText(value: unknown): string {
   if (Array.isArray(value)) return text(value[0]);
   return typeof value === "number" ? String(value) : text(value);
+}
+
+/** 13/11: exercise question/answer translations exist for A1–A2 only. */
+export function monthlyExerciseTranslationsForLevel(cefr: string | null | undefined): boolean {
+  return cefr === "A1" || cefr === "A2";
 }
 
 /** True for a translation key (`questionTranslation` / `answerTranslation`): Vietnamese by design at every level. */

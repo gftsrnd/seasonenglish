@@ -1,5 +1,5 @@
 import type { MonthlyCurriculumContract, MonthlyDaySpec } from "@e4s/domain";
-import { monthlyCollocationTranslationIssues, monthlyExerciseTranslationIssues, monthlyRelationMeaningIssue, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPronunciationExampleText, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
+import { monthlyCollocationTranslationIssues, monthlyExerciseTranslationIssues, monthlyExerciseTranslationsForLevel, monthlyRelationMeaningIssue, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPronunciationExampleText, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
 import type { LessonPart } from "@e4s/contracts";
 import { monthlyGrammarRoadmapDayIssues } from "./monthly-grammar-roadmap.js";
 import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
@@ -177,10 +177,11 @@ export function evaluateMonthlyLessonQuality(
   // December 2026: wrong keys, a second correct option, wrong voice, an off-label recall item, and Word form options outside the lesson's words.
   severe.push(...monthlyAnswerKeyFindings(contract, day, dayNumber, lesson.parts), ...monthlyWordFormScopeFindings(contract, day, dayNumber, lesson.parts));
   // 12/11: every exercise question with a correct answer carries a short Vietnamese
-  // question and answer translation (all levels), shown only after it is finished.
-  for (const part of lesson.parts) {
+  // question and answer translation, shown only after it is finished. 13/11: A1–A2 only;
+  // a B1+ learner sees no Vietnamese, so the translation is never required there.
+  if (monthlyExerciseTranslationsForLevel(contract.cefr)) for (const part of lesson.parts) {
     const issues = monthlyExerciseTranslationIssues(review ? "review" : "new", part.code, part.content);
-    if (issues.length) severe.push(finding("MONTHLY_EXERCISE_TRANSLATION", `Add questionTranslation and answerTranslation (short natural Vietnamese, at every level; a one-word answer such as isn't keeps answerTranslation equal to the answer) to every exercise question that has an answer: ${issues.slice(0, 4).join("; ")}${issues.length > 4 ? `; and ${issues.length - 4} more` : ""}`, dayNumber, part.code));
+    if (issues.length) severe.push(finding("MONTHLY_EXERCISE_TRANSLATION", `Add questionTranslation and answerTranslation (short natural Vietnamese, A1-A2 only; a one-word answer such as isn't keeps answerTranslation equal to the answer) to every exercise question that has an answer: ${issues.slice(0, 4).join("; ")}${issues.length > 4 ? `; and ${issues.length - 4} more` : ""}`, dayNumber, part.code));
   }
   if (review) {
     const sections = evaluateMonthlyReviewSections(contract, day, dayNumber, parts);

@@ -172,7 +172,8 @@ export function answerWeeklyReviewItem(input: {
     ? (english ? "Correct." : "Đúng rồi.")
     : variant.explanation?.trim() || (english ? "Not quite. Read the explanation and try this point again at the end of the section." : "Chưa đúng. Câu này sẽ quay lại ở cuối phần để bạn làm lại.");
   // A finished (correct) item reveals its Vietnamese question/answer translation; a wrong one never does.
-  const translation = correct && variant.questionTranslation && variant.answerTranslation ? { question: variant.questionTranslation, answer: variant.answerTranslation } : undefined;
+  // B1+ learners see none (13/11), even when older content still carries one.
+  const translation = correct && !english && variant.questionTranslation && variant.answerTranslation ? { question: variant.questionTranslation, answer: variant.answerTranslation } : undefined;
   return { ok: true, correct, feedback, willRetry: !correct, state, ...(translation ? { translation } : {}) };
 }
 
