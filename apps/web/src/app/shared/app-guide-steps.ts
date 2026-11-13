@@ -24,8 +24,9 @@ const learnerSteps: Record<string, readonly GuideStep[]> = {
     // Thẻ Tiến độ học tập: một bước cho mỗi ô, dòng vắng nằm ở bước Điểm danh.
     ['[data-home-block="metrics"] [data-home-metric="lessons"]', "Bài theo lịch", "Số **bài học mới** đã học xong trên tổng số bài của tháng. Vòng tròn đầy khi bạn học hết bài theo lịch."],
     ['[data-home-block="metrics"] [data-home-metric="reviews"]', "Bài ôn", "Số **bài ôn** cuối tuần đã làm trên tổng số bài ôn của tháng."],
-    ['[data-home-block="metrics"] [data-home-metric="attendance"]', "Điểm danh", "Số **ngày đã học** trên số ngày học đã qua. Dòng **Vắng** bên dưới so số ngày vắng với **giới hạn cho phép** để được thi tháng."],
-    ['[data-home-block="metrics"] [data-home-metric="points"]', "Điểm huy hiệu", "Điểm tích lũy khi học và luyện. Vòng tròn cho biết bạn còn cách **mốc Season** tiếp theo bao xa."],
+    ['[data-home-block="metrics"] [data-home-metric="attendance"]', "Điểm danh", "Số **ngày bạn đã vào học** trên số ngày học đã qua trong tháng."],
+    ['[data-home-block="metrics"] [data-home-metric="absence"]', "Ngày vắng", "Số ngày **đã vắng** so với số ngày **tối đa được vắng** trong tháng. Vắng quá mức này thì **không được thi tháng**."],
+    ['[data-home-block="metrics"] [data-home-metric="points"]', "Điểm huy hiệu", "Điểm tích lũy khi học và luyện. Vòng tròn cho biết bạn đã đi được bao nhiêu tới **mốc Season** tiếp theo (ghi ở dòng chữ bên dưới)."],
     // Đường lên mức: một bước cho mỗi điều kiện; thẻ dạng cũ (không theo tháng) có một bước chung.
     ['.home-readiness [data-readiness-key="eligibleMonths"]', "6 tháng hợp lệ", "Số **tháng học hợp lệ** ở mức hiện tại. Cần đủ số tháng này mới được thi lên mức."],
     ['.home-readiness [data-readiness-key="monthlyFinals"]', "Kết quả bài thi tháng", "Số **bài thi tháng đạt** và **điểm trung bình** so với mốc yêu cầu, kèm kết quả bài gần nhất."],

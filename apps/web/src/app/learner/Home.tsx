@@ -385,12 +385,13 @@ function HomeAttendanceMetric({ eligibility }: { eligibility: LearnerHomeView["m
 /** Ring toward the next Season points tier; a plain number once the last tier is reached. */
 function HomePointsMetric({ points, nextTier }: { points: number; nextTier: number | null }) {
   if (nextTier === null || nextTier <= 0) return <Metric metric="points" label="Điểm huy hiệu" value={String(points)} plain />;
-  return <Metric metric="points" label="Điểm huy hiệu" value={`${points}/${nextTier}`} percent={ratio(points, nextTier)} color="var(--primary)" title={`Còn ${Math.max(0, nextTier - points)} điểm tới mốc Season tiếp theo`} />;
+  // The ring shows the points only ("60/180" overflowed the ring); the next Season tier is named in the label.
+  return <Metric metric="points" label={`Điểm huy hiệu · mốc ${nextTier}`} value={String(points)} percent={ratio(points, nextTier)} color="var(--primary)" title={`Còn ${Math.max(0, nextTier - points)} điểm tới mốc Season tiếp theo`} />;
 }
 
 function AbsenceChip({ absenceDays, maxAbsences }: { absenceDays: number; maxAbsences: number }) {
   const tone = absenceDays > maxAbsences ? "danger" : absenceDays > 0 ? "warn" : "ok";
-  return <p className={`home-absence-chip badge ${tone}`} data-home-metric="absence" data-tone={tone}>Vắng {absenceDays}/{maxAbsences} ngày cho phép</p>;
+  return <p className={`home-absence-chip badge ${tone}`} data-home-metric="absence" data-tone={tone}>Đã vắng {absenceDays} ngày · tối đa {maxAbsences} ngày để được thi tháng</p>;
 }
 
 const ABSENCE_LOCK_DAYS = 5;

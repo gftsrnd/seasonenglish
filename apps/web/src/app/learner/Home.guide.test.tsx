@@ -70,7 +70,7 @@ describe("learner home guide", () => {
   it("walks the active month home through the progress rings and every level-up condition", () => {
     expect(resolvedTitles(fixtures.activeMonth!)).toEqual([
       "Bài học hôm nay",
-      "Bài theo lịch", "Bài ôn", "Điểm danh", "Điểm huy hiệu",
+      "Bài theo lịch", "Bài ôn", "Điểm danh", "Điểm huy hiệu", "Ngày vắng",
       "Lịch học tháng",
       "Season và bài tháng",
       "6 tháng hợp lệ", "Kết quả bài thi tháng", "Season đạt chỉ tiêu", "Chuyên cần cả level",

@@ -66,7 +66,7 @@ describe("monthly learner home", () => {
     expect(attendance.querySelector(".metric-secondary")).toBeNull();
     expect(attendance).toHaveAttribute("data-percent", "0");
     const chip = container.querySelector<HTMLElement>('[data-home-metric="absence"]')!;
-    expect(chip).toHaveTextContent("Vắng 3/4 ngày cho phép");
+    expect(chip).toHaveTextContent("Đã vắng 3 ngày · tối đa 4 ngày để được thi tháng");
     expect(chip).toHaveClass("warn");
     rerender(<LearnerHome view={view({ monthlyEligibility: { ...eligibility, attendedDays: 3, absenceDays: 1 } })} actions={actions} />);
     expect(container.querySelector('[data-home-metric="attendance"]')).toHaveAttribute("data-percent", "75");
@@ -81,7 +81,7 @@ describe("monthly learner home", () => {
     const metrics = { completedLessons: 1, totalLessons: 3, studyDays: 1, streakDays: 1, points: 60, completedReviews: 0, totalReviews: 1 };
     const { container, rerender } = render(<LearnerHome view={view({ metrics: { ...metrics, nextPointsTier: 180 } })} actions={actions} />);
     const points = () => container.querySelector<HTMLElement>('[data-home-metric="points"]')!;
-    expect(points()).toHaveTextContent("60/180Điểm huy hiệu");
+    expect(points()).toHaveTextContent("60Điểm huy hiệu · mốc 180");
     expect(points()).toHaveAttribute("data-percent", "33");
     expect(points().querySelector(".ring")).toHaveStyle({ "--p": "33" });
     rerender(<LearnerHome view={view({ metrics: { ...metrics, points: 420, nextPointsTier: null } })} actions={actions} />);
