@@ -1755,3 +1755,8 @@ table[aria-label="Lịch sử nhắc học"] td:nth-child(3){overflow-wrap:anywh
 .manager-accounts-table__table td:nth-child(4) .badge,
 .manager-accounts-table__table .manager-account-actions > .btn-sm { white-space: nowrap; }
 .settings-action-table.manager-accounts-table { overflow-x: auto; }
+
+/* Month picker on Hiệu suất vận hành (moved from the unloaded src/styles.css). */
+.manager-operations-month { display: grid; gap: 2px; justify-items: end; }
+.manager-operations-month select { width: auto; min-width: 0; }
+.manager-operations-month-summary { margin: 6px 0 0; }

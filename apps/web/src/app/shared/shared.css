@@ -1364,6 +1364,33 @@ body:has(#root > main :is(textarea, select, input:not([type="checkbox"], [type="
 /* An opened request row shows its decision buttons; let that box grow so they are never hidden in the scroll. */
 #root .request-table:has(.request-expanded-row) { max-height: none !important; overflow-y: visible !important; }
 
+/* Opt-in bounded region for any other long list or table (reminder cards and history, report learner tables).
+   These rules used to live only in src/styles.css, which no runtime module imports, so the class had no effect on
+   screen. shared.css is loaded by AppShell for every role. Same look as the lists above. */
+#root .bounded-scroll-region {
+  max-height: min(60vh, 32rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #9b958b #eeeae3;
+  scrollbar-gutter: stable;
+}
+#root .bounded-scroll-region.report-scroll-region { max-height: min(70vh, 40rem); }
+#root .bounded-scroll-region::-webkit-scrollbar { width: 10px; height: 10px; }
+#root .bounded-scroll-region::-webkit-scrollbar-thumb { border: 2px solid #eeeae3; border-radius: 999px; background: #9b958b; }
+/* Long tables inside a bounded region keep their header row visible while scrolling. */
+#root .sticky-table-head thead th { position: sticky; z-index: 3; top: 0; background: var(--surface); box-shadow: inset 0 -1px 0 var(--line); }
+/* On paper every bounded list and report table prints in full: no height cap, no inner scroll. */
+@media print {
+  #root .bounded-scroll-region,
+  #root .report-scroll-region {
+    max-height: none !important;
+    overflow: visible !important;
+    overscroll-behavior: auto;
+  }
+  #root .sticky-table-head thead th { position: static; box-shadow: none; }
+}
+
 /* Tables inside cards and dialogs inherited `overflow-wrap: anywhere` from .card/.dialog, so columns were squeezed
    until words split mid-word ("probl em", "khác h hàng"). Cells now only wrap between words; when the columns
    no longer fit, the table's own .table-wrap scrolls sideways instead of crushing the text. */

@@ -20,7 +20,8 @@ function isVisible(node: HTMLElement) {
   return true;
 }
 
-function findSteps(definitions: readonly GuideStep[], scope: ParentNode): ActiveStep[] {
+/** Resolves each step to its first visible target, in on-screen order; steps without a target are skipped. */
+export function findSteps(definitions: readonly GuideStep[], scope: ParentNode): ActiveStep[] {
   return definitions.flatMap(([selector, title, text, prioritize]) => {
     const target = Array.from(scope.querySelectorAll<HTMLElement>(selector)).find(isVisible);
     return target ? [{ selector, target, title, text, ...(prioritize ? { prioritize } : {}) }] : [];

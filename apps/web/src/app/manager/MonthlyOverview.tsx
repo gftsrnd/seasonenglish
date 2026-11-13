@@ -273,7 +273,7 @@ function MonthlyLearnerList({ learners }: { learners: readonly ManagerMonthlyLea
   const [showAll, setShowAll] = useState(false);
   const visibleLearners = showAll ? learners : learners.slice(0, 3);
   const remaining = learners.length - visibleLearners.length;
-  return <><ul className="manager-monthly-learner-list" aria-label="Kết quả học tập theo tháng">
+  return <><ul className="manager-monthly-learner-list bounded-scroll-region report-scroll-region" aria-label="Kết quả học tập theo tháng" tabIndex={0}>
     {visibleLearners.map((learner) => <li key={learner.learnerId}>
       <details>
         <summary>

@@ -71,3 +71,8 @@
   .manager-reminder-actions > .btn-sm { min-width: 0; min-height: 44px; padding-inline: 6px; white-space: normal; }
   .manager-reminder-actions > .btn-sm:last-child { grid-column: 1 / -1; }
 }
+
+/* Reminder cards and history scroll inside bounded regions (see .bounded-scroll-region in shared.css). */
+.manager-reminder-queue.bounded-scroll-region { padding: 2px 4px 2px 2px; }
+.manager-reminder-history-action { width: 1%; text-align: right; white-space: nowrap; }
+.manager-reminder-history-list .manager-reminder-history-delete { justify-self: start; margin-top: 6px; }

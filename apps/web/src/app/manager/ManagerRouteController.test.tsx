@@ -12,6 +12,8 @@ import { RoleRoutes } from "../RoleRoutes.js";
 import { ModalProvider } from "../shared/ModalProvider.js";
 import { ThemeProvider } from "../shared/ThemeProvider.js";
 import { ToastProvider } from "../shared/design-system.js";
+import { findSteps } from "../shared/AppGuide.js";
+import { guideDefinitions, type GuideRole } from "../shared/app-guide-steps.js";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 beforeEach(() => {
@@ -929,6 +931,121 @@ describe("ManagerRouteController", () => {
     expect(await screen.findByRole("heading", { name: "Giao diện theo mùa / lễ" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Nhạc nền của Season" })).toBeInTheDocument();
     expect(screen.queryByText("Không tải được cấu hình hệ thống.")).not.toBeInTheDocument();
+  });
+});
+
+/** Runs the guide's own lookup (first visible match per selector) and reports any step with no target. */
+function guideCoverage(role: GuideRole, path: string) {
+  const definitions = guideDefinitions(role, path) ?? [];
+  const found = findSteps(definitions, document);
+  const missing = definitions.filter(([selector]) => !found.some((step) => step.selector === selector)).map(([, title]) => title);
+  return { definitions, found, missing };
+}
+/** Every element in `cards` must be (or sit inside) the target of one guide step. */
+function uncoveredCards(cards: Iterable<Element>, found: ReturnType<typeof findSteps>) {
+  return Array.from(cards).filter((card) => !found.some((step) => step.target === card || step.target.contains(card)))
+    .map((card) => card.querySelector("h3")?.textContent ?? card.className);
+}
+
+/** A settings step targets the collapsible panel on narrow screens and the card itself on desktop. */
+function settingsPanelId(target: HTMLElement) {
+  return target.matches(".settings-panel") ? target.querySelector(':scope > [id^="setting-"]')?.id : target.parentElement?.id;
+}
+
+describe("Manager guide coverage and bounded scroll regions", () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, "getClientRects").mockImplementation(function (this: HTMLElement) {
+      return (this.closest("[hidden]") ? [] : [{}]) as unknown as DOMRectList;
+    });
+  });
+
+  it("guides every card on Tiến độ nhóm, including the toolbar and the three waiting lists", async () => {
+    const base = progressView.learners[0]!;
+    const waiting = (learnerId: string, learnerName: string, placementStatus: "submitted" | "in_progress" | "not_started") => ({ ...base, learnerId, learnerName, cefr: null, placementStatus });
+    vi.mocked(apiClient.getManagerProgress).mockResolvedValue({ ...progressView, learners: [
+      base, waiting("w-1", "Hồ Anh Tuấn", "submitted"), waiting("w-2", "Dương Mỹ Linh", "in_progress"), waiting("w-3", "Tạ Bảo Trâm", "not_started")
+    ] });
+    vi.spyOn(apiClient, "getManagerMonthlyOverview").mockResolvedValue(monthlyOverview);
+    vi.spyOn(apiClient, "getManagerReminders").mockResolvedValue({ organizationName: "GFT", inactiveDays: 3, webhookConfigured: false, candidates: [{ learnerId: "learner-1", learnerName: "Học viên Demo", learnerEmail: "learner@example.com", cefr: "A2", lastActivityAt: null, missedDays: 3 }], history: [] });
+    renderManager(<MemoryRouter initialEntries={["/mgr"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    await screen.findByRole("heading", { name: "Chưa làm test (1)" });
+    expect(screen.getByRole("link", { name: "Mở danh sách 1 người cần nhắc" })).toBeInTheDocument();
+    const { found, missing } = guideCoverage("manager", "/mgr");
+    expect(missing).toEqual([]);
+    expect(found.map((step) => step.title)).toEqual(["Ba chỉ số chính", "Danh sách đang học", "Thao tác nhanh", "Chờ duyệt mức", "Đang làm test", "Chưa làm test"]);
+    expect(uncoveredCards(document.querySelectorAll(".manager-progress-page > section"), found)).toEqual([]);
+    const toolbar = found.find((step) => step.title === "Thao tác nhanh")!.target;
+    for (const name of [/cần nhắc$/, /^Xuất CSV$/, /^Giả lập phần thưởng$/]) expect(toolbar).toContainElement(screen.getByRole(name.source.includes("CSV") ? "button" : "link", { name }));
+    for (const [title, learner] of [["Chờ duyệt mức", "Hồ Anh Tuấn"], ["Đang làm test", "Dương Mỹ Linh"], ["Chưa làm test", "Tạ Bảo Trâm"]] as const) {
+      expect(found.find((step) => step.title === title)!.target).toContainElement(screen.getByRole("button", { name: `Hồ sơ ${learner}` }));
+    }
+  });
+
+  it("guides the reminder list and history, and bounds both on screen", async () => {
+    vi.spyOn(apiClient, "getManagerReminders").mockResolvedValue({
+      organizationName: "GFT", inactiveDays: 3, webhookConfigured: false,
+      candidates: [1, 2, 3].map((index) => ({ learnerId: `learner-${index}`, learnerName: `Học viên ${index}`, learnerEmail: `learner${index}@example.com`, cefr: "A2", lastActivityAt: null, missedDays: 3 + index })),
+      history: [{ reminderId: "reminder-1", learnerId: "learner-1", learnerName: "Học viên 1", recipient: "learner1@example.com", missedDays: 4, status: "sent", deliveryStatus: "sent", provider: "resend", createdAt: "2026-11-10T03:00:00.000Z", attemptedAt: null }]
+    });
+    renderManager(<MemoryRouter initialEntries={["/mgr/reminders"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    const queue = await screen.findByRole("region", { name: "Danh sách học viên cần nhắc" });
+    expect(queue).toHaveClass("manager-reminder-queue", "bounded-scroll-region");
+    expect(queue).toHaveAttribute("tabindex", "0");
+    expect(within(queue).getAllByRole("button", { name: "Copy tin nhắn" })).toHaveLength(3);
+    const history = screen.getByRole("region", { name: "Danh sách lịch sử nhắc" });
+    expect(history).toHaveClass("table-wrap", "bounded-scroll-region", "sticky-table-head");
+    expect(history).toHaveAttribute("tabindex", "0");
+    expect(within(history).getByRole("table", { name: "Lịch sử nhắc học" })).toBeInTheDocument();
+    const { found, missing } = guideCoverage("manager", "/mgr/reminders");
+    expect(missing).toEqual([]);
+    expect(found.map((step) => step.title)).toEqual(["Người cần nhắc", "Danh sách cần nhắc", "Lời nhắc", "Lịch sử nhắc"]);
+  });
+
+  it("guides the monthly report and bounds the per-learner table that /mgr/report renders", async () => {
+    vi.spyOn(apiClient, "getManagerMonthlyOverview").mockResolvedValue(monthlyOverview);
+    renderManager(<MemoryRouter initialEntries={["/mgr/report"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    const region = await screen.findByRole("region", { name: "Bảng từng học viên" });
+    expect(region).toHaveClass("table-wrap", "bounded-scroll-region", "report-scroll-region", "sticky-table-head");
+    expect(region).toHaveAttribute("tabindex", "0");
+    const { found, missing } = guideCoverage("manager", "/mgr/report");
+    expect(missing).toEqual([]);
+    expect(found.find((step) => step.title === "Từng học viên")?.target).toBe(region);
+  });
+
+  it("gives every Manager settings card one step, in reading order", async () => {
+    vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
+    vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
+    vi.spyOn(apiClient, "getManagerSettings").mockResolvedValue(managerSettings);
+    vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
+    vi.spyOn(apiClient, "getManagerAccounts").mockResolvedValue({ organizationName: "GFT", accounts: [] });
+    const { container } = renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    await waitFor(() => expect(container.querySelector("#setting-accounts > .card")).not.toBeNull());
+    const panels = Array.from(container.querySelectorAll('.settings-panel-content[id^="setting-"]'));
+    expect(panels.map((panel) => panel.id)).toEqual(["setting-prompts", "setting-ai", "setting-test-date", "setting-monthly", "setting-images", "setting-theme", "setting-music", "setting-policy", "setting-data", "setting-accounts"]);
+    const { definitions, found, missing } = guideCoverage("manager", "/settings");
+    expect(missing).toEqual([]);
+    expect(found).toHaveLength(definitions.length);
+    expect(found.map((step) => settingsPanelId(step.target))).toEqual(panels.map((panel) => panel.id));
+    expect(found.map((step) => step.title)).toEqual(["Prompt & rubric", "Kết nối AI", "Ngày hệ thống thử", "Học theo tháng", "Ảnh minh họa từ vựng", "Giao diện theo mùa", "Nhạc nền", "Nhắc học và báo cáo", "Dữ liệu", "Người dùng"]);
+  });
+
+  it("gives every Operator settings card one step, in reading order", async () => {
+    vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
+    vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
+    vi.spyOn(apiClient, "getOperatorSettingsOverview").mockResolvedValue({
+      organizationName: "GFT",
+      settings: managerSettings,
+      pilot: { startDate: managerSettings.pilotStartDate, weeks: managerSettings.pilotWeeks, weekOverride: managerSettings.weekOverride, minMinutesPerDay: managerSettings.minMinutesPerDay, courseTheme: managerSettings.courseTheme, coachDailyLimit: managerSettings.coachDailyLimit },
+      test: { timed: managerSettings.testTimed, times: managerSettings.testTimes, warnLimit: managerSettings.testWarnLimit },
+      accounts: []
+    } satisfies OperatorSettingsOverviewView);
+    const { container } = renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="operator" currentUserId="operator-1" /></MemoryRouter>);
+    await waitFor(() => expect(container.querySelector("#setting-accounts > .card")).not.toBeNull());
+    const panels = Array.from(container.querySelectorAll('.settings-panel-content[id^="setting-"]'));
+    expect(panels.map((panel) => panel.id)).toEqual(["setting-theme", "setting-music", "setting-monthly", "setting-exam-requests", "setting-accounts"]);
+    const { found, missing } = guideCoverage("operator", "/settings");
+    expect(missing).toEqual([]);
+    expect(found.map((step) => settingsPanelId(step.target))).toEqual(panels.map((panel) => panel.id));
   });
 });
 

@@ -5,24 +5,40 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync(new URL("./manager.css", import.meta.url), "utf8");
 const controller = readFileSync(new URL("./ManagerRouteController.tsx", import.meta.url), "utf8");
 
-const globalCss = readFileSync(new URL("../../styles.css", import.meta.url), "utf8");
+// The bounded-region rules must live in a stylesheet the app actually loads: src/styles.css is imported by no
+// runtime module, which is why the 2d54aad rules never reached the deployed page.
+const sharedCss = readFileSync(new URL("../shared/shared.css", import.meta.url), "utf8");
+const appShell = readFileSync(new URL("../shared/AppShell.tsx", import.meta.url), "utf8");
 const monthlyReport = readFileSync(new URL("./MonthlyOverview.tsx", import.meta.url), "utf8");
 const pilotReport = readFileSync(new URL("./Report.tsx", import.meta.url), "utf8");
 const reminders = readFileSync(new URL("./Reminders.tsx", import.meta.url), "utf8");
+const screenCss = sharedCss.replace(/@media print \{[\s\S]*?\n\}/g, "");
 
 describe("Manager long-table scroll and print contract", () => {
-  it("bounds report learner tables and reminder history on screen", () => {
-    for (const source of [monthlyReport, pilotReport]) expect(source).toMatch(/manager-report-learner-table-wrap bounded-scroll-region sticky-table-head report-scroll-region/);
-    expect(reminders).toMatch(/table-wrap bounded-scroll-region sticky-table-head manager-reminder-history-scroll/);
-    expect(globalCss).toMatch(/\.sticky-table-head thead th\s*\{[^}]*position:\s*sticky[^}]*top:\s*0/);
-    expect(globalCss).toMatch(/\.report-scroll-region\s*\{[^}]*max-height:/);
+  it("loads the bounded-region rules through the shell every role renders", () => {
+    expect(appShell).toMatch(/import ["']\.\/shared\.css["']/);
   });
 
-  it("prints every bounded table in full with no height cap or inner scroll", () => {
-    const print = globalCss.match(/@media print \{\s*\.bounded-scroll-region,\s*\.report-scroll-region\s*\{([^}]*)\}([^}]*\{[^}]*\})?/);
+  it("marks the reminder cards, reminder history and report learner tables as bounded regions", () => {
+    for (const source of [monthlyReport, pilotReport]) expect(source).toMatch(/manager-report-learner-table-wrap bounded-scroll-region sticky-table-head report-scroll-region" role="region" aria-label="Bảng từng học viên" tabIndex=\{0\}/);
+    expect(monthlyReport).toMatch(/manager-monthly-learner-list bounded-scroll-region report-scroll-region/);
+    expect(reminders).toMatch(/manager-reminder-queue bounded-scroll-region" role="region" aria-label="Danh sách học viên cần nhắc" tabIndex=\{0\}/);
+    expect(reminders).toMatch(/table-wrap bounded-scroll-region sticky-table-head manager-reminder-history-scroll" role="region" aria-label="Danh sách lịch sử nhắc" tabIndex=\{0\}/);
+  });
+
+  it("caps bounded regions on screen with an inner scroll and a sticky table header", () => {
+    expect(screenCss).toMatch(/#root \.bounded-scroll-region\s*\{[^}]*max-height:\s*min\(60vh,\s*32rem\)[^}]*overflow:\s*auto/);
+    expect(screenCss).toMatch(/#root \.bounded-scroll-region\.report-scroll-region\s*\{[^}]*max-height:\s*min\(70vh,\s*40rem\)/);
+    expect(screenCss).toMatch(/#root \.sticky-table-head thead th\s*\{[^}]*position:\s*sticky[^}]*top:\s*0/);
+    // Nothing on screen switches the cap or the inner scroll back off for these regions.
+    expect(screenCss).not.toMatch(/(bounded-scroll-region|report-scroll-region|manager-reminder-queue|manager-report-learner-table-wrap)[^{]*\{[^}]*(max-height:\s*none|overflow(-y)?:\s*visible)/);
+  });
+
+  it("prints every bounded region in full with no height cap or inner scroll", () => {
+    const print = sharedCss.match(/@media print \{\s*#root \.bounded-scroll-region,\s*#root \.report-scroll-region\s*\{([^}]*)\}([^}]*\{[^}]*\})?/);
     expect(print?.[1]).toMatch(/max-height:\s*none !important/);
     expect(print?.[1]).toMatch(/overflow:\s*visible !important/);
-    expect(print?.[2]).toMatch(/\.sticky-table-head thead th\s*\{\s*position:\s*static/);
+    expect(print?.[2]).toMatch(/#root \.sticky-table-head thead th\s*\{\s*position:\s*static/);
   });
 });
 

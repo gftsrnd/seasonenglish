@@ -133,7 +133,11 @@ operatorSteps["/op/levelforms"] = [
 const managerSteps: Record<string, readonly GuideStep[]> = {
   "/mgr": [
     [".manager-kpi-grid", "Ba chỉ số chính", "Tỷ lệ **duy trì nhịp học**, **hoàn thành lộ trình** và mức **hài lòng** của nhóm, so với ngưỡng mục tiêu."],
-    [".manager-progress-card", "Danh sách đang học", "Người học xếp theo **rủi ro bỏ học**. Bấm **Xuất CSV** để tải tiến độ, **Hồ sơ** ở mỗi hàng để xem chi tiết người học."],
+    [".manager-progress-card", "Danh sách đang học", "Người học đã có mức, xếp theo **rủi ro bỏ học**. Bấm **Hồ sơ** ở mỗi hàng để xem chi tiết người học."],
+    [".manager-progress-card-actions", "Thao tác nhanh", "**Cần nhắc** mở trang Nhắc học, **Xuất CSV** tải tiến độ tháng, **Giả lập phần thưởng** xem trước điểm và huy hiệu người học nhận."],
+    [".manager-progress-submitted", "Chờ duyệt mức", "Người học đã nộp **test đầu vào**, đang chờ **Vận hành duyệt mức**. Bấm **Hồ sơ** để xem điểm và thông tin người học."],
+    [".manager-progress-testing", "Đang làm test", "Người học đã mở **test đầu vào** nhưng chưa nộp nên chưa có điểm. Bấm **Hồ sơ** để xem chi tiết."],
+    [".manager-progress-not-tested", "Chưa làm test", "Người học đã có tài khoản nhưng **chưa làm test đầu vào**. Bấm **Hồ sơ** để xem hồ sơ và hoạt động gần nhất."],
   ],
   "/mgr/ops": [
     [".manager-operators-section", "Hiệu suất vận hành", "Mỗi hàng là một người vận hành. Mở hàng để xem số bài **đã soạn**, **đã duyệt** và chi tiết chất lượng."],
@@ -144,13 +148,14 @@ const managerSteps: Record<string, readonly GuideStep[]> = {
   ],
   "/mgr/reminders": [
     [".manager-reminder-toolbar", "Người cần nhắc", "Số người học vắng lâu cần được nhắc hôm nay. Từng người hiện ở các thẻ bên dưới."],
-    [".manager-reminder-card", "Lời nhắc", "Mở để xem nội dung nhắc, rồi gửi qua **email**, **Base.vn** nếu đã cấu hình, hoặc **sao chép** để gửi kênh khác."],
-    [".manager-reminder-history", "Lịch sử nhắc", "Mỗi lần nhắc ghi ngày, người học, nơi nhận, kênh và **kết quả**."],
+    [".manager-reminder-queue", "Danh sách cần nhắc", "Mỗi thẻ là một người học vắng lâu, kèm tin nhắn soạn sẵn. Danh sách dài thì **cuộn trong khung**."],
+    [".manager-reminder-card", "Lời nhắc", "**Copy tin nhắn**, **Gửi email** hoặc **Gửi Base.vn** sau khi **Cấu hình Base.vn**. Đã nhắc ngoài app thì bấm **Đã nhắc qua kênh khác**."],
+    [".manager-reminder-history", "Lịch sử nhắc", "Mỗi lần nhắc ghi ngày, người học, nơi nhận, kênh và **kết quả**. Bảng dài thì **cuộn trong khung**."],
   ],
   "/mgr/report": [
     [".report > .rhead", "Báo cáo tháng", "Chọn **Tháng** và **Mức** để lọc cả báo cáo. Bấm **In / Lưu PDF**, **Copy bản chữ** hoặc tải **.txt** để gửi đi."],
     ['[aria-label="Ba chỉ số của tháng"]', "Ba chỉ số", "Kết quả từng chỉ số so với **ngưỡng** và đánh giá đạt hay chưa."],
-    ['[aria-label="Kết quả học tập theo tháng"]', "Từng học viên", "Điểm danh, bài học, lượt Season, **bài thi tháng** và số khiếu nại của từng người."],
+    [".manager-report-learner-table-wrap, .manager-monthly-learner-list", "Từng học viên", "Điểm danh, bài học, lượt Season, **bài thi tháng** và số khiếu nại của từng người."],
     [".manager-report-next-actions", "Việc cần làm tiếp", "Gợi ý **việc nên làm** từ số liệu tháng, kèm **tên người học** liên quan."],
   ],
   "/mgr/surveys": [
@@ -204,10 +209,13 @@ const musicGuide = settingsStep("music", "Nhạc nền", "Bật nhạc nền, ch
 const learningGuide = settingsStep("monthly", "Học theo tháng", "Thời lượng học khuyến nghị mỗi ngày và **giới hạn lượt chat** với Season. Bấm **Lưu** để áp dụng.");
 
 const managerSettings: readonly GuideStep[] = [
+  settingsStep("prompts", "Prompt & rubric", "Bấm **Mở Prompt & rubric** để xem và sửa **hướng dẫn AI** và **rubric chấm**, tách khỏi việc vận hành hằng ngày."),
   settingsStep("ai", "Kết nối AI", "Chọn **nhà cung cấp**, địa chỉ, khóa và mô hình AI cho Season và sinh bài. Bấm **Kiểm tra kết nối** trước khi **Lưu**."),
   settingsStep("test-date", "Ngày hệ thống thử", "Ngày giả lập điều khiển **lịch học**, quyền vào bài, điểm danh và thông báo của **cả tổ chức**."),
   learningGuide,
   settingsStep("images", "Ảnh minh họa từ vựng", "Chọn **nguồn ảnh** cho từ vựng. Bấm **Thử ảnh** để xem mẫu, **Xoá cache ảnh** khi đổi nguồn."),
+  themeGuide,
+  musicGuide,
   settingsStep("policy", "Nhắc học và báo cáo", "Số **ngày không hoạt động** thì cần nhắc học, và có gửi **báo cáo tháng** hay không."),
   settingsStep("data", "Dữ liệu", "**Xuất JSON** để sao lưu, **Xuất CSV** để xem tiến độ. **Nhập JSON** sẽ ghi đè dữ liệu, kiểm tra đúng tệp trước."),
   settingsStep("accounts", "Người dùng", "Vai trò và trạng thái từng tài khoản. Mỗi hàng có **Khoá**, **Đặt lại** mật khẩu hoặc PIN và **Xoá**; cuối thẻ để thêm người dùng."),

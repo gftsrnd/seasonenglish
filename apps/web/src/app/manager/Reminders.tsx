@@ -84,7 +84,7 @@ export function ManagerReminders({ view, sendingKey, notice, noticeTone = "info"
     {notice ? <div className={`banner ${noticeTone}`} role={noticeTone === "danger" ? "alert" : "status"}>{notice}</div> : null}
     {localStatus ? <div className="manager-inline-status xs muted" role="status" aria-live="polite">{localStatus}</div> : null}
     {view.candidates.length ? <div className="card row between manager-reminder-toolbar"><div><b>{view.candidates.length} người học cần được nhắc</b><span className="small muted">Email được gửi riêng cho từng học viên.</span></div><button className="btn-primary" type="button" disabled={view.emailConfigured === false || sending || sendingAll} aria-busy={sendingAll || undefined} onClick={() => setConfirmation({ kind: "all" })}>{sendingAll ? "Đang gửi tất cả…" : "Gửi tất cả qua email"}</button></div> : null}
-    {view.candidates.length ? <div className="manager-reminder-queue">
+    {view.candidates.length ? <div className="manager-reminder-queue bounded-scroll-region" role="region" aria-label="Danh sách học viên cần nhắc" tabIndex={0}>
       {view.candidates.map((candidate) => {
         const days = candidate.missedDays ?? view.inactiveDays;
         const message = reminderMessage(candidate.learnerName, days);
