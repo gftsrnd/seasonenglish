@@ -12,7 +12,7 @@ import type {
   MonthlyExamEligibilityView
 } from "@e4s/contracts";
 import { buildPronunciationAssets, microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
-import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerConsecutiveLearningAbsences, learnerMonthlyAccess, learnerMonthlyAttendanceDates, learnerMonthlyLessonDates, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
+import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerLearningAbsenceStreak, nextSeasonPointsTier, syncLearnerAbsenceNotice, learnerMonthlyAccess, learnerMonthlyAttendanceDates, learnerMonthlyLessonDates, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
 import { gradeLessonAnswer, SENSITIVE_NAME_MESSAGE_VI, sensitiveTextIssue, validateGeneratedFeedback } from "@e4s/domain/content";
 import { evaluateMonthlyExamEligibility, learnerMonthlySeasonTarget, monthlyAttendanceCountedDates, MONTHLY_EXAM_ENTRY_CUTOFF, monthlyExamEntryState } from "@e4s/domain/progression";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
@@ -174,7 +174,7 @@ export function registerLearningRoutes(
 
   app.get("/api/v1/learner/home", { preHandler: learnerOnly }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
-    const [profile, monthlyContext, progress, microLesson, runner, monthlyEligibility, monthlyAccess, inactiveDays, coachTarget, monthlyAttempt] = await Promise.all([
+    const [profile, monthlyContext, progress, microLesson, runner, monthlyEligibility, monthlyAccess, absenceStreak, coachTarget, monthlyAttempt] = await Promise.all([
       repositories.learning.getProfile(learnerId),
       repositories.learning.getActiveMonthlyContext(learnerId),
       repositories.learning.getProgressDashboard(learnerId),
@@ -182,11 +182,17 @@ export function registerLearningRoutes(
       runnerFor(learnerId),
       monthlyExamEligibility(pool, learnerId),
       learnerMonthlyAccess(pool, learnerId),
-      learnerConsecutiveLearningAbsences(pool, learnerId),
+      learnerLearningAbsenceStreak(pool, learnerId),
       repositories.coach.dailyLimitForLearner(learnerId),
       repositories.assessments.findMonthlyFinalAttempt(learnerId)
     ]);
     if (!progress) return reply.code(404).send({ code: "LEARNER_NOT_FOUND" });
+    const inactiveDays = absenceStreak.days;
+    try {
+      await syncLearnerAbsenceNotice(pool, learnerId, absenceStreak);
+    } catch (error) {
+      request.log.warn({ err: error }, "Unable to sync absence notification");
+    }
     // Home follows the organisation (Manager test) date everywhere, also when the month is not published yet.
     const organizationDate = monthlyContext?.systemDate ?? monthlyAccess?.systemDate ?? monthlyEligibility.systemDate;
     const lifecycle = progress.learner.cefr
@@ -307,6 +313,7 @@ export function registerLearningRoutes(
         studyDays: monthlyContext ? progress.studyDays : 0,
         streakDays: monthlyContext ? calculateCurrentStreak(progress.activity.map((item) => item.occurredAt), organizationDate) : 0,
         points,
+        nextPointsTier: monthlyContext ? nextSeasonPointsTier(points) : null,
         completedReviews,
         totalReviews,
         monthlyExamStatus

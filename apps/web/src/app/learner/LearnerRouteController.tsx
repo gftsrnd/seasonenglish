@@ -210,8 +210,8 @@ function LearnerContent({ courseCompleted }: { courseCompleted: boolean }) {
       switch (route.name) {
         case "home":
         case "monthly": {
-          const [homeData, notifications] = await Promise.all([apiClient.getHome(), apiClient.getNotifications().catch(() => ({ notifications: [] }))]);
-          const home = { ...homeData, notifications: notifications.notifications };
+          // Notifications are read in the bell; Home only shows its own blocks.
+          const home = await apiClient.getHome();
           if (!home.onboardingRequired && home.learner.cefr === null) {
             try {
               const placement = await apiClient.getAssessment("placement");

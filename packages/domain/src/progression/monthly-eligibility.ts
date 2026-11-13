@@ -56,14 +56,28 @@ export function monthlyAttendanceCountedDates(effectiveDates: readonly string[],
 export function consecutiveLearningAbsences(
   effectiveDates: readonly string[], attendedDates: readonly string[], today: string, resetOn?: string
 ): number {
+  return learningAbsenceStreak(effectiveDates, attendedDates, today, resetOn).days;
+}
+
+/** The current run of missed learning days and the first missed date of that run (one key per streak). */
+export function learningAbsenceStreak(
+  effectiveDates: readonly string[], attendedDates: readonly string[], today: string, resetOn?: string
+): { days: number; startedOn: string | null } {
   const attended = new Set(attendedDates);
-  let missed = 0;
+  let days = 0;
+  let startedOn: string | null = null;
   for (const date of effectiveDates) {
     if (date >= today) break;
     if (resetOn && date < resetOn) continue;
-    missed = attended.has(date) ? 0 : missed + 1;
+    if (attended.has(date)) {
+      days = 0;
+      startedOn = null;
+    } else {
+      if (days === 0) startedOn = date;
+      days += 1;
+    }
   }
-  return missed;
+  return { days, startedOn };
 }
 
 export interface MonthlyExamEligibilityInput {

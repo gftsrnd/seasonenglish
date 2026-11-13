@@ -128,6 +128,13 @@ function notificationContent(item: InboxNotificationView): { title: string; desc
       return { title: "Tài khoản của bạn đã được mở lại", description: "Bạn đã có thể sử dụng E4S theo quyền của mình.", path: "/", action: "Về trang chính" };
     case "lesson_availability_changed":
       return { title: "Lịch học tháng đã thay đổi", description: "Mở lịch để xem các bài hiện có.", path: "/monthly", action: "Xem lịch học" };
+    case "lesson_reopened":
+      return { title: "Một bài học đang được cập nhật", description: "Kết quả đã hoàn thành của bạn vẫn được giữ nguyên. Bài sẽ mở lại khi được duyệt.", path: "/monthly", action: "Xem lịch học" };
+    case "absence_warning": {
+      const days = /^\d+$/.test(item.context) ? Number(item.context) : 3;
+      const left = Math.max(1, 5 - days);
+      return { title: `Bạn đã vắng ${days} ngày học liên tiếp`, description: `Vắng thêm ${left} ngày học liên tiếp sẽ bị khóa tài khoản.`, path: "/home", action: "Học bài hôm nay" };
+    }
     case "lesson_published":
       return { title: "Lịch học có bài mới hoặc bài cập nhật", description: "Lịch tháng hiển thị ngày mở của từng bài.", path: "/monthly", action: "Xem lịch học" };
     case "monthly_exam_published":

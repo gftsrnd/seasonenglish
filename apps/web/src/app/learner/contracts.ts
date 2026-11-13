@@ -16,7 +16,6 @@ import type {
   RequestEvidenceInput,
   LearnerAcademicAppealView,
   LearnerComplaintView,
-  LearnerNotificationView,
   LearnerProfileData,
   LearnerProgressView,
   LessonProgressView,
@@ -54,7 +53,6 @@ export interface LearnerHomeView extends LearnerHomeContractView {
   approvalPending?: boolean;
   placementDraft?: boolean;
   reward?: { points: number; nextPoints: number | null; seasonName: string };
-  notifications?: readonly LearnerNotificationView[];
 }
 
 export interface OnboardView {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consecutiveLearningAbsences, evaluateMonthlyExamEligibility, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, monthlyExamEntryState, learnerMonthlySeasonTarget, monthlyLearnerWindow, monthlySeasonTurnTarget } from "../src/progression/monthly-eligibility.js";
+import { consecutiveLearningAbsences, learningAbsenceStreak, evaluateMonthlyExamEligibility, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, monthlyExamEntryState, learnerMonthlySeasonTarget, monthlyLearnerWindow, monthlySeasonTurnTarget } from "../src/progression/monthly-eligibility.js";
 
 it("allows starts through the 23:24 ICT minute and closes at 23:25", () => {
   expect(monthlyExamEntryState("2026-11-29", "2026-11-30", "23:59:59")).toBe("upcoming");
@@ -20,6 +20,13 @@ it("counts only elapsed effective dates and resets the streak on attendance", ()
   expect(consecutiveLearningAbsences(dates, [], "2026-11-11")).toBe(5);
   expect(consecutiveLearningAbsences(dates, ["2026-11-09"], "2026-11-11")).toBe(1);
   expect(consecutiveLearningAbsences(dates, [], "2026-11-11", "2026-11-10")).toBe(1);
+});
+
+it("keys an absence streak by its first missed date so each streak level is reported once", () => {
+  const dates = ["2026-11-04", "2026-11-05", "2026-11-06", "2026-11-09", "2026-11-10", "2026-11-11"];
+  expect(learningAbsenceStreak(dates, ["2026-11-05"], "2026-11-11")).toEqual({ days: 3, startedOn: "2026-11-06" });
+  expect(learningAbsenceStreak(dates, ["2026-11-05"], "2026-11-12")).toEqual({ days: 4, startedOn: "2026-11-06" });
+  expect(learningAbsenceStreak(dates, ["2026-11-10"], "2026-11-11")).toEqual({ days: 0, startedOn: null });
 });
 
 it("shows attendance today without treating today as an elapsed absence", () => {

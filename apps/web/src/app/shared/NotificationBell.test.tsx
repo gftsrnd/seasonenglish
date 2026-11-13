@@ -58,6 +58,22 @@ describe("NotificationBell", () => {
     expect(api.markInboxRead).toHaveBeenCalledWith({ ids: ["unknown-kind"] });
   });
 
+  it("shows the learner's absence warning and a reopened lesson as bell notifications", async () => {
+    const items = [
+      { ...notification, id: "absence-3", kind: "absence_warning", context: "3" },
+      { ...notification, id: "lesson-reopen", kind: "lesson_reopened", context: "2026-11" }
+    ];
+    api.getNotificationInbox.mockImplementation(async (limit) => ({ items: limit ? items : [], unreadCount: 2, nextCursor: null }));
+    api.markInboxRead.mockResolvedValue({ unreadCount: 1 });
+    const user = userEvent.setup();
+    render(<MemoryRouter><NotificationBell /></MemoryRouter>);
+    await user.click(await screen.findByRole("button", { name: /2 chưa đọc/ }));
+    const dialog = screen.getByRole("dialog", { name: "Thông báo" });
+    expect(await within(dialog).findByText("Bạn đã vắng 3 ngày học liên tiếp")).toBeInTheDocument();
+    expect(within(dialog).getByText("Vắng thêm 2 ngày học liên tiếp sẽ bị khóa tài khoản.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Một bài học đang được cập nhật")).toBeInTheDocument();
+  });
+
   it("shows the test-date and unapproved upcoming-lesson notices with their dates", async () => {
     const items = [
       { ...notification, id: "test-date", kind: "test_date_active", context: "2026-11-09:2026-11-12" },

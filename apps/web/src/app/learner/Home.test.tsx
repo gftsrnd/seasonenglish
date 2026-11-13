@@ -48,6 +48,50 @@ describe("monthly learner home", () => {
     expect(screen.queryByRole("region", { name: "Bài thi đầu ra" })).not.toBeInTheDocument();
   });
 
+  it("keeps absence and content notices in the bell and shows a compact banner only on the last day before the lock", () => {
+    const { rerender, container } = render(<LearnerHome view={view({ inactivityReminder: { inactiveDays: 3 } })} actions={actions} />);
+    expect(screen.queryByText(/ngày học liên tiếp/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Thông báo mới" })).not.toBeInTheDocument();
+    expect(container.querySelector(".home-blocking-banner")).toBeNull();
+    rerender(<LearnerHome view={view({ inactivityReminder: { inactiveDays: 4 } })} actions={actions} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Vắng thêm 1 ngày học sẽ bị khóa tài khoản.");
+    expect(container.querySelectorAll(".home-blocking-banner")).toHaveLength(1);
+  });
+
+  it("shows attendance over the days so far and absences as a separate toned chip", () => {
+    const eligibility = { month: "2026-11", systemDate: "2026-11-06", examDate: "2026-11-30", effectiveDays: 15, attendedDays: 0, absenceDays: 3, maxAbsences: 4, attendanceEligible: true, accessState: "tracking" as const, opensAt: "2026-11-30T00:00:00", closesAt: null };
+    const { container, rerender } = render(<LearnerHome view={view({ monthlyEligibility: eligibility })} actions={actions} />);
+    const attendance = container.querySelector<HTMLElement>('[data-home-metric="attendance"]')!;
+    expect(attendance).toHaveTextContent("0/3Điểm danh");
+    expect(attendance.querySelector(".metric-secondary")).toBeNull();
+    expect(attendance).toHaveAttribute("data-percent", "0");
+    const chip = container.querySelector<HTMLElement>('[data-home-metric="absence"]')!;
+    expect(chip).toHaveTextContent("Vắng 3/4 ngày cho phép");
+    expect(chip).toHaveClass("warn");
+    rerender(<LearnerHome view={view({ monthlyEligibility: { ...eligibility, attendedDays: 3, absenceDays: 1 } })} actions={actions} />);
+    expect(container.querySelector('[data-home-metric="attendance"]')).toHaveAttribute("data-percent", "75");
+    rerender(<LearnerHome view={view({ monthlyEligibility: { ...eligibility, attendedDays: 2, absenceDays: 0 } })} actions={actions} />);
+    expect(container.querySelector('[data-home-metric="absence"]')).toHaveClass("ok");
+    rerender(<LearnerHome view={view({ monthlyEligibility: { ...eligibility, absenceDays: 5 } })} actions={actions} />);
+    expect(container.querySelector('[data-home-metric="absence"]')).toHaveClass("danger");
+    for (const card of container.querySelectorAll(".monthly-home-metrics .stat")) expect(card.querySelectorAll(".lbl")).toHaveLength(1);
+  });
+
+  it("fills the badge-points ring toward the next Season tier and shows a plain number after the last tier", () => {
+    const metrics = { completedLessons: 1, totalLessons: 3, studyDays: 1, streakDays: 1, points: 60, completedReviews: 0, totalReviews: 1 };
+    const { container, rerender } = render(<LearnerHome view={view({ metrics: { ...metrics, nextPointsTier: 180 } })} actions={actions} />);
+    const points = () => container.querySelector<HTMLElement>('[data-home-metric="points"]')!;
+    expect(points()).toHaveTextContent("60/180Điểm huy hiệu");
+    expect(points()).toHaveAttribute("data-percent", "33");
+    expect(points().querySelector(".ring")).toHaveStyle({ "--p": "33" });
+    rerender(<LearnerHome view={view({ metrics: { ...metrics, points: 420, nextPointsTier: null } })} actions={actions} />);
+    expect(points()).toHaveTextContent("420Điểm huy hiệu");
+    expect(points().querySelector(".ring")).toBeNull();
+    expect(points()).toHaveClass("is-plain");
+    const lessons = container.querySelector<HTMLElement>('[data-home-metric="lessons"]')!;
+    expect(lessons).toHaveAttribute("data-percent", "33");
+  });
+
   it("renders monthly counters, calendar, monthly exam, and no retired weekly/pilot UI", () => {
     render(<LearnerHome view={view()} actions={actions} />);
     expect(screen.getAllByText("Bài tháng").length).toBeGreaterThan(0);

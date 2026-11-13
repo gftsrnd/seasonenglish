@@ -387,6 +387,8 @@ export interface LearnerHomeView {
     studyDays: number;
     streakDays: number;
     points: number;
+    /** Points of the next Season tier; null or absent once the last tier is reached. */
+    nextPointsTier?: number | null;
     completedReviews?: number;
     totalReviews?: number;
     monthlyExamStatus?: "unpublished" | "locked" | "ready" | "completed";

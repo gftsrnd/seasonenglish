@@ -33,9 +33,10 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
   return <div className="app-learner-page home-page" data-monthly-preparation={monthlyPreparation || !monthly || (!next && !view.lessons.length)} style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
     <PageTitle eyebrow={monthly ? `Tháng ${formatMonth(monthly.month)} · ${monthly.themeTitle}` : "Lộ trình tháng đang được chuẩn bị"} title={`Chào ${view.learner.displayName}!`} aside={<span className={`badge lvl lvl-${view.learner.cefr}`}>Trình độ {view.learner.cefr}</span>} />
     <div className="bao-row" style={{ marginBottom: 16 }} aria-label="Lời chào của Season AI Coach"><div className="bubble home-today-heading" style={{ flex: 1 }}>Hôm nay học gì nào?</div></div>
-    {view.inactivityReminder ? <Notice tone="warn"><b>Bạn đã vắng {view.inactivityReminder.inactiveDays} ngày học liên tiếp.</b> Vắng thêm {Math.max(1, 5 - view.inactivityReminder.inactiveDays)} ngày học liên tiếp sẽ bị khóa tài khoản.</Notice> : null}
+    {/* Absence warnings and content updates live in the notification bell. Only the last day before the
+        account lock stays on the page, as one compact line. */}
+    {view.inactivityReminder && view.inactivityReminder.inactiveDays >= ABSENCE_LOCK_DAYS - 1 ? <p className="home-blocking-banner" role="alert"><b>Vắng thêm 1 ngày học sẽ bị khóa tài khoản.</b> Học bài hôm nay để giữ tài khoản.</p> : null}
     {!view.aiAvailable && view.aiAvailable !== undefined ? <Notice tone="warn">Bạn vẫn có thể học, làm bài thi và luyện với Season. Nhận xét AI đang tạm thời gián đoạn.</Notice> : null}
-    {view.notifications?.length ? <section className="card soft" aria-label="Thông báo mới" style={{ marginTop: 12 }}><div className="eyebrow">Thông báo</div><h3 style={{ margin: "2px 0 8px" }}>Nội dung học tập</h3><ul style={{ margin: 0, paddingLeft: 20 }}>{view.notifications.slice(0, 5).map((notification) => <li key={notification.id} className="small" style={{ marginBottom: 6 }}>{notification.message}</li>)}</ul></section> : null}
     <PrimaryLesson view={view} next={next} actions={actions} />
     {view.learner.cefr === "C1" && !courseCompleted ? <section className="card learner-summary-card pass-course-home-card" aria-label="Bài thi đầu ra">
       <div className="row between">
@@ -50,11 +51,12 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
     {!monthlyPreparation ? <section data-home-block="metrics" aria-label="Tiến độ tháng" style={{ marginTop: 16, padding: "16px 18px", borderRadius: 18, background: "var(--mint)", border: "1px solid var(--border)" }}>
       <div><div className="eyebrow">Theo tháng</div><h2 style={{ margin: "2px 0 0" }}>Tiến độ học tập</h2></div>
       <div className="stats monthly-home-metrics" style={{ marginTop: 12 }}>
-        <Metric label="Bài theo lịch" value={`${view.metrics.completedLessons}/${view.metrics.totalLessons}`} percent={ratio(view.metrics.completedLessons, view.metrics.totalLessons)} />
-        <Metric label="Bài ôn" value={`${view.metrics.completedReviews ?? 0}/${view.metrics.totalReviews ?? 0}`} percent={ratio(view.metrics.completedReviews ?? 0, view.metrics.totalReviews ?? 0)} color="var(--primary)" />
-        <Metric label="Điểm danh" secondary={view.monthlyEligibility ? `Vắng ${view.monthlyEligibility.absenceDays}/${view.monthlyEligibility.maxAbsences}` : undefined} value={view.monthlyEligibility ? `${view.monthlyEligibility.attendedDays}/${view.monthlyEligibility.effectiveDays}` : "–"} percent={view.monthlyEligibility ? ratio(view.monthlyEligibility.attendedDays, view.monthlyEligibility.effectiveDays) : 0} color="var(--peach)" />
-        <Metric label="Điểm huy hiệu" value={String(view.metrics.points)} color="var(--primary)" />
+        <Metric metric="lessons" label="Bài theo lịch" value={`${view.metrics.completedLessons}/${view.metrics.totalLessons}`} percent={ratio(view.metrics.completedLessons, view.metrics.totalLessons)} />
+        <Metric metric="reviews" label="Bài ôn" value={`${view.metrics.completedReviews ?? 0}/${view.metrics.totalReviews ?? 0}`} percent={ratio(view.metrics.completedReviews ?? 0, view.metrics.totalReviews ?? 0)} color="var(--primary)" />
+        <HomeAttendanceMetric eligibility={view.monthlyEligibility} />
+        <HomePointsMetric points={view.metrics.points} nextTier={view.metrics.nextPointsTier ?? null} />
       </div>
+      {view.monthlyEligibility ? <AbsenceChip absenceDays={view.monthlyEligibility.absenceDays} maxAbsences={view.monthlyEligibility.maxAbsences} /> : null}
     </section> : null}
     {monthly ? <MonthlyCalendar month={monthly} lessons={view.lessons} actions={actions} /> : null}
     <section className="grid cols-2" style={{ marginTop: 16, alignItems: "stretch", gridAutoRows: "1fr", minWidth: 0 }} data-home-block="activities" aria-label="Hoạt động tháng">
@@ -366,9 +368,32 @@ function MonthlyEligibilitySummary({ eligibility, actions }: { eligibility: NonN
     {appealRequired ? <section className="card monthly-complaint-form"><h3>Khiếu nại điều kiện dự thi</h3><p className="small muted">Quản lý sẽ phản hồi trong 24 giờ. Nếu chưa xử lý đúng hạn, đơn sẽ được tự duyệt.</p>{complaints.filter((item) => item.kind === "exam_eligibility" && (item.month ?? item.submittedAt.slice(0, 7)) === eligibility.month).slice(0, 1).map((item) => <p className="small" key={item.id}>Đơn gần nhất: {item.status === "pending" ? "Đang chờ xử lý" : item.status === "auto_approved" || item.status === "approved" ? `Đã duyệt${item.resolution ? ` · ${item.resolution}` : ""}` : `Bị từ chối${item.resolution ? ` · ${item.resolution}` : ""}`}</p>)}{complaintError ? <p role="alert" className="small danger-text">{complaintError}</p> : null}<RequestEvidenceFields key={complaintRevision} value={complaintEvidence} onChange={setComplaintEvidence} label="Ngày hoặc mục cần kiểm tra" placeholder="Ví dụ: Điểm danh ngày 06/11" disabled={submittingComplaint} /><label>Lý do<textarea value={complaintReason} maxLength={2000} onChange={(event) => setComplaintReason(event.target.value)} /></label><button className="btn-sm btn-primary" type="button" disabled={submittingComplaint || complaintEvidence.blocked || complaintReason.trim().length < 5 || complaints.some((item) => item.kind === "exam_eligibility" && item.status === "pending")} onClick={() => { const submit = actions.submitComplaint; if (!submit) return; setSubmittingComplaint(true); setComplaintError(""); void submit("exam_eligibility", complaintReason.trim(), ...requestEvidenceArgs(complaintEvidence)).then(() => { setComplaintReason(""); setComplaintEvidence({}); setComplaintRevision(value => value + 1); return actions.getComplaints?.(); }).then((result) => { if (result) setComplaints(result.complaints); }).catch(() => setComplaintError("Không gửi được khiếu nại. Hãy thử lại sau.")).finally(() => setSubmittingComplaint(false)); }}>Gửi khiếu nại</button></section> : null}
   </section>;
 }
-function Metric({ label, secondary, value, pending, percent, color = "var(--olive)" }: { label: string; secondary?: string | undefined; value?: string; pending?: string; percent?: number; color?: string }) {
-  return <article className={`stat${pending ? " is-pending" : ""}`}>{pending ? <div className="metric-pending" role="status">{pending}</div> : <div className="ring" style={{ "--p": percent ?? 0, "--c": color } as CSSProperties}><b>{value}</b></div>}<span className="lbl">{label}</span>{secondary ? <small className="metric-secondary" style={{ display: "block" }}>{secondary}</small> : null}</article>;
+function Metric({ metric, label, secondary, value, pending, percent, color = "var(--olive)", plain = false, title }: { metric?: string; label: string; secondary?: string | undefined; value?: string; pending?: string; percent?: number; color?: string; plain?: boolean; title?: string | undefined }) {
+  const figure = pending ? <div className="metric-pending" role="status">{pending}</div>
+    : plain ? <div className="stat-figure"><b>{value}</b></div>
+      : <div className="ring" style={{ "--p": percent ?? 0, "--c": color } as CSSProperties}><b>{value}</b></div>;
+  return <article className={`stat${pending ? " is-pending" : ""}${plain ? " is-plain" : ""}`} data-home-metric={metric} data-percent={plain || pending ? undefined : percent ?? 0} title={title}>{figure}<span className="lbl">{label}</span>{secondary ? <small className="metric-secondary" style={{ display: "block" }}>{secondary}</small> : null}</article>;
 }
+
+/** Days attended over the counted learning days that have already come (absences + attended days). */
+function HomeAttendanceMetric({ eligibility }: { eligibility: LearnerHomeView["monthlyEligibility"] }) {
+  if (!eligibility) return <Metric metric="attendance" label="Điểm danh" value="–" percent={0} color="var(--peach)" />;
+  const daysSoFar = eligibility.attendedDays + eligibility.absenceDays;
+  return <Metric metric="attendance" label="Điểm danh" value={`${eligibility.attendedDays}/${daysSoFar}`} percent={ratio(eligibility.attendedDays, daysSoFar)} color="var(--peach)" title={`Đã học ${eligibility.attendedDays} trên ${daysSoFar} ngày học đã qua`} />;
+}
+
+/** Ring toward the next Season points tier; a plain number once the last tier is reached. */
+function HomePointsMetric({ points, nextTier }: { points: number; nextTier: number | null }) {
+  if (nextTier === null || nextTier <= 0) return <Metric metric="points" label="Điểm huy hiệu" value={String(points)} plain />;
+  return <Metric metric="points" label="Điểm huy hiệu" value={`${points}/${nextTier}`} percent={ratio(points, nextTier)} color="var(--primary)" title={`Còn ${Math.max(0, nextTier - points)} điểm tới mốc Season tiếp theo`} />;
+}
+
+function AbsenceChip({ absenceDays, maxAbsences }: { absenceDays: number; maxAbsences: number }) {
+  const tone = absenceDays > maxAbsences ? "danger" : absenceDays > 0 ? "warn" : "ok";
+  return <p className={`home-absence-chip badge ${tone}`} data-home-metric="absence" data-tone={tone}>Vắng {absenceDays}/{maxAbsences} ngày cho phép</p>;
+}
+
+const ABSENCE_LOCK_DAYS = 5;
 
 function ratio(value: number, total: number) { return total > 0 ? Math.max(0, Math.min(100, Math.round(value / total * 100))) : 0; }
 

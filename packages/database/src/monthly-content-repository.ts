@@ -760,11 +760,7 @@ export class MonthlyContentRepository {
     await this.audit(manager, "monthly.framework_retired", framework.id, {
       month: framework.month, cefr: framework.cefr, reason: reason.trim()
     });
-    await this.notifyAffectedLearners(
-      manager.organization_id,
-      "daily_lesson",
-      "Tài nguyên tháng đã được rút khỏi phát hành để kiểm tra. Bài mới sẽ được thông báo khi phát hành lại."
-    );
+    // Learners of this level hear about it in the bell (audit trigger, kind lesson_availability_changed).
   }
 
   /**
@@ -1057,7 +1053,7 @@ export class MonthlyContentRepository {
     await this.database.query("update month_lesson_corrections set status = 'published', published_at = now() where id = $1", [correctionId]);
     await this.database.query("update month_lessons set lesson_id = $2, updated_at = now() where id = $1", [correction.month_lesson_id, lessonId]);
     await this.audit(actor, "monthly.correction_published", correctionId, { monthLessonId: correction.month_lesson_id, lessonId });
-    await this.notifyAffectedLearners(actor.organization_id, correction.target, "Nội dung bài học đã được cập nhật. Kết quả đã hoàn thành của bạn vẫn được giữ nguyên.");
+    // Publishing the correction notifies the level cohort in the bell (trigger, kind lesson_published).
   }
 
   async listReopenRequests(managerId: string): Promise<ReopenRequestView[]> {
@@ -1114,7 +1110,7 @@ export class MonthlyContentRepository {
     if (!row) throw httpError(409, "REOPEN_REQUEST_NOT_PENDING", "Yêu cầu mở lại đã được xử lý hoặc không còn hiệu lực.");
     await this.audit(manager, `monthly.reopen_${decision}`, correctionId, { target: row.target, targetId: row.target_id, reason: reason.trim() });
     if (decision === "approved") {
-      await this.notifyAffectedLearners(manager.organization_id, row.target, "Nội dung bài học đã được mở lại để cập nhật. Kết quả đã hoàn thành của bạn vẫn được giữ nguyên.");
+      await this.notifyLessonReopened(manager.organization_id, correctionId, row.target_id);
     }
     return { id: row.id, target: row.target, targetId: row.target_id, requestedBy: row.requested_by, reason: row.reason,
       status: decision, decisionReason: row.decision_reason ?? reason.trim(), createdAt: row.created_at.toISOString(), decidedAt: row.decided_at!.toISOString() };
@@ -1253,9 +1249,8 @@ export class MonthlyContentRepository {
     } finally {
       if (pooledClient) (client as PoolClient).release();
     }
-    if (approvedLessonCount > 0) {
-      await this.notifyAffectedLearners(manager.organization_id, "daily_lesson", "Tài nguyên tháng đã được mở lại để cập nhật. Bài học mới sẽ được thông báo khi phát hành lại.");
-    }
+    // An approved reopen with approved lessons reaches the level cohort once, in the bell, through the
+    // monthly.framework_reopened audit trigger (kind lesson_availability_changed).
     const detail = await this.frameworkReopenDetail(decided.framework_id);
     return toFrameworkReopenRequestView({ ...decided, ...detail });
   }
@@ -1521,15 +1516,19 @@ export class MonthlyContentRepository {
     }));
   }
 
-  private async notifyAffectedLearners(organizationId: string, target: "daily_lesson" | "weekly_review", message: string): Promise<void> {
-    const learners = await this.database.query<{ id: string }>("select id from users where organization_id = $1 and role = 'learner' and status = 'active'", [organizationId]);
-    for (const learner of learners.rows) {
-      await this.database.query(
-        `insert into reminders (id, learner_id, reason, message, status)
-         values ($1, $2, $3, $4, 'sent')`,
-        [randomUUID(), learner.id, target === "weekly_review" ? "weekly_review_reopened" : "daily_lesson_reopened", message]
-      );
-    }
+  /**
+   * One bell notification per reopened lesson for the learners of that lesson's level (the old
+   * reminder rows went to every learner of the organisation and showed as a list on Home).
+   */
+  private async notifyLessonReopened(organizationId: string, correctionId: string, monthLessonId: string): Promise<void> {
+    await this.database.query(
+      `select notify_level_cohort($1, mf.cefr, $2, 'lesson_reopened', pm.month)
+       from month_lessons ml
+       join month_frameworks mf on mf.id = ml.framework_id
+       join program_months pm on pm.id = mf.program_month_id and pm.organization_id = $1
+       where ml.id = $3`,
+      [organizationId, `lesson-reopen:${correctionId}`, monthLessonId]
+    );
   }
 
   private async requireManager(actorId: string): Promise<ActorRow> {

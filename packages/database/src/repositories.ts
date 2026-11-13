@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, LEVEL_READINESS_THRESHOLDS, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
+import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, learningAbsenceStreak, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, LEVEL_READINESS_THRESHOLDS, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
 import { pickGameWordExample } from "@e4s/domain/engagement";
@@ -2569,6 +2569,11 @@ const SEASONS = [
   { key: "winter", level: 4, name: "Mùa đông – vững vàng", pointsRequired: 360, badges: ["streak5", "first_try", "wordsmith"] }
 ] as const;
 
+/** Points of the next Season tier above `points` (60, 180, 360), or null once the last tier is reached. */
+export function nextSeasonPointsTier(points: number): number | null {
+  return SEASONS.find((season) => season.pointsRequired > points)?.pointsRequired ?? null;
+}
+
 function normalizeSeasonLevel(value: number | undefined): 2 | 3 | 4 {
   return value === 3 || value === 4 ? value : 2;
 }
@@ -2964,7 +2969,11 @@ async function learnerMissedPreviousExam(db: Pool | PoolClient, learnerId: strin
 }
 
 async function learnerLearningAbsences(db: Pool | PoolClient, learnerId: string, access: LearnerMonthlyAccess): Promise<number> {
-  if (access.state !== "active" || !access.cefr || access.graduated) return 0;
+  return (await learnerAbsenceStreak(db, learnerId, access)).days;
+}
+
+async function learnerAbsenceStreak(db: Pool | PoolClient, learnerId: string, access: LearnerMonthlyAccess): Promise<{ days: number; startedOn: string | null }> {
+  if (access.state !== "active" || !access.cefr || access.graduated) return { days: 0, startedOn: null };
   const previous = await learnerMonthlyAccess(db, learnerId, previousLearningMonth(access.month));
   const windows = previous?.state === "active" ? [previous, access] : [access];
   const [attendance, lessonDates] = await Promise.all([
@@ -2973,12 +2982,38 @@ async function learnerLearningAbsences(db: Pool | PoolClient, learnerId: string,
   ]);
   // A past weekday without an approved lesson is never an absence.
   const counted = windows.flatMap(item => monthlyAttendanceCountedDates(item.effectiveDates, lessonDates.get(item.month) ?? new Set(), access.systemDate));
-  return consecutiveLearningAbsences(counted, [...attendance.values()].flat(), access.systemDate, access.resetOn ?? undefined);
+  return learningAbsenceStreak(counted, [...attendance.values()].flat(), access.systemDate, access.resetOn ?? undefined);
 }
 
 export async function learnerConsecutiveLearningAbsences(db: Pool | PoolClient, learnerId: string) {
   const access = await learnerMonthlyAccess(db, learnerId);
   return access ? learnerLearningAbsences(db, learnerId, access) : 0;
+}
+
+/** Consecutive missed learning days with the first missed date of the run (stable key for one streak). */
+export async function learnerLearningAbsenceStreak(db: Pool | PoolClient, learnerId: string): Promise<{ days: number; startedOn: string | null }> {
+  const access = await learnerMonthlyAccess(db, learnerId);
+  return access ? learnerAbsenceStreak(db, learnerId, access) : { days: 0, startedOn: null };
+}
+
+/** Days in a row after which the inactivity job locks a learner account. */
+export const LEARNING_ABSENCE_LOCK_DAYS = 5;
+/** First streak length that warns the learner (one inbox notification per streak length). */
+export const LEARNING_ABSENCE_WARNING_DAYS = 3;
+
+/**
+ * Puts the absence warning into the learner's notification bell: one notification per streak
+ * length (3, then 4 days) of the same streak, never one per day. The event key holds the first
+ * missed date, so a new streak after attending again warns again.
+ */
+export async function syncLearnerAbsenceNotice(db: Pool | PoolClient, learnerId: string, streak?: { days: number; startedOn: string | null }): Promise<void> {
+  const current = streak ?? await learnerLearningAbsenceStreak(db, learnerId);
+  if (!current.startedOn || current.days < LEARNING_ABSENCE_WARNING_DAYS || current.days >= LEARNING_ABSENCE_LOCK_DAYS) return;
+  await db.query(
+    `select notify_inbox(organization_id, 'learner', id, $2, 'absence_warning', $3)
+     from users where id = $1 and role = 'learner' and status = 'active'`,
+    [learnerId, `absence:${current.startedOn}:${current.days}`, String(current.days)]
+  );
 }
 
 export async function autoApproveExpiredEligibilityComplaints(

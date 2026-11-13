@@ -2127,3 +2127,17 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
 .lesson-exercise-translation{min-width:0}
 .lesson-exercise-translation .banner .body{display:grid;gap:2px;min-width:0;overflow-wrap:break-word}
 .lesson-exercise-translation .lesson-exercise-translation-line{display:block;min-width:0}
+
+/* Home progress: every metric card is a figure plus one label line; absence sits below as a toned chip. */
+.monthly-home-metrics .stat .stat-figure{width:64px;height:64px;display:grid;place-items:center}
+.monthly-home-metrics .stat .stat-figure > b{font-size:1.25rem;font-weight:600}
+.monthly-home-metrics .stat .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.home-absence-chip{margin:10px 0 0;white-space:normal}
+.home-absence-chip.warn{background:var(--warn-soft);color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn-line)}
+.home-absence-chip.danger{box-shadow:inset 0 0 0 1px var(--danger-line)}
+.home-absence-chip.ok{color:var(--muted)}
+.home-blocking-banner{margin:0 0 12px;padding:8px 12px;border-radius:12px;background:var(--danger-soft);color:var(--danger);box-shadow:inset 0 0 0 1px var(--danger-line);font-size:.875rem;line-height:1.4}
+@media (max-width:700px){
+  .monthly-home-metrics .stat .stat-figure{width:auto;height:auto;place-items:start}
+  .monthly-home-metrics .stat .stat-figure > b{font-size:1rem}
+}
