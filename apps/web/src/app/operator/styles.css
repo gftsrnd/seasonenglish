@@ -494,6 +494,9 @@
   white-space: normal;
 }
 .operator-modal-scope .operator-lesson-editor-form { display: grid; gap: 4px; }
+/* Save notices (missing items, save error) take the same 18px top margin as a section card, so they
+   sit apart from the card above instead of riding on the 4px form gap. */
+.operator-modal-scope .operator-lesson-editor-form > .operator-editor-notice { margin-top: 18px; }
 .operator-modal-scope .operator-vocabulary-grid {
   gap: 18px;
 }
