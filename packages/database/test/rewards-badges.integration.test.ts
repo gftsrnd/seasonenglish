@@ -329,7 +329,7 @@ describe("reward points and Season badges", () => {
       // One on-time review of the four an A2 learner needs.
       expect(await earnedBadgeKeys()).not.toContain("friday");
       const roadmap = (await repositories.learning.getProgressDashboard(learnerId))?.badgeRoadmap.find((badge) => badge.key === "friday");
-      expect(roadmap).toMatchObject({ earned: false, threshold: 4, description: "Hoàn thành 4 bài Ôn tuần đúng ngày đã xếp lịch" });
+      expect(roadmap).toMatchObject({ earned: false, threshold: 4, description: "4 bài Ôn tuần đúng hẹn" });
     });
 
     it("counts a calendar week for 'Tuần trọn vẹn' when every lesson of it is completed (A2 needs 3)", async () => {
@@ -642,12 +642,12 @@ describe("reward points and Season badges", () => {
       await sync();
       // A2: 25 words ≥ 20 (Thợ chữ) but 25 turns < 30 (Bạn của Season).
       expect(await earnedBadgeKeys()).toEqual(["wordsmith"]);
-      expect(await roadmap("coach_friend")).toMatchObject({ earned: false, threshold: 30, description: "Có 30 lượt luyện hợp lệ với Season" });
+      expect(await roadmap("coach_friend")).toMatchObject({ earned: false, threshold: 30, description: "30 lượt luyện với Season" });
 
       await setLevel("A1");
       await sync();
       expect(await earnedBadgeKeys()).toEqual(["coach_friend", "wordsmith"]);
-      expect(await roadmap("coach_friend")).toMatchObject({ earned: true, earnedLevel: "A1", description: "Có 20 lượt luyện hợp lệ với Season" });
+      expect(await roadmap("coach_friend")).toMatchObject({ earned: true, earnedLevel: "A1", description: "20 lượt luyện với Season" });
 
       await setLevel("B1");
       await sync();
@@ -668,7 +668,7 @@ describe("reward points and Season badges", () => {
       }
       await sync();
       expect(await earnedBadgeKeys()).not.toContain("monthly_final_score");
-      expect(await roadmap("monthly_final_score")).toMatchObject({ threshold: 75, description: "Một bài thi tháng đạt từ 75 điểm" });
+      expect(await roadmap("monthly_final_score")).toMatchObject({ threshold: 75, description: "Thi tháng đạt từ 75 điểm" });
       await setLevel("A1");
       await sync();
       expect(await earnedBadgeKeys()).toContain("monthly_final_score");

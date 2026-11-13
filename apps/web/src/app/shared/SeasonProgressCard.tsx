@@ -26,7 +26,8 @@ export const REWARD_SEASON_RULES: readonly string[] = [
   "Lên Season: đủ điểm trong trình độ và mọi huy hiệu của Season đó; đi lần lượt, không nhảy cấp.",
   "Đổi trình độ (lên mức, kháng nghị, điều chỉnh): Season bắt đầu lại từ Mùa xuân của trình độ mới. Tổng điểm tích lũy và huy hiệu đã nhận được giữ mãi.",
   "Huy hiệu chưa nhận dùng mức yêu cầu của trình độ hiện tại.",
-  "Ngày học (Chuỗi ngày học): ngày có bài theo lịch tháng (T2–T5 bài mới, T6 bài ôn) được hoàn thành đúng ngày. Mini game, luyện Season không tính; cuối tuần, ngày nghỉ lễ không tính và không làm đứt chuỗi."
+  "Ngày học (Chuỗi ngày học): ngày có bài theo lịch tháng (T2–T5 bài mới, T6 bài ôn) được hoàn thành đúng ngày. Mini game, luyện Season không tính; cuối tuần, ngày nghỉ lễ không tính và không làm đứt chuỗi.",
+  "Học trọn tuần: xong mọi bài T2–CN của tuần đó trong lịch tháng. Đúng ngay lần đầu: Nghe, Đọc, Viết, Nói đều đúng ngay lần đầu, từ 80 điểm."
 ];
 
 type SeasonCardData = Pick<LearnerProgressView, "season" | "points" | "badgeRoadmap"> & { badgeCount: number };

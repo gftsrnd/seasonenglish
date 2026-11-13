@@ -90,23 +90,23 @@ export function rewardBadgeThreshold(key: RewardBadgeKey, level: CefrLevel | nul
   return REWARD_BADGE_THRESHOLDS[key][level ?? DEFAULT_REWARD_LEVEL];
 }
 
-/** The rule text of a badge at a level ("Học 5 ngày học liên tiếp" at B1). */
+/** The rule text of a badge at a level ("Học 5 ngày liên tiếp" at B1). */
 export function rewardBadgeDescription(key: string, level: CefrLevel | null | undefined): string {
   const cefr = level ?? DEFAULT_REWARD_LEVEL;
   switch (key) {
-    case "starter": return "Hoàn thành bài học mới đầu tiên";
-    case "streak": return `Học ${REWARD_BADGE_THRESHOLDS.streak[cefr]} ngày học liên tiếp (hoàn thành bài theo lịch đúng ngày; cuối tuần, ngày nghỉ lễ không tính và không làm đứt chuỗi)`;
-    case "week_complete": return `Hoàn thành mọi bài của ${REWARD_BADGE_THRESHOLDS.week_complete[cefr]} tuần (T2–CN) trong lịch học tháng`;
-    case "friday": return `Hoàn thành ${REWARD_BADGE_THRESHOLDS.friday[cefr]} bài Ôn tuần đúng ngày đã xếp lịch`;
-    case "coach_friend": return `Có ${REWARD_BADGE_THRESHOLDS.coach_friend[cefr]} lượt luyện hợp lệ với Season`;
-    case "wordsmith": return `Dùng ${REWARD_BADGE_THRESHOLDS.wordsmith[cefr]} từ khác nhau khi luyện với Season`;
+    case "starter": return "Xong bài học đầu tiên";
+    case "streak": return `Học ${REWARD_BADGE_THRESHOLDS.streak[cefr]} ngày liên tiếp`;
+    case "week_complete": return `Học trọn ${REWARD_BADGE_THRESHOLDS.week_complete[cefr]} tuần`;
+    case "friday": return `${REWARD_BADGE_THRESHOLDS.friday[cefr]} bài Ôn tuần đúng hẹn`;
+    case "coach_friend": return `${REWARD_BADGE_THRESHOLDS.coach_friend[cefr]} lượt luyện với Season`;
+    case "wordsmith": return `Dùng ${REWARD_BADGE_THRESHOLDS.wordsmith[cefr]} từ khác nhau với Season`;
     case "first_try": {
       const count = REWARD_BADGE_THRESHOLDS.first_try[cefr];
-      return `${count} bài có Nghe, Đọc, Viết, Nói đều đúng ngay lần đầu (từ 80 điểm)`;
+      return `${count} bài đúng ngay lần đầu`;
     }
     case "monthly_final_score": {
       const threshold = REWARD_BADGE_THRESHOLDS.monthly_final_score[cefr];
-      return threshold === "passed" ? "Đạt một bài thi tháng" : `Một bài thi tháng đạt từ ${threshold} điểm`;
+      return threshold === "passed" ? "Đạt một bài thi tháng" : `Thi tháng đạt từ ${threshold} điểm`;
     }
     default: return "Tiêu chí được xác định trong hệ thống";
   }

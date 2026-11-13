@@ -39,9 +39,9 @@ describe("Season ladder per CEFR level", () => {
     ]);
     expect(Object.values(REWARD_BADGE_THRESHOLDS.starter)).toEqual([1, 1, 1, 1, 1]);
     expect(rewardBadgeThreshold("coach_friend", null)).toBe(20);
-    expect(rewardBadgeDescription("streak", "B1")).toMatch(/^Học 5 ngày học liên tiếp/);
+    expect(rewardBadgeDescription("streak", "B1")).toMatch(/^Học 5 ngày liên tiếp$/);
     expect(rewardBadgeDescription("monthly_final_score", "A1")).toBe("Đạt một bài thi tháng");
-    expect(rewardBadgeDescription("monthly_final_score", "C1")).toBe("Một bài thi tháng đạt từ 90 điểm");
+    expect(rewardBadgeDescription("monthly_final_score", "C1")).toBe("Thi tháng đạt từ 90 điểm");
   });
 });
 
