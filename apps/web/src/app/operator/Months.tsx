@@ -30,6 +30,10 @@ type MonthlyQualityReport = { severe: MonthlyQualityFindingView[]; light: Monthl
 type MonthlyResourceCriteria = { cefr: CefrLevel; vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number };
 type ResourceGroup = "core" | "expanded" | "grammar" | "sounds" | "plan" | "images";
 
+/**
+ * This view owns the toast for every action it calls: once on success, once with its own message on failure.
+ * Implementations must stay silent and reject on failure (OperatorRouteController's `act`).
+ */
 export interface OperatorMonthsActions {
   /** Core-word illustrations (draft: generate/upload; approved: frozen, read-only). */
   onLoadIllustrations?(id: string): Promise<MonthlyIllustrationsView>;
@@ -223,7 +227,9 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
         ? `${preview.waitingNextMonth} học viên ${cefr} sẽ bắt đầu từ ${preview.nextMonth} vì còn dưới 75% số ngày học.`
         : `${preview.affectedLearners} học viên ${cefr} chịu ảnh hưởng bởi ngày công bố.`;
       const confirmed = await modal.confirm({ title: `Công bố tháng ${month} · ${cefr}?`, message: `Học viên sẽ thấy bài theo lịch. ${impact}`, confirmLabel: "Công bố tháng" });
-      if (confirmed) await actions.onPublishMonth(framework.id, preview.publishOn);
+      if (!confirmed) return;
+      await actions.onPublishMonth(framework.id, preview.publishOn);
+      toast.show({ message: "Đã công bố nội dung tháng.", tone: "ok" });
     } catch (error) {
       showUnavailable(error instanceof Error ? error.message : "Không công bố được tháng.");
     }
@@ -246,7 +252,9 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
         </ul>,
         confirmLabel: "Công bố lại"
       });
-      if (confirmed) await actions.onRepublishMonth(framework.id, preview.republishOn);
+      if (!confirmed) return;
+      await actions.onRepublishMonth(framework.id, preview.republishOn);
+      toast.show({ message: "Đã công bố lại theo ngày hệ thống.", tone: "ok" });
     } catch (error) {
       showUnavailable(error instanceof Error && error.message ? error.message : "Không công bố lại được tháng.");
     }
@@ -419,6 +427,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
     try {
       await actions.onRequestResourcesReopen(framework.id, reason.trim());
       setRequestingResourcesReopen(false);
+      toast.show({ message: "Đã gửi yêu cầu mở lại tài nguyên tới Quản lý.", tone: "ok" });
     } catch {
       showUnavailable("Không gửi được yêu cầu mở lại tài nguyên. Hãy thử lại.");
     }

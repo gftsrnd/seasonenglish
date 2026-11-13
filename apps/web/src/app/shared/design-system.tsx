@@ -25,6 +25,7 @@ type ToastInput = { message: ReactNode; tone?: ToastTone; durationMs?: number };
 type ToastItem = ToastInput & { id: number };
 type ToastApi = { show: (input: ToastInput) => number; dismiss: (id: number) => void };
 const ToastContext = createContext<ToastApi | undefined>(undefined);
+const TOAST_DEDUPE_WINDOW_MS = 1_500;
 
 export function useToast(): ToastApi {
   const value = useContext(ToastContext);
@@ -42,8 +43,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     timers.current.delete(id);
     setItems((current) => current.filter((item) => item.id !== id));
   }, []);
+  // Safety net only: each action has one owner for its toast. A text toast repeated within the window is not shown again.
+  const recent = useRef(new Map<string, { id: number; at: number }>());
   const show = useCallback((input: ToastInput) => {
+    const key = typeof input.message === "string" ? `${input.tone ?? "info"}:${input.message}` : undefined;
+    const now = Date.now();
+    const previous = key ? recent.current.get(key) : undefined;
+    if (previous && now - previous.at < TOAST_DEDUPE_WINDOW_MS && timers.current.has(previous.id)) return previous.id;
     const id = ++sequence.current;
+    if (key) recent.current.set(key, { id, at: now });
     const item = { ...input, id, durationMs: input.durationMs ?? 4_000 };
     setItems((current) => [...current.slice(-2), item]);
     if (item.durationMs > 0) timers.current.set(id, window.setTimeout(() => dismiss(id), item.durationMs));

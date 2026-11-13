@@ -293,6 +293,12 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     catch (reason) { if (propagateError) throw reason; const detail = message(reason); setError(detail); toast.show({ message: detail, tone: "danger" }); return undefined; }
     finally { setBusy(false); }
   };
+  /**
+   * The actions handed to OperatorMonths. That view owns the feedback for them (it toasts the success, or its own
+   * error message, once), so they run silently here and reject on failure. Toasting here as well showed each
+   * confirmed action twice, and a failure swallowed here let the view toast "success" after the error.
+   */
+  const act = <T,>(action: () => Promise<T>) => run(action, undefined, true);
   // Toasts name the day the way the calendar does: "bài 7" is the 7th new lesson (Friday reviews not counted), a review is "bài ôn".
   const monthDayLabel = (dayNumber: number) => {
     const day = overview?.calendar?.find((item) => item.lessonNumber === dayNumber && (item.kind === "new" || item.kind === "review"));
@@ -445,18 +451,18 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
       onSelectMonth: selectMonth,
       onSelectLevel: selectLevel,
       onSuggestBrief: async (selectedMonth) => {
-        const result = await run(() => client.suggestContentMonthBrief(selectedMonth), "Đã tạo gợi ý AI cho chủ đề tháng.");
+        const result = await act(() => client.suggestContentMonthBrief(selectedMonth));
         if (!result) throw new Error("Không tạo được gợi ý AI cho chủ đề tháng.");
         return { title: result.title, brief: result.brief, context: result.context, communicationGoal: result.communicationGoal };
       },
-      onSaveBrief: async (selectedMonth, input) => { await run(() => client.saveContentMonthBrief(selectedMonth, input), "Đã lưu chủ đề tháng."); },
-      onApproveBrief: async (selectedMonth) => { await run(() => client.approveContentMonthBrief(selectedMonth), "Đã chốt chủ đề tháng."); },
-      onSaveFramework: async (selectedMonth, contract) => { await run(() => client.saveContentMonthFramework(selectedMonth, contract), "Đã lưu tài nguyên tháng."); },
+      onSaveBrief: async (selectedMonth, input) => { await act(() => client.saveContentMonthBrief(selectedMonth, input)); },
+      onApproveBrief: async (selectedMonth) => { await act(() => client.approveContentMonthBrief(selectedMonth)); },
+      onSaveFramework: async (selectedMonth, contract) => { await act(() => client.saveContentMonthFramework(selectedMonth, contract)); },
       onGenerateFramework: async (selectedMonth, criteria) => {
         setResourceGenerationActive(true);
         setResourceCheckpoint(previous=>previous ? {...previous,progress:null} : previous);
         try {
-          const result=await run(()=>client.generateContentMonthResources(selectedMonth,criteria),undefined,true);
+          const result=await act(()=>client.generateContentMonthResources(selectedMonth,criteria));
           if (!result) throw new Error("Không sinh được tài nguyên tháng.");
           return result;
         } finally {
@@ -466,18 +472,18 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
           setResourceGenerationActive(false);
         }
       },
-      onApproveFramework: async (id, options) => { await run(() => client.approveContentMonthFramework(id, options), "Đã chốt tài nguyên tháng."); },
+      onApproveFramework: async (id, options) => { await act(() => client.approveContentMonthFramework(id, options)); },
       ...(!readOnly && client.previewContentMonthPublication && client.publishContentMonth ? {
         onPreviewPublication: client.previewContentMonthPublication,
         onPublishMonth: async (id: string, confirmedOn: string) => {
-          await run(() => client.publishContentMonth!(id, confirmedOn), "Đã công bố nội dung tháng.", true);
+          await act(() => client.publishContentMonth!(id, confirmedOn));
         }
       } : {}),
       // "Công bố lại" is open to the Manager too (read-only Months view otherwise).
       ...(client.previewContentMonthRepublication && client.republishContentMonth ? {
         onPreviewRepublication: client.previewContentMonthRepublication,
         onRepublishMonth: async (id: string, confirmedOn: string) => {
-          await run(() => client.republishContentMonth!(id, confirmedOn), "Đã công bố lại theo ngày hệ thống.", true);
+          await act(() => client.republishContentMonth!(id, confirmedOn));
         }
       } : {}),
       ...(!readOnly && client.getManualContentMonthResources && client.createManualContentMonthResources ? {
@@ -503,16 +509,16 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         }
       } : {}),
       onRequestResourcesReopen: async (id, reason) => {
-        const result = await run(() => client.requestContentMonthResourcesReopen(id, reason), "Đã gửi yêu cầu mở lại tài nguyên tới Quản lý.");
+        const result = await act(() => client.requestContentMonthResourcesReopen(id, reason));
         if (!result) throw new Error("Không gửi được yêu cầu mở lại tài nguyên tháng.");
       },
       onGenerateMonthlyFinal: async (id) => {
-        const result = await run(() => client.generateMonthlyFinal(id), undefined, true);
+        const result = await act(() => client.generateMonthlyFinal(id));
         if (!result || !("blueprint" in result)) throw new Error("Không tải được bản nháp đề tháng.");
         return result;
       },
       onComposeMonthlyFinal: async (id) => {
-        const result = await run(() => client.composeMonthlyFinal(id), "Đã mở bản nháp soạn tay đề tháng.");
+        const result = await act(() => client.composeMonthlyFinal(id));
         if (!result || !("blueprint" in result)) throw new Error("Không tải được bản nháp soạn tay đề tháng.");
         return result;
       },
@@ -531,12 +537,12 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         return result;
       },
       onSaveMonthlyFinal: async (versionId, input) => {
-        const result = await run(() => client.updateMonthlyFinal(versionId, input));
+        const result = await act(() => client.updateMonthlyFinal(versionId, input));
         if (!result) throw new Error("Không lưu được bản nháp đề tháng.");
         return result;
       },
       onPublishMonthlyFinal: async (versionId) => {
-        const result = await run(() => client.publishMonthlyFinal(versionId), "Đã duyệt và phát hành đề tháng.");
+        const result = await act(() => client.publishMonthlyFinal(versionId));
         if (!result) throw new Error("Không phát hành được đề tháng.");
       },
       onSynthesizeMonthlyFinalAudio: (input) => client.synthesizeAssessmentEdgeTts(input),
@@ -547,35 +553,35 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
       onComposeDay: openDayEditor,
       onViewDay: (frameworkId, dayNumber) => navigate(`${paths.months}/lesson/${frameworkId}/${dayNumber}?month=${month}`),
       onSaveDay: async (id, dayNumber, lesson) => {
-        const result = await run(() => client.saveContentMonthDay(id, dayNumber, lesson), `Đã lưu bản nháp ${monthDayLabel(dayNumber)}.`);
+        const result = await act(() => client.saveContentMonthDay(id, dayNumber, lesson));
         if (!result) throw new Error("Không lưu được bản nháp tháng.");
         return result;
       },
       onGenerateDay: async (id, dayNumber) => {
         // A quality failure stores the failing candidate for the day view: reload so "Lỗi" appears.
-        const result = await run(() => client.generateContentMonthDay(id, dayNumber), undefined, true).catch(async (reason: unknown) => { await load(); throw reason; });
+        const result = await act(() => client.generateContentMonthDay(id, dayNumber)).catch(async (reason: unknown) => { await load(); throw reason; });
         if (!result) throw new Error("AI không sinh được bài ngày đạt chuẩn.");
         return result;
       },
       onGenerateReview: async (id, dayNumber) => {
-        const result = await run(() => client.generateContentMonthReview(id, dayNumber), undefined, true).catch(async (reason: unknown) => { await load(); throw reason; });
+        const result = await act(() => client.generateContentMonthReview(id, dayNumber)).catch(async (reason: unknown) => { await load(); throw reason; });
         if (!result) throw new Error("AI không sinh được bài ôn đạt chuẩn.");
         return result;
       },
-      onAcknowledge: async (id, dayNumber, findingKeys) => { await run(() => client.acknowledgeContentMonthQuality(id, dayNumber, findingKeys)); },
-      onApproveDay: async (id, dayNumber) => { await run(() => client.approveContentMonthDay(id, dayNumber), `Đã duyệt ${monthDayLabel(dayNumber)}.`); },
+      onAcknowledge: async (id, dayNumber, findingKeys) => { await act(() => client.acknowledgeContentMonthQuality(id, dayNumber, findingKeys)); },
+      onApproveDay: async (id, dayNumber) => { await act(() => client.approveContentMonthDay(id, dayNumber)); },
       onCreateCorrection: async (id, dayNumber, reason) => {
-        const result = await run(() => client.createContentMonthCorrection(id, dayNumber, reason));
+        const result = await act(() => client.createContentMonthCorrection(id, dayNumber, reason));
         if (!result) throw new Error("Không tạo được revision hiệu chỉnh.");
         return result.id;
       },
       onSaveCorrection: async (id, dayNumber, correctionId, lesson) => {
-        const result = await run(() => client.saveContentMonthCorrection(id, dayNumber, correctionId, lesson));
+        const result = await act(() => client.saveContentMonthCorrection(id, dayNumber, correctionId, lesson));
         if (!result) throw new Error("Không lưu được revision hiệu chỉnh.");
         return result;
       },
-      onAcknowledgeCorrection: async (correctionId, findingKeys) => { await run(() => client.acknowledgeContentMonthCorrection(correctionId, findingKeys)); },
-      onApproveCorrection: async (correctionId) => { await run(() => client.approveContentMonthCorrection(correctionId)); }
+      onAcknowledgeCorrection: async (correctionId, findingKeys) => { await act(() => client.acknowledgeContentMonthCorrection(correctionId, findingKeys)); },
+      onApproveCorrection: async (correctionId) => { await act(() => client.approveContentMonthCorrection(correctionId)); }
     }}
   />{dayEditor}</>;
 }
