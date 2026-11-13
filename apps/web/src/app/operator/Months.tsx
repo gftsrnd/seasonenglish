@@ -445,9 +445,12 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
               ["coreTerms", "Từ cốt lõi"], ["expandedTerms", "Từ mở rộng"], ["grammarTopics", "Ngữ pháp"], ["pronunciationTargets", "Phát âm"]
             ] as const).map(([key, label]) => {
               const category = resourceCheckpoint.categories[key];
-              return <li key={key}><span>{label}</span><strong>{category.count}/{category.target}</strong><em>{category.state === "complete" ? "Đã lưu nháp" : "Chưa sinh"}</em></li>;
+              // Expanded words: the stored target is the 9-per-core maximum; what is needed is at least 3 per core.
+              const shown = key === "expandedTerms" ? `${category.count} · cần ≥ ${resourceCheckpoint.categories.coreTerms.target * 3}` : `${category.count}/${category.target}`;
+              const state = category.state === "complete" ? "Đã lưu nháp" : category.count > 0 ? (resourceRunning ? "Đang bổ sung" : "Đã có một phần") : (resourceRunning ? "Đang chờ" : "Chưa có");
+              return <li key={key}><span>{label}</span><strong>{shown}</strong><em>{state}</em></li>;
             })}</ul>
-            <small>Tiếp tục sẽ sinh các nhóm còn thiếu; nhóm đã lưu vẫn ở trạng thái nháp và chưa dùng cho học viên.</small>
+            <small>Tiếp tục sẽ sinh các nhóm còn thiếu; nhóm đã lưu vẫn ở trạng thái nháp và chưa dùng cho học viên. Số từ mở rộng có thể giảm tạm thời: từ cốt lõi nào không đủ quan hệ bắt buộc sẽ được thay, và các từ mở rộng của nó được bỏ rồi sinh lại.</small>
           </div>}
           {framework?.status !== "approved" && <button type="button" className={`btn ${framework?.resources ? "btn-danger" : "btn-primary"} monthly-resource-main-action`} aria-busy={resourceRunning} disabled={busy || !canEdit} onClick={() => void generateFramework()}>{resourceRunning ? <><span className="spinner" aria-hidden="true" />Đang sinh tài nguyên…</> : resourceCheckpoint?.state === "draft_checkpoint" && !framework?.resources ? "Tiếp tục nhóm còn thiếu" : framework?.resources ? "Sinh lại tài nguyên" : "Sinh tài nguyên"}</button>}
           {framework?.status === "draft" && <button type="button" className="btn monthly-resource-main-action" disabled={busy || !canEdit} onClick={() => void approveFramework()}>Duyệt tài nguyên</button>}
