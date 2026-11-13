@@ -118,6 +118,12 @@ function describeFinding(finding: MonthlyQualityFindingView, context: MonthlyFin
     case "MONTHLY_DAILY_GRAMMAR_QUESTION": return single("Mỗi câu ngữ pháp cần đề bài, 4 lựa chọn khác nhau, đáp án nằm trong các lựa chọn và lời giải thích.");
     case "MONTHLY_DAILY_GRAMMAR_RECALL": return single("Thiếu câu ôn lại chủ điểm A theo kế hoạch; thêm một câu.");
     case "MONTHLY_DAILY_GRAMMAR_RECALL_OFF_TOPIC": return single("Câu ôn chủ điểm A chưa kiểm tra đúng điểm ngữ pháp được gắn; viết lại câu này.");
+    case "MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH": {
+      // Advisory warning (never blocks approval): one line per grammar step whose formula rows and examples differ.
+      const what = "Công thức ngữ pháp không khớp câu ví dụ; sửa tay công thức/ví dụ hoặc sinh lại ngày này.";
+      const steps = [...new Set([...message.matchAll(/grammar\.steps\[(\d+)\]/gu)].map((match) => Number(match[1]) + 1))];
+      return steps.length ? steps.map((step) => ({ where: `${section} · bước ${step}`, what })) : single(what);
+    }
     case "MONTHLY_GRAMMAR_EXAMPLE_VOICE": return single("Có ví dụ ngữ pháp sai thể (chủ động/bị động); sửa thành câu tiếng Anh đúng.");
     case "MONTHLY_EXERCISE_TRANSLATION": return single("Thêm bản dịch tiếng Việt ngắn cho câu hỏi và đáp án của từng bài tập.");
     case "MONTHLY_OBJECTIVE_CAN_DO": return single("Mục tiêu bài học chưa nói rõ học viên làm được gì; viết lại ngắn gọn, cụ thể.");

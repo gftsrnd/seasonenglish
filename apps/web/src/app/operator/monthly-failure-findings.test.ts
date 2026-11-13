@@ -40,3 +40,13 @@ describe("describeMonthlyFindings", () => {
     ]);
   });
 });
+
+describe("grammar formula vs examples warning (24/12 Bài 15)", () => {
+  it("is a friendly light line per mismatching grammar step", () => {
+    const finding = { severity: "light" as const, code: "MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH", component: "grammar", dayNumber: 15, message: "Grammar formula and examples do not match (the formula is locked). grammar.steps[0]: formula row \"x\" has no example that uses it | grammar.steps[1]: it has fewer examples than formula rows" };
+    expect(describeMonthlyFindings([finding], { kind: "new", parts: dailyParts }).map((line) => `${line.severity} ${line.where}: ${line.what}`)).toEqual([
+      "light Ngữ pháp · bước 1: Công thức ngữ pháp không khớp câu ví dụ; sửa tay công thức/ví dụ hoặc sinh lại ngày này.",
+      "light Ngữ pháp · bước 2: Công thức ngữ pháp không khớp câu ví dụ; sửa tay công thức/ví dụ hoặc sinh lại ngày này."
+    ]);
+  });
+});

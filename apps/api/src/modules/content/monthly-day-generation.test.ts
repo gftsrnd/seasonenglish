@@ -601,3 +601,43 @@ describe("independent answer verification (December 2026)", () => {
     expect((await generateMonthlyDayWithAi(contract(), 1, runner(true), "Prompt", [], { verifyAnswers: true })).status).toBe("ready");
   });
 });
+
+describe("grammar formula rows vs examples (24/12 Bài 15)", () => {
+  const FORMULA = "will + base verb (commitment) / must + base verb (obligation)";
+  const scope = () => { const value = contract(); value.grammarTopics[0]!.steps[0]!.formula = FORMULA; return value; };
+  const lesson = (examples: string[]) => (components: readonly string[]) => components.map((code) => code === "grammar" ? { code, content: { formula: FORMULA, text: "Dùng will để hứa và must để nói việc bắt buộc.", examples } } : part(code));
+  const mismatched = ["We will send the budget today.", "The cost is high."];
+  const matched = ["We will send the budget today.", "The team must check the cost."];
+
+  it("flags the mismatch as an advisory light finding and repairs only the grammar part, once", async () => {
+    const report = evaluateMonthlyLessonQuality(scope(), 1, { title: "Budget", parts: lesson(mismatched)(components) });
+    expect(report.light.map((finding) => finding.code)).toContain("MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH");
+    const calls: Array<{ components: string[]; repair: string[] }> = [];
+    const result = await generateMonthlyDay({
+      contract: scope(), dayNumber: 1, repairGrammarExamples: {},
+      generate: async (input) => {
+        calls.push({ components: [...input.components], repair: input.repairFindings.map((finding) => finding.code) });
+        return { title: "Budget", parts: lesson(calls.length === 1 ? mismatched : matched)(input.components) };
+      }
+    });
+    expect(result.status).toBe("ready");
+    expect(calls).toEqual([{ components, repair: [] }, { components: ["grammar"], repair: ["MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH"] }]);
+    expect(result.lesson!.parts.find((candidate) => candidate.code === "grammar")!.content).toMatchObject({ formula: FORMULA, examples: matched });
+    expect(result.report.light.map((finding) => finding.code)).not.toContain("MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH");
+  });
+
+  it("keeps the accepted grammar when the repair is no better, and skips the call once the AI budget is spent", async () => {
+    let count = 0;
+    const kept = await generateMonthlyDay({ contract: scope(), dayNumber: 1, repairGrammarExamples: {}, generate: async (input) => { count += 1; return { title: "Budget", parts: lesson(mismatched)(input.components) }; } });
+    expect(count).toBe(2);
+    expect(kept.status).toBe("ready");
+    expect(kept.report.light.map((finding) => finding.code)).toContain("MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH");
+    count = 0;
+    await generateMonthlyDay({ contract: scope(), dayNumber: 1, repairGrammarExamples: { isBudgetExhausted: () => true }, generate: async (input) => { count += 1; return { title: "Budget", parts: lesson(mismatched)(input.components) }; } });
+    expect(count).toBe(1);
+  });
+
+  it("asks every daily lesson for one example per formula row", () => {
+    expect(monthlyDailyTeachingContract(contract().daySpecs[0]!, "B1")).toContain("FORMULA AND EXAMPLES MATCH");
+  });
+});

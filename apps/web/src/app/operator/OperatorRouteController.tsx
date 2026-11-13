@@ -1,6 +1,6 @@
 import { monthlyManualSeed } from "./monthly-manual-seed.js";
 import { describeMonthlyFindings, MONTHLY_PART_TITLES, type MonthlyFindingLine } from "./monthly-failure-findings.js";
-import { monthlyDefaultLessonTitle, monthlyLessonDisplayTitle } from "@e4s/domain/monthly";
+import { monthlyDefaultLessonTitle, monthlyGatedLightFindings, monthlyLessonDisplayTitle } from "@e4s/domain/monthly";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import "./styles.css";
@@ -381,8 +381,9 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     return <><MonthlyLessonPreview date={lesson.lessonDate} cefr={framework.cefr} lesson={lesson} focusedPart={focusedPart} {...(framework.resources ? { resources: framework.resources } : {})} busy={busy} onClose={() => navigate(paths.months)}
       {...(isDraft && !readOnly ? {
         // A day with only a failed AI candidate (no saved draft) has nothing to approve.
-        // Same gate as the API: a saved draft with no severe finding and at most two light ones.
-        ...(lesson.content?.parts?.length && lesson.status === "draft" && !lesson.quality.severe.length && lesson.quality.light.length <= 2 ? { onApprove: async () => {
+        // Same gate as the API: a saved draft with no severe finding and at most two light ones
+        // (advisory ones such as the grammar formula/example check are not counted).
+        ...(lesson.content?.parts?.length && lesson.status === "draft" && !lesson.quality.severe.length && monthlyGatedLightFindings(lesson.quality.light).length <= 2 ? { onApprove: async () => {
           const title = lesson.kind === "review" ? "Duyệt bài ôn" : "Duyệt bài học";
           const light = lesson.quality.light;
           const message = light.length ? `Bài có ${light.length} cảnh báo nhẹ; duyệt nghĩa là bạn đã kiểm tra và chấp nhận chúng. Bài sẽ được khóa chỉnh sửa sau khi duyệt.` : "Bài sẽ được khóa chỉnh sửa sau khi duyệt.";

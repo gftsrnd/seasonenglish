@@ -12,6 +12,7 @@ import {
   backfillMonthlyCurriculumPlan,
   validateMonthlyCurriculum,
   validateMonthlyGrammarObjectives,
+  monthlyGatedLightFindings,
   type MonthlyResourcePoolContract,
   type MonthlyResourcePoolCoreTerm,
   type MonthlyResourcePoolSupportTerm,
@@ -1000,13 +1001,13 @@ export class MonthlyContentRepository {
     if (!day) throw new Error("Locked monthly day was not found");
     day.quality_report = activeQualityReport(day.quality_report);
     if (day.quality_report.severe.length) throw new Error("Severe monthly quality findings block acknowledgement");
-    const expected = day.quality_report.light.map(qualityFindingKey);
-    if (expected.length > 0 && (expected.length !== findingKeys.length || expected.some((key) => !findingKeys.includes(key)))) {
+    if (day.quality_report.light.length > 0 && !acknowledgementCoversLightFindings(day.quality_report.light, findingKeys)) {
       throw new Error("Operator must acknowledge every light finding individually");
     }
     // The light-finding cap is per lesson (one or two light issues may be
     // acknowledged); a month of 20+ lessons is never summed against it.
-    const currentDayLightCount = day.quality_report.light.length;
+    // Advisory findings (grammar formula vs examples) never count toward it.
+    const currentDayLightCount = monthlyGatedLightFindings(day.quality_report.light).length;
     if (currentDayLightCount > 2) throw new Error("Monthly lesson exceeds the two-light-finding limit");
     const acknowledgement: OperatorAcknowledgementView = { actorId, acknowledgedAt: new Date().toISOString(), findingCodes: findingKeys };
     await this.database.query("update month_lessons set quality_acknowledgement = $2::jsonb where id = $1", [day.id, JSON.stringify(acknowledgement)]);
@@ -1149,8 +1150,7 @@ export class MonthlyContentRepository {
     if (!correction || correction.status !== "authorized") throw new Error("Authorized monthly correction was not found");
     correction.quality_report = activeQualityReport(correction.quality_report);
     if (correction.quality_report.severe.length) throw new Error("Severe monthly correction findings block acknowledgement");
-    const expected = correction.quality_report.light.map(qualityFindingKey);
-    if (expected.length !== findingKeys.length || expected.some((key) => !findingKeys.includes(key))) throw new Error("Operator must acknowledge every correction finding individually");
+    if (!acknowledgementCoversLightFindings(correction.quality_report.light, findingKeys)) throw new Error("Operator must acknowledge every correction finding individually");
     const acknowledgement: OperatorAcknowledgementView = { actorId, acknowledgedAt: new Date().toISOString(), findingCodes: findingKeys };
     await this.database.query("update month_lesson_corrections set quality_acknowledgement = $2::jsonb where id = $1", [correctionId, JSON.stringify(acknowledgement)]);
     await this.audit(actor, "monthly.correction_quality_acknowledged", correctionId, { findingKeys });
@@ -1175,7 +1175,7 @@ export class MonthlyContentRepository {
     correction.quality_report = activeQualityReport(correction.quality_report);
     if (correction.quality_report.severe.length) throw new Error("Severe monthly correction findings block approval");
     const acknowledged = new Set(correction.quality_acknowledgement?.findingCodes ?? []);
-    if (correction.quality_report.light.map(qualityFindingKey).some((key) => !acknowledged.has(key))) throw new Error("Operator must acknowledge every correction finding before approval");
+    if (monthlyGatedLightFindings(correction.quality_report.light).map(qualityFindingKey).some((key) => !acknowledged.has(key))) throw new Error("Operator must acknowledge every correction finding before approval");
     const lesson = await this.database.query<{ lesson_id: string }>("select lesson_id from lesson_versions where id = $1", [correction.correction_lesson_version_id]);
     const lessonId = lesson.rows[0]?.lesson_id;
     if (!lessonId) throw new Error("Monthly correction content version was not found");
@@ -2023,6 +2023,15 @@ function dayKind(spec: MonthlyDaySpec | undefined): "new" | "review" {
   return spec.kind;
 }
 
+/**
+ * An acknowledgement names every counted light finding and nothing else; advisory
+ * findings (monthlyGatedLightFindings) may be named but are not required.
+ */
+function acknowledgementCoversLightFindings(light: readonly MonthlyQualityFindingView[], findingKeys: readonly string[]): boolean {
+  const allowed = new Set(light.map(qualityFindingKey));
+  return monthlyGatedLightFindings(light).map(qualityFindingKey).every((key) => findingKeys.includes(key)) && findingKeys.every((key) => allowed.has(key));
+}
+
 function qualityFindingKey(finding: MonthlyQualityFindingView): string {
   return `${finding.code}:${finding.dayNumber ?? 0}:${finding.component ?? ""}`;
 }
@@ -2051,9 +2060,11 @@ export function monthlyDayApprovalDecision(
 ): MonthlyDayApprovalDecision {
   if (!day || !day.lesson_id) return { ok: false, status: 404, code: "MONTHLY_DAY_DRAFT_NOT_FOUND", message: "Không tìm thấy bản nháp bài học." };
   const severe = day.quality_report?.severe ?? [];
-  const light = day.quality_report?.light ?? [];
+  const allLight = day.quality_report?.light ?? [];
+  // Advisory light findings (grammar formula vs examples) are shown but neither counted nor required to be acknowledged.
+  const light = monthlyGatedLightFindings(allLight);
   if (acknowledgeSevereFindings && severe.length && (day.status === "draft" || day.status === "failed")) {
-    return { ok: true, override: { severeCodes: [...new Set(severe.map((finding) => finding.code))], findingKeys: [...severe, ...light].map(qualityFindingKey) } };
+    return { ok: true, override: { severeCodes: [...new Set(severe.map((finding) => finding.code))], findingKeys: [...severe, ...allLight].map(qualityFindingKey) } };
   }
   if (day.status !== "draft" || severe.length) return { ok: false, status: 409, code: "MONTHLY_DAY_QUALITY_BLOCKED", message: "Bài chưa thể duyệt. Hãy mở bản nháp và sửa các mục chất lượng trước khi duyệt lại." };
   if (light.length > 2) return { ok: false, status: 409, code: "MONTHLY_DAY_QUALITY_BLOCKED", message: "Bài có quá hai cảnh báo. Hãy sửa bớt cảnh báo trước khi duyệt bài." };

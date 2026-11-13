@@ -1,5 +1,5 @@
 import type { MonthlyCurriculumContract, MonthlyDaySpec } from "@e4s/domain";
-import { monthlyCollocationTranslationIssues, monthlyExerciseTranslationIssues, monthlyExerciseTranslationsForLevel, monthlyRelationMeaningIssue, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPlanObjectivesMatch, monthlyPronunciationExampleText, monthlyReadablePlanObjective, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
+import { MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH, monthlyGrammarFormulaExampleIssues, monthlyGrammarFormulaExampleMessage, monthlyCollocationTranslationIssues, monthlyExerciseTranslationIssues, monthlyExerciseTranslationsForLevel, monthlyRelationMeaningIssue, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPlanObjectivesMatch, monthlyPronunciationExampleText, monthlyReadablePlanObjective, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
 import type { LessonPart } from "@e4s/contracts";
 import { monthlyGrammarRoadmapDayIssues } from "./monthly-grammar-roadmap.js";
 import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
@@ -124,6 +124,11 @@ export function evaluateMonthlyLessonQuality(
   if (!grammarIds.length || grammarSteps.length !== grammarIds.length || grammarSteps.some((step) => !formula.includes(normalizeFormula(step.formula)))) {
     severe.push(finding("MONTHLY_GRAMMAR_SCOPE_MISMATCH", `Grammar formula does not match every locked grammar step. grammar.formula${grammarSteps.length > 1 ? " (or grammar.steps[].formula, one per step in order)" : ""} must contain verbatim: ${grammarSteps.map((step) => `"${step.formula}"`).join("; ")}`, dayNumber, "grammar"));
   }
+
+  // 24/12 Bài 15: every formula rule row needs an example that uses it, and every example a row.
+  // Advisory light finding: shown to the Operator, never counted toward the two-light approval limit.
+  const formulaExampleIssues = monthlyGrammarFormulaExampleIssues(grammarContent);
+  if (formulaExampleIssues.length) light.push({ severity: "light", code: MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH, message: monthlyGrammarFormulaExampleMessage(formulaExampleIssues), dayNumber, component: "grammar" });
 
   const pronunciation = parts.get("pronunciation")?.content;
   const focus = asString(pronunciation?.focus);

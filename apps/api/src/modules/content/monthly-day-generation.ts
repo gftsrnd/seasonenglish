@@ -1,4 +1,4 @@
-import { MONTHLY_ANSWER_TRANSLATION_RULE, MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS, monthlyLessonDisplayTitle, monthlyReadablePlanObjective, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, withoutAdvancedGrammarExampleTranslations, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
+import { MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH, monthlyGrammarFormulaExampleIssues, MONTHLY_ANSWER_TRANSLATION_RULE, MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS, monthlyLessonDisplayTitle, monthlyReadablePlanObjective, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, withoutAdvancedGrammarExampleTranslations, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
 import { MONTHLY_LESSON_PART_CONTENT_CONTRACT, MONTHLY_REVIEW_CHOICE_SECTIONS, type AiTaskRunner, type MonthlyReviewChoiceSection } from "@e4s/ai";
 import { evaluateMonthlyLessonQuality, monthlyLockedPlanExpectations, normalizeFormula, type MonthlyLessonCandidate, type MonthlyLockedPlanExpectations, type MonthlyQualityReport, type MonthlyQualityFinding } from "./monthly-quality.js";
 import { rebalanceAnswerTextPositions, type AnswerTextChoice } from "../shared/answer-order.js";
@@ -19,7 +19,7 @@ export function monthlyDailyTeachingContract(day: MonthlyDaySpec, cefr: string, 
     "DAILY TEACHING PLAN V2 overrides generic daily/review shape instructions for grammar and pronunciation only. Keep every other component's existing contract.",
     `Teach day N${day.newLessonNumber}, grammar code ${day.grammarPlan?.code}, mode ${day.grammarPlan?.mode}, objective: ${grammarObjective}. A shared formula does not mean repeating the same teaching lesson. Explain the planned focus in ${language}.`,
     vietnamese ? "" : "The locked objective above may be written in Vietnamese: copy it verbatim only into grammar.objective; never quote or translate it into the objective, instruction or any other learner-facing text, which stays in English.",
-    `grammar: return {dailyCode, objective, formula, text, examples, items, steps?}. dailyCode and objective copy the locked daily plan. grammar.examples: at least 3 natural NEW workplace sentences (never copied from lockedScope.grammarStep examples) that together use at least two of today's core words${words}, each word spelled exactly as given. The pool's examples are references; do not copy the entire reference example list into the lesson. grammar.text is shown to learners as written: never put roadmap step labels in it (no "Bước 3 (Lỗi thường gặp):" or "Step 1 (Identify):"); write one or two short sentences for the rule, then at most one short tip sentence (for example how Vietnamese differs). Keep grammar.formula short: one pattern per line, or at most three patterns joined with " → " (the app shows each on its own line).`,
+    `grammar: return {dailyCode, objective, formula, text, examples, items, steps?}. dailyCode and objective copy the locked daily plan. grammar.examples: at least 3 natural NEW workplace sentences (never copied from lockedScope.grammarStep examples) that together use at least two of today's core words${words}, each word spelled exactly as given. The pool's examples are references; do not copy the entire reference example list into the lesson. grammar.text is shown to learners as written: never put roadmap step labels in it (no "Bước 3 (Lỗi thường gặp):" or "Step 1 (Identify):"); write one or two short sentences for the rule, then at most one short tip sentence (for example how Vietnamese differs). Keep grammar.formula short: one pattern per line, or at most three patterns joined with " → " (the app shows each on its own line). ${MONTHLY_GRAMMAR_FORMULA_EXAMPLE_RULE}`,
     "grammar.items: 3–5 distinct questions, each {id,prompt,options:[4 different strings],answer,explanation,milestoneId}. Use the day's practice mode. Explain why each answer is correct. Do not add unrelated grammar formulas.",
     day.grammarPlan?.recallMilestoneIds.length ? `Include one recall question with milestoneId from ${day.grammarPlan.recallMilestoneIds.join(", ")} (previous topic A); the other questions teach the current topic.` : "",
     `pronunciation: teach stage ${day.pronunciationPlan?.stage}, objective ${pronunciationObjective}. Return stage and objective matching the plan. This is a ${cefr} target: advanced stress/linking/intonation targets remain advanced features, not isolated beginner phoneme lessons.`,
@@ -79,8 +79,18 @@ export const MONTHLY_DAY_COMPONENTS = [
 ] as const;
 export type MonthlyDayComponent = (typeof MONTHLY_DAY_COMPONENTS)[number];
 
+/**
+ * Formula and examples (24/12 Bài 15): the locked formula decides what the examples teach. Shared by the daily
+ * teaching contract, the review study call and the grammar repair request.
+ */
+export const MONTHLY_GRAMMAR_FORMULA_EXAMPLE_RULE = "FORMULA AND EXAMPLES MATCH: the formula of grammar (and of each grammar.steps entry) is locked; its text and examples teach exactly the structures that formula lists. A formula rule row is each pattern separated by \" / \" between two \"+\" patterns, \";\", \" vs \" or a new line. Every rule row gets at least one example that uses exactly that structure, so a formula with N rows has at least N examples (never fewer than 2), and every example uses a row of its own formula: never an example of a structure the formula does not list (no routine-vs-now examples under a state-verb or always + continuous formula, no past continuous under a have / have got formula). Error-check (common errors) formulas keep their (NOT ...) notes and their examples illustrate those same rules; a \"Wrong: ... Right: ...\" example counts for the rule it corrects.";
+
 /** `verifyAnswers`: run the independent answer check (monthly_answer_verification) once the deterministic gate passes. */
-export interface MonthlyAiGenerationOptions { verifyAnswers?: boolean }
+export interface MonthlyAiGenerationOptions {
+  verifyAnswers?: boolean;
+  /** Monthly AI-call budget: when exhausted, the optional grammar formula/example repair call is skipped. */
+  isBudgetExhausted?: () => boolean;
+}
 
 export async function generateMonthlyDayWithAi(contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string, priorGrammarExamples: readonly string[] = [], options: MonthlyAiGenerationOptions = {}): Promise<MonthlyDayGenerationResult> {
   return generateMonthlyContentWithAi("new", contract, dayNumber, runner, systemPrompt, priorGrammarExamples, options);
@@ -160,7 +170,7 @@ ${note}` : basePrompt}${contract.planSchemaVersion === 2 && kind === "new" ? `\n
       if (kind === "review" && studyCodes.length && exerciseCodes.some((code) => code !== "grammar")) {
         // One call for the study tab (12 cards) and ~30 exercise items is too large; split them like the monthly exam.
         const [study, exercises] = await Promise.all([
-          call(studyCodes, "This request returns only the study-tab parts listed in components. For grammar return formula, text, examples and steps, without items.", 10_000),
+          call(studyCodes, `This request returns only the study-tab parts listed in components. For grammar return formula, text, examples and steps, without items. ${MONTHLY_GRAMMAR_FORMULA_EXAMPLE_RULE}`, 10_000),
           call(exerciseCodes, "This request returns only the review exercise sections listed in components, as sections.<code>. For grammar return only { items } (the study formula is produced separately). Keep the title short.", 14_000, "monthly_review_exercises")
         ]);
         title = study.title;
@@ -205,6 +215,8 @@ ${MONTHLY_REVIEW_ITEM_REPAIR_RULE}`;
       const output = result.output as { items?: Array<{ section: string; id: string; item: Record<string, unknown> }> };
       return normalizeMonthlyReviewParts(mergeMonthlyReviewItemRepairs(parts, requests, output.items ?? []));
     } } : {}),
+    // One grammar-only repair round when the formula rows and examples do not match (bounded: one extra call per lesson).
+    repairGrammarExamples: { ...(options.isBudgetExhausted ? { isBudgetExhausted: options.isBudgetExhausted } : {}) },
     ...(options.verifyAnswers ? { verifyAnswers: async ({ daySpec, parts }: { daySpec: MonthlyDaySpec; parts: MonthlyLessonCandidate["parts"] }) => monthlyAnswerVerification(contract, daySpec, parts, runner) } : {})
   });
   return generated;
@@ -466,6 +478,14 @@ export async function generateMonthlyDay(input: {
    * any other severe finding (December 2026: approved wrong keys).
    */
   verifyAnswers?: (input: { daySpec: MonthlyDaySpec; parts: MonthlyLessonCandidate["parts"] }) => Promise<MonthlyQualityFinding[]>;
+  /**
+   * Optional targeted grammar repair once the lesson passes the gate: when the
+   * formula rows and the examples do not match (MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH),
+   * `generate` is asked once more for the grammar part only. Only its text and
+   * examples are taken, and only when the mismatch shrinks without a new finding.
+   * Skipped when the AI-call budget is exhausted.
+   */
+  repairGrammarExamples?: { isBudgetExhausted?: () => boolean };
   maxAttempts?: number;
   priorGrammarExamples?: readonly string[];
 }): Promise<MonthlyDayGenerationResult> {
@@ -506,6 +526,12 @@ export async function generateMonthlyDay(input: {
       if (disputed.length) report = { ...report, severe: disputed };
     }
     if (report.severe.length === 0) {
+      if (input.repairGrammarExamples && !input.repairGrammarExamples.isBudgetExhausted?.()) {
+        ({ parts, report } = await repairMonthlyGrammarFormulaExamples(input.contract, input.dayNumber, title, parts, report, input.priorGrammarExamples, async (finding) => {
+          const generated = await input.generate({ contract: input.contract, dayNumber: input.dayNumber, components: ["grammar"], daySpec, coreTerms, grammarStep, grammarSteps, sound, sounds, pronunciationExamples, priorParts: parts, repairFindings: [finding] });
+          return generated.parts.find((part) => part.code === "grammar")?.content ?? null;
+        }));
+      }
       if (input.repairLight) ({ parts, report } = await repairMonthlyLightFindings(input.contract, input.dayNumber, title, parts, report, input.priorGrammarExamples, (current) => input.repairLight!({ daySpec, coreTerms, grammarSteps, parts: current.parts, report: current.report })));
       return { status: "ready", lesson: { title, parts: shuffleMonthlyAnswerOrder(parts, scopeHash, input.dayNumber) }, report, scopeHash, attempts: attempt };
     }
@@ -522,6 +548,69 @@ export interface MonthlyLightRepairInput {
   grammarSteps: readonly GrammarStep[];
   parts: MonthlyLessonCandidate["parts"];
   report: MonthlyQualityReport;
+}
+
+/**
+ * Takes only the explanation and examples of a repaired grammar part (formula,
+ * items, codes and objectives stay as accepted): top-level text/examples/
+ * exampleTranslations, and per step when both have the same number of steps.
+ */
+export function mergeMonthlyGrammarExampleRepair(accepted: Record<string, unknown>, repaired: Record<string, unknown>): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...accepted };
+  const strings = (value: unknown) => Array.isArray(value) && value.every((item) => typeof item === "string") ? value as string[] : null;
+  const take = (target: Record<string, unknown>, source: Record<string, unknown>) => {
+    if (typeof source.text === "string" && source.text.trim()) target.text = source.text;
+    const examples = strings(source.examples);
+    if (examples?.length) {
+      target.examples = examples;
+      const translations = strings(source.exampleTranslations);
+      if (translations) target.exampleTranslations = translations; else delete target.exampleTranslations;
+    }
+  };
+  take(next, repaired);
+  const own = Array.isArray(accepted.steps) ? accepted.steps : null;
+  const fresh = Array.isArray(repaired.steps) ? repaired.steps : null;
+  if (own && fresh && own.length === fresh.length) {
+    next.steps = own.map((step, index) => {
+      const source = fresh[index];
+      if (!isRecord(step) || !isRecord(source)) return step;
+      const copy = { ...step };
+      take(copy, source);
+      return copy;
+    });
+  }
+  return next;
+}
+
+/**
+ * One grammar-only repair round for MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH. The
+ * repaired part is kept only when it adds no severe finding and no other light
+ * finding, and leaves fewer mismatching grammar steps; a failed call keeps the lesson.
+ */
+async function repairMonthlyGrammarFormulaExamples(
+  contract: MonthlyCurriculumContract,
+  dayNumber: number,
+  title: string,
+  parts: MonthlyLessonCandidate["parts"],
+  report: MonthlyQualityReport,
+  priorGrammarExamples: readonly string[] | undefined,
+  repair: (finding: MonthlyQualityFinding) => Promise<Record<string, unknown> | null>
+): Promise<{ parts: MonthlyLessonCandidate["parts"]; report: MonthlyQualityReport }> {
+  const finding = report.light.find((candidate) => candidate.code === MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH);
+  const index = parts.findIndex((part) => part.code === "grammar");
+  const day = contract.daySpecs.find((candidate) => candidate.lessonNumber === dayNumber);
+  if (!finding || index < 0 || !day) return { parts, report };
+  let repaired: Record<string, unknown> | null;
+  try { repaired = await repair(finding); } catch { return { parts, report }; }
+  if (!repaired || !isRecord(repaired)) return { parts, report };
+  const accepted = parts[index]!;
+  const merged = mergeMonthlyGrammarExampleRepair(accepted.content, repaired);
+  if (JSON.stringify(merged) === JSON.stringify(accepted.content)) return { parts, report };
+  const trial = applyMonthlyLockedPlanFields(contract, day, parts.map((part, position) => position === index ? { ...part, content: merged } : part));
+  const trialReport = evaluateMonthlyLessonQuality(contract, dayNumber, { title, parts: trial }, priorGrammarExamples);
+  const others = (light: readonly MonthlyQualityFinding[]) => light.filter((candidate) => candidate.code !== MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH).length;
+  const better = monthlyGrammarFormulaExampleIssues(trial[index]!.content).length < monthlyGrammarFormulaExampleIssues(accepted.content).length;
+  return !trialReport.severe.length && others(trialReport.light) <= others(report.light) && better ? { parts: trial, report: trialReport } : { parts, report };
 }
 
 /** Up to two light-repair rounds; each changed part is kept only when it lowers the light count without a severe finding. */
