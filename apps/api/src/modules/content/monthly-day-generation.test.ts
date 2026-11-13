@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MonthlyCurriculumContract } from "@e4s/domain";
+import { monthlyGatedLightFindings, type MonthlyCurriculumContract } from "@e4s/domain";
 import { applyMonthlyLockedPlanFields, monthlyAnswerTranslationRule, dropSupportTermVocabularyCards, generateMonthlyDay, generateMonthlyDayWithAi, generateMonthlyReviewWithAi, keepMeaningfulVocabularyRelations, monthlyCheckpointKey, monthlyDailyTeachingContract, monthlyLearnerLanguageContract, monthlyReviewExerciseContract, monthlyReviewWordFormCandidates, monthlyVocabularyRelationContract } from "./monthly-day-generation.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 
@@ -127,7 +127,9 @@ describe("monthly day generation", () => {
     }} as unknown as import("@e4s/ai").AiTaskRunner;
     const result=await generateMonthlyReviewWithAi(scope,5,runner,"Review prompt");
     expect(result.status,JSON.stringify(result.report.severe)).toBe("ready");
-    expect(calls).toHaveLength(2);
+    // The model wrote no step examples and the plan examples are never copied in: one grammar-only formula/example repair follows.
+    expect(calls).toHaveLength(3);
+    expect(calls[2]).toEqual(["grammar"]);
     // Study tab on the lesson task; exercises on the review task whose schema requires variants.
     expect(tasks.slice(0,2).sort()).toEqual(["monthly_lesson_day","monthly_review_exercises"]);
     const grammar=result.lesson!.parts.find(part=>part.code==="grammar")!;
@@ -639,5 +641,82 @@ describe("grammar formula rows vs examples (24/12 Bài 15)", () => {
 
   it("asks every daily lesson for one example per formula row", () => {
     expect(monthlyDailyTeachingContract(contract().daySpecs[0]!, "B1")).toContain("FORMULA AND EXAMPLES MATCH");
+  });
+});
+
+describe("review grammar steps write their own examples (live B1 2026-12, framework 900fd0fb)", () => {
+  // The two step-3 ("common errors") formulas and resource examples of the live B1 December month resources.
+  const STEP_A3 = { id: "step", focus: "Common errors with present tenses", formula: "Error check: [subject] + [state verb] (NOT is knowing) / always + am/is/are + verb-ing (complaint about repeated habit)", usage: "Present tense errors", examples: ["Wrong: She work in Hanoi. Right: She works in Hanoi.", "Wrong: I am knowing the answer. Right: I know the answer.", "Wrong: We are agree with the plan. Right: We agree with the plan.", "Our manager is always changing the schedule, so it is hard to plan ahead."] };
+  const STEP_B3 = { id: "step-2", focus: "Common errors with past tenses; have vs have got", formula: "Error check: [subject] + verb-ed/irregular (NOT did + verb-ed) / have/has + noun (I have two projects) vs have got (I have got a new laptop)", usage: "Past tense errors", examples: ["Wrong: Yesterday I go to the client meeting. Right: Yesterday I went to the client meeting.", "Wrong: Did she wrote the report? Right: Did she write the report?", "We have got three new projects this year. We had only one last year.", "My team has a clear goal for next year, so I have got a good plan to share."] };
+  const RESOURCE_EXAMPLES = new Set([...STEP_A3.examples, ...STEP_B3.examples]);
+  const OWN = [
+    ["Wrong: I am knowing the new budget. Right: I know the new budget.", "Our supplier is always changing the cost, so we cannot plan the forecast."],
+    ["Wrong: Did the client approved the budget? Right: Did the client approve the budget?", "Our team has a new forecast this quarter.", "We have got a clear cost report for the next project."]
+  ];
+  const scope = () => {
+    const value = contract();
+    value.planSchemaVersion = 2; value.cefr = "B1";
+    for (const word of ["report", "client", "meeting", "team", "deadline", "email", "plan", "step", "update"]) value.coreTerms.push({ ...value.coreTerms[0]!, id: word, word });
+    value.sounds[0]!.examples.push(...["cup", "car", "call", "come", "case", "cake"].map((word) => ({ id: word, word, ipa: "/k/" })));
+    value.grammarTopics[0]!.steps = [STEP_A3, STEP_B3];
+    value.sounds.push({ id: "sound-2", ipa: "/s/", label: "S", examples: [{ id: "see", word: "see", ipa: "/siː/" }, { id: "soon", word: "soon", ipa: "/suːn/" }, { id: "sales", word: "sales", ipa: "/seɪlz/" }] });
+    value.daySpecs.push({ ...value.daySpecs[0]!, lessonNumber: 5, date: "2026-11-06", kind: "review", coreTermIds: [], expandedTermIds: [], reviewTermIds: value.coreTerms.map((term) => term.id), reviewGrammarStepIds: ["step", "step-2"], reviewSoundIds: ["sound", "sound-2"], reviewPronunciationExampleIds: value.sounds.flatMap((sound) => sound.examples.map((example) => example.id)) });
+    return value;
+  };
+  const candidateFor = (value: MonthlyCurriculumContract) => {
+    const candidate = reviewLessonCandidate(false);
+    const first = value.sounds[0]!;
+    const choice = (word: string) => translated({ id: word, prompt: `Choose ${word}`, options: [word, "other", "different", "unrelated"], answer: word, explanation: "It fits.", audioText: word });
+    candidate.parts = candidate.parts.map((item) => item.code === "vocabulary" ? { code: item.code, content: { items: value.coreTerms.map((term) => ({ word: term.word, collocations: [`our ${term.word}`, `the ${term.word}`, `a ${term.word}`] })) } } : item.code === "listening" ? { code: item.code, content: { items: value.coreTerms.map((term) => choice(term.word)) } } : item.code === "word_use" ? { code: item.code, content: { items: value.coreTerms.slice(0, 4).map((term) => choice(term.word)) } } : item.code === "word_class" ? { code: item.code, content: { items: value.coreTerms.slice(0, 3).map((term) => choice(term.word)) } } : item.code === "reading" ? { code: item.code, content: { ...item.content, passage: `Our team discusses ${value.coreTerms.map((term) => term.word).join(", ")}.` } } : item.code === "pronunciation" ? { code: item.code, content: { focus: first.ipa, words: first.examples.slice(0, 3), reviewTargets: value.sounds.map((sound) => ({ soundId: sound.id, focus: sound.ipa, words: sound.examples })) } } : item);
+    return candidate;
+  };
+  /** studyGrammar(call) is the grammar study content the model returns on its n-th grammar study call. */
+  const run = async (studyGrammar: (call: number) => Record<string, unknown>) => {
+    const value = scope();
+    const candidate = candidateFor(value);
+    const prompts: string[] = [];
+    let studyCalls = 0;
+    const runner = { runTask: async (task: string, input: Record<string, any>, options: Record<string, any>) => {
+      if (task === "monthly_review_item_repair") return { output: { items: [] }, metadata: {} };
+      const study = task === "monthly_lesson_day" && input.components.includes("grammar");
+      if (study) { studyCalls += 1; prompts.push(options.systemPrompt); }
+      const call = studyCalls;
+      return { output: { lesson: { title: "Weekly review", parts: candidate.parts.filter((item) => input.components.includes(item.code)).map((item) => item.code !== "grammar" ? item : input.components.includes("listening") ? { code: item.code, content: { items: item.content.items } } : { code: item.code, content: { formula: item.content.formula, ...studyGrammar(call) } }) } }, metadata: {} };
+    } } as unknown as import("@e4s/ai").AiTaskRunner;
+    const result = await generateMonthlyReviewWithAi(value, 5, runner, "Review prompt");
+    return { value, result, prompts, studyCalls: () => studyCalls };
+  };
+  const stepsOf = (lesson: { parts: Array<{ code: string; content: Record<string, unknown> }> }) => lesson.parts.find((item) => item.code === "grammar")!.content.steps as Array<{ formula: string; examples: string[] }>;
+
+  it("keeps the AI's own per-row examples under the locked formulas: no mismatch, no repair call, no resource example", async () => {
+    const { result, prompts, studyCalls } = await run(() => ({ steps: OWN.map((examples) => ({ formula: "rewritten", text: "Fix the common error.", examples })) }));
+    expect(result.status, JSON.stringify(result.report.severe)).toBe("ready");
+    const steps = stepsOf(result.lesson!);
+    expect(steps.map((step) => step.formula)).toEqual([STEP_A3.formula, STEP_B3.formula]);
+    expect(steps.map((step) => step.examples)).toEqual(OWN);
+    expect(result.report.light.map((finding) => finding.code)).not.toContain("MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH");
+    expect(studyCalls()).toBe(1);
+    expect(prompts[0]).toContain("style references only");
+  });
+
+  it("never copies the resource examples; the one grammar repair writes the missing per-row examples", async () => {
+    const { result, prompts, studyCalls } = await run((call) => call === 1 ? {} : { steps: OWN.map((examples) => ({ formula: "x", text: "Fix the common error.", examples })) });
+    expect(result.status, JSON.stringify(result.report.severe)).toBe("ready");
+    expect(studyCalls()).toBe(2);
+    expect(prompts[1]).toContain("FORMULA AND EXAMPLES MATCH");
+    const steps = stepsOf(result.lesson!);
+    expect(steps.map((step) => step.examples)).toEqual(OWN);
+    expect(steps.flatMap((step) => step.examples).some((example) => RESOURCE_EXAMPLES.has(example))).toBe(false);
+    expect(result.report.light.map((finding) => finding.code)).not.toContain("MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH");
+  });
+
+  it("an already-approved lesson whose steps copied the first two resource examples stays valid (advisory finding only)", async () => {
+    const { value, result } = await run(() => ({ steps: OWN.map((examples) => ({ formula: "x", text: "Fix the common error.", examples })) }));
+    const lesson = result.lesson!;
+    const old = { title: lesson.title, parts: lesson.parts.map((item) => item.code !== "grammar" ? item : { ...item, content: { ...item.content, steps: [STEP_A3, STEP_B3].map((step) => ({ formula: step.formula, text: step.usage, examples: step.examples.slice(0, 2) })) } }) };
+    const report = evaluateMonthlyLessonQuality(value, 5, old);
+    expect(report.severe).toEqual([]);
+    expect(report.light.map((finding) => finding.code)).toContain("MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH");
+    expect(monthlyGatedLightFindings(report.light)).toEqual(monthlyGatedLightFindings(result.report.light));
   });
 });

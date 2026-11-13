@@ -83,7 +83,7 @@ export type MonthlyDayComponent = (typeof MONTHLY_DAY_COMPONENTS)[number];
  * Formula and examples (24/12 Bài 15): the locked formula decides what the examples teach. Shared by the daily
  * teaching contract, the review study call and the grammar repair request.
  */
-export const MONTHLY_GRAMMAR_FORMULA_EXAMPLE_RULE = "FORMULA AND EXAMPLES MATCH: the formula of grammar (and of each grammar.steps entry) is locked; its text and examples teach exactly the structures that formula lists. A formula rule row is each pattern separated by \" / \" between two \"+\" patterns, \";\", \" vs \" or a new line. Every rule row gets at least one example that uses exactly that structure, so a formula with N rows has at least N examples (never fewer than 2), and every example uses a row of its own formula: never an example of a structure the formula does not list (no routine-vs-now examples under a state-verb or always + continuous formula, no past continuous under a have / have got formula). Error-check (common errors) formulas keep their (NOT ...) notes and their examples illustrate those same rules; a \"Wrong: ... Right: ...\" example counts for the rule it corrects.";
+export const MONTHLY_GRAMMAR_FORMULA_EXAMPLE_RULE = "FORMULA AND EXAMPLES MATCH: the formula of grammar (and of each grammar.steps entry) is locked; its text and examples teach exactly the structures that formula lists. A formula rule row is each pattern separated by \" / \" between two \"+\" patterns, \";\", \" vs \" or a new line. Every rule row gets at least one example that uses exactly that structure, so a formula with N rows has at least N examples (never fewer than 2), and every example uses a row of its own formula: never an example of a structure the formula does not list (no routine-vs-now examples under a state-verb or always + continuous formula, no past continuous under a have / have got formula). Error-check (common errors) formulas keep their (NOT ...) notes and their examples illustrate those same rules; a \"Wrong: ... Right: ...\" example counts for the rule it corrects, and common-errors steps keep that Wrong: ... Right: ... style. Only the formula and the step structure are locked: lockedScope.grammarStep(s) examples are style references only. Never copy them; write your own fresh, natural workplace sentences, using today's core words where they fit.";
 
 /** `verifyAnswers`: run the independent answer check (monthly_answer_verification) once the deterministic gate passes. */
 export interface MonthlyAiGenerationOptions {
@@ -184,7 +184,7 @@ ${note}` : basePrompt}${contract.planSchemaVersion === 2 && kind === "new" ? `\n
         const exercisesOnly = kind === "review" && !studyCodes.length;
         const single = exercisesOnly
           ? await call(components, "This request returns only the review exercise sections listed in components, as sections.<code>. Keep the title short.", 14_000, "monthly_review_exercises")
-          : await call(components, "", kind === "review" ? 14_000 : 8_000);
+          : await call(components, kind === "review" && components.includes("grammar") ? MONTHLY_GRAMMAR_FORMULA_EXAMPLE_RULE : "", kind === "review" ? 14_000 : 8_000);
         title = single.title;
         rawParts = single.parts;
       }

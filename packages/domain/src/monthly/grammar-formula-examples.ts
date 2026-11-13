@@ -441,6 +441,11 @@ export function monthlyGrammarFormulaExampleIssues(grammar: Record<string, unkno
     : typeof grammar.formula === "string" ? [{ step: null as number | null, formula: grammar.formula, examples: stringList(grammar.examples) }] : [];
   return blocks.flatMap((block) => {
     const check = checkMonthlyGrammarStep(block.formula, block.examples);
+    // A step left without examples (the model wrote none for it; resource examples are never copied in): every readable row lacks one.
+    if (block.step !== null && !block.examples.length) {
+      const rows = check.rows.filter((row) => row.readable).map((row) => row.text);
+      return rows.length ? [{ step: block.step, formula: block.formula, rowsWithoutExample: rows, examplesWithoutRow: [], tooFewExamples: true }] : [];
+    }
     return check.rowsWithoutExample.length || check.examplesWithoutRow.length || check.tooFewExamples
       ? [{ step: block.step, formula: block.formula, rowsWithoutExample: check.rowsWithoutExample, examplesWithoutRow: check.examplesWithoutRow, tooFewExamples: check.tooFewExamples }]
       : [];

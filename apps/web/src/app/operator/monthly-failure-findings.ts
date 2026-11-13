@@ -120,7 +120,7 @@ function describeFinding(finding: MonthlyQualityFindingView, context: MonthlyFin
     case "MONTHLY_DAILY_GRAMMAR_RECALL_OFF_TOPIC": return single("Câu ôn chủ điểm A chưa kiểm tra đúng điểm ngữ pháp được gắn; viết lại câu này.");
     case "MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH": {
       // Advisory warning (never blocks approval): one line per grammar step whose formula rows and examples differ.
-      const what = "Công thức ngữ pháp không khớp câu ví dụ; sửa tay công thức/ví dụ hoặc sinh lại ngày này.";
+      const what = "Công thức ngữ pháp chưa có ví dụ cho mọi dòng; sửa tay để thêm ví dụ.";
       const steps = [...new Set([...message.matchAll(/grammar\.steps\[(\d+)\]/gu)].map((match) => Number(match[1]) + 1))];
       return steps.length ? steps.map((step) => ({ where: `${section} · bước ${step}`, what })) : single(what);
     }

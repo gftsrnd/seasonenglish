@@ -6,6 +6,7 @@
  * them. AI output also uses plain strings for synonyms; cards need { word }.
  */
 import { monthlyRegisterLexicalDetails, monthlyRegisterTermsApply, validMonthlyRegisterTerms, type MonthlyRegisterTerm } from "./register-terms.js";
+import { checkMonthlyGrammarStep } from "./grammar-formula-examples.js";
 
 export interface MonthlyVocabularyCore {
   id: string; word: string; meaning?: string; type?: string; ipa?: string; imageUrl?: string;
@@ -288,10 +289,26 @@ export function withMonthlyExpandedTerms<T extends { code?: string; content?: Re
 
 export interface MonthlyGrammarStepSource { formula: string; usage?: string; focus?: string; examples?: readonly string[] }
 
+/** The model's top-level grammar examples that use a readable row of a step formula (in order). */
+function topLevelExamplesForStep(formula: string, examples: readonly string[]): string[] {
+  if (!examples.length) return [];
+  const used = new Set(checkMonthlyGrammarStep(formula, examples).rows.flatMap((row) => row.exampleIndexes));
+  return examples.filter((_, index) => used.has(index));
+}
+
 /**
  * Review days teach several grammar steps. Each step is shown as its own block,
- * so the grammar part carries `steps: [{ formula, text, examples }]`. When the
- * model did not return them, they are rebuilt from the approved plan.
+ * so the grammar part carries `steps: [{ formula, text, examples }]`.
+ *
+ * The approved plan (month resources) locks only each step's formula and the
+ * step structure. The examples are the lesson model's own (B1 2026-12: copying
+ * the first two resource examples left a 2–3-row formula with examples for
+ * row 1 only): every example the model wrote for the step is kept; when it
+ * wrote none for a step, the step takes the model's top-level grammar.examples
+ * that use a row of that step's formula. The resource examples are style
+ * references for the model only and are never copied into the lesson, so a
+ * step can stay without examples (the formula/example check then asks for a
+ * grammar repair).
  */
 export function withMonthlyGrammarSteps<T extends { code?: string; content?: Record<string, unknown> }>(parts: readonly T[], steps: readonly MonthlyGrammarStepSource[]): T[] {
   if (steps.length < 2) return [...parts];
@@ -305,13 +322,14 @@ export function withMonthlyGrammarSteps<T extends { code?: string; content?: Rec
     const fromModel = existing.length === steps.length;
     const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
     const list = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : [];
+    const topLevel = list(part.content.examples);
     return { ...part, content: { ...part.content, steps: steps.map((step, index) => {
       const own = fromModel ? existing[index]! : {};
       const ownExamples = list(own.examples);
       return {
         formula: step.formula,
         text: text(own.text) || text(own.usage) || step.usage || step.focus || "",
-        examples: (ownExamples.length ? ownExamples : [...(step.examples ?? [])]).slice(0, 2)
+        examples: ownExamples.length ? ownExamples : topLevelExamplesForStep(step.formula, topLevel)
       };
     }) } };
   });

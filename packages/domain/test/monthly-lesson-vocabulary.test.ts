@@ -42,6 +42,7 @@ describe("attachMonthlyExpandedTerms umbrella siblings", () => {
 });
 
 import { withMonthlyGrammarSteps } from "../src/monthly/lesson-vocabulary.js";
+import { MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH, monthlyGatedLightFindings, monthlyGrammarFormulaExampleIssues } from "../src/monthly/grammar-formula-examples.js";
 
 describe("attachMonthlyExpandedTerms umbrella / family IPA (13/11)", () => {
   it("passes a sibling's IPA through and borrows a core word's IPA for a family/umbrella word, never inventing one", () => {
@@ -70,20 +71,62 @@ describe("withMonthlyGrammarSteps", () => {
     { formula: "S + V(s)", usage: "routines", examples: ["We send a report."] },
     { formula: "am/is/are + V-ing", focus: "now", examples: ["We are testing.", "He is fixing it.", "Extra."] }
   ];
-  it("adds one step entry per planned grammar step when the model returned a single formula", () => {
-    const [grammar] = withMonthlyGrammarSteps<{ code: string; content: Record<string, unknown> }>([{ code: "grammar", content: { formula: "S + V(s). am/is/are + V-ing" } }], steps);
+  it("adds one step entry per planned grammar step when the model returned a single formula, never copying the plan examples", () => {
+    const [grammar] = withMonthlyGrammarSteps<{ code: string; content: Record<string, unknown> }>([{ code: "grammar", content: { formula: "S + V(s). am/is/are + V-ing", examples: ["The client is calling now.", "Our team is checking the invoice."] } }], steps);
     expect(grammar!.content!.steps).toEqual([
-      { formula: "S + V(s)", text: "routines", examples: ["We send a report."] },
-      { formula: "am/is/are + V-ing", text: "now", examples: ["We are testing.", "He is fixing it."] }
+      // "S + V(s)" cannot be read: no top-level example is assigned to it, and the plan example is not copied in.
+      { formula: "S + V(s)", text: "routines", examples: [] },
+      { formula: "am/is/are + V-ing", text: "now", examples: ["The client is calling now.", "Our team is checking the invoice."] }
     ]);
   });
   it("keeps the plan formulas but the model's explanations, and ignores single-step days", () => {
     const own = [{ code: "grammar", content: { steps: [{ formula: "rewritten a", text: "giải thích A", examples: ["A1."] }, { formula: "rewritten b", text: "giải thích B" }] } }];
     expect(withMonthlyGrammarSteps<{ code: string; content: Record<string, unknown> }>(own, steps)[0]!.content!.steps).toEqual([
       { formula: "S + V(s)", text: "giải thích A", examples: ["A1."] },
-      { formula: "am/is/are + V-ing", text: "giải thích B", examples: ["We are testing.", "He is fixing it."] }
+      { formula: "am/is/are + V-ing", text: "giải thích B", examples: [] }
     ]);
     expect(withMonthlyGrammarSteps([{ code: "grammar", content: { formula: "x" } }], steps.slice(0, 1))[0]!.content).toEqual({ formula: "x" });
+  });
+});
+
+describe("withMonthlyGrammarSteps on the live B1 2026-12 review steps", () => {
+  // month_frameworks 900fd0fb (4300): the step-3 formulas and resource examples of topics A and B.
+  const planSteps = [
+    { formula: "Error check: [subject] + [state verb] (NOT is knowing) / always + am/is/are + verb-ing (complaint about repeated habit)", usage: "A3", examples: ["Wrong: She work in Hanoi. Right: She works in Hanoi.", "Wrong: I am knowing the answer. Right: I know the answer.", "Wrong: We are agree with the plan. Right: We agree with the plan.", "Our manager is always changing the schedule, so it is hard to plan ahead."] },
+    { formula: "Error check: [subject] + verb-ed/irregular (NOT did + verb-ed) / have/has + noun (I have two projects) vs have got (I have got a new laptop)", usage: "B3", examples: ["Wrong: Yesterday I go to the client meeting. Right: Yesterday I went to the client meeting.", "Wrong: Did she wrote the report? Right: Did she write the report?", "We have got three new projects this year. We had only one last year.", "My team has a clear goal for next year, so I have got a good plan to share."] }
+  ];
+  const resourceExamples = new Set(planSteps.flatMap((step) => step.examples));
+  type Part = { code: string; content: Record<string, unknown> };
+
+  it("keeps every per-row example the model wrote (no 2-example cap) and passes the formula/example check", () => {
+    const own = [
+      ["Wrong: I am knowing the new forecast. Right: I know the new forecast.", "Our supplier is always changing the delivery date, so we cannot plan the budget."],
+      ["Wrong: Did the client approved the budget? Right: Did the client approve the budget?", "Our team has a new supplier this quarter.", "We have got a clear forecast for the next project."]
+    ];
+    const [grammar] = withMonthlyGrammarSteps<Part>([{ code: "grammar", content: { formula: "x", steps: own.map((examples) => ({ formula: "rewritten", text: "t", examples })) } }], planSteps);
+    const stepsOut = grammar!.content.steps as Array<{ formula: string; examples: string[] }>;
+    expect(stepsOut.map((step) => step.formula)).toEqual(planSteps.map((step) => step.formula));
+    expect(stepsOut.map((step) => step.examples)).toEqual(own);
+    expect(monthlyGrammarFormulaExampleIssues(grammar!.content)).toEqual([]);
+  });
+
+  it("never copies the resource examples: a step the model wrote no example for takes matching top-level examples or stays empty", () => {
+    const top = ["Wrong: I am knowing the client. Right: I know the client.", "Our manager is always changing the plan.", "We have got a new laptop for the intern."];
+    const [grammar] = withMonthlyGrammarSteps<Part>([{ code: "grammar", content: { formula: "x", examples: top } }], planSteps);
+    const stepsOut = grammar!.content.steps as Array<{ examples: string[] }>;
+    expect(stepsOut.flatMap((step) => step.examples).some((example) => resourceExamples.has(example))).toBe(false);
+    expect(stepsOut[0]!.examples).toEqual(top.slice(0, 2));
+    const [bare] = withMonthlyGrammarSteps<Part>([{ code: "grammar", content: { formula: "x" } }], planSteps);
+    expect((bare!.content.steps as Array<{ examples: string[] }>).map((step) => step.examples)).toEqual([[], []]);
+    // An empty step is reported (so the day's one-shot grammar repair writes its examples).
+    expect(monthlyGrammarFormulaExampleIssues(bare!.content).map((issue) => [issue.step, issue.rowsWithoutExample.length])).toEqual([[1, 2], [2, 3]]);
+  });
+
+  it("the old copy (first two resource examples per step) stays reportable only as the advisory mismatch", () => {
+    const copied = { formula: "x", steps: planSteps.map((step) => ({ formula: step.formula, text: step.usage, examples: step.examples.slice(0, 2) })) };
+    const issues = monthlyGrammarFormulaExampleIssues(copied);
+    expect(issues.map((issue) => issue.rowsWithoutExample)).toEqual([["always + am/is/are + verb-ing (complaint about repeated habit)"], ["have/has + noun (I have two projects)", "have got (I have got a new laptop)"]]);
+    expect(monthlyGatedLightFindings([{ code: MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH }])).toEqual([]);
   });
 });
 
