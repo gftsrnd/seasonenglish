@@ -264,6 +264,17 @@ describe("monthly day generation – AI quality plan 11/11 (WP1/D1, WP2)", () =>
     expect(applyMonthlyLockedPlanFields(scope, day, [{ code: "speaking", content: {} }]).map((item) => item.code)).toEqual(["speaking"]);
   });
 
+  it("drops grammar exampleTranslations from B1 before the gate, keeps them at A1–A2 (13/11)", () => {
+    const scope = v2();
+    const day = scope.daySpecs[0]!;
+    const grammar = { code: "grammar", content: { examples: ["We were discussing the budget."], exampleTranslations: ["Chúng tôi đang thảo luận ngân sách."], steps: [{ formula: "S + was + V-ing", exampleTranslations: ["x"] }] } };
+    expect(applyMonthlyLockedPlanFields(scope, day, [grammar])[0]!.content).toHaveProperty("exampleTranslations");
+    scope.cefr = "B1";
+    const content = applyMonthlyLockedPlanFields(scope, day, [grammar])[0]!.content as Record<string, unknown>;
+    expect(content).not.toHaveProperty("exampleTranslations");
+    expect((content.steps as Array<Record<string, unknown>>)[0]).not.toHaveProperty("exampleTranslations");
+  });
+
   it("1b: the repair prompt carries the exact expected strings", async () => {
     const prompts: string[] = [];
     const runner = { runTask: async (_task: string, input: Record<string, any>, options: Record<string, any>) => {

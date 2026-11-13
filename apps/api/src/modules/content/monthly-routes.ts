@@ -1,4 +1,4 @@
-import { monthlyPronunciationCatalog, monthlyRegisterTermsApply, MONTHLY_PRONUNCIATION_MEMORY_MONTHS, selectMonthlyPronunciationItems, MONTHLY_GRAMMAR_MEMORY_MONTHS, selectMonthlyGrammarPair, buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlyPhrasePlacements, maxMonthlySupportRepeats, monthlyDayKind, monthlyScopeHash, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, hasRequiredMonthlySupportRelations, requiredSupportRelationsFor, type MonthlyCurriculumContract } from "@e4s/domain";
+import { monthlyPronunciationCatalog, monthlyRegisterTermsApply, MONTHLY_PRONUNCIATION_MEMORY_MONTHS, selectMonthlyPronunciationItems, MONTHLY_GRAMMAR_MEMORY_MONTHS, selectMonthlyGrammarPair, buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlyPhrasePlacements, maxMonthlySupportRepeats, monthlyDayKind, monthlyScopeHash, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, hasRequiredMonthlySupportRelations, requiredSupportRelationsFor, withoutAdvancedGrammarExampleTranslations, type MonthlyCurriculumContract } from "@e4s/domain";
 import { monthlyResourcePlanOutputSchema, monthlyTopicSuggestionOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import { MonthlyResourceProgressStore } from "./monthly-resource-progress.js";
@@ -1107,10 +1107,12 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
 
   app.put("/api/v1/content/month-frameworks/:id/days/:dayNumber", { preHandler: contentOperator }, async (request, reply) => {
     const { id, dayNumber } = dayParams.parse(request.params);
-    const input = lessonInput.parse(request.body);
+    const parsed = lessonInput.parse(request.body);
     let contract;
     try { contract = await repositories.monthlyContent.getFrameworkContract(request.e4sSession!.user.id, id); }
     catch (error) { const response = invalidMonthlyPlanReply(reply, error); if (response) return response; throw error; }
+    // B1–C1 grammar examples carry no Vietnamese translations (the app never shows them); drop old ones on save.
+    const input = { ...parsed, parts: withoutAdvancedGrammarExampleTranslations(contract.cefr, parsed.parts) };
     const teachingContract = contract.daySpecs.find(day => day.lessonNumber === dayNumber)?.reviewFromPreviousMonth ? await repositories.monthlyContent.getReviewTeachingContract(request.e4sSession!.user.id,id,dayNumber) : contract;
     const report = evaluateMonthlyLessonQuality(teachingContract, dayNumber, input, await priorMonthlyGrammarExamples(pool, id, contract, dayNumber));
     await repositories.monthlyContent.saveMonthlyDayDraft(request.e4sSession!.user.id, id, dayNumber, input, report);
@@ -1226,10 +1228,11 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
   app.put("/api/v1/content/month-frameworks/:id/days/:dayNumber/corrections/:correctionId", { preHandler: contentOperator }, async (request, reply) => {
     const { id, dayNumber } = dayParams.parse(request.params);
     const { correctionId } = correctionParams.parse(request.params);
-    const input = lessonInput.parse(request.body);
+    const parsed = lessonInput.parse(request.body);
     let contract;
     try { contract = await repositories.monthlyContent.getFrameworkContract(request.e4sSession!.user.id, id); }
     catch (error) { const response = invalidMonthlyPlanReply(reply, error); if (response) return response; throw error; }
+    const input = { ...parsed, parts: withoutAdvancedGrammarExampleTranslations(contract.cefr, parsed.parts) };
     const report = evaluateMonthlyLessonQuality(contract, dayNumber, input);
     await repositories.monthlyContent.saveMonthlyCorrection(request.e4sSession!.user.id, correctionId, input, report);
     return report;

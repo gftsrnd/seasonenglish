@@ -1,5 +1,5 @@
 import type { MonthlyCurriculumContract, MonthlyDaySpec } from "@e4s/domain";
-import { monthlyCollocationTranslationIssues, monthlyExerciseTranslationIssues, monthlyRelationMeaningIssue, answerIsUniqueLongestOption, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPronunciationExampleText, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
+import { monthlyCollocationTranslationIssues, monthlyExerciseTranslationIssues, monthlyRelationMeaningIssue, answerIsClearlyLongestOption, answerIsUniqueLongestOption, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPronunciationExampleText, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
 import type { LessonPart } from "@e4s/contracts";
 import { monthlyGrammarRoadmapDayIssues } from "./monthly-grammar-roadmap.js";
 import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
@@ -305,6 +305,16 @@ export function collectMonthlyChoices(parts: ReadonlyArray<{ code: string; conte
   return entries;
 }
 
+/**
+ * Grammar and word-form options are forms of one word or tense ("was reviewing / reviewed / has reviewed"), so
+ * their lengths differ naturally: they count only when the answer is clearly longer and not a form variant
+ * (13/11 B1 review). Listening, reading and the other sections keep the strict unique-longest cue.
+ */
+const FORM_CHOICE_COMPONENTS = new Set(["grammar", "word_class"]);
+function answerLooksLongest(choice: ChoiceEntry): boolean {
+  return FORM_CHOICE_COMPONENTS.has(choice.component) ? answerIsClearlyLongestOption(choice.options, choice.answer) : answerIsUniqueLongestOption(choice.options, choice.answer);
+}
+
 /** WP3 (distractors, HV-R49), WP7 (internal wording) and WP8 (offensive words) checks shared by daily lessons and reviews. */
 function evaluateChoiceAndWording(
   contract: MonthlyCurriculumContract,
@@ -336,7 +346,7 @@ function evaluateChoiceAndWording(
   for (const choice of choices) if (choice.options.length >= 3) groups.set(choice.group, [...(groups.get(choice.group) ?? []), choice]);
   for (const [group, list] of groups) {
     if (list.length < 2) continue;
-    const longest = list.filter((choice) => answerIsUniqueLongestOption(choice.options, choice.answer)).length;
+    const longest = list.filter((choice) => answerLooksLongest(choice)).length;
     if (longest / list.length > 0.5) light.push({ severity: "light", code: "MONTHLY_ANSWER_LONGEST_OPTION", message: `In ${group === SINGLE_GROUP ? "the lesson's single-question exercises" : group}, the correct answer is the only longest option in ${longest}/${list.length} questions; make distractors similar in length`, dayNumber, component: list[0]!.component });
   }
 

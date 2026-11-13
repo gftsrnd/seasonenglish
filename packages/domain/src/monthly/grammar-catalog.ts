@@ -435,3 +435,18 @@ export function monthlyGrammarExampleTranslationIssues(cefr: CefrLevel, examples
   });
   return issues;
 }
+
+/**
+ * B1–C1: removes grammar `exampleTranslations` (on the part and on each step). Translations of grammar
+ * examples are A1–A2 only and the learner app never shows them from B1, so generation and manual saves
+ * drop any the model or an old draft still carries (13/11: a B1 review kept them and failed English-only).
+ */
+export function withoutAdvancedGrammarExampleTranslations<T extends { code: string; content?: unknown }>(cefr: string, parts: readonly T[]): T[] {
+  if (cefr === "A1" || cefr === "A2") return [...parts];
+  const strip = (value: unknown): unknown => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+    const { exampleTranslations: _dropped, ...rest } = value as Record<string, unknown>;
+    return Array.isArray(rest.steps) ? { ...rest, steps: rest.steps.map(strip) } : rest;
+  };
+  return parts.map((part) => part.code === "grammar" && part.content && typeof part.content === "object" ? { ...part, content: strip(part.content) } as T : part);
+}

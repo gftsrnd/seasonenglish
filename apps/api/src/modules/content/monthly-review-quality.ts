@@ -1,4 +1,4 @@
-import { containsVietnameseLearnerText, isExerciseTranslationKey, monthlyMinimalPairPartners, monthlyMinimalPairRepairAdvice, monthlyPronunciationContrastIssue, monthlyPronunciationContrastRule, monthlyPronunciationExampleText, type MonthlyCurriculumContract, type MonthlyDaySpec, type MonthlyPronunciationContrastRule } from "@e4s/domain";
+import { containsVietnameseLearnerText, isExerciseTranslationKey, isVietnameseTranslationKey, monthlyMinimalPairPartners, monthlyMinimalPairRepairAdvice, monthlyPronunciationContrastIssue, monthlyPronunciationContrastRule, monthlyPronunciationExampleText, type MonthlyCurriculumContract, type MonthlyDaySpec, type MonthlyPronunciationContrastRule } from "@e4s/domain";
 import type { MonthlyQualityFinding } from "./monthly-quality.js";
 
 /**
@@ -187,7 +187,9 @@ export function evaluateMonthlyReviewSections(
 function vietnameseStrings(content: Content, meaningsAllowed: boolean): string[] {
   const found: string[] = [];
   const visit = (value: unknown, key: string) => {
-    if (/meaning$/iu.test(key) || key === "id" || isExerciseTranslationKey(key) || (meaningsAllowed && (key === "options" || key === "answer"))) return;
+    // Translation fields (question/answer translations, grammar exampleTranslations) are Vietnamese by
+    // design and never English-only prose (13/11: a B1 review failed on grammar.exampleTranslations[1]).
+    if (/meaning$/iu.test(key) || key === "id" || isExerciseTranslationKey(key) || isVietnameseTranslationKey(key) || (meaningsAllowed && (key === "options" || key === "answer"))) return;
     if (typeof value === "string") { if (containsVietnameseLearnerText(value)) found.push(value.trim()); return; }
     if (Array.isArray(value)) { for (const item of value) visit(item, key === "items" || key === "variants" ? "" : key); return; }
     if (isRecord(value)) for (const [childKey, item] of Object.entries(value)) visit(item, childKey);

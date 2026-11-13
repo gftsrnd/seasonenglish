@@ -4609,8 +4609,14 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 .operator-monthly-findings-body { max-height: min(34vh, 320px); margin-top: 8px; overflow-y: auto; overscroll-behavior: contain; }
 .operator-monthly-findings-body[hidden] { display: none; }
 .operator-monthly-findings-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.operator-monthly-findings-list > li { display: flex; align-items: baseline; gap: 8px; }
-.operator-monthly-finding-text { flex: 1 1 auto; min-width: 0; }
+.operator-monthly-findings-list > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+/* Chip + section ("Nhẹ  Phần 4 · Ngữ pháp:") is one label that never shrinks or wraps; the message takes the
+   rest of the row and wraps itself, or drops below the label when the row is too narrow (13/11 word-by-word wrap). */
+.operator-monthly-finding-label { display: inline-flex; flex: none; align-items: baseline; gap: 6px; white-space: nowrap; }
+.operator-monthly-finding-label > .badge { flex: none; }
+.operator-monthly-finding-where { flex: none; white-space: nowrap; }
+.operator-monthly-findings-list > li > .badge, .operator-editor-findings-list > li > .badge { flex: none; }
+.operator-monthly-finding-text { flex: 1 1 14em; min-width: 0; overflow-wrap: anywhere; }
 .operator-monthly-findings .operator-monthly-finding-edit { display: inline-flex; flex: none; align-items: center; gap: 4px; min-height: 0 !important; padding: 0 2px; border: 0; background: none; box-shadow: none; font: inherit; font-weight: 700; color: var(--brown, #8a4d08); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .operator-monthly-finding-link { padding: 0; border: 0; background: none; font: inherit; font-weight: 700; color: var(--brown, #8a4d08); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; min-height: 0 !important; }
 .app-operator .operator-monthly-findings-dock { position: sticky; z-index: 9; top: 8px; display: grid; gap: 8px; margin-bottom: 14px; }
@@ -4633,7 +4639,11 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 .operator-modal-scope .operator-editor-findings-count { flex: none; font-weight: 700; color: var(--text); }
 .operator-modal-scope .operator-editor-findings-first { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .operator-modal-scope .operator-editor-finding-link { padding: 0; border: 0; background: none; box-shadow: none; font: inherit; font-weight: 400; color: var(--text); text-align: left; cursor: pointer; min-height: 0 !important; }
-.operator-modal-scope .operator-editor-finding-link > strong { color: var(--brown, #8a4d08); text-decoration: underline; text-underline-offset: 2px; }
+.operator-modal-scope .operator-editor-finding-link strong { color: var(--brown, #8a4d08); text-decoration: underline; text-underline-offset: 2px; }
+/* Buttons are inline-flex app-wide, which squeezed the section label to min-content; the collapsed first line is a
+   plain block (so its ellipsis works) and each list item lays out label + message like the day page. */
+.operator-modal-scope button.operator-editor-findings-first { display: block; }
+.operator-modal-scope button.operator-editor-finding-item { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: baseline; justify-content: flex-start; gap: 4px 8px; min-width: 0; }
 .operator-modal-scope button.operator-editor-findings-toggle { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 28px; height: 28px; min-height: 0 !important; margin-left: auto; padding: 0; border: 1px solid #ead19a; border-radius: 8px; background: #fff; box-shadow: none; color: var(--brown, #8a4d08); cursor: pointer; }
 .operator-modal-scope button.operator-editor-findings-toggle:hover:not(:disabled) { background: #fdf1d6; border-color: #d9b56a; box-shadow: none; }
 .operator-modal-scope button.operator-editor-findings-toggle:focus-visible { outline: 3px solid var(--primary-glow, rgba(223, 129, 51, .4)); outline-offset: 2px; }

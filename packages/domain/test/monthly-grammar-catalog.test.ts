@@ -5,7 +5,7 @@ import { buildMonthlyTeachingCalendar } from "../src/monthly/calendar.js";
 import { dailyTeachingPlan } from "../src/monthly/daily-progression.js";
 import {
   findMonthlyGrammarCatalogTopic, monthlyGrammarCatalog, monthlyGrammarExampleTranslationIssues, monthlyGrammarContentMarkers, monthlyGrammarCoverageIssues, monthlyGrammarDayCode,
-  monthlyGrammarDayStage, monthlyGrammarMonthCodes, monthlyGrammarPairOf, monthlyGrammarTopicTitle, monthlyGrammarUncoveredContents, selectMonthlyGrammarPair
+  monthlyGrammarDayStage, monthlyGrammarMonthCodes, monthlyGrammarPairOf, monthlyGrammarTopicTitle, monthlyGrammarUncoveredContents, selectMonthlyGrammarPair, withoutAdvancedGrammarExampleTranslations
 } from "../src/monthly/grammar-catalog.js";
 
 const LEVELS: readonly CefrLevel[] = ["A1", "A2", "B1", "B2", "C1"];
@@ -237,5 +237,16 @@ describe("A1–A2 grammar example translations", () => {
     expect(monthlyGrammarExampleTranslationIssues("A2", ["I have sent it. (Tôi đã gửi.)"], ["Tôi đã gửi."])[0]).toMatch(/read aloud in English.*into grammar.exampleTranslations/u);
     expect(monthlyGrammarExampleTranslationIssues("B1", examples, undefined)).toEqual([]);
     expect(monthlyGrammarExampleTranslationIssues("B2", examples, ["Tôi đã gửi báo cáo.", "Cô ấy đã đặt phòng."])).toEqual(["grammar.exampleTranslations must be omitted at B2 (no Vietnamese translations from B1)"]);
+  });
+
+  it("drops grammar exampleTranslations (part and steps) from B1, keeps them at A1–A2 (13/11)", () => {
+    const parts = [
+      { code: "grammar", content: { examples, exampleTranslations: ["Tôi đã gửi báo cáo.", "Cô ấy đã đặt phòng."], steps: [{ formula: "S + have + V3", examples, exampleTranslations: ["a", "b"] }] } },
+      { code: "reading", content: { exampleTranslations: ["kept"] } }
+    ];
+    const [grammar, reading] = withoutAdvancedGrammarExampleTranslations("B1", parts);
+    expect(grammar!.content).toEqual({ examples, steps: [{ formula: "S + have + V3", examples }] });
+    expect(reading).toBe(parts[1]);
+    expect(withoutAdvancedGrammarExampleTranslations("A2", parts)[0]!.content).toHaveProperty("exampleTranslations");
   });
 });

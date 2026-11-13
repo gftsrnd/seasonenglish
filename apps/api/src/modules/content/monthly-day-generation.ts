@@ -1,4 +1,4 @@
-import { MONTHLY_ANSWER_TRANSLATION_RULE, MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS, answerIsUniqueLongestOption, monthlyLessonDisplayTitle, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
+import { MONTHLY_ANSWER_TRANSLATION_RULE, MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS, answerIsUniqueLongestOption, monthlyLessonDisplayTitle, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, withoutAdvancedGrammarExampleTranslations, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
 import { MONTHLY_LESSON_PART_CONTENT_CONTRACT, MONTHLY_REVIEW_CHOICE_SECTIONS, type AiTaskRunner, type MonthlyReviewChoiceSection } from "@e4s/ai";
 import { evaluateMonthlyLessonQuality, monthlyLockedPlanExpectations, normalizeFormula, type MonthlyLessonCandidate, type MonthlyLockedPlanExpectations, type MonthlyQualityReport, type MonthlyQualityFinding } from "./monthly-quality.js";
 import { rebalanceAnswerTextPositions, type AnswerTextChoice } from "../shared/answer-order.js";
@@ -590,7 +590,8 @@ async function repairMonthlyLightFindings(
  */
 export function applyMonthlyLockedPlanFields<T extends LessonPartRecord>(contract: MonthlyCurriculumContract, day: MonthlyDaySpec, parts: readonly T[]): T[] {
   const expected = monthlyLockedPlanExpectations(contract, day);
-  return parts.map((part) => {
+  // B1–C1 grammar examples have no Vietnamese translations; drop any the model still returned (13/11).
+  return withoutAdvancedGrammarExampleTranslations(contract.cefr, parts).map((part) => {
     if (!isRecord(part.content)) return part;
     if (part.code === "grammar") return { ...part, content: lockedGrammar(part.content, expected) };
     if (part.code === "pronunciation") return { ...part, content: lockedPronunciation(part.content, expected) };

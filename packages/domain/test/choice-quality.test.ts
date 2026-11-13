@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  answerIsClearlyLongestOption,
   answerIsUniqueLongestOption,
+  isVietnameseTranslationKey,
+  optionsAreFormVariants,
   bracketHintWords,
   containsVietnameseLetters,
   internalLearnerTerms,
@@ -37,6 +40,25 @@ describe("choice quality heuristics (AI quality plan 11/11)", () => {
   it("detects a unique longest answer", () => {
     expect(answerIsUniqueLongestOption(["The budget is ready now.", "No.", "Yes.", "Maybe."], "The budget is ready now.")).toBe(true);
     expect(answerIsUniqueLongestOption(["report", "different", "unrelated", "other"], "report")).toBe(false);
+  });
+
+  it("treats tense and word forms as form variants, not a longest-answer cue (13/11 B1 review)", () => {
+    expect(optionsAreFormVariants(["was reviewing", "reviewed", "has reviewed", "is reviewing"])).toBe(true);
+    expect(optionsAreFormVariants(["was writing", "wrote", "has written", "writes"])).toBe(true);
+    expect(optionsAreFormVariants(["decide", "decision", "decisive", "decisively"])).toBe(true);
+    expect(optionsAreFormVariants(["in front of", "at", "on", "by"])).toBe(false);
+    expect(answerIsUniqueLongestOption(["was reviewing", "reviewed", "has reviewed", "is reviewing"], "was reviewing")).toBe(true);
+    expect(answerIsClearlyLongestOption(["was reviewing", "reviewed", "has reviewed", "is reviewing"], "was reviewing")).toBe(false);
+    expect(answerIsClearlyLongestOption(["will have been working", "worked", "has worked", "works"], "will have been working")).toBe(false);
+    // Not forms of one word and clearly longer: still a cue.
+    expect(answerIsClearlyLongestOption(["in front of the office", "at", "on", "by"], "in front of the office")).toBe(true);
+    // Only one word / under 30% longer: not a clear margin.
+    expect(answerIsClearlyLongestOption(["because of", "despite", "although", "unless"], "because of")).toBe(false);
+  });
+
+  it("recognises translation keys that language gates skip", () => {
+    for (const key of ["questionTranslation", "answerTranslation", "exampleTranslations", "exampleTranslation"]) expect(isVietnameseTranslationKey(key)).toBe(true);
+    for (const key of ["text", "examples", "prompt", "translation", "explanation"]) expect(isVietnameseTranslationKey(key)).toBe(false);
   });
 
   it("detects Vietnamese letters and internal planning wording", () => {

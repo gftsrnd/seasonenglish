@@ -4,6 +4,7 @@ import { validateLessonPartOrder } from "../learning/index.js";
 export { hasSensitiveText, hasSensitiveTopicText, SENSITIVE_NAME_MESSAGE_VI, SENSITIVE_TOPIC_MESSAGE_VI, sensitiveTextIssue, sensitiveTopicIssue, sensitiveTopicSeverity, UNSUITABLE_TOPIC_MESSAGE_VI, type SensitiveTextCategory, type SensitiveTextIssue, type SensitiveTopicSeverity } from "./sensitive-text.js";
 export { CURATED_LEXICAL_RELATIONS, curatedRelationEvidence, lexicalRelationCoverageSatisfied, relationExemptionIsCredible } from "./lexical-relations.js";
 export {
+  answerIsClearlyLongestOption,
   answerIsUniqueLongestOption,
   bracketHintWords,
   containsVietnameseLetters,
@@ -13,6 +14,7 @@ export {
   isPlausibleMinimalPair,
   mentionsWordClass,
   offensiveWords,
+  optionsAreFormVariants,
   optionsAreWordClassLabels
 } from "./choice-quality.js";
 import { containsVietnameseLetters } from "./choice-quality.js";
@@ -311,6 +313,14 @@ export function containsVietnameseLearnerText(value: unknown): boolean {
  */
 const STANDARD_SECTION_TITLES = new Set(["Mục tiêu bài học", "Hướng dẫn làm bài", "Từ vựng", "Ngữ pháp", "Phát âm", "Nghe", "Đọc", "Viết", "Từ loại", "Dùng từ", "Nói", "Ôn tập"]);
 
+/**
+ * Translation fields (`questionTranslation`, `answerTranslation`, grammar `exampleTranslations`, any camelCase
+ * `…Translation(s)`): Vietnamese by design, never English-only learner prose, so language gates skip them.
+ */
+export function isVietnameseTranslationKey(key: string): boolean {
+  return /^[a-z][A-Za-z]*Translations?$/u.test(key);
+}
+
 function learnerFacingPartContainsVietnamese(part: LessonPart, locked?: Readonly<Record<string, string>>): boolean {
   const visit = (value: unknown, parentKey = ""): boolean => {
     // Vocabulary meanings may be Vietnamese. The plan attaches synonym/antonym
@@ -320,8 +330,9 @@ function learnerFacingPartContainsVietnamese(part: LessonPart, locked?: Readonly
     // synonym/antonym `definition` is English and stays checked.
     if (part.code === "vocabulary" && (/meaning$/i.test(parentKey) || parentKey === "note" || parentKey === "imageAttribution")) return false;
     // Exercise question/answer translations are Vietnamese at every level and
-    // are shown only after the question is finished (12/11).
-    if (parentKey === "questionTranslation" || parentKey === "answerTranslation") return false;
+    // are shown only after the question is finished (12/11); grammar
+    // exampleTranslations are A1–A2 popups the app never shows from B1 (13/11).
+    if (isVietnameseTranslationKey(parentKey)) return false;
     if (containsVietnameseLearnerText(value)) return true;
     if (Array.isArray(value)) return value.some((item) => visit(item, parentKey));
     if (!value || typeof value !== "object") return false;

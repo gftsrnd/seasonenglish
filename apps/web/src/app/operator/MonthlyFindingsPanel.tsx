@@ -20,6 +20,15 @@ function SeverityChip({ line }: { line: MonthlyFindingLine }) {
 }
 
 /**
+ * The section ("Phần 4 · Ngữ pháp:") never shrinks or wraps; beside the severity chip it forms one label and
+ * the message after it takes the remaining width and wraps on its own (13/11: buttons are inline-flex app-wide,
+ * so the section was squeezed to a few characters and broke word by word).
+ */
+function FindingWhere({ line }: { line: MonthlyFindingLine }) {
+  return <strong className="operator-monthly-finding-where">{line.where}:</strong>;
+}
+
+/**
  * Day page: quality findings that stay in view while the Operator scrolls the
  * lesson. One row (title, status chip, count, chevron), then one line per
  * problem: WHERE it is and WHAT to fix. With `onEditLine`, each line ends with a
@@ -45,7 +54,7 @@ export function MonthlyFindingsPanel({ label, title, badge, lines, onEditLine, t
     </button>
     <div className="operator-monthly-findings-body" id={bodyId} hidden={!open}>
       <ul className="small operator-monthly-findings-list">{lines.map((line) => <li key={line.key}>
-        <SeverityChip line={line} /> <span className="operator-monthly-finding-text"><strong>{line.where}</strong>: {line.what}</span>
+        <span className="operator-monthly-finding-label"><SeverityChip line={line} />{" "}<FindingWhere line={line} /></span>{" "}<span className="operator-monthly-finding-text">{line.what}</span>
         {onEditLine ? <button type="button" className="link-button operator-monthly-finding-edit" aria-label={`Sửa tay: ${line.where}`} title="Mở trình sửa tay tại mục này" onClick={() => onEditLine(line)}><Pencil size={13} aria-hidden="true" />Sửa</button> : null}
       </li>)}</ul>
     </div>
@@ -69,7 +78,7 @@ export function EditorFindingsStrip({ lines, onSelect }: { lines: readonly Month
       {lines.length > 1 ? <button type="button" className="operator-editor-findings-toggle" aria-expanded={open} aria-controls={listId} aria-label={toggleLabel(open)} title={toggleLabel(open)} onClick={() => setOpen((value) => !value)}><ChevronDown className="operator-editor-findings-chevron" size={18} aria-hidden="true" focusable="false" /></button> : null}
     </div>
     {lines.length > 1 ? <ul className="small operator-editor-findings-list" id={listId} hidden={!open}>{lines.map((line) => <li key={line.key}>
-      <SeverityChip line={line} /> <button type="button" className="link-button operator-editor-finding-link" onClick={() => onSelect(line)}><strong>{line.where}</strong>: {line.what}</button>
+      <SeverityChip line={line} /><button type="button" className="link-button operator-editor-finding-link operator-editor-finding-item" onClick={() => onSelect(line)}><FindingWhere line={line} />{" "}<span className="operator-monthly-finding-text">{line.what}</span></button>
     </li>)}</ul> : null}
   </section>;
 }

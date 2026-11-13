@@ -394,6 +394,32 @@ describe("Friday review gate (AI quality round 2, 11/11)", () => {
     }
   });
 
+  it("B1+: translation fields (grammar exampleTranslations, question/answer translations) are not English-only prose (13/11 B1 review)", () => {
+    for (const cefr of ["B1", "C1"] as const) {
+      const { plan, parts } = english(cefr);
+      const grammar = parts.get("grammar")!.content;
+      parts.set("grammar", { content: { ...grammar, examples: ["We were discussing the budget when the client called."], exampleTranslations: ["Chúng tôi đang thảo luận ngân sách thì khách hàng gọi.", "Trong khi các lập trình viên đang kiểm thử ứng dụng, nhà thiết kế cập nhật màn hình."], steps: [{ formula: "S + was/were + V-ing", examples: ["We were testing it."], exampleTranslations: ["Chúng tôi đang kiểm thử nó."] }], items: (grammar.items as Array<Record<string, unknown>>).map((item) => ({ ...item, questionTranslation: "Trong khi cả nhóm ____ báo cáo mới, quản lý đã gọi.", answerTranslation: "đang xem xét" })) } });
+      expect(codes(evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, parts))).not.toContain("MONTHLY_REVIEW_INSTRUCTION_LANGUAGE");
+      // Real Vietnamese prose in a learner field is still flagged.
+      parts.set("grammar", { content: { ...parts.get("grammar")!.content, text: "Trong khi các lập trình viên đang kiểm thử ứng dụng, nhà thiết kế cập nhật màn hình." } });
+      expect(codes(evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, parts))).toContain("MONTHLY_REVIEW_INSTRUCTION_LANGUAGE");
+    }
+  });
+
+  it("tense-form grammar options are not a longest-answer cue; listening/reading still are (13/11 B1 review)", () => {
+    const tense = (id: string, answer: string, options: string[]) => ({ id, prompt: "While the team ____ the report, the manager called.", options, answer, explanation: "Past continuous for the background action." });
+    const grammarItems = [
+      tense("g1", "was reviewing", ["was reviewing", "reviewed", "has reviewed", "is reviewing"]),
+      tense("g2", "were discussing", ["were discussing", "discussed", "have discussed", "discuss"]),
+      tense("g3", "will have been working", ["will have been working", "worked", "has worked", "works"])
+    ];
+    const graded = lesson({ parts: reviewParts().map((item) => item.code === "grammar" ? part("grammar", { ...item.content, items: grammarItems }) : item) });
+    expect(evaluateMonthlyLessonQuality(contract(), 2, graded).light.filter((row) => row.code === "MONTHLY_ANSWER_LONGEST_OPTION").map((row) => row.component)).toEqual([]);
+    const long = (answer: string, index: number) => ({ id: `l${index}`, prompt: "Chọn đáp án đúng", options: [answer, "No.", "Yes.", "Maybe."], answer, explanation: "Vì đúng." });
+    const cued = lesson({ parts: reviewParts().map((item) => item.code === "grammar" ? part("grammar", { ...item.content, items: grammarItems }) : item.code === "listening" ? part("listening", { ...item.content, items: ["The budget is ready now.", "The team is late again.", "The plan changed today."].map(long) }) : item) });
+    expect(evaluateMonthlyLessonQuality(contract(), 2, cued).light.filter((row) => row.code === "MONTHLY_ANSWER_LONGEST_OPTION").map((row) => row.component)).toEqual(["listening"]);
+  });
+
   it("A1-A2 reviews keep their Vietnamese prompts (the English-only check does not apply)", () => {
     const plan = contract();
     expect(codes(evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, sections()))).not.toContain("MONTHLY_REVIEW_INSTRUCTION_LANGUAGE");

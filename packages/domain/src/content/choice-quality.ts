@@ -92,6 +92,48 @@ export function answerIsUniqueLongestOption(options: readonly string[], answer: 
   return options.every((option) => option === answerOption || option.trim().length < length);
 }
 
+// Auxiliaries, modals, negation and infinitive "to": tense/verb-form options differ by these, so they are
+// naturally longer ("was reviewing" vs "reviewed") without giving the answer away.
+const FORM_FUNCTION_WORDS = new Set(["am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "will", "would", "shall", "should", "can", "could", "may", "might", "must", "not", "to", "going"]);
+const contractionRest = (word: string) => word.replace(/n't$|'(?:s|re|ve|ll|d|m)$/u, "");
+
+/**
+ * True when every option is a form of one word: after dropping auxiliaries/modals/"not"/"to", each option
+ * leaves a single word and all share a stem (common prefix of at least 3 letters, e.g. review / reviewed /
+ * reviewing; decide / decision / decisive). Irregular forms (write / wrote / written) also pass when the
+ * remaining words share their first 2 letters and every option is at most 3 words long.
+ */
+export function optionsAreFormVariants(options: readonly string[]): boolean {
+  if (options.length < 2) return false;
+  const lexical = options.map((option) => (option.toLocaleLowerCase("en-US").match(/[a-z']+/gu) ?? []).map(contractionRest).filter((word) => word && !FORM_FUNCTION_WORDS.has(word)));
+  if (lexical.some((words) => words.length !== 1)) return false;
+  const words = lexical.map((list) => list[0]!);
+  let prefix = words[0]!;
+  for (const word of words.slice(1)) {
+    let index = 0;
+    while (index < prefix.length && index < word.length && prefix[index] === word[index]) index += 1;
+    prefix = prefix.slice(0, index);
+  }
+  if (prefix.length >= 3) return true;
+  return prefix.length >= 2 && options.every((option) => option.trim().split(/\s+/u).length <= 3);
+}
+
+/**
+ * Tolerant "answer is the longest" cue for grammar and word-form items (13/11): tense and word forms are
+ * naturally different lengths, so it is a cue only when the options are not forms of one word AND the answer
+ * is clearly longer than every other option — more than one word longer and more than 30% more characters.
+ * Listening/reading keep {@link answerIsUniqueLongestOption}.
+ */
+export function answerIsClearlyLongestOption(options: readonly string[], answer: string): boolean {
+  if (!answerIsUniqueLongestOption(options, answer) || optionsAreFormVariants(options)) return false;
+  const wanted = answer.trim().toLocaleLowerCase("en-US");
+  const others = options.filter((option) => option.trim().toLocaleLowerCase("en-US") !== wanted);
+  const wordCount = (value: string) => value.trim().split(/\s+/u).filter(Boolean).length;
+  const longestOther = Math.max(...others.map((option) => option.trim().length));
+  const mostWords = Math.max(...others.map(wordCount));
+  return wordCount(answer) - mostWords > 1 && answer.trim().length > longestOther * 1.3;
+}
+
 const VIETNAMESE_LETTERS = /[ăâđêôơưàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/iu;
 
 /** Vietnamese text by its letters (diacritics) — used where Vietnamese is required, not forbidden. */
