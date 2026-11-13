@@ -136,8 +136,9 @@ describe("new Settings app branch", () => {
   it("wires settings save for the Manager", async () => {
     const callbacks = actions(); const user = userEvent.setup();
     render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={callbacks} />);
-    await user.clear(screen.getByRole("spinbutton", { name: "Khuyến nghị học tối thiểu (phút/ngày)" }));
-    await user.type(screen.getByRole("spinbutton", { name: "Khuyến nghị học tối thiểu (phút/ngày)" }), "20");
+    expect(screen.queryByRole("spinbutton", { name: "Khuyến nghị học tối thiểu (phút/ngày)" })).not.toBeInTheDocument();
+    await user.clear(screen.getByRole("spinbutton", { name: /Giới hạn chat với Season/ }));
+    await user.type(screen.getByRole("spinbutton", { name: /Giới hạn chat với Season/ }), "40");
     await user.click(screen.getByRole("button", { name: "Lưu thiết lập học theo tháng" }));
     expect(callbacks.onSaveManager).toHaveBeenCalled();
   });
