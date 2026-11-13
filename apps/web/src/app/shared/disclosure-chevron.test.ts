@@ -39,13 +39,14 @@ describe("disclosure chevrons", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("the shared chevron is drawn from one mask and centred on the cross axis of its row", () => {
+  it("the shared chevron is drawn from one clip-path shape (no data: images) and centred on the cross axis of its row", () => {
     const css = read("app/app.css");
     const rule = css.match(/\.ui-chevron,[\s\S]*?\{([\s\S]*?)\n\}/)?.[1] ?? "";
     expect(rule).toMatch(/content:\s*""/);
     expect(rule).toMatch(/align-self:\s*center/);
     expect(rule).toMatch(/margin-block:\s*auto/);
-    expect(rule).toMatch(/mask:\s*var\(--ui-chevron-mask\)/);
+    expect(rule).toMatch(/clip-path:\s*var\(--ui-chevron-shape\)/);
+    expect(css).not.toMatch(/data:image/);
     expect(css).toMatch(/\.ui-chevron--right[\s\S]*?\{transform:rotate\(-90deg\)\}/);
     expect(css).toMatch(/\[aria-expanded="true"\] > \.ui-chevron:not\(\.ui-chevron--right\)\{transform:rotate\(180deg\)\}/);
   });

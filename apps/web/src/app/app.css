@@ -757,7 +757,7 @@ button,.btn{min-height:var(--hci-touch-target)}
    One CSS-drawn chevron for every accordion / disclosure / select-like trigger (no "v" / "^" / arrow text glyphs).
    It points down by default and rotates 180deg when open; `.ui-chevron--right` (and the right-pointing pseudo markers
    below) start rotated -90deg and settle back to "down" when open. It is centred on the cross axis of its row. */
-:root{--ui-chevron-size:1.125rem;--ui-chevron-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")}
+:root{--ui-chevron-size:1.125rem;--ui-chevron-shape:polygon(12% 34%,24% 22%,50% 48%,76% 22%,88% 34%,50% 72%)}
 .ui-chevron,
 .operator-level-editor-dialog .operator-level-section > summary::after,
 .coach-page .coach-vocabulary-details > summary h2::after,
@@ -767,7 +767,7 @@ button,.btn{min-height:var(--hci-touch-target)}
   content:"";display:inline-block;box-sizing:border-box;flex:none;align-self:center;
   width:var(--ui-chevron-size);height:var(--ui-chevron-size);margin-block:auto;
   background-color:currentColor;color:var(--muted);
-  -webkit-mask:var(--ui-chevron-mask) center/contain no-repeat;mask:var(--ui-chevron-mask) center/contain no-repeat;
+  clip-path:var(--ui-chevron-shape);
   transition:transform .15s ease;
 }
 .ui-chevron--right,
@@ -778,7 +778,7 @@ button,.btn{min-height:var(--hci-touch-target)}
   .manager-monthly-learner-list summary::before{
     content:"";display:inline-block;box-sizing:border-box;flex:none;align-self:center;
     width:var(--ui-chevron-size);height:var(--ui-chevron-size);background-color:currentColor;color:var(--muted);
-    -webkit-mask:var(--ui-chevron-mask) center/contain no-repeat;mask:var(--ui-chevron-mask) center/contain no-repeat;
+    clip-path:var(--ui-chevron-shape);
     transform:rotate(-90deg);transition:transform .15s ease;
   }
 }
@@ -786,7 +786,7 @@ button,.btn{min-height:var(--hci-touch-target)}
   .games-play-first .game-vocabulary-tools > summary::before{
     content:"";display:inline-block;box-sizing:border-box;flex:none;align-self:center;
     width:var(--ui-chevron-size);height:var(--ui-chevron-size);background-color:currentColor;color:var(--muted);
-    -webkit-mask:var(--ui-chevron-mask) center/contain no-repeat;mask:var(--ui-chevron-mask) center/contain no-repeat;
+    clip-path:var(--ui-chevron-shape);
     transform:rotate(-90deg);transition:transform .15s ease;
   }
 }
