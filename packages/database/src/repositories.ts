@@ -3356,7 +3356,7 @@ function gradeLessonPart(
   if (correct) return { status: "correct", score: 100, feedback: "Đúng rồi. Bạn đã hoàn thành phần này." };
   return attemptNumber >= 2
     ? { status: "wrong_exhausted", score: 0, feedback: "Bạn đã hết lượt thử. Hãy xem lại phần hướng dẫn hoặc gửi kháng nghị." }
-    : { status: "wrong_retry", score: 0, feedback: "Chưa đúng. Bạn còn một lượt thử; hãy xem lại gợi ý." };
+    : { status: "wrong_retry", score: 0, feedback: "Chưa đúng. Bạn còn một lượt thử." };
 }
 
 function normalizeLessonAnswer(value: string): string {
