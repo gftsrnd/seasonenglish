@@ -13,7 +13,7 @@ import type { MonthlyResourceCheckpointPrefillView, MonthlyResourceCheckpointVie
 import { groupVocabularyForDisplay, isStandaloneWord } from "./resource-display.js";
 import { MonthlyFinalReview } from "./MonthlyFinalReview.js";
 import { MonthlyResourceProgress } from "./MonthlyResourceProgress.js";
-import { isGatewayTimeout, monthlyGenerationMessage, monthlyFinalGenerationMessage, monthlyResourceGenerationNotice, monthlyResourceManualSuggestion } from "./monthly-generation-message.js";
+import { isGatewayTimeout, monthlyGenerationMessage, monthlyFinalGenerationMessage, monthlyFinalGenerationTone, monthlyResourceGenerationNotice, monthlyResourceManualSuggestion } from "./monthly-generation-message.js";
 import { MonthlyResourceEditor } from "./MonthlyResourceEditor.js";
 import { MonthlyReviewPractice } from "./MonthlyReviewPractice.js";
 import { describeMonthlyFindings, MONTHLY_PART_TITLES } from "./monthly-failure-findings.js";
@@ -403,7 +403,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       if (draft?.blueprint) { setMonthlyFinal(draft); setMonthlyFinalExists(true); }
       toast.show({ message: "Đã sinh bản nháp đề tháng. Rà báo cáo GEN, thêm và nghe soát audio, rồi duyệt trước 00:00 ngày thi.", tone: "ok" });
     }
-    catch (reason) { showUnavailable(monthlyFinalGenerationMessage(reason)); }
+    catch (reason) { toast.show({ message: monthlyFinalGenerationMessage(reason), tone: monthlyFinalGenerationTone(reason) }); }
     finally { generationInFlight.current = false; setGenerating(undefined); }
   };
   const openMonthlyFinal = async () => {

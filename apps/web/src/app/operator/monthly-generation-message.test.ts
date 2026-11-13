@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { monthlyGenerationMessage,monthlyFinalGenerationMessage } from "./monthly-generation-message.js";
+import { monthlyGenerationMessage,monthlyFinalGenerationMessage, monthlyFinalGenerationTone } from "./monthly-generation-message.js";
 it("distinguishes rejected structure from a failed quality check without exposing validator details", () => {
   const message = monthlyGenerationMessage({ code:"AI_OUTPUT_INVALID",details:{issues:[{component:"grammar",path:"lesson.parts.0.content",message:"sensitive provider output"}]}});
   expect(message).toContain("chưa đúng cấu trúc ở phần Ngữ pháp");
@@ -13,7 +13,7 @@ it("shows actionable timeout and provider limit notices", () => {
   expect(monthlyGenerationMessage({code:"AI_PROVIDER_RATE_LIMIT"})).toContain("chờ rồi thử lại");
 });
 it("reports monthly exam content failures and preserves the current draft",()=>{
-  expect(monthlyFinalGenerationMessage({code:"MONTHLY_FINAL_GENERATION_QUALITY_FAILED",details:{report:{checks:[{code:"GEN11"},{code:"GEN22"}]}}})).toBe("Đề mới chưa đạt yêu cầu về từ luyện âm, độ dài và level. Chưa thay bản nháp hiện có; hãy thử sinh lại.");
+  expect(monthlyFinalGenerationMessage({code:"MONTHLY_FINAL_GENERATION_QUALITY_FAILED",details:{report:{checks:[{code:"GEN11"},{code:"GEN22"}]}}})).toBe("AI đã thử sửa nhiều lượt nhưng đề chưa đạt về từ luyện âm, độ dài và level. Bản nháp cũ giữ nguyên — bấm sinh lại để thử tiếp.");
   expect(monthlyFinalGenerationMessage({code:"AI_OUTPUT_INVALID"})).not.toContain("ngày thi");
 });
 
@@ -42,4 +42,14 @@ it("maps AI provider throttling and blocking to a warn notice with the reason", 
 it("uses the red tone only when the server broke and nothing was saved", () => {
   expect(monthlyResourceGenerationNotice({ code: "HTTP_500", status: 500 }).tone).toBe("danger");
   expect(monthlyResourceGenerationNotice({ code: "HTTP_500", status: 500, details: { progressSaved: true } }).tone).toBe("info");
+});
+
+it("explains a failed monthly final calmly and names the parts", () => {
+  const reason = { code: "AI_OUTPUT_INVALID", details: { code: "AI_OUTPUT_INVALID", issues: [
+    { code: "AI_OUTPUT_INVALID", path: "candidates", message: "P2 has no exact matches in this passage. Use TWO different words spelled exactly as in this pool: called." },
+    { code: "AI_OUTPUT_INVALID", path: "listening.messages", message: "The correct option is uniquely longest for 6/11 questions." }
+  ] } };
+  expect(monthlyFinalGenerationMessage(reason)).toBe("AI đã thử sửa nhiều lượt nhưng đề chưa đạt ở phần Đọc to (thiếu từ luyện âm) và phần Nghe (đáp án đúng dài hơn các lựa chọn). Bản nháp cũ giữ nguyên — bấm sinh lại để thử tiếp.");
+  expect(monthlyFinalGenerationTone(reason)).toBe("info");
+  expect(monthlyFinalGenerationTone({ code: "INTERNAL" })).toBe("danger");
 });

@@ -32,9 +32,9 @@ export function monthlyFinalGenerationMessage(reason:unknown):string {
   const labels:Record<string,string>={GEN04:"độ phủ từ",GEN10:"bằng chứng ngữ pháp",GEN11:"từ luyện âm",GEN18:"bảo mật đề học viên",GEN22:"độ dài và level"};
   if(error.code === "MONTHLY_FINAL_GENERATION_QUALITY_FAILED") {
     const areas=[...new Set((error.details?.report?.checks??[]).map(check=>labels[check.code]??"kiểm tra nội dung"))];
-    return `Đề mới chưa đạt yêu cầu${areas.length ? ` về ${areas.join(", ")}` : ""}. Chưa thay bản nháp hiện có; hãy thử sinh lại.`;
+    return `AI đã thử sửa nhiều lượt nhưng đề chưa đạt${areas.length ? ` về ${areas.join(", ")}` : ""}. Bản nháp cũ giữ nguyên — bấm sinh lại để thử tiếp.`;
   }
-  if(error.code === "AI_OUTPUT_INVALID")return "AI chưa tạo được đề tháng đạt yêu cầu sau các lượt sửa. Chưa thay bản nháp hiện có; hãy thử sinh lại.";
+  if(error.code === "AI_OUTPUT_INVALID")return monthlyFinalAiRetryMessage(reason);
   if(error.code === "MONTHLY_FINAL_EXAM_DATE_LOCKED")return "Đã đến ngày thi; đề tháng đã khóa chỉnh sửa.";
   if(error.code === "MONTHLY_FINAL_ALREADY_PUBLISHED")return "Đề tháng đã phát hành. Cần mở khóa theo luồng quản lý trước khi thay đổi.";
   return "Không sinh được đề thi tháng. Bản nháp hiện có vẫn được giữ; hãy thử lại.";
@@ -83,4 +83,31 @@ export function monthlyResourceGenerationNotice(reason: unknown): MonthlyResourc
   if (firstIssue && KNOWN_RESOURCE_OPERATOR_MESSAGE.test(firstIssue)) return { message: withSuggestion(firstIssue), tone: "info", progressSaved: progressSaved || !firstIssue.startsWith("Nhà cung cấp AI") };
   if (progressSaved) return { message: withSuggestion("Đã sinh thêm một phần. Bấm Tiếp tục để sinh tiếp."), tone: "info", progressSaved };
   return { message: withSuggestion("AI chưa tạo được tài nguyên lần này. Hãy thử lại."), tone: code.startsWith("HTTP_5") || code === "API_INVALID_RESPONSE" ? "danger" : "warn", progressSaved };
+}
+
+/** Which parts of a failed monthly final the gate issues point at, in plain Vietnamese. */
+function monthlyFinalIssueAreas(reason: unknown): string[] {
+  const details = reason && typeof reason === "object" ? (reason as { details?: unknown }).details : undefined;
+  const raw = details && typeof details === "object" ? (details as { issues?: unknown }).issues : undefined;
+  const texts = (Array.isArray(raw) ? raw : []).map((issue) => typeof issue === "string" ? issue : issue && typeof issue === "object" ? `${(issue as { path?: unknown }).path ?? ""} ${(issue as { message?: unknown }).message ?? ""}` : "");
+  const areas: string[] = [];
+  const add = (area: string) => { if (!areas.includes(area)) areas.push(area); };
+  for (const text of texts) {
+    if (/exact matches in this passage|spelled exactly as in this pool|read.?aloud/iu.test(text)) add("phần Đọc to (thiếu từ luyện âm)");
+    if (/uniquely longest|comparable lengths/iu.test(text)) add(/reading/iu.test(text) ? "phần Đọc (đáp án đúng dài hơn các lựa chọn)" : "phần Nghe (đáp án đúng dài hơn các lựa chọn)");
+  }
+  return areas;
+}
+
+function monthlyFinalAiRetryMessage(reason: unknown): string {
+  const areas = monthlyFinalIssueAreas(reason);
+  return `AI đã thử sửa nhiều lượt nhưng đề chưa đạt${areas.length ? ` ở ${areas.join(" và ")}` : ""}. Bản nháp cũ giữ nguyên — bấm sinh lại để thử tiếp.`;
+}
+
+/** Quality misses after AI repair rounds are not breakages: show them calmly (info); keep danger for real failures. */
+export function monthlyFinalGenerationTone(reason: unknown): "info" | "warn" | "danger" {
+  const code = reason && typeof reason === "object" ? (reason as { code?: unknown }).code : undefined;
+  if (code === "AI_OUTPUT_INVALID" || code === "MONTHLY_FINAL_GENERATION_QUALITY_FAILED") return "info";
+  if (code === "MONTHLY_FINAL_EXAM_DATE_LOCKED" || code === "MONTHLY_FINAL_ALREADY_PUBLISHED" || code === "AI_PROVIDER_RATE_LIMIT") return "warn";
+  return "danger";
 }
