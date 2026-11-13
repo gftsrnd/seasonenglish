@@ -18,7 +18,7 @@ import { MonthlyResourceEditor } from "./MonthlyResourceEditor.js";
 import { MonthlyReviewPractice } from "./MonthlyReviewPractice.js";
 import { describeMonthlyFindings, MONTHLY_PART_TITLES } from "./monthly-failure-findings.js";
 import { MonthlyFindingsPanel } from "./MonthlyFindingsPanel.js";
-import { MonthlyIllustrationPanel } from "./MonthlyIllustrationPanel.js";
+import { MonthlyIllustrationPanel, illustrationCounts } from "./MonthlyIllustrationPanel.js";
 import type { MonthlyIllustrationsView } from "../../api/operator.js";
 import "./months.css";
 import { operatorRegisterKindLabel, operatorRegisterNote, type OperatorRegisterTerm } from "./register-terms.js";
@@ -42,7 +42,7 @@ export interface OperatorMonthsActions {
   onApproveBrief(month: string): Promise<void> | void;
   onGenerateFramework(month: string, criteria: MonthlyResourceCriteria): Promise<unknown> | void;
   onSaveFramework(month: string, contract: MonthlyCurriculumContract): Promise<void> | void;
-  onApproveFramework(id: string): Promise<void> | void;
+  onApproveFramework(id: string, options?: { confirmIllustrationsInProgress?: boolean }): Promise<void> | void;
   onPreviewPublication?(id: string): Promise<import("@e4s/contracts").MonthlyPublicationPreviewView>;
   onPublishMonth?(id: string, confirmedOn: string): Promise<void>;
   /** Saves a hand-edited DRAFT resource pool (VH-R30/VH-R35); rejects with per-row `details.issues`. */
@@ -182,7 +182,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
     { key: "expanded" as const, label: "Từ mở rộng", count: (framework?.resources?.supportTerms.length ?? 0) + (framework?.resources?.coreTerms ?? []).reduce((total, core) => total + (core.registerTerms?.length ?? 0), 0), description: "3–9 từ mỗi từ cốt lõi" },
     { key: "grammar" as const, label: "Ngữ pháp", count: framework?.resources?.grammarTopics.length ?? 0, description: "Điểm ngữ pháp cần dùng" },
     { key: "sounds" as const, label: "Phát âm", count: framework?.resources?.sounds.length ?? 0, description: "Âm và ví dụ thực hành" },
-    ...(illustrations ? [{ key: "images" as const, label: "Ảnh minh họa", count: illustrations.images.filter((image) => image.status === "ready").length, description: `/${illustrations.images.length} từ có ảnh` }] : [])
+    ...(illustrations ? [{ key: "images" as const, label: "Ảnh minh họa", count: illustrationCounts(illustrations).ready, description: illustrationCardDescription(illustrations) }] : [])
   ];
   const frameworkIdForExam = framework?.status === "approved" ? framework.id : undefined;
   useEffect(() => {
@@ -355,19 +355,30 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
   const approveFramework = async () => {
     if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
     if (!framework) return showUnavailable("Hãy sinh tài nguyên tháng trước khi duyệt.");
-    const withoutImage = illustrations ? illustrations.images.filter((image) => image.status !== "ready").length : 0;
-    const imageWarning = illustrationsWorking
-      ? "Ảnh minh họa chưa sinh xong sẽ không được dùng."
-      : withoutImage ? `${withoutImage} từ chưa có ảnh minh họa và sẽ chỉ hiện chữ.` : "";
-    if (!await modal.confirm({
+    // Fresh counts: the job may have moved on since the last poll.
+    const current = (await loadIllustrations()) ?? illustrations;
+    const counts = current ? illustrationCounts(current) : { ready: 0, inProgress: 0, fillable: 0 };
+    const withoutImage = current ? current.images.length - counts.ready : 0;
+    if (counts.inProgress > 0) {
+      // Waiting is the safe default; approving anyway keeps the job drawing the words without a picture.
+      if (!await modal.confirm({
+        title: `Còn ${counts.inProgress} ảnh đang sinh — chờ xong rồi chốt?`,
+        message: `Chờ ảnh xong: giữ bản nháp, duyệt sau. Vẫn duyệt: ${counts.ready} ảnh đã có được khóa cùng tài nguyên; ${counts.inProgress} ảnh đang sinh vẫn sinh tiếp, và từ chưa có ảnh vẫn sinh hoặc tải lên được sau khi duyệt.`,
+        confirmLabel: "Vẫn duyệt",
+        cancelLabel: "Chờ ảnh xong",
+        tone: "danger",
+        countdownSeconds: 0
+      })) return;
+    } else if (!await modal.confirm({
       title: "Duyệt tài nguyên tháng?",
-      message: ["Tài nguyên và ảnh minh họa sẽ được khóa sau khi duyệt.", imageWarning].filter(Boolean).join(" "),
+      message: ["Tài nguyên và ảnh minh họa đã có sẽ được khóa sau khi duyệt.", withoutImage ? `${withoutImage} từ chưa có ảnh minh họa; vẫn sinh hoặc tải ảnh lên được sau khi duyệt.` : ""].filter(Boolean).join(" "),
       confirmLabel: "Duyệt tài nguyên",
-      tone: illustrationsWorking ? "danger" : "primary",
+      tone: "primary",
       countdownSeconds: 0
     })) return;
     try {
-      await actions.onApproveFramework(framework.id);
+      if (counts.inProgress > 0) await actions.onApproveFramework(framework.id, { confirmIllustrationsInProgress: true });
+      else await actions.onApproveFramework(framework.id);
       toast.show({ message: "Đã duyệt tài nguyên tháng.", tone: "ok" });
     } catch {
       showUnavailable("Không duyệt được tài nguyên tháng. Hãy thử lại.");
@@ -778,4 +789,10 @@ function formatCalendarDay(date: Date) {
 
 function toResourceCounts(criteria: Pick<MonthlyResourceCriteria, "vocabularyCount" | "expandedVocabularyCount" | "grammarTopicCount" | "pronunciationSoundCount">) {
   return { core: criteria.vocabularyCount, expanded: criteria.expandedVocabularyCount, grammar: criteria.grammarTopicCount, sounds: criteria.pronunciationSoundCount };
+}
+
+/** Resource card line under the ready count, e.g. "/54 từ có ảnh · 48 có thể sinh tiếp". */
+function illustrationCardDescription(view: MonthlyIllustrationsView): string {
+  const { fillable, inProgress } = illustrationCounts(view);
+  return [`/${view.images.length} từ có ảnh`, inProgress ? `${inProgress} đang sinh` : "", fillable ? `${fillable} có thể sinh tiếp` : ""].filter(Boolean).join(" · ");
 }

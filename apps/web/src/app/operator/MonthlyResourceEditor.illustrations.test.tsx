@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MonthFrameworkView, MonthlyOperatorOverviewView } from "@e4s/contracts";
 import type { MonthlyIllustrationsView } from "../../api/operator.js";
 import { MonthlyResourceEditor } from "./MonthlyResourceEditor.js";
+import { MonthlyIllustrationPanel } from "./MonthlyIllustrationPanel.js";
 import { OperatorMonths, type OperatorMonthsActions } from "./Months.js";
 import { ToastProvider } from "../shared/design-system.js";
 import { ModalProvider } from "../shared/ModalProvider.js";
@@ -131,10 +132,64 @@ describe("Months: picture editing wired into Sửa tay", () => {
     expect(actions.onLoadIllustrations).toHaveBeenCalledTimes(2);
   });
 
+  it("asks whether to wait when pictures are still being drawn, and approves anyway only on request", async () => {
+    const drawing = view(false, { running: true, images: [view().images[0]!, { ...view().images[1]!, status: "generating" }] });
+    const { actions, panel } = renderMonths("draft", { onLoadIllustrations: vi.fn().mockResolvedValue(drawing) });
+    const user = userEvent.setup();
+    await waitFor(() => expect(panel.getByText(/1 đang sinh/u)).toBeInTheDocument());
+    await user.click(panel.getByRole("button", { name: "Duyệt tài nguyên" }));
+    const ask = await screen.findByRole("dialog", { name: "Còn 1 ảnh đang sinh — chờ xong rồi chốt?" });
+    expect(within(ask).getByText(/vẫn sinh tiếp/u)).toBeInTheDocument();
+    await user.click(within(ask).getByRole("button", { name: "Chờ ảnh xong" }));
+    expect(actions.onApproveFramework).not.toHaveBeenCalled();
+
+    await user.click(panel.getByRole("button", { name: "Duyệt tài nguyên" }));
+    await user.click(within(await screen.findByRole("dialog", { name: "Còn 1 ảnh đang sinh — chờ xong rồi chốt?" })).getByRole("button", { name: "Vẫn duyệt" }));
+    await waitFor(() => expect(actions.onApproveFramework).toHaveBeenCalledWith("framework-a2", { confirmIllustrationsInProgress: true }));
+  });
+
+  it("shows how many words can still get a picture on the approved resource card", async () => {
+    const approvedView = view(true, { locked: true, images: [view(true).images[0]!, { ...view().images[1]!, status: "missing", locked: false }] });
+    const { panel } = renderMonths("approved", { onLoadIllustrations: vi.fn().mockResolvedValue(approvedView) });
+    await waitFor(() => expect(panel.getByText("/2 từ có ảnh · 1 có thể sinh tiếp")).toBeInTheDocument());
+  });
+
   it("offers no manual edit, and so no picture editing, after approval", async () => {
     const { actions, panel } = renderMonths("approved");
     await waitFor(() => expect(actions.onLoadIllustrations).toHaveBeenCalled());
     expect(panel.queryByRole("button", { name: "Sửa tay" })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: /Ảnh minh họa của/u })).not.toBeInTheDocument();
+  });
+});
+
+describe("Illustration panel after approval", () => {
+  afterEach(() => cleanup());
+
+  it("keeps ready pictures locked but lets the Operator fill the words without one", async () => {
+    const onGenerate = vi.fn();
+    const onUpload = vi.fn();
+    const onRemove = vi.fn();
+    const approved = view(true, { locked: true, images: [view(true).images[0]!, { ...view().images[1]!, status: "failed", error: "refused", locked: false }] });
+    const { container } = render(<MonthlyIllustrationPanel view={approved} busy={false} onGenerate={onGenerate} onUpload={onUpload} onRemove={onRemove} />);
+    const panel = within(container);
+    expect(panel.getByText(/1 có thể sinh tiếp/u)).toBeInTheDocument();
+    expect(panel.getByText(/từ chưa có ảnh vẫn sinh hoặc tải lên được/u)).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(panel.getByRole("button", { name: "Sinh ảnh còn thiếu (1)" }));
+    expect(onGenerate).toHaveBeenCalledWith({});
+    // The ready word has no actions; the failed one can be redrawn or uploaded, never removed.
+    expect(panel.queryByLabelText("Tải ảnh cho budget")).not.toBeInTheDocument();
+    expect(panel.queryByRole("button", { name: /Xóa ảnh/u })).not.toBeInTheDocument();
+    const file = new File(["png"], "approve.png", { type: "image/png" });
+    await user.upload(panel.getByLabelText("Tải ảnh cho approve"), file);
+    expect(onUpload).toHaveBeenCalledWith("approve", file);
+    expect(panel.getAllByRole("button", { name: "Sinh lại" })).toHaveLength(1);
+  });
+
+  it("says the pictures are locked when every word has one", () => {
+    const allReady = view(true, { locked: true, images: [view(true).images[0]!, { ...view(true).images[0]!, coreTermId: "a2-core-2", word: "approve" }] });
+    const { container } = render(<MonthlyIllustrationPanel view={allReady} busy={false} onGenerate={vi.fn()} onUpload={vi.fn()} />);
+    expect(within(container).getByText(/Ảnh đã khóa cùng tài nguyên, không đổi được/u)).toBeInTheDocument();
+    expect(within(container).queryByRole("button", { name: /Sinh ảnh còn thiếu/u })).not.toBeInTheDocument();
   });
 });

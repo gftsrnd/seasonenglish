@@ -1537,7 +1537,11 @@ export class MonthlyContentRepository {
     if (!row || row.role !== "manager") throw new Error("Monthly reopen decisions require an active Manager");
     return row;
   }
-  /** Core words, theme and lock state needed to generate or edit illustrations (Operators only). */
+  /**
+   * Core words, theme and lock state needed to generate or edit illustrations (Operators only).
+   * `locked` = the framework is no longer a draft. An approved framework still accepts pictures
+   * for the words that have none (see saveFrameworkIllustration); a retired one accepts nothing.
+   */
   async frameworkIllustrationContext(actorId: string, frameworkId: string): Promise<MonthlyIllustrationContext> {
     const actor = await this.requireContentOperator(actorId);
     const result = await this.database.query<FrameworkRow & { month: string }>(
@@ -1549,7 +1553,7 @@ export class MonthlyContentRepository {
     if (!row) throw new Error("Monthly framework was not found");
     const contract = row.curriculum_contract;
     return {
-      frameworkId, month: row.month, cefr: row.cefr, locked: row.status !== "draft",
+      frameworkId, month: row.month, cefr: row.cefr, locked: row.status !== "draft", status: row.status,
       theme: { title: contract.theme.title, context: contract.theme.context },
       coreTerms: contract.coreTerms.map((term) => ({ id: term.id, word: term.word, meaning: term.meaning, type: term.type }))
     };
@@ -1566,8 +1570,8 @@ export class MonthlyContentRepository {
     );
     const row = result.rows[0];
     if (!row) throw new Error("Monthly framework was not found");
-    const images = await this.database.query<{ word: string; status: "pending" | "generating" | "ready" | "failed"; source: "ai" | "upload"; artifact_key: string | null; error: string | null }>(
-      "select word, status, source, artifact_key, error from month_framework_images where framework_id = $1", [frameworkId]
+    const images = await this.database.query<{ word: string; status: "pending" | "generating" | "ready" | "failed"; source: "ai" | "upload"; artifact_key: string | null; error: string | null; updated_at: Date }>(
+      "select word, status, source, artifact_key, error, updated_at from month_framework_images where framework_id = $1", [frameworkId]
     );
     const byWord = new Map(images.rows.map((image) => [image.word, image]));
     const coreTerms = row.curriculum_contract.coreTerms as Array<{ id: string; word: string; meaning: string; imageUrl?: string }>;
@@ -1584,22 +1588,38 @@ export class MonthlyContentRepository {
         ...(image?.source ? { source: image.source } : {}),
         ...(url ? { url } : {}),
         ...(image?.error && !url ? { error: image.error } : {}),
-        locked: row.status !== "draft"
+        ...(image && !url ? { updatedAt: image.updated_at.toISOString() } : {}),
+        frameworkLocked: row.status !== "draft",
+        // Approval locks only the words that already have a picture; the others stay fillable.
+        locked: row.status !== "draft" && (row.status !== "approved" || Boolean(url))
       };
     });
   }
 
-  /** Status writes for the illustration job and manual uploads; ignored once the framework is no longer a draft. */
+  /**
+   * Status writes for the illustration job and manual uploads. A draft accepts every write.
+   * An approved framework accepts writes only for a word without a picture: no URL frozen in
+   * its contract and no ready working row (a ready picture is locked with the resources).
+   * Retired frameworks accept nothing. Returns false when the write was refused.
+   */
   async saveFrameworkIllustration(input: { frameworkId: string; word: string; status: "pending" | "generating" | "ready" | "failed"; source?: "ai" | "upload"; artifactKey?: string | null; mimeType?: string | null; hint?: string | null; error?: string | null; actorId?: string }): Promise<boolean> {
     const result = await this.database.query(
       `insert into month_framework_images (framework_id, word, status, source, artifact_key, mime_type, prompt_hint, error, updated_by, updated_at)
        select $1, $2, $3, $4, $5, $6, $7, $8, $9, now()
-       where exists (select 1 from month_frameworks where id = $1 and status = 'draft')
+       where exists (
+         select 1 from month_frameworks mf
+         where mf.id = $1 and (mf.status = 'draft' or (mf.status = 'approved' and not exists (
+           select 1 from jsonb_array_elements(coalesce(mf.curriculum_contract->'coreTerms', '[]'::jsonb)) as core(item)
+           where lower(btrim(core.item->>'word')) = $2 and coalesce(core.item->>'imageUrl', '') <> ''
+         )))
+       )
        on conflict (framework_id, word) do update set status = excluded.status, source = excluded.source,
          artifact_key = case when excluded.status = 'ready' then excluded.artifact_key else month_framework_images.artifact_key end,
          mime_type = case when excluded.status = 'ready' then excluded.mime_type else month_framework_images.mime_type end,
          prompt_hint = coalesce(excluded.prompt_hint, month_framework_images.prompt_hint),
-         error = excluded.error, updated_by = coalesce(excluded.updated_by, month_framework_images.updated_by), updated_at = now()`,
+         error = excluded.error, updated_by = coalesce(excluded.updated_by, month_framework_images.updated_by), updated_at = now()
+       where month_framework_images.status <> 'ready'
+          or exists (select 1 from month_frameworks draft where draft.id = excluded.framework_id and draft.status = 'draft')`,
       [input.frameworkId, normalizeIllustrationWord(input.word), input.status, input.source ?? "ai", input.artifactKey ?? null, input.mimeType ?? null, input.hint ?? null, input.error ?? null, input.actorId ?? null]
     );
     return (result.rowCount ?? 0) > 0;
@@ -1805,6 +1825,8 @@ export interface MonthlyIllustrationContext {
   month: string;
   cefr: string;
   locked: boolean;
+  /** Framework status; optional for callers that build a context by hand. */
+  status?: string;
   theme: { title: string; context: string };
   coreTerms: Array<{ id: string; word: string; meaning: string; type: string }>;
 }
@@ -1817,7 +1839,12 @@ export interface MonthlyIllustrationView {
   source?: "ai" | "upload";
   url?: string;
   error?: string;
+  /** Last status write of a word without a picture (lets the API spot rows left pending by a dead job). */
+  updatedAt?: string;
+  /** True when this word's picture can no longer change (approved with a picture, or retired). */
   locked: boolean;
+  /** The resources are approved (or retired): existing pictures are frozen. */
+  frameworkLocked?: boolean;
 }
 
 export function normalizeIllustrationWord(word: string): string {

@@ -101,7 +101,8 @@ export interface OperatorApiClient {
   saveContentMonthFramework(month: string, contract: MonthlyCurriculumContract): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
   generateContentMonthResources(month: string, criteria: { cefr: CefrLevel; vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number }): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
   getContentMonthResourceCheckpoint(month: string, cefr: CefrLevel): Promise<MonthlyResourceCheckpointView>;
-  approveContentMonthFramework(id: string): Promise<void>;
+  /** 409 MONTHLY_ILLUSTRATIONS_IN_PROGRESS (with `pending`) while pictures are drawn, unless `confirmIllustrationsInProgress`. */
+  approveContentMonthFramework(id: string, input?: { confirmIllustrationsInProgress?: boolean }): Promise<void>;
   /** Asks a Manager to reopen approved monthly resources (409 when a request is already pending). */
   getOwnReopenRequests(): Promise<{ requests: ReopenRequestView[] }>;
   getOwnDeletionRequests(): Promise<{ requests: AssessmentDeletionRequestView[] }>;
@@ -220,7 +221,7 @@ export const operatorApiClient: OperatorApiClient = {
   saveContentMonthFramework: (month, contract) => request(`/api/v1/content/months/${encodeURIComponent(month)}/frameworks/generate`, { method: "POST", body: JSON.stringify({ contract }) }),
   generateContentMonthResources: (month, criteria) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/generate`, { method: "POST", body: JSON.stringify(criteria) }),
   getContentMonthResourceCheckpoint: (month, cefr) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/checkpoint?cefr=${encodeURIComponent(cefr)}`),
-  approveContentMonthFramework: async (id) => { await request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/approve`, { method: "POST", body: "{}" }); },
+  approveContentMonthFramework: async (id, input = {}) => { await request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/approve`, { method: "POST", body: JSON.stringify(input) }); },
   getOwnReopenRequests: () => request("/api/v1/content/reopen-requests"),
   getOwnDeletionRequests: () => request("/api/v1/assessment-reviews/deletion-requests"),
   requestContentMonthResourcesReopen: (id, reason) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/reopen-requests`, { method: "POST", body: JSON.stringify({ reason }) }),
@@ -287,6 +288,7 @@ export interface MonthlyIllustrationView {
   source?: "ai" | "upload";
   url?: string;
   error?: string;
+  /** This word's picture can no longer change (approved with a picture). A word without one stays fillable after approval. */
   locked: boolean;
 }
 
@@ -295,4 +297,8 @@ export interface MonthlyIllustrationsView {
   running: boolean;
   available: boolean;
   model: string | null;
+  /** Resources approved: existing pictures are frozen. */
+  locked?: boolean;
+  /** Words that can still get a picture (missing/failed/interrupted). */
+  fillable?: number;
 }

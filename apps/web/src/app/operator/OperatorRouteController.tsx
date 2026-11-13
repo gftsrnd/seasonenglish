@@ -419,7 +419,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
           setResourceGenerationActive(false);
         }
       },
-      onApproveFramework: async (id) => { await run(() => client.approveContentMonthFramework(id), "Đã chốt tài nguyên tháng."); },
+      onApproveFramework: async (id, options) => { await run(() => client.approveContentMonthFramework(id, options), "Đã chốt tài nguyên tháng."); },
       ...(!readOnly && client.previewContentMonthPublication && client.publishContentMonth ? {
         onPreviewPublication: client.previewContentMonthPublication,
         onPublishMonth: async (id: string, confirmedOn: string) => {
@@ -1629,7 +1629,9 @@ const operatorErrorMessages: Record<string, string> = {
   MONTHLY_FINAL_GRAMMAR_COMPONENT_INVALID: "Thành phần chính/phụ phải là 2 bước khác nhau đã dạy của chủ điểm.",
   MONTHLY_FINAL_GRAMMAR_COMPONENT_LOCKED: "Tháng theo lộ trình ngữ pháp: thành phần chính là bước 1, thành phần phụ là bước 2 của mỗi chủ điểm; chỉ sửa nhãn và mẫu chấp nhận.",
   MONTHLY_FINAL_REGENERATE_REQUIRED: "Bản nháp cũ chưa theo cấu trúc v2.0; hãy sinh lại đề.",
-  MONTHLY_FINAL_GENERATION_FAILED: "AI chưa sinh được đề thi tháng. Hãy thử lại."
+  MONTHLY_FINAL_GENERATION_FAILED: "AI chưa sinh được đề thi tháng. Hãy thử lại.",
+  MONTHLY_ILLUSTRATIONS_IN_PROGRESS: "Ảnh minh họa vẫn đang sinh. Hãy chờ xong rồi duyệt, hoặc bấm Duyệt tài nguyên lần nữa và chọn Vẫn duyệt.",
+  MONTHLY_RESOURCES_LOCKED: "Ảnh này đã khóa cùng tài nguyên, không đổi được."
 };
 
 function message(reason: unknown) {

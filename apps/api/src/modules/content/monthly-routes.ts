@@ -20,9 +20,12 @@ import { monthlyGenerationFailure } from "./monthly-generation-errors.js";
 import { repairMonthlyCoreIpa } from "./monthly-british-ipa.js";
 import { verifyMonthlyWords } from "./monthly-word-verification.js";
 import { applyMonthlyResourceEdit, blankMonthlyResourcePool, monthlyResourceEditInputSchema, prefillMonthlyResourcePoolFromCheckpoint } from "./monthly-resource-manual-edit.js";
+import { illustrationJobRunning, illustrationsInProgress } from "./monthly-illustrations.js";
 
 const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) });
 const frameworkParams = z.object({ id: z.uuid() });
+/** `confirmIllustrationsInProgress`: approve even though a live job is still drawing pictures (it carries on for those words). */
+const approveFrameworkInput = z.object({ confirmIllustrationsInProgress: z.boolean().optional() }).passthrough();
 const dayParams = z.object({ id: z.uuid(), dayNumber: z.coerce.number().int().positive().max(31) });
 const correctionParams = z.object({ correctionId: z.uuid() });
 const briefInput = z.object({
@@ -1019,6 +1022,13 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
 
   app.post("/api/v1/content/month-frameworks/:id/approve", { preHandler: contentOperator }, async (request, reply) => {
     const input = frameworkParams.parse(request.params);
+    const body = approveFrameworkInput.safeParse(request.body ?? {});
+    // Pictures still being drawn: ask first ("chờ xong rồi chốt?"). Approving anyway is allowed;
+    // the job keeps filling the words that have no picture yet, and those stay fillable after approval.
+    if (illustrationJobRunning(input.id) && !(body.success && body.data.confirmIllustrationsInProgress)) {
+      const pending = illustrationsInProgress(input.id, await repositories.monthlyContent.listFrameworkIllustrations(request.e4sSession!.user.id, input.id));
+      if (pending > 0) return reply.code(409).send({ code: "MONTHLY_ILLUSTRATIONS_IN_PROGRESS", pending });
+    }
     try { await repositories.monthlyContent.approveFramework(request.e4sSession!.user.id, input.id); }
     catch (error) {
       // A reopened pool that cannot be re-planned is an Operator-fixable

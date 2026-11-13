@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Pool } from "pg";
 import { createRepositories } from "../src/repositories.js";
-import { withFrozenMonthlyIllustrations } from "../src/monthly-illustration-projection.js";
+import { FROZEN_MONTHLY_ILLUSTRATIONS_SQL, withFrozenMonthlyIllustrations } from "../src/monthly-illustration-projection.js";
 
 describe("frozen monthly illustrations", () => {
   it.each(["new", "review"] as const)("returns frozen media in both the learner list and opened %s lesson, even for old saved content", async (kind) => {
@@ -31,6 +31,11 @@ describe("frozen monthly illustrations", () => {
       { id: "c2", word: "report" }
     ]);
     expect(cores[0]).not.toHaveProperty("imageUrl");
+  });
+
+  it("also projects a picture added after approval (a word without a picture stays fillable)", () => {
+    expect(FROZEN_MONTHLY_ILLUSTRATIONS_SQL).toContain("mf.status = 'approved'");
+    expect(FROZEN_MONTHLY_ILLUSTRATIONS_SQL).not.toContain("approved_at");
   });
 
   it("keeps the contract's frozen image even when another working image is available", () => {

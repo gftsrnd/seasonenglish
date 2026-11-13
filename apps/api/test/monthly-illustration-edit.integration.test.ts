@@ -2,14 +2,15 @@ import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createCredentialHash } from "@e4s/domain";
-import { createRepositories, DEMO_IDS, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
+import { createRepositories, DEMO_IDS, FROZEN_MONTHLY_ILLUSTRATIONS_SQL, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { buildApi } from "../src/app.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 
 /**
  * Manual picture editing of a DRAFT monthly resource pool: upload/replace and
- * remove are Operator-only and blocked once the resources are approved.
+ * remove are Operator-only; once the resources are approved, a word that has a
+ * picture is locked while a word without one can still get one.
  * No image is generated here (no image provider is configured in tests).
  */
 describe("monthly core-word picture editing before approval", () => {
@@ -119,8 +120,30 @@ describe("monthly core-word picture editing before approval", () => {
     expect(await createRepositories(pool).monthlyContent.removeFrameworkIllustration({ frameworkId, word: "budget" })).toBe(false);
     expect((await pool.query("select 1 from month_framework_images where framework_id = $1 and word = 'budget' and status = 'ready'", [frameworkId])).rowCount).toBe(1);
     const locked = await images();
-    expect(locked.every((image) => image.locked)).toBe(true);
+    // Only the word with a picture is locked; "approve" had none at approval and stays fillable.
+    expect(locked.map((image) => [image.word, image.locked])).toEqual([["budget", true], ["approve", false]]);
     // Approved contracts keep their frozen URL.
     expect(locked[0]!.url).toContain("stale.png");
+  });
+
+  it("still fills a word without a picture after approval, then locks it and shows it to lessons", async () => {
+    const repository = createRepositories(pool).monthlyContent;
+    // A job interrupted by the approval left the row pending; the job may still write it.
+    expect(await repository.saveFrameworkIllustration({ frameworkId, word: "approve", status: "pending" })).toBe(true);
+    const key = await ownedImage("approve");
+    const uploaded = await app.inject({ method: "PUT", url, headers: { cookie: operatorCookie }, payload: { word: "approve", artifactKey: key } });
+    expect(uploaded.statusCode, uploaded.body).toBe(200);
+    expect((await images())[1]).toMatchObject({ word: "approve", status: "ready", source: "upload", locked: true });
+    // Now it has a picture, it is locked like the others.
+    expect(await repository.saveFrameworkIllustration({ frameworkId, word: "approve", status: "generating" })).toBe(false);
+    const again = await app.inject({ method: "PUT", url, headers: { cookie: operatorCookie }, payload: { word: "approve", artifactKey: await ownedImage("approve-late") } });
+    expect(again.statusCode, again.body).toBe(409);
+    // The frozen word refuses even a status write.
+    expect(await repository.saveFrameworkIllustration({ frameworkId, word: "budget", status: "pending" })).toBe(false);
+    // Lessons read the picture added after approval through the frozen-illustration projection.
+    const projected = await pool.query<{ frozen: Array<{ word: string; artifactKey: string }> }>(
+      `select ${FROZEN_MONTHLY_ILLUSTRATIONS_SQL} as frozen from month_frameworks mf where mf.id = $1`, [frameworkId]
+    );
+    expect(projected.rows[0]!.frozen).toEqual(expect.arrayContaining([{ word: "approve", artifactKey: key }]));
   });
 });
