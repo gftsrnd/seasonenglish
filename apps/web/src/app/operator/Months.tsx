@@ -428,7 +428,11 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
     if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
     if (!framework || framework.status !== "approved") return showUnavailable("Hãy chốt tài nguyên tháng trước khi sinh đề thi.");
     if (!actions.onGenerateMonthlyFinal) return showUnavailable("Luồng đề thi tháng chưa sẵn sàng.");
-    if (monthlyFinalExists && !await modal.confirm({ title: "Sinh lại đề thi tháng?", message: "Sinh lại sẽ thay bản nháp đề thi tháng hiện có. Tiếp tục?", confirmLabel: "Sinh lại", cancelLabel: "Quay lại", tone: "danger", countdownSeconds: 0 })) return;
+    const replacingPublished = monthlyFinal?.status === "published" && monthlyFinal.regenerable;
+    const regenerateMessage = replacingPublished
+      ? "Sinh một bản nháp mới theo phạm vi đã duyệt. Đề đang phát hành vẫn dùng cho học viên cho đến khi bản mới được duyệt và phát hành."
+      : "Sinh lại sẽ thay bản nháp đề thi tháng hiện có. Tiếp tục?";
+    if ((monthlyFinalExists || replacingPublished) && !await modal.confirm({ title: replacingPublished ? "Sinh lại đề?" : "Sinh lại đề thi tháng?", message: regenerateMessage, confirmLabel: "Sinh lại", cancelLabel: "Quay lại", tone: "danger", countdownSeconds: 0 })) return;
     if (generationInFlight.current) return;
     generationInFlight.current = true;
     setGenerating("final");
@@ -646,6 +650,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       readOnly={!canEdit}
       onClose={() => setMonthlyFinal(null)}
       {...(actions.onSaveMonthlyFinal ? { onSave: async (input: MonthlyFinalUpdateInput) => { const saved = await actions.onSaveMonthlyFinal!(monthlyFinal.versionId, input); if (saved && "blueprint" in saved) setMonthlyFinal(saved); toast.show({ message: "Đã lưu bản nháp đề tháng.", tone: "ok" }); } } : {})}
+      {...(monthlyFinal.regenerable && canEdit && actions.onGenerateMonthlyFinal ? { onRegenerate: generateMonthlyFinal } : {})}
       {...(actions.onPublishMonthlyFinal ? { onPublish: async () => { await actions.onPublishMonthlyFinal!(monthlyFinal.versionId); toast.show({ message: "Đã duyệt và phát hành đề tháng.", tone: "ok" }); setMonthlyFinal(null); } } : {})}
       {...(actions.onSynthesizeMonthlyFinalAudio ? { synthesize: actions.onSynthesizeMonthlyFinalAudio } : {})}
       {...(actions.onUploadMonthlyFinalAudio ? { uploadAudio: actions.onUploadMonthlyFinalAudio } : {})}

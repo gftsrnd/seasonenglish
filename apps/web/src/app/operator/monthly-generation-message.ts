@@ -36,7 +36,8 @@ export function monthlyFinalGenerationMessage(reason:unknown):string {
   }
   if(error.code === "AI_OUTPUT_INVALID")return monthlyFinalAiRetryMessage(reason);
   if(error.code === "MONTHLY_FINAL_EXAM_DATE_LOCKED")return "Đã đến ngày thi; đề tháng đã khóa chỉnh sửa.";
-  if(error.code === "MONTHLY_FINAL_ALREADY_PUBLISHED")return "Đề tháng đã phát hành. Cần mở khóa theo luồng quản lý trước khi thay đổi.";
+  if(error.code === "MONTHLY_FINAL_ALREADY_PUBLISHED")return "Đề tháng đã phát hành và vẫn khớp phạm vi đã duyệt; không cần sinh lại.";
+  if(error.code === "MONTHLY_FINAL_ALREADY_STARTED")return "Đề đã có học viên làm, giữ nguyên đề này.";
   return "Không sinh được đề thi tháng. Bản nháp hiện có vẫn được giữ; hãy thử lại.";
 }
 

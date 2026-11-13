@@ -75,7 +75,11 @@ export interface MonthlyFinalExamMeta {
   status: MonthlyFinalExamStatus;
   source: "ai" | "manual";
   /** Phase hand-off: the exact approved plan this exam was built from. */
-  framework: { id: string; version: number; scopeHash: string; month: string; cefr: CefrLevel; examDate: string };
+  framework: {
+    id: string; version: number; scopeHash: string; month: string; cefr: CefrLevel; examDate: string;
+    /** Content-only fingerprint of what the exam tests (no version numbers); absent on exams generated before 13/11/2026. */
+    examScopeHash?: string;
+  };
   formCode: string;
   allocation: { n: number; l: number; r: number; w: number; s: number };
   instructionLanguage: "vi" | "en";
@@ -109,8 +113,14 @@ export interface MonthlyFinalDraftView {
   examDate: string;
   /** false after 00:00 of the exam date or once published. */
   editable: boolean;
-  /** The draft was built from an older approved plan than the current one. */
+  /** What the exam tests (terms, grammar, sounds, theme) no longer matches the approved plan. A version bump alone is not stale. */
   stale: boolean;
+  /** Learners who have started the live published version (0 when none is published). */
+  startedLearners?: number;
+  /** A published, stale exam nobody has started: "Sinh lại đề" makes a new draft while this one stays live. */
+  regenerable?: boolean;
+  /** This draft replaces a published version that stays live until the draft is approved and published. */
+  livePublishedVersion?: number | null;
 }
 
 export interface MonthlyFinalReviewInput {

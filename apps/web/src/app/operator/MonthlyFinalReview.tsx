@@ -14,6 +14,8 @@ const STATUS_COPY: Record<MonthlyFinalExamStatus, { label: string; tone: string;
   NEEDS_REVIEW: { label: "Chờ rà soát", tone: "warn", description: "Không còn lỗi tự động. Còn mục cần người xác nhận hoặc audio chưa nghe soát." },
   READY: { label: "Sẵn sàng phát hành", tone: "ok", description: "Đã đủ điều kiện. Có thể duyệt và phát hành." }
 };
+/** A published exam shows its real state, whatever the re-run checks say under today's rules. */
+const PUBLISHED_COPY = { label: "Đã phát hành", tone: "ok", description: "Đề đang dùng cho các lượt thi tháng." };
 const AUDIO_LABEL: Record<string, string> = { SCRIPT_ONLY: "Chưa có audio", REVIEWED: "Audio đã nghe soát" };
 
 /** Plain-language summary of a failed check: what is missing and where, without rule codes. */
@@ -47,6 +49,8 @@ export interface MonthlyFinalReviewProps {
   onClose(): void;
   onSave?(input: MonthlyFinalUpdateInput): Promise<unknown>;
   onPublish?(): Promise<unknown>;
+  /** "Sinh lại đề": only offered for a published exam whose scope changed and nobody has started. */
+  onRegenerate?(): Promise<unknown> | void;
   synthesize?(input: { text: string; voice: string }): Promise<{ filename: string; mimeType: string; base64: string }>;
   uploadAudio?(file: Blob, filename: string): Promise<{ url: string }>;
 }
@@ -57,7 +61,7 @@ export interface MonthlyFinalReviewProps {
  * the N-row mapping, GA/GB main/secondary components, pronunciation positions,
  * grader samples and the "đã nghe soát" audio tick that publishing requires.
  */
-export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, onPublish, synthesize, uploadAudio }: MonthlyFinalReviewProps) {
+export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, onPublish, onRegenerate, synthesize, uploadAudio }: MonthlyFinalReviewProps) {
   const modal = useModal();
   const exam = draft.exam;
   const editable = draft.editable && !readOnly && Boolean(exam);
@@ -143,7 +147,9 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
     : exam.status !== "READY" ? "Còn mục cần người xác nhận."
     : null;
 
-  const status = exam ? STATUS_COPY[exam.status] : STATUS_COPY.DRAFT;
+  const published = draft.status === "published";
+  const status = published ? PUBLISHED_COPY : exam ? STATUS_COPY[exam.status] : STATUS_COPY.DRAFT;
+  const startedLearners = draft.startedLearners ?? 0;
   const failedChecks = (exam?.checks ?? []).filter((check) => check.status === "fail");
   const manualChecks = (exam?.checks ?? []).filter((check) => check.mode === "manual" && check.status !== "fail");
   const todoCount = failedChecks.length + (savedAudioReady ? 0 : 1);
@@ -162,18 +168,29 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
     onDraftChange={setCurrent}
   >
     <section className="card flat monthly-final-review" aria-label="Kiểm duyệt đề thi tháng">
-      <header className="row between"><div><b>Trạng thái đề</b> <span className={`badge ${status.tone}`} data-testid="monthly-final-status" data-status={exam?.status ?? "DRAFT"}>{status.label}</span> <span className={`badge ${exam?.audio.status === "REVIEWED" ? "ok" : "warn"}`}>{AUDIO_LABEL[exam?.audio.status ?? "SCRIPT_ONLY"] ?? exam?.audio.status}</span></div>
-        {onPublish ? <button type="button" className="btn btn-primary" disabled={Boolean(publishBlocker) || publishing} title={publishBlocker ?? undefined} onClick={() => void publish()}>{publishing ? "Đang phát hành…" : "Duyệt & phát hành"}</button> : null}</header>
-      <p className="small muted">{status.description}{publishBlocker ? ` ${publishBlocker}` : ""}</p>
+      <header className="row between"><div><b>Trạng thái đề</b> <span className={`badge ${status.tone}`} data-testid="monthly-final-status" data-status={published ? "PUBLISHED" : exam?.status ?? "DRAFT"}>{status.label}</span> <span className={`badge ${exam?.audio.status === "REVIEWED" ? "ok" : "warn"}`}>{AUDIO_LABEL[exam?.audio.status ?? "SCRIPT_ONLY"] ?? exam?.audio.status}</span></div>
+        {onPublish && !published ? <button type="button" className="btn btn-primary" disabled={Boolean(publishBlocker) || publishing} title={publishBlocker ?? undefined} onClick={() => void publish()}>{publishing ? "Đang phát hành…" : "Duyệt & phát hành"}</button> : null}</header>
+      <p className="small muted">{status.description}{publishBlocker && !published ? ` ${publishBlocker}` : ""}</p>
       {exam ? <p className="xs muted">{exam.framework.cefr} · tháng {exam.framework.month} · ngày thi {draft.examDate} · {exam.allocation.l} câu Nghe · {exam.allocation.r} câu Đọc · Viết · Nói · {exam.source === "ai" ? "AI sinh" : "Soạn tay"}</p> : null}
-      {draft.stale ? <div className="banner warn" role="alert"><div className="body small">Khung tháng đã được duyệt lại sau khi sinh đề này. Đề không còn khớp phạm vi đã duyệt; hãy sinh lại.</div></div> : null}
+      {draft.stale && !published ? <div className="banner warn" role="alert"><div className="body small">Khung tháng đã được duyệt lại sau khi sinh đề này. Đề không còn khớp phạm vi đã duyệt; hãy sinh lại.</div></div> : null}
+      {draft.stale && published && startedLearners > 0 ? <p className="small muted monthly-final-kept" role="note">Đề đã có {startedLearners} học viên làm, giữ nguyên đề này.</p> : null}
+      {draft.stale && published && startedLearners === 0 && draft.regenerable ? <div className="banner warn monthly-final-regenerate" role="note"><div className="body small">Phạm vi đã duyệt của tháng đã đổi sau khi phát hành đề này. Chưa học viên nào làm đề: có thể sinh lại. Đề hiện tại vẫn dùng cho học viên đến khi bản mới được duyệt và phát hành.</div>
+        {onRegenerate && !readOnly ? <button type="button" className="btn" onClick={() => void onRegenerate()}>Sinh lại đề</button> : null}</div> : null}
+      {!published && draft.livePublishedVersion ? <p className="small muted" role="note">Bản nháp này thay cho phiên bản {draft.livePublishedVersion} đang phát hành; học viên vẫn làm phiên bản đó cho đến khi bản này được duyệt và phát hành.</p> : null}
       {!draft.editable && draft.status === "draft" ? <div className="banner warn"><div className="body small">Đã quá 00:00 ngày thi ({draft.examDate}); không sửa hoặc sinh lại được.</div></div> : null}
       {error ? <p role="alert" className="monthly-error">{error}</p> : null}
     </section>
 
     {exam ? <>
 
-      <section className={`card flat monthly-final-issues ${failedChecks.length ? "has-issues" : ""}`} aria-label="Việc còn thiếu">
+      {published ? <section className="card flat monthly-final-issues" aria-label="Kiểm tra đề">
+        <h4>Đề đã phát hành</h4>
+        <p className="small muted">{failedChecks.length ? `${failedChecks.length} kiểm tra không đạt theo quy tắc hiện tại; đề đã phát hành giữ nguyên.` : "Nội dung đã qua mọi kiểm tra tự động."}</p>
+        <details className="monthly-final-fold">
+          <summary>Xem toàn bộ {exam.checks.length} kiểm tra</summary>
+          <ul className="monthly-final-check-list small">{exam.checks.map((check) => <li key={check.code}><span className={`badge ${CHECK_STATUS[check.status].tone}`}>{CHECK_STATUS[check.status].label}</span> <b>{check.title}</b>{check.detail ? <div className="xs muted">{check.detail}</div> : null}</li>)}</ul>
+        </details>
+      </section> : <section className={`card flat monthly-final-issues ${failedChecks.length ? "has-issues" : ""}`} aria-label="Việc còn thiếu">
         <h4>{todoCount ? `Còn thiếu ${todoCount} việc` : "Không còn việc thiếu"}</h4>
         {todoCount ? <ul className="monthly-final-issue-list">
           {!savedAudioReady ? <li data-testid="todo-audio"><span className="badge danger">Audio</span> Chưa có audio cho 2 bản nghe — thêm audio ở phần Nghe rồi lưu.</li> : null}
@@ -192,7 +209,7 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
           <summary>Xem toàn bộ {exam.checks.length} kiểm tra</summary>
           <ul className="monthly-final-check-list small">{exam.checks.map((check) => <li key={check.code}><span className={`badge ${CHECK_STATUS[check.status].tone}`}>{CHECK_STATUS[check.status].label}</span> <b>{check.title}</b>{check.detail ? <div className="xs muted">{check.detail}</div> : null}</li>)}</ul>
         </details>
-      </section>
+      </section>}
 
       <details className="card flat monthly-final-fold" aria-label="Bảng mapping mục từ">
         <summary><b>Từ vựng được kiểm tra ở đâu</b> <span className="xs muted">{exam.mapping.length} từ</span></summary>

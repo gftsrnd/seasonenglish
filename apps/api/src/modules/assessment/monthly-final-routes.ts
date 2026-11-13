@@ -19,6 +19,7 @@ import {generateMonthlyFinalListening} from "./monthly-final-listening-generatio
 import {generateMonthlyFinalReading, repairMonthlyFinalReadingItems} from "./monthly-final-reading-generation.js";
 import { verifyMonthlyFinalAnswers } from "./monthly-final-answer-verification.js";
 import { blueprintListeningAudioIndex, withBlueprintListeningAudio, type ListeningAudioService } from "./listening-audio.js";
+import { monthlyFinalScopeHash, monthlyFinalScopeStale } from "./monthly-final-scope.js";
 
 const frameworkParam = z.object({ frameworkId: z.uuid() });
 const versionParam = z.object({ versionId: z.uuid() });
@@ -102,7 +103,8 @@ export function registerMonthlyFinalRoutes(
       if (error instanceof MonthlyFinalInputError) return reply.code(422).send({ code: "MONTHLY_FINAL_INPUT_ERROR", status: "INPUT_ERROR", missing: error.missing });
       throw error;
     }
-    if (await hasPublishedMonthlyFinal(pool, context)) return reply.code(409).send({ code: "MONTHLY_FINAL_ALREADY_PUBLISHED" });
+    const publishedBlock = await publishedRegenerationBlock(pool, context);
+    if (publishedBlock) return reply.code(409).send(publishedBlock);
     const runner = await runnerFor(actorId);
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const task = await repositories.aiRuns.activeTaskPrompt(actorId, "monthly_final_generation");
@@ -200,6 +202,8 @@ export function registerMonthlyFinalRoutes(
     if (!monthlyFinalWindowOpen(context.today, context.examDate)) return reply.code(409).send({ code: "MONTHLY_FINAL_EXAM_DATE_LOCKED", examDate: context.examDate, today: context.today });
     const planIssues = validateMonthlyCurriculum(context.contract);
     if (planIssues.length) return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_PLAN_INVALID", issues: planIssues });
+    const publishedBlock = await publishedRegenerationBlock(pool, context);
+    if (publishedBlock) return reply.code(409).send(publishedBlock);
     let blueprint;
     try { blueprint = buildManualMonthlyFinalDraft(context.contract, context.framework); }
     catch (error) {
@@ -259,6 +263,11 @@ export function registerMonthlyFinalRoutes(
       const issues: string[] = monthlyFinalReleaseReadiness(evaluated);
       if (!await hasPersistedMonthlyAudio(client, actorId, evaluated)) issues.push("LISTENING_AUDIO_SOURCE_MISSING");
       if (issues.length) { await client.query("rollback"); return reply.code(409).send({ code: "MONTHLY_FINAL_NOT_PUBLISHABLE", issues }); }
+      // A replacement draft never takes over from a published version learners have already started.
+      const started = await client.query<{ started: number }>(
+        `select count(distinct attempt.learner_id)::int as started from assessment_versions av join assessment_attempts attempt on attempt.assessment_version_id = av.id
+         where av.definition_id = $1 and av.status = 'published'`, [version.definitionId]);
+      if ((started.rows[0]?.started ?? 0) > 0) { await client.query("rollback"); return reply.code(409).send({ code: "MONTHLY_FINAL_ALREADY_STARTED", startedLearners: started.rows[0]!.started }); }
       await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'published'", [version.definitionId]);
       const published = await client.query<{ published_at: Date }>(
         "update assessment_versions set status = 'published', published_at = now(), blueprint = $2::jsonb where id = $1 returning published_at",
@@ -393,19 +402,49 @@ function definitionKey(context: FrameworkContext): string {
   return `monthly-final-${context.contract.month}-${context.contract.cefr.toLowerCase()}`;
 }
 
-function isStale(exam: MonthlyFinalExamMeta, context: FrameworkContext): boolean {
-  return exam.framework.id !== context.framework.id || exam.framework.version !== context.framework.version || exam.framework.scopeHash !== context.framework.scopeHash;
+/** Stale only when what the exam tests changed (see monthlyFinalScopeStale); a plan version bump alone is not. */
+function isStale(exam: MonthlyFinalExamMeta, context: Pick<FrameworkContext, "framework" | "contract">): boolean {
+  return monthlyFinalScopeStale(exam, { frameworkId: context.framework.id, scopeHash: context.framework.scopeHash, contract: context.contract });
 }
 
-async function hasPublishedMonthlyFinal(pool: Pool, context: FrameworkContext): Promise<boolean> {
-  const result = await pool.query(
-    `select 1 from assessment_definitions ad join assessment_versions av on av.definition_id = ad.id and av.status = 'published'
-     where ad.organization_id = $1 and ad.assessment_key = $2 limit 1`, [context.organizationId, definitionKey(context)]);
-  return Boolean(result.rowCount);
+interface PublishedMonthlyFinal { versionId: string; version: number; blueprint: StoredAssessmentDefinition; startedLearners: number }
+
+/** The live published version of this month's final and how many learners have started it. */
+async function publishedMonthlyFinal(pool: Pool, context: FrameworkContext): Promise<PublishedMonthlyFinal | null> {
+  const result = await pool.query<{ version_id: string; version: number; blueprint: StoredAssessmentDefinition; started_learners: number }>(
+    `select av.id as version_id, av.version, av.blueprint,
+            (select count(distinct attempt.learner_id)::int from assessment_attempts attempt where attempt.assessment_version_id = av.id) as started_learners
+     from assessment_definitions ad join assessment_versions av on av.definition_id = ad.id and av.status = 'published'
+     where ad.organization_id = $1 and ad.assessment_key = $2 order by av.version desc limit 1`, [context.organizationId, definitionKey(context)]);
+  const row = result.rows[0];
+  return row ? { versionId: row.version_id, version: row.version, blueprint: row.blueprint, startedLearners: row.started_learners } : null;
+}
+
+/**
+ * A published monthly final is replaced only when its scope really changed and no learner has started it;
+ * the new version is a draft and the published one stays live until that draft is approved and published.
+ */
+export function monthlyFinalRegenerationBlock(
+  published: Pick<PublishedMonthlyFinal, "blueprint" | "startedLearners"> | null,
+  context: Pick<FrameworkContext, "framework" | "contract">
+): { code: string; startedLearners?: number } | null {
+  if (!published) return null;
+  const exam = published.blueprint.monthlyExam;
+  if (exam && !isStale(exam, context)) return { code: "MONTHLY_FINAL_ALREADY_PUBLISHED" };
+  if (published.startedLearners > 0) return { code: "MONTHLY_FINAL_ALREADY_STARTED", startedLearners: published.startedLearners };
+  return null;
+}
+
+async function publishedRegenerationBlock(pool: Pool, context: FrameworkContext) {
+  return monthlyFinalRegenerationBlock(await publishedMonthlyFinal(pool, context), context);
 }
 
 /** replaceDraft = AI regeneration: the previous draft becomes "Đã thay" (retired) and the new one starts as DRAFT. */
-async function saveNewDraft(pool: Pool, context: FrameworkContext, blueprint: StoredAssessmentDefinition, replaceDraft: boolean): Promise<void> {
+async function saveNewDraft(pool: Pool, context: FrameworkContext, generated: StoredAssessmentDefinition, replaceDraft: boolean): Promise<void> {
+  // Content-only fingerprint of the plan this exam was built from, so a later version bump does not make it stale.
+  const blueprint: StoredAssessmentDefinition = generated.monthlyExam
+    ? { ...generated, monthlyExam: { ...generated.monthlyExam, framework: { ...generated.monthlyExam.framework, examScopeHash: monthlyFinalScopeHash(context.contract) } } }
+    : generated;
   const client = await pool.connect();
   try {
     await client.query("begin");
@@ -413,9 +452,14 @@ async function saveNewDraft(pool: Pool, context: FrameworkContext, blueprint: St
       "select id from assessment_definitions where organization_id = $1 and assessment_key = $2 for update", [context.organizationId, blueprint.key]);
     const definitionId = existing.rows[0]?.id ?? randomUUID();
     if (existing.rowCount) {
-      const published = await client.query("select 1 from assessment_versions where definition_id = $1 and status = 'published' limit 1", [definitionId]);
-      // A published monthly final is immutable; corrections go through the Manager reopen workflow.
-      if (published.rowCount) throw new Error("MONTHLY_FINAL_ALREADY_PUBLISHED");
+      const published = await client.query<{ blueprint: StoredAssessmentDefinition; started_learners: number }>(
+        `select av.blueprint, (select count(distinct attempt.learner_id)::int from assessment_attempts attempt where attempt.assessment_version_id = av.id) as started_learners
+         from assessment_versions av where av.definition_id = $1 and av.status = 'published' order by av.version desc limit 1 for update of av`, [definitionId]);
+      // A published monthly final is immutable. Only a truly stale one nobody has started gets a replacement
+      // draft next to it; it stays live until that draft is published.
+      const publishedRow = published.rows[0];
+      const block = publishedRow ? monthlyFinalRegenerationBlock({ blueprint: publishedRow.blueprint, startedLearners: publishedRow.started_learners }, context) : null;
+      if (block) throw new Error(block.code);
       const draft = await client.query<{ id: string }>("select id from assessment_versions where definition_id = $1 and status = 'draft' for update", [definitionId]);
       if (draft.rowCount && !replaceDraft) { await client.query("commit"); return; }
       if (draft.rowCount) await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'draft'", [definitionId]);
@@ -447,15 +491,19 @@ async function currentMonthlyFinal(pool: Pool, context: FrameworkContext): Promi
   if (!row) return null;
   // Always present checks against the current approved plan.
   const blueprint = row.blueprint.monthlyExam ? withEvaluation(row.blueprint, context.contract) : row.blueprint;
-  return monthlyFinalDraftView(row, blueprint, context);
+  const published = await publishedMonthlyFinal(pool, context);
+  return monthlyFinalDraftView(row, blueprint, context, published);
 }
 
 export function monthlyFinalDraftView(
   row: { definition_id: string; version_id: string; version: number; status: "draft" | "published" },
   blueprint: StoredAssessmentDefinition,
-  context: Pick<FrameworkContext, "examDate" | "today" | "framework">
+  context: Pick<FrameworkContext, "examDate" | "today" | "framework" | "contract">,
+  published: Pick<PublishedMonthlyFinal, "versionId" | "version" | "startedLearners"> | null = null
 ): MonthlyFinalDraftView {
   const exam = blueprint.monthlyExam ?? null;
+  const stale = exam ? isStale(exam, context) : true;
+  const startedLearners = published?.startedLearners ?? 0;
   return {
     definitionId: row.definition_id, versionId: row.version_id, version: row.version, status: row.status,
     blueprint: {
@@ -468,7 +516,10 @@ export function monthlyFinalDraftView(
     exam,
     examDate: context.examDate,
     editable: row.status === "draft" && Boolean(exam) && monthlyFinalWindowOpen(context.today, context.examDate),
-    stale: exam ? exam.framework.id !== context.framework.id || exam.framework.version !== context.framework.version || exam.framework.scopeHash !== context.framework.scopeHash : true
+    stale,
+    startedLearners,
+    regenerable: row.status === "published" && stale && startedLearners === 0 && monthlyFinalWindowOpen(context.today, context.examDate),
+    livePublishedVersion: row.status === "draft" ? published?.version ?? null : null
   };
 }
 
