@@ -53,20 +53,18 @@ describe("new Settings app branch", () => {
   it("keeps Manager sections in app order", () => {
     const { container } = render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} accounts={<section><h3>Người dùng</h3></section>} />);
     expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual([
-      "Prompt & rubric", "Kết nối AI", "Ngày hệ thống thử", "Học theo tháng", "Ảnh minh hoạ từ vựng", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Chính sách nhắc học và báo cáo", "Dữ liệu", "Người dùng"
+      "Ngày hệ thống thử", "Học theo tháng", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Chính sách nhắc học và báo cáo", "Người dùng"
     ]);
-    expect(screen.getByText(/Khoá nhà cung cấp được lưu an toàn ở server/)).toBeInTheDocument();
-    expect(screen.getByText("Xuất JSON")).toBeInTheDocument();
+    expect(screen.queryByText(/Khoá nhà cung cấp được lưu an toàn/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Xuất JSON")).not.toBeInTheDocument();
   });
 
   it("keeps Settings guidance concise", () => {
     render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} />);
 
     expect(screen.getByText(/Đổi màu và icon; không đổi bố cục, nội dung, dữ liệu/)).toBeInTheDocument();
-    expect(screen.getByText(/Tự động tìm ảnh có giấy phép mở/)).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Tự động từ nguồn mở" })).toBeInTheDocument();
-    expect(screen.queryByText(/Pexels:|Pixabay:/)).not.toBeInTheDocument();
   });
+
 
   it.each(["manager", "operator"] as const)("removes obsolete program labels from %s settings", (role) => {
     const overview: OperatorSettingsOverviewView = {
@@ -135,55 +133,21 @@ describe("new Settings app branch", () => {
     expect(screen.queryByLabelText("Webhook URL")).not.toBeInTheDocument();
   });
 
-  it("wires provider test, settings save and data operations", async () => {
+  it("wires settings save for the Manager", async () => {
     const callbacks = actions(); const user = userEvent.setup();
     render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={callbacks} />);
-    await user.click(screen.getByRole("button", { name: "Kiểm tra kết nối AI" }));
-    expect(callbacks.onTestAi).toHaveBeenCalled();
     await user.clear(screen.getByRole("spinbutton", { name: "Khuyến nghị học tối thiểu (phút/ngày)" }));
     await user.type(screen.getByRole("spinbutton", { name: "Khuyến nghị học tối thiểu (phút/ngày)" }), "20");
     await user.click(screen.getByRole("button", { name: "Lưu thiết lập học theo tháng" }));
     expect(callbacks.onSaveManager).toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Xuất JSON" }));
-    expect(callbacks.onExportJson).toHaveBeenCalled();
   });
 
-  it("lets Manager disable AI for acceptance testing without changing the provider key", async () => {
-    const callbacks = actions();
-    render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={callbacks} />);
-
-    const fallbackSwitch = screen.getByRole("switch", { name: "Tắt AI để kiểm thử chế độ dự phòng" });
-    expect(fallbackSwitch.closest("div")).toHaveClass("settings-ai-fallback-control");
-    await userEvent.setup().click(fallbackSwitch);
-    await userEvent.setup().click(screen.getByRole("button", { name: "Lưu chế độ kiểm thử AI" }));
-
-    expect(callbacks.onSaveManager).toHaveBeenCalledWith(expect.objectContaining({ aiTestDisabled: true }));
-    expect(screen.getByText(/Khoá API vẫn được giữ nguyên/)).toBeInTheDocument();
-  });
-
-  it("keeps JSON import keyboard-accessible and busy until the file action completes", async () => {
-    let resolveImport!: () => void;
-    const importDone = new Promise<void>((resolve) => { resolveImport = resolve; });
-    const callbacks = actions();
-    callbacks.onImportJson = vi.fn(() => importDone);
-    const user = userEvent.setup();
-    const { container } = render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={callbacks} />);
-    const importButton = screen.getByRole("button", { name: "Nhập JSON" });
-    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
-    const file = new File(["{}"], "settings.json", { type: "application/json" });
-
-    expect(fileInput).not.toBeNull();
-    importButton.focus();
-    await user.keyboard("{Enter}");
-    await user.upload(fileInput!, file);
-
-    expect(callbacks.onImportJson).toHaveBeenCalledWith(file);
-    expect(importButton).toBeDisabled();
-    expect(importButton).toHaveAttribute("aria-busy", "true");
-
-    resolveImport();
-    await waitFor(() => expect(importButton).not.toBeDisabled());
-    expect(importButton).not.toHaveAttribute("aria-busy");
+  it("hides the technical cards (Prompt & rubric, AI connection, vocabulary images, data) from the Manager", () => {
+    render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} />);
+    for (const name of ["Prompt & rubric", "Kết nối AI", "Ảnh minh hoạ từ vựng", "Dữ liệu"]) expect(screen.queryByRole("heading", { name })).not.toBeInTheDocument();
+    for (const name of ["Mở Prompt & rubric", "Lưu kết nối AI", "Xoá cache ảnh", "Xuất JSON", "Nhập JSON", "Xuất CSV tiến độ"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Mở Prompt & rubric" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Tắt AI để kiểm thử chế độ dự phòng" })).not.toBeInTheDocument();
   });
 
   it("shows localized account states in the read-only staff directory", () => {
@@ -331,17 +295,6 @@ describe("new Settings app branch", () => {
     expect(screen.queryByRole("checkbox", { name: "Nhạc nền" })).not.toBeInTheDocument();
     rerender(<SettingsPage role="operator" product={product} capabilities={capabilities} actions={actions()} />);
     expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
-  });
-
-  it.each([
-    ["PROVIDER_NOT_CONFIGURED", "Chưa lưu API key"],
-    ["PROVIDER_ENDPOINT_INVALID", "Base URL không hợp lệ"],
-    ["PROVIDER_NETWORK_ERROR", "Không kết nối được nhà cung cấp"],
-    ["PROVIDER_TIMEOUT", "Nhà cung cấp phản hồi quá thời gian"],
-    ["PROVIDER_HTTP_401", "Nhà cung cấp từ chối yêu cầu (HTTP 401)"]
-  ])("explains the safe AI diagnostic %s", (code, message) => {
-    render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: code !== "PROVIDER_NOT_CONFIGURED", baseUrl: "https://api.groq.com/openai/v1", model: "demo", speechToTextModel: "whisper", lastTest: { status: code === "PROVIDER_TIMEOUT" ? "timeout" : "error", testedAt: "2026-10-19T10:00:00.000Z", code } }} actions={actions()} />);
-    expect(screen.getByText(message, { exact: false })).toBeInTheDocument();
   });
 
   it("does not offer a global Base test or expose retired webhook secrets", () => {

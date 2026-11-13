@@ -99,16 +99,12 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
   const musicPanel: SettingsPanel = { id: "music", label: "Nhạc nền của Season", content: <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} /> };
   const learningPanel: SettingsPanel = { id: "monthly", label: "Học theo tháng", content: managerDraft && <MonthlyLearningSection value={managerDraft} onChange={setManagerDraft} coachLimitReadOnly={role === "operator"} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> };
   const panels: SettingsPanel[] = role === "manager" ? [
-    { id: "prompts", label: "Prompt & rubric", content: <section className="card" aria-label="Cấu hình Prompt & rubric"><h3>Prompt & rubric</h3><p className="small muted">Quản lý hướng dẫn AI và rubric chấm trong khu vực Cài đặt, tách khỏi các thao tác vận hành hằng ngày.</p><a className="btn" href="/settings/prompts">Mở Prompt & rubric</a></section> },
-    { id: "ai", label: "Kết nối AI", content: aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} aiTestDisabled={managerDraft?.aiTestDisabled ?? false} onAiTestDisabledChange={(aiTestDisabled) => setManagerDraft((current) => current ? { ...current, aiTestDisabled } : current)} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} {...(actions.onSaveManager && managerDraft ? { onSaveAiTestMode: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} /> },
     ...(managerDraft ? [
       { id: "test-date", label: "Ngày hệ thống thử", content: <SystemTestDateSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> },
       learningPanel,
-      { id: "images", label: "Ảnh minh hoạ từ vựng", content: <ImageSection value={productDraft} onChange={setProductDraft} {...(actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!(productDraft) } : {})} {...(actions.onTestImage ? { onTest: () => actions.onTestImage!(productDraft) } : {})} {...(actions.onClearImageCache ? { onClear: actions.onClearImageCache } : {})} /> },
       themePanel,
       musicPanel,
       { id: "policy", label: "Nhắc học và báo cáo", content: <PolicySection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> },
-      { id: "data", label: "Dữ liệu", content: <DataSection actions={actions} capabilities={capabilities} /> },
       { id: "accounts", label: "Người dùng", content: accounts }
     ] satisfies SettingsPanel[] : [])
   ] : [

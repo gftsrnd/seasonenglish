@@ -66,48 +66,6 @@ beforeEach(() => {
 });
 
 describe("Manager AI provider settings", () => {
-  it("loads the safe provider view and sends only an intentional replacement key", async () => {
-    const user = userEvent.setup();
-    window.history.pushState({}, "", "/settings");
-    render(<App />);
-
-    expect(await screen.findByRole("heading", { name: "Kết nối AI" })).toBeInTheDocument();
-    expect(client.getManagerProviderSettings).toHaveBeenCalledOnce();
-    expect(screen.getByLabelText(/API key mới/)).toHaveAttribute("type", "password");
-
-    await user.type(screen.getByLabelText(/API key mới/), "replacement-secret");
-    await user.click(screen.getByRole("button", { name: "Lưu kết nối AI" }));
-    expect(client.saveManagerProviderSettings).toHaveBeenCalledWith(expect.objectContaining({ credential: "replacement-secret" }));
-  });
-
-  it("loads the real provider defaults when switching Claude, Gemini, and OpenAI-compatible", async () => {
-    const user = userEvent.setup();
-    window.history.pushState({}, "", "/settings");
-    render(<App />);
-
-    expect(await screen.findByRole("heading", { name: "Kết nối AI" })).toBeInTheDocument();
-    const provider = screen.getByLabelText("Nhà cung cấp");
-    const model = screen.getByLabelText("Tên model");
-
-    await user.selectOptions(provider, "claude");
-    expect(model).toHaveValue("claude-haiku-5-5");
-    expect(screen.queryByLabelText("Model chép lời file ghi âm")).not.toBeInTheDocument();
-
-    await user.selectOptions(provider, "gemini");
-    expect(model).toHaveValue("gemini-1.5-flash");
-    expect(screen.queryByLabelText("Model chép lời file ghi âm")).not.toBeInTheDocument();
-
-    await user.selectOptions(provider, "openai");
-    expect(screen.getByLabelText("Base URL")).toHaveValue("https://api.groq.com/openai/v1");
-    expect(model).toHaveValue("qwen/qwen3.8-27b");
-    expect(screen.getByLabelText("Model chép lời file ghi âm")).toHaveValue("whisper-large-v3-turbo");
-
-    await user.selectOptions(screen.getByLabelText("Preset OpenAI-compatible"), "openrouter");
-    expect(screen.getByLabelText("Base URL")).toHaveValue("https://openrouter.ai/api/v1");
-    await user.selectOptions(screen.getByLabelText("Preset OpenAI-compatible"), "custom");
-    expect(screen.getByLabelText("Base URL")).toHaveValue("");
-  });
-
   it("applies a selected product theme before saving it", async () => {
     const user = userEvent.setup();
     window.history.pushState({}, "", "/settings");
@@ -150,34 +108,20 @@ describe("Manager AI provider settings", () => {
     expect(await screen.findByRole("button", { name: "Nhạc nền: tắt" })).toBeDisabled();
   });
 
-  it("wires Manager media, music and export actions without global Base controls", async () => {
+  it("wires Manager music actions without global Base controls and hides technical cards", async () => {
     const user = userEvent.setup();
     window.history.pushState({}, "", "/settings");
     render(<App />);
-    expect(await screen.findByRole("button", { name: /Thử ảnh/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Lưu nhạc nền" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Thử ảnh/ }));
-    await user.click(screen.getByRole("button", { name: "Xoá cache ảnh" }));
     await user.click(screen.getByRole("button", { name: "Lưu nhạc nền" }));
     expect(screen.queryByRole("button", { name: "Gửi tin thử" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Xuất JSON" }));
+    for (const name of ["Lưu kết nối AI", "Xoá cache ảnh", "Xuất JSON", "Nhập JSON"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Nguồn ảnh")).not.toBeInTheDocument();
 
-    expect(client.testManagerImage).toHaveBeenCalledWith({ source: "wikimedia" });
-    expect(client.clearManagerImageCache).toHaveBeenCalledOnce();
     expect(client.saveOrganisationExperience).toHaveBeenCalledWith({ theme: "auto", backgroundMusic: { enabled: true, playlistId: "auto", customUrl: "", volume: 22 } });
     expect(client.testManagerWebhook).not.toHaveBeenCalled();
-    expect(client.exportManagerData).toHaveBeenCalledOnce();
-  });
-
-  it("offers only automatic open media or disabled and normalizes legacy sources", async () => {
-    client.getProductPreferences.mockResolvedValue({ theme: "auto", vocabImageSource: "pexels" });
-    window.history.pushState({}, "", "/settings");
-    render(<App />);
-
-    const source = await screen.findByLabelText("Nguồn ảnh");
-    expect(source).toHaveValue("wikimedia");
-    expect(screen.getAllByRole("option", { name: /nguồn mở|Tắt ảnh/ })).toHaveLength(2);
-    expect(screen.queryByRole("option", { name: /Pexels|Pixabay|Openverse/ })).not.toBeInTheDocument();
+    expect(client.exportManagerData).not.toHaveBeenCalled();
   });
 
   it("keeps the app header avatar actionable for Manager", async () => {

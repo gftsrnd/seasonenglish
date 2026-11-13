@@ -68,41 +68,7 @@ describe("ManagerRouteController", () => {
     await waitFor(() => expect(screen.getByRole("radio", { name: "Tự động theo ngày" })).toBeChecked());
   });
 
-  it("requires confirmation before clearing the image cache or importing organisation settings", async () => {
-    vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
-    vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
-    vi.spyOn(apiClient, "getManagerSettings").mockResolvedValue(managerSettings);
-    vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
-    vi.spyOn(apiClient, "getManagerAccounts").mockResolvedValue({ organizationName: "GFT", accounts: [] });
-    const clear = vi.spyOn(apiClient, "clearManagerImageCache").mockResolvedValue({ cleared: 1 });
-    const importData = vi.spyOn(apiClient, "importManagerData").mockResolvedValue({ imported: true });
-    const user = userEvent.setup();
-    renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
-
-    await user.click(await screen.findByRole("button", { name: "Xoá cache ảnh" }));
-    const clearDialog = await screen.findByRole("dialog", { name: "Xoá cache ảnh?" });
-    expect(clear).not.toHaveBeenCalled();
-    await user.click(within(clearDialog).getByRole("button", { name: "Huỷ" }));
-    expect(clear).not.toHaveBeenCalled();
-
-    const snapshot = { version: 1, settings: {} };
-    const file = new File([], "e4s-settings.json", { type: "application/json" });
-    Object.defineProperty(file, "text", { value: async () => JSON.stringify(snapshot) });
-    const input = document.querySelector<HTMLInputElement>("#settings-import-json")!;
-    fireEvent.change(input, { target: { files: [file] } });
-    const importDialog = await screen.findByRole("dialog", { name: "Nhập cấu hình từ JSON?" });
-    expect(importDialog).toHaveTextContent(file.name);
-    expect(importData).not.toHaveBeenCalled();
-    await user.click(within(importDialog).getByRole("button", { name: "Huỷ" }));
-    expect(importData).not.toHaveBeenCalled();
-    await waitFor(() => expect(input).toBeEnabled());
-
-    fireEvent.change(input, { target: { files: [file] } });
-    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Nhập cấu hình" }));
-    expect(importData).toHaveBeenCalledExactlyOnceWith(snapshot);
-  });
-
-  it("requires confirmation for changes to the system test date and AI test mode", async () => {
+  it("requires confirmation for changes to the system test date", async () => {
     vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
     vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
     vi.spyOn(apiClient, "getManagerSettings").mockResolvedValue(managerSettings);
@@ -128,15 +94,6 @@ describe("ManagerRouteController", () => {
     await user.click(screen.getByRole("button", { name: "Lưu ngày hệ thống thử" }));
     await user.click(within(confirm()).getByRole("button", { name: "Áp dụng thay đổi" }));
     await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ simulatedSystemDate: "2026-11-14" })));
-
-    const testMode = screen.getByRole("switch", { name: "Tắt AI để kiểm thử chế độ dự phòng" });
-    await user.click(testMode);
-    await user.click(screen.getByRole("button", { name: "Lưu chế độ kiểm thử AI" }));
-    expect(confirm()).toHaveTextContent(/Tắt AI/);
-    expect(save).toHaveBeenCalledTimes(1);
-    await user.click(within(confirm()).getByRole("button", { name: "Huỷ" }));
-    expect(testMode).toBeChecked();
-    expect(save).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -1021,12 +978,12 @@ describe("Manager guide coverage and bounded scroll regions", () => {
     const { container } = renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
     await waitFor(() => expect(container.querySelector("#setting-accounts > .card")).not.toBeNull());
     const panels = Array.from(container.querySelectorAll('.settings-panel-content[id^="setting-"]'));
-    expect(panels.map((panel) => panel.id)).toEqual(["setting-prompts", "setting-ai", "setting-test-date", "setting-monthly", "setting-images", "setting-theme", "setting-music", "setting-policy", "setting-data", "setting-accounts"]);
+    expect(panels.map((panel) => panel.id)).toEqual(["setting-test-date", "setting-monthly", "setting-theme", "setting-music", "setting-policy", "setting-accounts"]);
     const { definitions, found, missing } = guideCoverage("manager", "/settings");
     expect(missing).toEqual([]);
     expect(found).toHaveLength(definitions.length);
     expect(found.map((step) => settingsPanelId(step.target))).toEqual(panels.map((panel) => panel.id));
-    expect(found.map((step) => step.title)).toEqual(["Prompt & rubric", "Kết nối AI", "Ngày hệ thống thử", "Học theo tháng", "Ảnh minh họa từ vựng", "Giao diện theo mùa", "Nhạc nền", "Nhắc học và báo cáo", "Dữ liệu", "Người dùng"]);
+    expect(found.map((step) => step.title)).toEqual(["Ngày hệ thống thử", "Học theo tháng", "Giao diện theo mùa", "Nhạc nền", "Nhắc học và báo cáo", "Người dùng"]);
   });
 
   it("gives every Operator settings card one step, in reading order", async () => {

@@ -634,7 +634,7 @@ function FakeSettingsPanel({ id, label }: { id: string; label: string }) {
 describe("AppGuide collapsed sections", () => {
   it("opens the collapsed settings panel of the current step and closes it when moving on or closing", async () => {
     render(<><AppGuide role="manager" pathname="/settings" compact /><main className="settings-page">
-      <FakeSettingsPanel id="ai" label="Kết nối AI" /><FakeSettingsPanel id="test-date" label="Ngày hệ thống thử" />
+      <FakeSettingsPanel id="test-date" label="Ngày hệ thống thử" /><FakeSettingsPanel id="monthly" label="Học theo tháng" />
     </main></>);
     const toggles = () => screen.getAllByRole("button").filter(button => button.classList.contains("settings-panel-toggle"));
     fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));

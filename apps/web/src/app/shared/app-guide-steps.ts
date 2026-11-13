@@ -212,15 +212,11 @@ const musicGuide = settingsStep("music", "Nhạc nền", "Bật nhạc nền, ch
 const learningGuide = settingsStep("monthly", "Học theo tháng", "Thời lượng học khuyến nghị mỗi ngày và **giới hạn lượt chat** với Season. Bấm **Lưu** để áp dụng.");
 
 const managerSettings: readonly GuideStep[] = [
-  settingsStep("prompts", "Prompt & rubric", "Bấm **Mở Prompt & rubric** để xem và sửa **hướng dẫn AI** và **rubric chấm**, tách khỏi việc vận hành hằng ngày."),
-  settingsStep("ai", "Kết nối AI", "Chọn **nhà cung cấp**, địa chỉ, khóa và mô hình AI cho Season và sinh bài. Bấm **Kiểm tra kết nối** trước khi **Lưu**."),
   settingsStep("test-date", "Ngày hệ thống thử", "Ngày giả lập điều khiển **lịch học**, quyền vào bài, điểm danh và thông báo của **cả tổ chức**."),
   learningGuide,
-  settingsStep("images", "Ảnh minh họa từ vựng", "Chọn **nguồn ảnh** cho từ vựng. Bấm **Thử ảnh** để xem mẫu, **Xoá cache ảnh** khi đổi nguồn."),
   themeGuide,
   musicGuide,
   settingsStep("policy", "Nhắc học và báo cáo", "Số **ngày không hoạt động** thì cần nhắc học, và có gửi **báo cáo tháng** hay không."),
-  settingsStep("data", "Dữ liệu", "**Xuất JSON** để sao lưu, **Xuất CSV** để xem tiến độ. **Nhập JSON** sẽ ghi đè dữ liệu, kiểm tra đúng tệp trước."),
   settingsStep("accounts", "Người dùng", "Vai trò và trạng thái từng tài khoản. Mỗi hàng có **Khoá**, **Đặt lại** mật khẩu hoặc PIN và **Xoá**; cuối thẻ để thêm người dùng."),
 ];
 const operatorSettings: readonly GuideStep[] = [
