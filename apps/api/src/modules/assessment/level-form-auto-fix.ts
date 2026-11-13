@@ -1,7 +1,7 @@
 import { levelFormItemRepairOutputSchema, type AiTaskRunner, type LevelFormTaskOutput } from "@e4s/ai";
 import { rebalanceAnswerPositions } from "../shared/answer-order.js";
 import {
-  evaluateLevelFormQuality, hasCanonicalLevelFormListeningParts, LEVEL_FORM_MAX_LONGEST_ANSWER_SHARE, levelFormNearDuplicatePairs,
+  evaluateLevelFormQuality, hasCanonicalLevelFormListeningParts, levelFormNearDuplicatePairs,
   levelFormQualityInputFromOutput, splitLevelFormListeningParts, type LevelFormQualityIssue, type LevelFormQualityReport
 } from "./level-form-quality.js";
 
@@ -11,8 +11,7 @@ import {
  *
  * - answer-position clustering: deterministic, the seeded answer-order module
  *   (option order only; keys, prompts and scripts are unchanged; no AI call);
- * - correct option is the unique longest too often, duplicate options, an
- *   exact or near-duplicate question, a NOT question whose key is in the text:
+ * - duplicate options, an exact or near-duplicate question, a NOT question whose key is in the text:
  *   ONE targeted AI call per section with only the offending questions
  *   (`level_form_item_repair`), then the checks run again; at most two rounds.
  *
@@ -23,7 +22,7 @@ import {
 
 type Choice = LevelFormTaskOutput["listening"]["questions"][number];
 type Section = "listening" | "reading";
-export type LevelFormRepairKind = "balance_lengths" | "distinct_options" | "replace";
+export type LevelFormRepairKind = "distinct_options" | "replace";
 export interface LevelFormRepairRequest { id: number; kind: LevelFormRepairKind; reason: string }
 
 export const LEVEL_FORM_AUTO_FIX_MAX_ROUNDS = 2;
@@ -34,7 +33,6 @@ const SECTION_LABEL: Record<Section, string> = { listening: "Nghe", reading: "Đ
 const LEVEL_FORM_ITEM_REPAIR_PROMPT = [
   "You repair a few multiple-choice questions of a Workplace English CEFR promotion test. Return exactly one item for every requested id, with that same id, and nothing else.",
   "Each question has four concise options and exactly one correct option that is clearly supported by its source text. correctIndex is the 0-based index of the correct option in your options array.",
-  "kind \"balance_lengths\": keep the prompt and the correct option text EXACTLY. Rewrite only the three wrong options: plausible, clearly wrong according to the source, parallel in form, and at least one wrong option must be as long as or longer than the correct option (count characters). Never pad with empty words.",
   "kind \"distinct_options\": keep the prompt and the correct option text EXACTLY; replace the duplicated or empty wrong options with distinct plausible wrong ones of similar length.",
   "kind \"replace\": write a NEW question about a different detail of the same source text. It must not ask the same fact as any prompt in existingPrompts, its correct option must not be the single longest option, and if it is a NOT question exactly one option must be absent from the source.",
   "Prompts contain only the question text: no part labels such as \"Part 1:\" and no numbering. Return only the structured tool input."
@@ -42,13 +40,6 @@ const LEVEL_FORM_ITEM_REPAIR_PROMPT = [
 
 function normalise(value: string): string {
   return value.toLocaleLowerCase().replace(/[’‘]/g, "'").replace(/[^\p{L}\p{N}'\s]/gu, " ").replace(/\s+/g, " ").trim();
-}
-
-/** True when the key is the single longest option (trimmed characters), the pattern a learner can guess from. */
-export function levelFormKeyIsUniqueLongest(question: Choice): boolean {
-  const lengths = question.options.map((option) => option.trim().length);
-  const key = lengths[question.correctIndex];
-  return key !== undefined && lengths.every((length, index) => index === question.correctIndex || length < key);
 }
 
 function wellFormed(question: Choice): boolean {
@@ -59,8 +50,6 @@ function wellFormed(question: Choice): boolean {
 
 /**
  * The offending questions of one section (0-based ids), most severe first.
- * Longest-option bias asks only for as many questions as needed to get under
- * the threshold (plus one in reserve), the widest length gaps first.
  */
 export function levelFormRepairRequests(questions: Choice[], report: LevelFormQualityReport, section: Section): LevelFormRepairRequest[] {
   const requests = new Map<number, LevelFormRepairRequest>();
@@ -73,17 +62,6 @@ export function levelFormRepairRequests(questions: Choice[], report: LevelFormQu
   }
   for (const [left, right] of levelFormNearDuplicatePairs(questions)) {
     if (!requests.has(left)) add({ id: right, kind: "replace", reason: `asks the same fact as question ${left + 1}` });
-  }
-  const longest = questions.flatMap((question, id) => levelFormKeyIsUniqueLongest(question) ? [id] : []);
-  const allowed = Math.floor(questions.length * LEVEL_FORM_MAX_LONGEST_ANSWER_SHARE);
-  if (longest.length > allowed) {
-    const gap = (question: Choice) => {
-      const lengths = question.options.map((option) => option.trim().length);
-      return lengths[question.correctIndex]! - Math.max(...lengths.filter((_, index) => index !== question.correctIndex));
-    };
-    const pending = longest.filter((id) => !requests.has(id)).sort((left, right) => gap(questions[right]!) - gap(questions[left]!) || left - right);
-    const stillLongest = longest.filter((id) => requests.get(id)?.kind !== "replace").length;
-    for (const id of pending.slice(0, Math.max(0, stillLongest - allowed + 1))) add({ id, kind: "balance_lengths", reason: "the correct option is the single longest option" });
   }
   // Insertion order is severity order; the cap keeps one call small (token budget).
   return [...requests.values()].slice(0, LEVEL_FORM_AUTO_FIX_MAX_ITEMS_PER_CALL).sort((left, right) => left.id - right.id);
@@ -114,7 +92,6 @@ export function mergeLevelFormRepairs(questions: Choice[], requests: LevelFormRe
     if (request.kind !== "replace") {
       if (normalise(candidate.options[candidate.correctIndex]!) !== normalise(original.options[original.correctIndex]!)) continue;
       candidate.prompt = original.prompt;
-      if (request.kind === "balance_lengths" && levelFormKeyIsUniqueLongest(candidate)) continue;
     } else {
       const others = next.filter((_, index) => index !== item.id).map((question) => normalise(question.prompt));
       if (others.includes(normalise(candidate.prompt))) continue;
@@ -179,9 +156,7 @@ export async function autoFixLevelFormOutput(
   }
   let output = input.shuffled;
   let quality = evaluateLevelFormQuality(levelFormQualityInputFromOutput(output));
-  const initial = quality;
   const replaced: Record<Section, Map<number, string>> = { listening: new Map(), reading: new Map() };
-  const balanced: Record<Section, Set<number>> = { listening: new Set(), reading: new Set() };
   const distinct: Record<Section, Set<number>> = { listening: new Set(), reading: new Set() };
   let aiCalls = 0;
   for (let round = 0; runner && round < LEVEL_FORM_AUTO_FIX_MAX_ROUNDS; round += 1) {
@@ -206,7 +181,7 @@ export async function autoFixLevelFormOutput(
       for (const id of merged.accepted) {
         const request = requests.find((item) => item.id === id)!;
         if (request.kind === "replace") replaced[section].set(id, request.reason);
-        else (request.kind === "balance_lengths" ? balanced : distinct)[section].add(id);
+        else distinct[section].add(id);
       }
       // Same seed -> same slots: the repaired keys go back to the balanced positions.
       next = { ...next, [section]: { ...next[section], questions: rebalanceAnswerPositions(merged.questions, `${input.seed}:${section}`, 4) } };
@@ -223,12 +198,6 @@ export async function autoFixLevelFormOutput(
   const finalIssues = [...quality.severe, ...quality.light];
   for (const section of ["listening", "reading"] as const) {
     const label = SECTION_LABEL[section];
-    const total = output[section].questions.length;
-    if (sectionIssue(initial, section, "LEVEL_FORM_LONGEST_ANSWER_BIAS") && !sectionIssue(quality, section, "LEVEL_FORM_LONGEST_ANSWER_BIAS")) {
-      const before = input.shuffled[section].questions.filter(levelFormKeyIsUniqueLongest).length;
-      const after = output[section].questions.filter(levelFormKeyIsUniqueLongest).length;
-      autoFixed.push(`Phần ${label}: viết lại lựa chọn nhiễu của ${balanced[section].size} câu để đáp án không còn hay là lựa chọn dài nhất (${before}/${total} → ${after}/${total}, nên ≤ ${Math.round(LEVEL_FORM_MAX_LONGEST_ANSWER_SHARE * 100)}%).`);
-    }
     const stillDuplicateOptions = (id: number) => finalIssues.some((issue) => issue.section === section && issue.questionIndex === id && issue.code === "LEVEL_FORM_DUPLICATE_OPTIONS");
     const distinctFixed = [...distinct[section]].filter((id) => !stillDuplicateOptions(id)).sort((left, right) => left - right);
     if (distinctFixed.length) autoFixed.push(`Phần ${label}: thay lựa chọn bị trùng ở câu ${distinctFixed.map((id) => id + 1).join(", ")}.`);

@@ -362,7 +362,6 @@ export function validateMonthlyFinalListeningOutput(output: MonthlyFinalListenin
   if (labels !== expectedLabels) issues.push({ path: "listening.messages", message: `Return exactly the assigned message label(s): ${expectedLabels}.` });
   const questions = output.listening.messages.flatMap(message => message.questions);
   issues.push(...exactTermSet("listening", questions.map(question => question.termId), input.targets.listening.map(term => term.id)));
-  issues.push(...choiceLengthIssues("listening.messages", questions));
   for (const [index, message] of output.listening.messages.entries()) {
     if (!message.script.includes(message.gaSentence)) issues.push({ path: `listening.messages.${index}.gaSentence`, message: "gaSentence must be copied verbatim from the script." });
     if (!message.script.includes(message.gbSentence)) issues.push({ path: `listening.messages.${index}.gbSentence`, message: "gbSentence must be copied verbatim from the script." });
@@ -380,25 +379,12 @@ export function validateMonthlyFinalListeningOutput(output: MonthlyFinalListenin
   return issues;
 }
 
-function choiceLengthIssues(path: string, questions: ReadonlyArray<{termId: string; options: string[]; correctIndex: number}>): AiValidationIssue[] {
-  const longest = questions.filter(question => {
-    const correct = question.options[question.correctIndex]?.trim().length ?? 0;
-    return question.options.every((option, index) => index === question.correctIndex || option.trim().length < correct);
-  });
-  if (questions.length < 4 || longest.length <= questions.length / 2) return [];
-  return [{
-    path,
-    message: `The correct option is uniquely longest for ${longest.length}/${questions.length} questions. Rewrite these options with comparable lengths: ${longest.map(question => question.termId).join(", ")}.`
-  }];
-}
-
 export function validateMonthlyFinalReadingOutput(output: MonthlyFinalReadingOutput, input: MonthlyFinalGenerationInput): AiValidationIssue[] {
   const issues=exactTermSet("reading", output.reading.questions.map((question) => question.termId), input.targets.reading.map((term) => term.id));
   const bounds = profileBounds(input, "readingItem");
   const grammarExamples = input.grammar.flatMap(topic => topic.taughtSteps.flatMap(step => step.examples));
   const typeByWord = new Map([...input.targets.listening, ...input.targets.reading, ...input.targets.writing, ...input.targets.speaking].map((term) => [term.word.toLocaleLowerCase("en-US"), term.type] as const));
   const classOf = (word: string) => typeByWord.get(word);
-  issues.push(...choiceLengthIssues("reading.questions", output.reading.questions));
   for(const [index,question] of output.reading.questions.entries()) {
     const wordCount = monthlyFinalWordCount(question.prompt);
     if (bounds && wordCount > Math.ceil(bounds.max * 1.2)) {

@@ -4,8 +4,6 @@ import { validateLessonPartOrder } from "../learning/index.js";
 export { hasSensitiveText, hasSensitiveTopicText, SENSITIVE_NAME_MESSAGE_VI, SENSITIVE_TOPIC_MESSAGE_VI, sensitiveTextIssue, sensitiveTopicIssue, sensitiveTopicSeverity, UNSUITABLE_TOPIC_MESSAGE_VI, type SensitiveTextCategory, type SensitiveTextIssue, type SensitiveTopicSeverity } from "./sensitive-text.js";
 export { CURATED_LEXICAL_RELATIONS, curatedRelationEvidence, lexicalRelationCoverageSatisfied, relationExemptionIsCredible } from "./lexical-relations.js";
 export {
-  answerIsClearlyLongestOption,
-  answerIsUniqueLongestOption,
   bracketHintWords,
   containsVietnameseLetters,
   INTERNAL_LEARNER_TERMS,

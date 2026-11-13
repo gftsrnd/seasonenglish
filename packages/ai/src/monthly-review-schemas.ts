@@ -122,8 +122,7 @@ export type MonthlyReviewExercisesTaskOutput = z.infer<typeof monthlyReviewExerc
 
 /**
  * Targeted repair for light review findings: the model rewrites only the listed
- * items (a missing variant, or distractors so the answer is not the only longest
- * option); the application merges the returned variant/options into the accepted item.
+ * items (a missing variant); the application merges the returned variant into the accepted item.
  */
 export const monthlyReviewItemRepairOutputJsonSchema = {
   type: "object", additionalProperties: false, required: ["items"],

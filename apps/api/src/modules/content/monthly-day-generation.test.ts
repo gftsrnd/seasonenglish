@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MonthlyCurriculumContract } from "@e4s/domain";
-import { applyMonthlyLockedPlanFields, dropSupportTermVocabularyCards, generateMonthlyDay, generateMonthlyDayWithAi, generateMonthlyReviewWithAi, keepMeaningfulVocabularyRelations, mergeMonthlyReviewItemRepairs, monthlyCheckpointKey, monthlyDailyTeachingContract, monthlyLearnerLanguageContract, monthlyReviewExerciseContract, monthlyReviewLightRepairRequests, monthlyReviewWordFormCandidates, monthlyVocabularyRelationContract } from "./monthly-day-generation.js";
+import { applyMonthlyLockedPlanFields, dropSupportTermVocabularyCards, generateMonthlyDay, generateMonthlyDayWithAi, generateMonthlyReviewWithAi, keepMeaningfulVocabularyRelations, monthlyCheckpointKey, monthlyDailyTeachingContract, monthlyLearnerLanguageContract, monthlyReviewExerciseContract, monthlyReviewWordFormCandidates, monthlyVocabularyRelationContract } from "./monthly-day-generation.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 
 const components = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"];
@@ -411,7 +411,7 @@ describe("monthly day generation - lesson numbering (12/11)", () => {
 /**
  * 12/11 Friday review approval: December A1/B1/C1 reviews had 0 severe but 5–22
  * light findings (mostly MONTHLY_REVIEW_VARIANT_MISSING on listening, word_use and
- * word_class; plus MONTHLY_ANSWER_LONGEST_OPTION), over the two-finding cap.
+ * word_class), over the two-finding cap.
  */
 describe("Friday review light findings are repaired at the source (12/11)", () => {
   /** The v2 review of the "assembles a full v2 review" test: listening/word_use/word_class items come back without variants, as observed. */
@@ -504,29 +504,6 @@ describe("Friday review light findings are repaired at the source (12/11)", () =
     const result = await generateMonthlyReviewWithAi(scope, 5, runner, "Review prompt");
     expect(result.status).toBe("ready");
     expect(result.report.light.filter((finding) => finding.code === "MONTHLY_REVIEW_VARIANT_MISSING")).toHaveLength(14);
-  });
-
-  it("longest-option repair: takes only new distractors that keep the answer and remove the length cue", () => {
-    // Shape of the observed A1 W1 reading items: the answer is the one long, detailed sentence.
-    const reading = { code: "reading", content: { passage: "Subject: Progress update", items: [
-      { id: "r1", prompt: "Đọc tin nhắn và chọn đáp án đúng.", options: ["The client replied.", "The project team made three changes to the file.", "Minh is away.", "The meeting moved."], answer: "The project team made three changes to the file.", explanation: "Tin nhắn nói nhóm đã sửa ba chỗ.", variants: [{ id: "r1-v1", prompt: "Chọn đáp án đúng về tin nhắn.", options: ["No reply yet.", "The client gave a clear list of changes last week.", "It was cancelled.", "Minh left."], answer: "The client gave a clear list of changes last week.", explanation: "Khách hàng đã gửi danh sách." }] },
-      { id: "r2", prompt: "Đọc tin nhắn và chọn đáp án đúng.", options: ["Friday", "Monday morning at the office", "Sunday", "Today"], answer: "Monday morning at the office", explanation: "Tin nhắn nói sáng thứ Hai." }
-    ] } };
-    const light = [{ severity: "light" as const, code: "MONTHLY_ANSWER_LONGEST_OPTION", message: "In reading, the correct answer is the only longest option in 3/3 questions", dayNumber: 5, component: "reading" }];
-    const requests = monthlyReviewLightRepairRequests([reading], light);
-    expect(requests.map((request) => [request.id, request.issues])).toEqual([["r1", ["answer_longest_option"]], ["r2", ["answer_longest_option"]]]);
-    const merged = mergeMonthlyReviewItemRepairs([reading], requests, [
-      { section: "reading", id: "r1", item: { options: ["The client replied to the email yesterday.", "The project team made three changes to the file.", "Minh is away from the office until the end of next week.", "The meeting moved."], answer: "The project team made three changes to the file.", variants: [{ options: ["The client has not replied to us yet.", "The client gave a clear list of changes last week.", "The meeting with the client on Monday was cancelled by Minh.", "Minh left."], answer: "The client gave a clear list of changes last week." }] } },
-      // r2: the model changed the answer text, so its options are not taken.
-      { section: "reading", id: "r2", item: { options: ["On Friday afternoon at home", "Monday morning", "Sunday evening at the office", "Today"], answer: "Monday morning", variants: [] } }
-    ]);
-    const [r1, r2] = merged[0]!.content.items as Array<Record<string, any>>;
-    expect(r1!.options).toEqual(["The client replied to the email yesterday.", "The project team made three changes to the file.", "Minh is away from the office until the end of next week.", "The meeting moved."]);
-    expect(r1!.answer).toBe("The project team made three changes to the file.");
-    expect(r1!.explanation).toBe("Tin nhắn nói nhóm đã sửa ba chỗ.");
-    expect(r1!.variants[0].options).toContain("The meeting with the client on Monday was cancelled by Minh.");
-    expect(r1!.variants[0].explanation).toBe("Khách hàng đã gửi danh sách.");
-    expect(r2).toEqual(reading.content.items[1]);
   });
 
   it("the review prompt states the variant shape per section with an example", () => {

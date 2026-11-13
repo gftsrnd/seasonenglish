@@ -28,25 +28,23 @@ export function monthlyFinalReadingSystemPrompt(taskPrompt: string, terms: reado
 
 const READING_REPAIR_PROMPT = [
   "Repair the supplied Reading draft. Preserve the term IDs, correct meanings and answer positions. Change only the items named in the findings and keep every other item exactly as it is.",
-  "Option length: for every listed term, shorten the correct phrase or give a plausible wrong phrase comparable detail. All three choices must fit the same grammatical slot or use parallel meaning phrases. Never add empty padding or make two choices correct.",
   "Missing question: keep the context sentence and add one short question ending in '?', or replace the target word with a single ____ blank whose correct option is the target word.",
   "Word class: in a gap item replace the two distractors with words of the key's word class that are wrong in meaning; keep the blank and the key.",
   "Second correct option or disputed key (independent checker): keep the term and its correct meaning; rewrite the context sentence so only the key fits, or replace the distractor that also fits.",
   "Target word only in the question or options: rewrite the context sentence so it contains the exact target word (-s/-ed/-ing endings are allowed), then ask one short question ending in '?' about its meaning or what someone should do.",
-  "Compare character lengths. At least half of the correct choices must be tied with or shorter than another choice. Return the complete Reading result."
+  "Never make two choices correct. Return the complete Reading result."
 ].join("\n");
 
-/** Item-level findings a targeted repair of the existing draft can fix (option length, GEN07 question / context word, prompt length). */
+/** Item-level findings a targeted repair of the existing draft can fix (GEN07 question / context word, prompt length, word class). */
 function repairableReadingIssues(issues: readonly Issue[] | undefined): Issue[] {
   return (issues ?? []).filter(issue =>
-    (issue.path === "reading.questions" && issue.message.includes("uniquely longest"))
-    || /^reading\.questions\.\d+\.(?:prompt|termId)$/u.test(issue.path)
+    /^reading\.questions\.\d+\.(?:prompt|termId)$/u.test(issue.path)
     || (/^reading\.questions\.\d+\.options$/u.test(issue.path) && issue.message.includes("word class")));
 }
 
 /**
- * Reading questions for a set of target terms. The same validation (option
- * length, GEN07 question and context-word pre-check) runs inside the bounded
+ * Reading questions for a set of target terms. The same validation (GEN07
+ * question and context-word pre-check) runs inside the bounded
  * repair loop of each call. A draft that still fails gets one targeted repair
  * of the reported items; like the level-up reading repair, a slice that still
  * fails is then split in half and each half is requested on its own (at most

@@ -47,9 +47,10 @@ it("uses the red tone only when the server broke and nothing was saved", () => {
 it("explains a failed monthly final calmly and names the parts", () => {
   const reason = { code: "AI_OUTPUT_INVALID", details: { code: "AI_OUTPUT_INVALID", issues: [
     { code: "AI_OUTPUT_INVALID", path: "candidates", message: "P2 has no exact matches in this passage. Use TWO different words spelled exactly as in this pool: called." },
+    // The answer-length rule was removed (13/11): an old length issue names no part.
     { code: "AI_OUTPUT_INVALID", path: "listening.messages", message: "The correct option is uniquely longest for 6/11 questions." }
   ] } };
-  expect(monthlyFinalGenerationMessage(reason)).toBe("AI đã thử sửa nhiều lượt nhưng đề chưa đạt ở phần Đọc to (thiếu từ luyện âm) và phần Nghe (đáp án đúng dài hơn các lựa chọn). Bản nháp cũ giữ nguyên — bấm sinh lại để thử tiếp.");
+  expect(monthlyFinalGenerationMessage(reason)).toBe("AI đã thử sửa nhiều lượt nhưng đề chưa đạt ở phần Đọc to (thiếu từ luyện âm). Bản nháp cũ giữ nguyên — bấm sinh lại để thử tiếp.");
   expect(monthlyFinalGenerationTone(reason)).toBe("info");
   expect(monthlyFinalGenerationTone({ code: "INTERNAL" })).toBe("danger");
 });

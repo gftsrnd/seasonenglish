@@ -21,7 +21,6 @@ export interface LevelFormQualityIssue {
     | "LEVEL_FORM_HOW_MANY_MISMATCH"
     | "LEVEL_FORM_DUPLICATE_PROMPT"
     | "LEVEL_FORM_NEAR_DUPLICATE_QUESTIONS"
-    | "LEVEL_FORM_LONGEST_ANSWER_BIAS"
     | "LEVEL_FORM_ANSWER_POSITION_BIAS"
     | "LEVEL_FORM_STATEMENT_UNSUPPORTED"
     | "LEVEL_FORM_REPEATED_CONTEXT";
@@ -62,12 +61,6 @@ export interface LevelFormQualityRecord {
   autoFixed?: string[];
 }
 
-/**
- * Share of a section whose key is the unique longest option. Above it the gate
- * raises a LIGHT warning (user decision 11/11: the Operator reviews every key
- * before publishing; option length cannot be fixed by the answer shuffle).
- */
-export const LEVEL_FORM_MAX_LONGEST_ANSWER_SHARE = 0.35;
 /** Near-duplicate pair: key-word overlap (overlap coefficient) and prompt+key Jaccard similarity. */
 export const LEVEL_FORM_NEAR_DUPLICATE_KEY_OVERLAP = 0.6;
 export const LEVEL_FORM_NEAR_DUPLICATE_SIMILARITY = 0.4;
@@ -325,7 +318,6 @@ export function evaluateLevelFormQuality(input: LevelFormQualityInput): LevelFor
 
   for (const section of ["listening", "reading"] as const) {
     const questions = input[section];
-    let longestKeys = 0;
     const positions = [0, 0, 0, 0];
     questions.forEach((question, index) => {
       const label = questionLabel(section, index);
@@ -353,9 +345,6 @@ export function evaluateLevelFormQuality(input: LevelFormQualityInput): LevelFor
 
       if (key === undefined) return;
       if (question.correctIndex >= 0 && question.correctIndex < positions.length) positions[question.correctIndex]! += 1;
-      const lengths = question.options.map((option) => option.trim().length);
-      const longest = Math.max(...lengths);
-      if (lengths[question.correctIndex] === longest && lengths.filter((length) => length === longest).length === 1) longestKeys += 1;
 
       // NOT question: exactly one option is absent from the source, and it is the key.
       if (isNotQuestion(question.prompt)) {
@@ -402,11 +391,6 @@ export function evaluateLevelFormQuality(input: LevelFormQualityInput): LevelFor
     });
 
     if (questions.length) {
-      const share = longestKeys / questions.length;
-      if (share > LEVEL_FORM_MAX_LONGEST_ANSWER_SHARE) add({
-        code: "LEVEL_FORM_LONGEST_ANSWER_BIAS", severity: "light", section,
-        message: `Phần ${SECTION_LABEL[section]}: ${longestKeys}/${questions.length} câu có đáp án là lựa chọn dài nhất duy nhất (nên ≤ ${Math.round(LEVEL_FORM_MAX_LONGEST_ANSWER_SHARE * 100)}%); cần sửa độ dài lựa chọn để đáp án không lộ.`
-      });
       const nearDuplicates = levelFormNearDuplicatePairs(questions);
       if (nearDuplicates.length) add({
         code: "LEVEL_FORM_NEAR_DUPLICATE_QUESTIONS", severity: "light", section,

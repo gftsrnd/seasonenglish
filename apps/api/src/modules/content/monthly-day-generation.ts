@@ -1,4 +1,4 @@
-import { MONTHLY_ANSWER_TRANSLATION_RULE, MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS, answerIsUniqueLongestOption, monthlyLessonDisplayTitle, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, withoutAdvancedGrammarExampleTranslations, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
+import { MONTHLY_ANSWER_TRANSLATION_RULE, MONTHLY_COLLOCATION_TRANSLATION_MAX_CHARS, monthlyLessonDisplayTitle, monthlyModelRelationEntry, monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, withoutAdvancedGrammarExampleTranslations, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
 import { MONTHLY_LESSON_PART_CONTENT_CONTRACT, MONTHLY_REVIEW_CHOICE_SECTIONS, type AiTaskRunner, type MonthlyReviewChoiceSection } from "@e4s/ai";
 import { evaluateMonthlyLessonQuality, monthlyLockedPlanExpectations, normalizeFormula, type MonthlyLessonCandidate, type MonthlyLockedPlanExpectations, type MonthlyQualityReport, type MonthlyQualityFinding } from "./monthly-quality.js";
 import { rebalanceAnswerTextPositions, type AnswerTextChoice } from "../shared/answer-order.js";
@@ -242,14 +242,13 @@ export const MONTHLY_REVIEW_ITEM_REPAIR_RULE = [
   "REVIEW ITEM REPAIR (only the items in repairItems; every other part of the review is accepted and unchanged):",
   "Return items = one entry per repairItems entry: { section, id, item }, with section and id copied. item is the complete item: the same id, audioText (listening), prompt intent and answer text, plus exactly 1 entry in variants.",
   "issue variant_missing: add variants = [one retry item with the same fields (prompt, options x4, answer, explanation, questionTranslation, answerTranslation)] that tests the same point in a different context and is never a copy. listening: the SAME audioText (the same core word) and the same correct meaning, with 3 different distractor meanings; word_use / grammar: the same word or grammar point in a new workplace sentence; word_class: the same week word in a new sentence; reading: a different question about the same passage.",
-  "issue answer_longest_option: keep the answer text exactly and rewrite the 3 wrong options (of the item and of its variant) so at least one wrong option is as long as or longer than the answer (count characters); they stay real, plausible options of the same kind, all 4 different, and the explanation still fits.",
   "Follow the learner-language rule above for prompts and explanations."
 ].join("\n");
 
 export interface MonthlyReviewItemRepairRequest {
   section: MonthlyReviewChoiceSection;
   id: string;
-  issues: Array<"variant_missing" | "answer_longest_option">;
+  issues: Array<"variant_missing">;
   item: Record<string, unknown>;
 }
 
@@ -257,14 +256,11 @@ type ReviewPart = { code: string; title?: string; content: Record<string, unknow
 
 /**
  * Items behind the repairable light findings: every choice item without a
- * variant in a section flagged MONTHLY_REVIEW_VARIANT_MISSING, and every item
- * (or its variant) whose answer is the only longest option in a section flagged
- * MONTHLY_ANSWER_LONGEST_OPTION.
+ * variant in a section flagged MONTHLY_REVIEW_VARIANT_MISSING.
  */
 export function monthlyReviewLightRepairRequests(parts: readonly ReviewPart[], light: readonly MonthlyQualityFinding[]): MonthlyReviewItemRepairRequest[] {
   const flagged = (code: string) => new Set(light.filter((finding) => finding.code === code).map((finding) => finding.component));
   const variantSections = flagged("MONTHLY_REVIEW_VARIANT_MISSING");
-  const longestSections = flagged("MONTHLY_ANSWER_LONGEST_OPTION");
   const requests: MonthlyReviewItemRepairRequest[] = [];
   for (const part of parts) {
     const section = (MONTHLY_REVIEW_CHOICE_SECTIONS as readonly string[]).includes(part.code) ? part.code as MonthlyReviewChoiceSection : null;
@@ -274,7 +270,6 @@ export function monthlyReviewLightRepairRequests(parts: readonly ReviewPart[], l
       const variants = Array.isArray(item.variants) ? item.variants.filter(isRecord) : [];
       const issues: MonthlyReviewItemRepairRequest["issues"] = [];
       if (variantSections.has(section) && !variants.length) issues.push("variant_missing");
-      if (longestSections.has(section) && [item, ...variants].some(isLongestAnswerChoice)) issues.push("answer_longest_option");
       if (issues.length) requests.push({ section, id: item.id, issues, item });
     }
   }
@@ -283,8 +278,7 @@ export function monthlyReviewLightRepairRequests(parts: readonly ReviewPart[], l
 
 /**
  * Merges a targeted item repair into the accepted review: only the requested
- * fix is taken from the response - a missing variant, or new options that still
- * contain the unchanged answer and no longer make it the only longest one.
+ * fix is taken from the response - a missing variant.
  * Everything else in the accepted item stays; the quality gate re-checks the result.
  */
 export function mergeMonthlyReviewItemRepairs<T extends ReviewPart>(parts: readonly T[], requests: readonly MonthlyReviewItemRepairRequest[], repaired: ReadonlyArray<{ section: string; id: string; item: unknown }>): T[] {
@@ -307,38 +301,10 @@ export function mergeMonthlyReviewItemRepairs<T extends ReviewPart>(parts: reado
         item.variants = [part.code === "listening" && typeof item.audioText === "string" && !textOf(newVariant.audioText) ? { ...newVariant, audioText: item.audioText } : { ...newVariant }];
         changed = true;
       }
-      if (request.issues.includes("answer_longest_option")) {
-        const options = betterOptions(item, returned);
-        if (options) { item.options = options; changed = true; }
-        if (ownVariants.length && newVariant) {
-          const variants = ownVariants.map((variant, index) => {
-            const fixed = index === 0 ? betterOptions(variant, newVariant) : null;
-            return fixed ? { ...variant, options: fixed } : variant;
-          });
-          if (variants.some((variant, index) => variant !== ownVariants[index])) { item.variants = variants; changed = true; }
-        }
-      }
       return item;
     });
     return changed ? { ...part, content: { ...part.content, items } } : part;
   });
-}
-
-/** The repaired options, when they keep the same answer, stay 4 distinct strings and fix the longest-answer cue. */
-function betterOptions(current: Record<string, unknown>, returned: Record<string, unknown>): string[] | null {
-  if (!isLongestAnswerChoice(current)) return null;
-  const answer = textOf(current.answer);
-  const options = Array.isArray(returned.options) ? returned.options.filter((option): option is string => typeof option === "string" && Boolean(option.trim())).map((option) => option.trim()) : [];
-  const key = (value: string) => value.trim().toLocaleLowerCase("en-US");
-  if (options.length !== 4 || new Set(options.map(key)).size !== 4 || !options.some((option) => key(option) === key(answer))) return null;
-  if (textOf(returned.answer) && key(textOf(returned.answer)) !== key(answer)) return null;
-  const withAnswer = options.map((option) => key(option) === key(answer) ? answer : option);
-  return answerIsUniqueLongestOption(withAnswer, answer) ? null : withAnswer;
-}
-
-function isLongestAnswerChoice(choice: Record<string, unknown>): boolean {
-  const options = Array.isArray(choice.options) ? choice.options.filter((option): option is string => typeof option === "string") : [];
-  return options.length >= 3 && answerIsUniqueLongestOption(options, textOf(choice.answer));
 }
 
 function textOf(value: unknown): string { return typeof value === "string" ? value.trim() : ""; }

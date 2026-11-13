@@ -14,7 +14,7 @@ const failure = {
   attempts: 3,
   report: {
     severe: [{ severity: "severe" as const, code: "MONTHLY_PRONUNCIATION_HOMOPHONE", component: "pronunciation", message: "team / teem là hai từ đồng âm." }],
-    light: [{ severity: "light" as const, code: "MONTHLY_ANSWER_LONGEST_OPTION", component: "listening", message: "Đáp án đúng thường dài nhất." }]
+    light: [{ severity: "light" as const, code: "MONTHLY_REVIEW_VARIANT_MISSING", component: "listening", message: "Listening item l1 has no variant." }]
   },
   candidate: { title: "Ôn tập tuần 1", parts: [{ code: "instruction", title: "Hướng dẫn", content: { guidance: "Bản sinh lỗi: nghe và chọn." } }] }
 };
@@ -29,7 +29,7 @@ describe("Operator monthly day: failed AI generation (December 2026 N3)", () => 
     const section = screen.getByRole("region", { name: "Lần sinh AI chưa đạt" });
     expect(within(section).getByText("Không duyệt được")).toBeInTheDocument();
     expect(within(section).getByText(/team \/ teem là hai từ đồng âm/)).toBeInTheDocument();
-    expect(within(section).getByText(/Đáp án đúng thường là lựa chọn dài nhất/)).toBeInTheDocument();
+    expect(within(section).getByText(/Có câu thiếu bản làm lại/)).toBeInTheDocument();
     // One compact row: title, status chip, count and a chevron; no generation timestamp or explanatory paragraph.
     expect(section).not.toHaveTextContent(/Sinh lúc|Bước tiếp theo|Bấm để/);
     const toggle = within(section).getByRole("button", { name: "Thu gọn danh sách cảnh báo" });
@@ -70,12 +70,12 @@ describe("Operator monthly day: failed AI generation (December 2026 N3)", () => 
     expect(within(section).queryByRole("button", { name: /Sửa bản AI/ })).not.toBeInTheDocument();
     // Findings name the place (review section) before the text; severity chips stay.
     expect(section).toHaveTextContent("Nặng Phát âm: team / teem là hai từ đồng âm.");
-    expect(section).toHaveTextContent("Nhẹ Phần 1 · Nghe & nhận biết từ: Đáp án đúng thường là lựa chọn dài nhất");
+    expect(section).toHaveTextContent("Nhẹ Phần 1 · Nghe & nhận biết từ: Có câu thiếu bản làm lại");
     screen.getByRole("button", { name: "Sửa tay" }).click();
     expect(onEdit).toHaveBeenLastCalledWith();
     // Each finding line opens the editor on that line's item.
     within(section).getByRole("button", { name: "Sửa tay: Phần 1 · Nghe & nhận biết từ" }).click();
-    expect(onEdit).toHaveBeenLastCalledWith("MONTHLY_ANSWER_LONGEST_OPTION-1-0");
+    expect(onEdit).toHaveBeenLastCalledWith("MONTHLY_REVIEW_VARIANT_MISSING-1-0");
   });
 
   it("lists a saved draft's own quality findings with the next step", () => {

@@ -126,6 +126,17 @@ interface StoredGenerationFailure {
   candidate: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> } | null;
 }
 
+/**
+ * Finding codes the gate no longer raises (MONTHLY_ANSWER_LONGEST_OPTION, removed 13/11: an answer that is
+ * simply the longest option is not a defect). Reports stored before the removal still carry them, so they are
+ * dropped on read: they never show, count against the two-light cap or need an acknowledgement.
+ */
+const RETIRED_MONTHLY_FINDING_CODES = new Set(["MONTHLY_ANSWER_LONGEST_OPTION"]);
+function activeQualityReport<T extends { severe: MonthlyQualityFindingView[]; light: MonthlyQualityFindingView[] }>(report: T): T {
+  const keep = (findings: MonthlyQualityFindingView[]) => findings.filter((finding) => !RETIRED_MONTHLY_FINDING_CODES.has(finding.code));
+  return report && Array.isArray(report.light) && Array.isArray(report.severe) ? { ...report, severe: keep(report.severe), light: keep(report.light) } : report;
+}
+
 /** generation_error also holds a manual save's severe report; only an AI failure payload is shown as a failed generation. */
 function isGenerationFailure(value: unknown): value is StoredGenerationFailure {
   return Boolean(value && typeof value === "object" && (value as { kind?: unknown }).kind === "ai_generation_failed"
@@ -905,6 +916,7 @@ export class MonthlyContentRepository {
     );
     const day = result.rows[0];
     if (!day) throw new Error("Locked monthly day was not found");
+    day.quality_report = activeQualityReport(day.quality_report);
     if (day.quality_report.severe.length) throw new Error("Severe monthly quality findings block acknowledgement");
     const expected = day.quality_report.light.map(qualityFindingKey);
     if (expected.length > 0 && (expected.length !== findingKeys.length || expected.some((key) => !findingKeys.includes(key)))) {
@@ -933,6 +945,7 @@ export class MonthlyContentRepository {
     );
     const day = result.rows[0];
     if (!day || !day.lesson_id) throw httpError(404, "MONTHLY_DAY_DRAFT_NOT_FOUND", "Không tìm thấy bản nháp bài học.");
+    day.quality_report = activeQualityReport(day.quality_report);
     if (day.status !== "draft" || day.quality_report.severe.length) throw httpError(409, "MONTHLY_DAY_QUALITY_BLOCKED", "Bài chưa thể duyệt. Hãy mở bản nháp và sửa các mục chất lượng trước khi duyệt lại.");
     if (day.quality_report.light.length > 2) throw httpError(409, "MONTHLY_DAY_QUALITY_BLOCKED", "Bài có quá hai cảnh báo. Hãy sửa bớt cảnh báo trước khi duyệt bài.");
     const expectedKeys = day.quality_report.light.map(qualityFindingKey);
@@ -1019,6 +1032,7 @@ export class MonthlyContentRepository {
     );
     const correction = result.rows[0];
     if (!correction || correction.status !== "authorized") throw new Error("Authorized monthly correction was not found");
+    correction.quality_report = activeQualityReport(correction.quality_report);
     if (correction.quality_report.severe.length) throw new Error("Severe monthly correction findings block acknowledgement");
     const expected = correction.quality_report.light.map(qualityFindingKey);
     if (expected.length !== findingKeys.length || expected.some((key) => !findingKeys.includes(key))) throw new Error("Operator must acknowledge every correction finding individually");
@@ -1043,6 +1057,7 @@ export class MonthlyContentRepository {
     );
     const correction = result.rows[0];
     if (!correction || correction.status !== "authorized" || !correction.correction_lesson_version_id) throw new Error("Monthly correction draft was not found");
+    correction.quality_report = activeQualityReport(correction.quality_report);
     if (correction.quality_report.severe.length) throw new Error("Severe monthly correction findings block approval");
     const acknowledged = new Set(correction.quality_acknowledgement?.findingCodes ?? []);
     if (correction.quality_report.light.map(qualityFindingKey).some((key) => !acknowledged.has(key))) throw new Error("Operator must acknowledge every correction finding before approval");
@@ -1511,10 +1526,10 @@ export class MonthlyContentRepository {
       // The saved title lives on lessons.title, not in the version content: without it the editor reopens with the
       // calendar default title and a later save reverts the Operator's title fix.
       ...(lesson.content ? { content: { ...lesson.content, ...(!lesson.content.title && lesson.lesson_title ? { title: lesson.lesson_title } : {}) } } : {}),
-      quality: { ...lesson.quality_report, ...(lesson.quality_acknowledgement ? { acknowledged: lesson.quality_acknowledgement } : {}) },
+      quality: { ...activeQualityReport(lesson.quality_report), ...(lesson.quality_acknowledgement ? { acknowledged: lesson.quality_acknowledgement } : {}) },
       ...(lesson.status !== "approved" && isGenerationFailure(lesson.generation_error) ? { generationFailure: {
         failedAt: lesson.generation_error.failedAt, attempts: lesson.generation_error.attempts,
-        report: { severe: lesson.generation_error.report.severe, light: lesson.generation_error.report.light },
+        report: activeQualityReport({ severe: lesson.generation_error.report.severe, light: lesson.generation_error.report.light }),
         candidate: lesson.generation_error.candidate
       } } : {})
     }));

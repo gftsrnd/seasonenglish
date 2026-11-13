@@ -67,7 +67,7 @@ it("requires A1 opening support and rejects reading options which only differ by
  expect(validateMonthlyFinalReadingOutput(reading,f.input)).toEqual(expect.arrayContaining([expect.objectContaining({path:"reading.questions.0.options"})]));
 });
 
-it("flags reading length bias and copied grammar examples before the full exam is assembled", () => {
+it("flags copied grammar examples but not a correct option that is the longest (length rule removed 13/11)", () => {
   const {input} = fixture();
   const terms = ["report", "plan", "call", "meeting"];
   input.targets.reading = terms.map(word => ({id: word, code: word, word, type: "noun", meaning: word}));
@@ -79,10 +79,11 @@ it("flags reading length bias and copied grammar examples before the full exam i
     correctIndex: 0,
     explanation: "The meaning matches the context."
   }));
-  expect(validateMonthlyFinalReadingOutput({reading: {questions}}, input)).toEqual(expect.arrayContaining([
-    expect.objectContaining({path: "reading.questions", message: expect.stringContaining("uniquely longest")}),
+  const issues = validateMonthlyFinalReadingOutput({reading: {questions}}, input);
+  expect(issues).toEqual(expect.arrayContaining([
     expect.objectContaining({path: "reading.questions.0", message: expect.stringContaining("taught grammar example")})
   ]));
+  expect(issues.filter(issue => issue.path === "reading.questions")).toEqual([]);
 });
 
 it("flags a private sample sentence already visible in the task facts", () => {

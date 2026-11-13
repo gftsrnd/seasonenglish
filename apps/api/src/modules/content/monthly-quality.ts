@@ -1,5 +1,5 @@
 import type { MonthlyCurriculumContract, MonthlyDaySpec } from "@e4s/domain";
-import { monthlyCollocationTranslationIssues, monthlyExerciseTranslationIssues, monthlyRelationMeaningIssue, answerIsClearlyLongestOption, answerIsUniqueLongestOption, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPronunciationExampleText, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
+import { monthlyCollocationTranslationIssues, monthlyExerciseTranslationIssues, monthlyRelationMeaningIssue, bracketHintWords, internalLearnerTerms, inventedWordForms, mentionsWordClass, monthlyPronunciationExampleText, offensiveWords, optionsAreWordClassLabels, validateLessonPublication } from "@e4s/domain";
 import type { LessonPart } from "@e4s/contracts";
 import { monthlyGrammarRoadmapDayIssues } from "./monthly-grammar-roadmap.js";
 import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
@@ -173,7 +173,7 @@ export function evaluateMonthlyLessonQuality(
       }
     }
   }
-  evaluateChoiceAndWording(contract, dayNumber, lesson.parts, lockedPlanValues, severe, light);
+  evaluateChoiceAndWording(contract, dayNumber, lesson.parts, lockedPlanValues, severe);
   // December 2026: wrong keys, a second correct option, wrong voice, an off-label recall item, and Word form options outside the lesson's words.
   severe.push(...monthlyAnswerKeyFindings(contract, day, dayNumber, lesson.parts), ...monthlyWordFormScopeFindings(contract, day, dayNumber, lesson.parts));
   // 12/11: every exercise question with a correct answer carries a short Vietnamese
@@ -282,37 +282,26 @@ function formatExamples(examples: ReadonlyArray<{ word: string; ipa: string }>):
 }
 
 const CHOICE_PARTS = ["listening", "reading", "writing", "word_class", "word_use", "grammar", "speaking"] as const;
-const SINGLE_GROUP = "single";
 
-interface ChoiceEntry { component: string; group: string; label: string; prompt: string; options: string[]; answer: string }
+interface ChoiceEntry { component: string; label: string; prompt: string; options: string[]; answer: string }
 
 /** Every graded choice in the lesson: top-level single questions, items[] and each variants[] entry. */
 export function collectMonthlyChoices(parts: ReadonlyArray<{ code: string; content: Record<string, unknown> }>): ChoiceEntry[] {
   const entries: ChoiceEntry[] = [];
-  const entry = (component: string, group: string, label: string, raw: Record<string, unknown>) => {
+  const entry = (component: string, label: string, raw: Record<string, unknown>) => {
     const options = Array.isArray(raw.options) ? raw.options.filter((value): value is string => typeof value === "string") : [];
-    if (options.length >= 2) entries.push({ component, group, label, prompt: asString(raw.prompt) || asString(raw.question), options, answer: asString(raw.answer) });
+    if (options.length >= 2) entries.push({ component, label, prompt: asString(raw.prompt) || asString(raw.question), options, answer: asString(raw.answer) });
   };
   for (const part of parts) {
     if (!(CHOICE_PARTS as readonly string[]).includes(part.code)) continue;
     const list = Array.isArray(part.content.items) ? part.content.items.filter(isRecord) : [];
-    entry(part.code, list.length ? `${part.code}:top` : SINGLE_GROUP, part.code, part.content);
+    entry(part.code, part.code, part.content);
     list.forEach((item, index) => {
-      entry(part.code, part.code, `${part.code} item ${index + 1}`, item);
-      (Array.isArray(item.variants) ? item.variants.filter(isRecord) : []).forEach((variant, variantIndex) => entry(part.code, part.code, `${part.code} item ${index + 1} variant ${variantIndex + 1}`, variant));
+      entry(part.code, `${part.code} item ${index + 1}`, item);
+      (Array.isArray(item.variants) ? item.variants.filter(isRecord) : []).forEach((variant, variantIndex) => entry(part.code, `${part.code} item ${index + 1} variant ${variantIndex + 1}`, variant));
     });
   }
   return entries;
-}
-
-/**
- * Grammar and word-form options are forms of one word or tense ("was reviewing / reviewed / has reviewed"), so
- * their lengths differ naturally: they count only when the answer is clearly longer and not a form variant
- * (13/11 B1 review). Listening, reading and the other sections keep the strict unique-longest cue.
- */
-const FORM_CHOICE_COMPONENTS = new Set(["grammar", "word_class"]);
-function answerLooksLongest(choice: ChoiceEntry): boolean {
-  return FORM_CHOICE_COMPONENTS.has(choice.component) ? answerIsClearlyLongestOption(choice.options, choice.answer) : answerIsUniqueLongestOption(choice.options, choice.answer);
 }
 
 /** WP3 (distractors, HV-R49), WP7 (internal wording) and WP8 (offensive words) checks shared by daily lessons and reviews. */
@@ -321,8 +310,7 @@ function evaluateChoiceAndWording(
   dayNumber: number,
   parts: ReadonlyArray<{ code: string; content: Record<string, unknown> }>,
   locked: Record<string, Record<string, string>> | undefined,
-  severe: MonthlyQualityFinding[],
-  light: MonthlyQualityFinding[]
+  severe: MonthlyQualityFinding[]
 ): void {
   const grouped = new Map<string, { component: string; code: string; labels: string[]; detail: string; hint: string }>();
   const flag = (code: string, component: string, label: string, detail: string, hint: string) => {
@@ -341,14 +329,6 @@ function evaluateChoiceAndWording(
     if (bracketHintWords(choice.prompt).includes(normalize(choice.answer))) flag("MONTHLY_WORD_FORM_ANSWER_IS_HINT", choice.component, choice.label, choice.answer, "The Word form answer must not simply repeat the base word given in brackets; the bracketed word must need a change of form");
   }
   for (const group of grouped.values()) severe.push(finding(group.code, `${group.hint}. Fix: ${group.labels.join("; ")}`, dayNumber, group.component));
-
-  const groups = new Map<string, ChoiceEntry[]>();
-  for (const choice of choices) if (choice.options.length >= 3) groups.set(choice.group, [...(groups.get(choice.group) ?? []), choice]);
-  for (const [group, list] of groups) {
-    if (list.length < 2) continue;
-    const longest = list.filter((choice) => answerLooksLongest(choice)).length;
-    if (longest / list.length > 0.5) light.push({ severity: "light", code: "MONTHLY_ANSWER_LONGEST_OPTION", message: `In ${group === SINGLE_GROUP ? "the lesson's single-question exercises" : group}, the correct answer is the only longest option in ${longest}/${list.length} questions; make distractors similar in length`, dayNumber, component: list[0]!.component });
-  }
 
   const pasted = [contract.theme.communicationGoal].filter((value): value is string => typeof value === "string");
   for (const part of parts) {

@@ -83,15 +83,6 @@ export function offensiveWords(value: string): string[] {
   return [...new Set(englishTokens(value).filter((token) => OFFENSIVE_WORDS.has(token)))];
 }
 
-/** True when the answer is strictly longer than every other option (a give-away cue). */
-export function answerIsUniqueLongestOption(options: readonly string[], answer: string): boolean {
-  const wanted = answer.trim().toLocaleLowerCase("en-US");
-  const answerOption = options.find((option) => option.trim().toLocaleLowerCase("en-US") === wanted);
-  if (!answerOption || options.length < 3) return false;
-  const length = answerOption.trim().length;
-  return options.every((option) => option === answerOption || option.trim().length < length);
-}
-
 // Auxiliaries, modals, negation and infinitive "to": tense/verb-form options differ by these, so they are
 // naturally longer ("was reviewing" vs "reviewed") without giving the answer away.
 const FORM_FUNCTION_WORDS = new Set(["am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "will", "would", "shall", "should", "can", "could", "may", "might", "must", "not", "to", "going"]);
@@ -116,22 +107,6 @@ export function optionsAreFormVariants(options: readonly string[]): boolean {
   }
   if (prefix.length >= 3) return true;
   return prefix.length >= 2 && options.every((option) => option.trim().split(/\s+/u).length <= 3);
-}
-
-/**
- * Tolerant "answer is the longest" cue for grammar and word-form items (13/11): tense and word forms are
- * naturally different lengths, so it is a cue only when the options are not forms of one word AND the answer
- * is clearly longer than every other option — more than one word longer and more than 30% more characters.
- * Listening/reading keep {@link answerIsUniqueLongestOption}.
- */
-export function answerIsClearlyLongestOption(options: readonly string[], answer: string): boolean {
-  if (!answerIsUniqueLongestOption(options, answer) || optionsAreFormVariants(options)) return false;
-  const wanted = answer.trim().toLocaleLowerCase("en-US");
-  const others = options.filter((option) => option.trim().toLocaleLowerCase("en-US") !== wanted);
-  const wordCount = (value: string) => value.trim().split(/\s+/u).filter(Boolean).length;
-  const longestOther = Math.max(...others.map((option) => option.trim().length));
-  const mostWords = Math.max(...others.map(wordCount));
-  return wordCount(answer) - mostWords > 1 && answer.trim().length > longestOther * 1.3;
 }
 
 const VIETNAMESE_LETTERS = /[ăâđêôơưàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/iu;

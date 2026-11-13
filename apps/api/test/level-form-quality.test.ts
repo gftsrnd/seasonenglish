@@ -87,20 +87,12 @@ describe("level-form content gate (WP5)", () => {
     expect(report.severe).toEqual([expect.objectContaining({ code: "LEVEL_FORM_DUPLICATE_PROMPT", section: "reading", questionIndex: 30 })]);
   });
 
-  it("warns (light, not severe) when the key is the unique longest option in more than 35% of a section", () => {
-    const withLongKeys = (count: number) => neutralQuestions("reading", 40).map((question, index) => index < count
-      ? { ...question, options: question.options.map((option, optionIndex) => optionIndex === question.correctIndex ? `${option} and a much longer tail` : option) }
-      : question);
-    const under = evaluateLevelFormQuality(gateInput({ reading: withLongKeys(14) }));
-    expect(codes(under, "severe")).toEqual([]);
-    expect(codes(under, "light")).not.toContain("LEVEL_FORM_LONGEST_ANSWER_BIAS");
-    const report = evaluateLevelFormQuality(gateInput({ reading: withLongKeys(15) }));
-    expect(report.passed).toBe(true);
+  it("does not warn when the key is the unique longest option, however often (answer-length rule removed 13/11)", () => {
+    const reading = neutralQuestions("reading", 40).map((question) => ({ ...question, options: question.options.map((option, optionIndex) => optionIndex === question.correctIndex ? `${option}zzzz` : option) }));
+    const report = evaluateLevelFormQuality(gateInput({ reading }));
     expect(report.severe).toEqual([]);
-    // (The templated fixture keys also trip the near-duplicate warning; only the longest-option rule matters here.)
-    const longest = report.light.filter((issue) => issue.code === "LEVEL_FORM_LONGEST_ANSWER_BIAS");
-    expect(longest).toEqual([expect.objectContaining({ severity: "light", section: "reading" })]);
-    expect(longest[0]!.message).toContain("15/40");
+    expect(codes(report, "light")).not.toContain("LEVEL_FORM_LONGEST_ANSWER_BIAS");
+    expect(report.light.some((issue) => /dài nhất/u.test(issue.message))).toBe(false);
   });
 
   describe("near-duplicate questions (light)", () => {

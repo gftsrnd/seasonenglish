@@ -39,9 +39,8 @@ describe("GEN07 Reading item rule inside the Reading generation repair loop", ()
   it("feeds the GEN07 findings back as concrete repair issues before assembly", () => {
     const all = [...failing, ...passing];
     const questions = all.map(item => ({termId:item.word,prompt:item.prompt,options:[...item.options],correctIndex:0,explanation:"Meaning in context."}));
-    // Option-length bias is a separate finding; only the GEN07 ones are asserted here.
     const issues = validateMonthlyFinalReadingOutput({reading:{questions}}, input(all.map(item => item.word)));
-    expect(issues.filter(issue => !issue.message.includes("uniquely longest"))).toEqual([
+    expect(issues).toEqual([
       {path:"reading.questions.0.prompt",message:expect.stringContaining("has no question")},
       {path:"reading.questions.1.prompt",message:expect.stringContaining("has no question")},
       {path:"reading.questions.2.termId",message:expect.stringContaining('"ask" must appear verbatim in the context sentence')},

@@ -312,11 +312,12 @@ describe("monthly lesson quality – AI quality plan 11/11 (WP1, WP3, WP7, WP8)"
     expect(codes(evaluateMonthlyLessonQuality(contract(), 1, real))).not.toContain("MONTHLY_INVENTED_WORD_FORM");
   });
 
-  it("WP3: a part where the answer is usually the only longest option gets a light finding", () => {
-    const long = (answer: string, index: number) => ({ id: `r${index}`, prompt: "Chọn đáp án đúng", options: [answer, "No.", "Yes.", "Maybe."], answer, explanation: "Vì đúng." });
-    const cued = lesson({ parts: reviewParts().map((item) => item.code === "reading" ? part("reading", { ...item.content, items: ["The budget is ready now.", "The team is late again.", "The plan changed today."].map(long) }) : item) });
-    expect(evaluateMonthlyLessonQuality(contract(), 2, cued).light.map((row) => row.code)).toContain("MONTHLY_ANSWER_LONGEST_OPTION");
-    expect(evaluateMonthlyLessonQuality(contract(), 2, lesson({ parts: reviewParts() })).light.map((row) => row.code)).not.toContain("MONTHLY_ANSWER_LONGEST_OPTION");
+  it("an answer that is the longest option is not flagged (answer-length rule removed 13/11)", () => {
+    const modal = (index: number) => ({ id: `r${index}`, prompt: "____ you send the report today?", options: ["Can", "Will", "Must", "Could"], answer: "Could", explanation: "Lời đề nghị lịch sự." });
+    const long = (answer: string, index: number) => ({ id: `l${index}`, prompt: "Chọn đáp án đúng", options: [answer, "No.", "Yes.", "Maybe."], answer, explanation: "Vì đúng." });
+    const cued = lesson({ parts: reviewParts().map((item) => item.code === "grammar" ? part("grammar", { ...item.content, items: [0, 1, 2].map(modal) }) : item.code === "reading" ? part("reading", { ...item.content, items: ["The budget is ready now.", "The team is late again.", "The plan changed today."].map(long) }) : item) });
+    const report = evaluateMonthlyLessonQuality(contract(), 2, cued);
+    expect([...report.light, ...report.severe].map((row) => row.code)).not.toContain("MONTHLY_ANSWER_LONGEST_OPTION");
   });
 
   it("WP7: A1–A2 prompts must contain Vietnamese (real sample r1-a1-n8), B1 is unaffected", () => {
@@ -404,20 +405,6 @@ describe("Friday review gate (AI quality round 2, 11/11)", () => {
       parts.set("grammar", { content: { ...parts.get("grammar")!.content, text: "Trong khi các lập trình viên đang kiểm thử ứng dụng, nhà thiết kế cập nhật màn hình." } });
       expect(codes(evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, parts))).toContain("MONTHLY_REVIEW_INSTRUCTION_LANGUAGE");
     }
-  });
-
-  it("tense-form grammar options are not a longest-answer cue; listening/reading still are (13/11 B1 review)", () => {
-    const tense = (id: string, answer: string, options: string[]) => ({ id, prompt: "While the team ____ the report, the manager called.", options, answer, explanation: "Past continuous for the background action." });
-    const grammarItems = [
-      tense("g1", "was reviewing", ["was reviewing", "reviewed", "has reviewed", "is reviewing"]),
-      tense("g2", "were discussing", ["were discussing", "discussed", "have discussed", "discuss"]),
-      tense("g3", "will have been working", ["will have been working", "worked", "has worked", "works"])
-    ];
-    const graded = lesson({ parts: reviewParts().map((item) => item.code === "grammar" ? part("grammar", { ...item.content, items: grammarItems }) : item) });
-    expect(evaluateMonthlyLessonQuality(contract(), 2, graded).light.filter((row) => row.code === "MONTHLY_ANSWER_LONGEST_OPTION").map((row) => row.component)).toEqual([]);
-    const long = (answer: string, index: number) => ({ id: `l${index}`, prompt: "Chọn đáp án đúng", options: [answer, "No.", "Yes.", "Maybe."], answer, explanation: "Vì đúng." });
-    const cued = lesson({ parts: reviewParts().map((item) => item.code === "grammar" ? part("grammar", { ...item.content, items: grammarItems }) : item.code === "listening" ? part("listening", { ...item.content, items: ["The budget is ready now.", "The team is late again.", "The plan changed today."].map(long) }) : item) });
-    expect(evaluateMonthlyLessonQuality(contract(), 2, cued).light.filter((row) => row.code === "MONTHLY_ANSWER_LONGEST_OPTION").map((row) => row.component)).toEqual(["listening"]);
   });
 
   it("A1-A2 reviews keep their Vietnamese prompts (the English-only check does not apply)", () => {

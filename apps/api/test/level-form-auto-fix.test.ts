@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AiTaskRunner } from "@e4s/ai";
 import { aiSlices, neutralQuestions, type FixtureChoice } from "./support/level-form-fixture.js";
 import { assembleLevelFormFromAi, autoFixAssembledLevelForm } from "../src/modules/assessment/routes.js";
-import { levelFormKeyIsUniqueLongest, levelFormRepairRequests, mergeLevelFormRepairs } from "../src/modules/assessment/level-form-auto-fix.js";
+import { levelFormRepairRequests, mergeLevelFormRepairs } from "../src/modules/assessment/level-form-auto-fix.js";
 import { evaluateLevelFormQuality, levelFormQualityInputFromOutput } from "../src/modules/assessment/level-form-quality.js";
 import { monthlyFinalPositionFixNote } from "../src/modules/assessment/monthly-final-builder.js";
 
@@ -82,7 +82,7 @@ describe("level-up auto-fix: targeted AI repair", () => {
 
   it("sends only the offending reading questions in one call, shrinks the checklist and lists the fix", async () => {
     const assembled = assembleLevelFormFromAi("A2", aiSlices(biasedReading(LONG)), { now: NOW });
-    expect(assembled.quality.light.map((issue) => issue.code)).toEqual(expect.arrayContaining(["LEVEL_FORM_LONGEST_ANSWER_BIAS", "LEVEL_FORM_NEAR_DUPLICATE_QUESTIONS"]));
+    expect(assembled.quality.light.map((issue) => issue.code)).toContain("LEVEL_FORM_NEAR_DUPLICATE_QUESTIONS");
     const { runner, runTask } = repairRunner();
     const fixed = await autoFixAssembledLevelForm(runner, assembled);
 
@@ -90,37 +90,30 @@ describe("level-up auto-fix: targeted AI repair", () => {
     const input = runTask.mock.calls[0]![1] as { section: string; items: RepairItem[]; sources: Array<{ sourceId: string }> };
     expect(input.section).toBe("reading");
     expect(input.sources.map((source) => source.sourceId)).toEqual(["passage"]);
-    const sent = input.items.map((item) => item.id);
-    expect(sent).toContain(37);
-    const longestBefore = assembled.shuffled.reading.questions.flatMap((question, id) => levelFormKeyIsUniqueLongest(question) ? [id] : []);
-    expect(sent.filter((id) => id !== 37).every((id) => longestBefore.includes(id))).toBe(true);
-    // Only as many as needed to get under 35 % (+1 in reserve), never the whole section.
-    expect(sent.length).toBeLessThan(longestBefore.length);
+    // A key that is the longest option is not a defect (rule removed 13/11): only the near-duplicate is sent.
+    expect(input.items.map((item) => item.id)).toEqual([37]);
 
     const codes = [...fixed.quality.severe, ...fixed.quality.light].map((issue) => issue.code);
     expect(codes).not.toContain("LEVEL_FORM_LONGEST_ANSWER_BIAS");
     expect(codes).not.toContain("LEVEL_FORM_NEAR_DUPLICATE_QUESTIONS");
     expect(fixed.blueprint.levelFormQuality.warnings).toEqual(fixed.quality.light);
-    expect(fixed.autoFixed).toEqual(expect.arrayContaining([
-      expect.stringMatching(/^Phần Đọc: viết lại lựa chọn nhiễu của \d+ câu/u),
-      "Phần Đọc: thay câu 38 (trùng ý với câu 11) bằng câu hỏi mới về chi tiết khác của bài."
-    ]));
-    // Rewritten items keep prompt and key text; the keys stay balanced.
-    for (const id of sent.filter((item) => item !== 37)) {
-      expect(fixed.shuffled.reading.questions[id]!.prompt).toBe(assembled.shuffled.reading.questions[id]!.prompt);
-      expect(keyText(fixed.shuffled.reading.questions[id]!)).toBe(keyText(assembled.shuffled.reading.questions[id]!));
-    }
+    expect(fixed.autoFixed).toContain("Phần Đọc: thay câu 38 (trùng ý với câu 11) bằng câu hỏi mới về chi tiết khác của bài.");
+    expect(fixed.autoFixed.some((note) => note.includes("lựa chọn nhiễu") || note.includes("dài nhất"))).toBe(false);
+    // The long keys are left exactly as generated.
+    for (const id of LONG) expect(fixed.shuffled.reading.questions[id]!.options).toEqual(assembled.shuffled.reading.questions[id]!.options);
     expect(fixed.shuffled.reading.questions[37]!.prompt).toBe("What will Priya Desai do during the first two weeks?");
     expect(counts(fixed.shuffled.reading.questions)).toEqual([10, 10, 10, 10]);
   });
 
-  it("rejects a rewrite that changes the key and keeps the issue for the Operator", async () => {
-    const assembled = assembleLevelFormFromAi("A2", aiSlices(biasedReading(LONG)), { now: NOW });
-    const { runner, runTask } = repairRunner((item) => item.kind === "replace" ? null : { ...item, options: ["one", "two", "three", "four"] });
-    const fixed = await autoFixAssembledLevelForm(runner, assembled);
-    expect(runTask).toHaveBeenCalledTimes(1);
-    expect(fixed.quality.light.map((issue) => issue.code)).toEqual(expect.arrayContaining(["LEVEL_FORM_LONGEST_ANSWER_BIAS", "LEVEL_FORM_NEAR_DUPLICATE_QUESTIONS"]));
-    expect(fixed.autoFixed.some((note) => note.includes("lựa chọn nhiễu") || note.includes("câu hỏi mới"))).toBe(false);
+  it("rejects a rewrite that changes the key and keeps the issue for the Operator", () => {
+    const questions = neutralQuestions("reading", 40);
+    questions[3] = { ...questions[3]!, options: ["same", "same", "other one", "fourth"], correctIndex: 2 };
+    const output = { listening: { script: "", questions: [] }, reading: { passage: "", questions } };
+    const requests = levelFormRepairRequests(questions, evaluateLevelFormQuality(levelFormQualityInputFromOutput(output)), "reading");
+    expect(requests).toEqual([{ id: 3, kind: "distinct_options", reason: expect.any(String) }]);
+    const merged = mergeLevelFormRepairs(questions, requests, [{ id: 3, prompt: "ignored", options: ["one", "two", "three", "four"], correctIndex: 2 }]);
+    expect(merged.accepted).toEqual([]);
+    expect(merged.questions[3]).toEqual(questions[3]);
   });
 
   it("keeps the generated form when the repair call fails", async () => {
@@ -134,14 +127,19 @@ describe("level-up auto-fix: targeted AI repair", () => {
   });
 
   it("runs at most two rounds, each with only what still fails", async () => {
-    const assembled = assembleLevelFormFromAi("A2", aiSlices(biasedReading(LONG)), { now: NOW });
+    const reading = neutralQuestions("reading", 40, () => 1);
+    for (const id of [3, 5]) reading[id] = { ...reading[id]!, options: ["same", "same", "other one", "fourth"], correctIndex: 2 };
+    const assembled = assembleLevelFormFromAi("A2", aiSlices(reading), { now: NOW });
     let accepted = 0;
-    const { runner, runTask } = repairRunner((item) => item.kind !== "replace" && accepted++ < 1 ? defaultRepair(item) : null);
+    const distinctRepair = (item: RepairItem): RepairItem => ({ ...item, options: item.options.map((option, index) => index === item.correctIndex ? option : `wrong ${item.id} ${index}`) });
+    const { runner, runTask } = repairRunner((item) => item.kind === "distinct_options" && accepted++ < 1 ? distinctRepair(item) : null);
     await autoFixAssembledLevelForm(runner, assembled);
     expect(runTask).toHaveBeenCalledTimes(2);
-    const secondIds = (runTask.mock.calls[1]![1] as { items: RepairItem[] }).items.map((item) => item.id);
     const firstIds = (runTask.mock.calls[0]![1] as { items: RepairItem[] }).items.map((item) => item.id);
-    expect(secondIds).not.toContain(firstIds.find((id) => id !== 37));
+    const secondIds = (runTask.mock.calls[1]![1] as { items: RepairItem[] }).items.map((item) => item.id);
+    expect(firstIds).toHaveLength(2);
+    expect(secondIds).toHaveLength(1);
+    expect(firstIds).toContain(secondIds[0]);
   });
 
   it("repairs duplicate options and duplicate prompts (otherwise severe) in the same call", () => {
@@ -174,30 +172,21 @@ describe("monthly final: deterministic answer-order note", () => {
   });
 });
 
-describe("monthly final listening: targeted option-length repair (GEN17)", () => {
-  it("repairs only the options of the worst message, keeps keys and scripts, one extra call", async () => {
+describe("monthly final listening: no option-length repair (rule removed 13/11)", () => {
+  it("accepts messages whose correct options are all the longest, with no extra AI call", async () => {
     const { buildMonthlyFinalGenerationInput } = await import("../src/modules/assessment/monthly-final-builder.js");
     const { generateMonthlyFinalListening } = await import("../src/modules/assessment/monthly-final-listening-generation.js");
     const { fakeMonthlyFinalAiOutput, frameworkRef, monthlyFinalContract } = await import("./support/monthly-final-fixture.js");
     const input = buildMonthlyFinalGenerationInput(monthlyFinalContract("B1"), frameworkRef);
     const fixture = fakeMonthlyFinalAiOutput(input);
     const lengthen = (message: (typeof fixture.receptive.listening.messages)[number]) => ({ ...message, questions: message.questions.map((question) => ({ ...question, options: question.options.map((option, index) => index === question.correctIndex ? `${option} for the whole team today` : option) })) });
-    const calls: string[] = [];
-    const runner = { runTask: vi.fn(async (_taskId: string, raw: { messageLabel: string }, options: { systemPrompt: string }) => {
-      const message = fixture.receptive.listening.messages.find((item) => item.label === raw.messageLabel)!;
-      const repair = options.systemPrompt.startsWith("Repair only the answer options");
-      calls.push(`${raw.messageLabel}${repair ? ":repair" : ""}`);
-      const long = lengthen(message);
-      return { output: repair ? { ...long, questions: long.questions.map((question) => ({ ...question, options: question.options.map((option, index) => index === question.correctIndex ? option : `${option} for the whole team as well`) })) } : long, metadata: {} };
-    }) } as unknown as AiTaskRunner;
-    const result = await generateMonthlyFinalListening(runner, input, "prompt");
-    expect(calls.filter((call) => call.endsWith(":repair"))).toHaveLength(1);
-    const repairedLabel = calls.find((call) => call.endsWith(":repair"))!.split(":")[0];
+    const runTask = vi.fn(async (_taskId: string, raw: { messageLabel: string }) => ({ output: lengthen(fixture.receptive.listening.messages.find((item) => item.label === raw.messageLabel)!), metadata: {} }));
+    const result = await generateMonthlyFinalListening({ runTask } as unknown as AiTaskRunner, input, "prompt");
+    expect(runTask).toHaveBeenCalledTimes(2);
     for (const message of result.output.listening.messages) {
       const original = lengthen(fixture.receptive.listening.messages.find((item) => item.label === message.label)!);
       expect(message.script).toBe(original.script);
-      message.questions.forEach((question, index) => expect(question.options[question.correctIndex]).toBe(original.questions[index]!.options[original.questions[index]!.correctIndex]));
-      if (message.label === repairedLabel) expect(message.questions.some(levelFormKeyIsUniqueLongest)).toBe(false);
+      expect(message.questions.map((question) => question.options)).toEqual(original.questions.map((question) => question.options));
     }
   });
 });

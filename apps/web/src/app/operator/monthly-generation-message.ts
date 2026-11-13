@@ -94,7 +94,6 @@ function monthlyFinalIssueAreas(reason: unknown): string[] {
   const add = (area: string) => { if (!areas.includes(area)) areas.push(area); };
   for (const text of texts) {
     if (/exact matches in this passage|spelled exactly as in this pool|read.?aloud/iu.test(text)) add("phần Đọc to (thiếu từ luyện âm)");
-    if (/uniquely longest|comparable lengths/iu.test(text)) add(/reading/iu.test(text) ? "phần Đọc (đáp án đúng dài hơn các lựa chọn)" : "phần Nghe (đáp án đúng dài hơn các lựa chọn)");
   }
   return areas;
 }

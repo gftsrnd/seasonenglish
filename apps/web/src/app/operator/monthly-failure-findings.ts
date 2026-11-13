@@ -96,7 +96,6 @@ function describeFinding(finding: MonthlyQualityFindingView, context: MonthlyFin
         const options = [...(segment.rest ?? "").split(" are all correct")[0]!.matchAll(/"([^"]+)"/gu)].map((match) => quote(match[1]!));
         return `Có nhiều lựa chọn cùng đúng${options.length ? ` (${options.join(", ")})` : ""}; viết lại câu hoặc thay các lựa chọn sai cho rõ.`;
       }) ?? single("Có nhiều lựa chọn cùng đúng; viết lại câu hoặc thay các lựa chọn sai cho rõ.");
-    case "MONTHLY_ANSWER_LONGEST_OPTION": return single("Đáp án đúng thường là lựa chọn dài nhất; viết các lựa chọn dài gần bằng nhau.");
     case "MONTHLY_COMPONENT_MISSING": return single("Thiếu phần này; hãy soạn thêm.");
     case "MONTHLY_CORE_TERM_MISSING": return single(`Thiếu từ trọng tâm ${quote(message.split(" is required")[0]!.trim())} theo kế hoạch; thêm thẻ từ này.`);
     case "MONTHLY_SYNONYM_OR_ANTONYM_MISSING": return single(`Từ ${quote(message.split(" is missing")[0]!.trim())} chưa có từ đồng nghĩa hoặc trái nghĩa; thêm một từ.`);

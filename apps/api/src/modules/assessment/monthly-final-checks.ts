@@ -33,7 +33,7 @@ const TITLES: Record<MonthlyFinalGenCode, string> = {
   GEN14: "Khóa key và rubric trước khi phát hành",
   GEN15: "Mỗi câu có giải thích; câu nghe có trích đoạn bằng chứng",
   GEN16: "Lựa chọn có hình thức tương đương, không mẹo vô nghĩa",
-  GEN17: "Không tạo quy luật đoán theo độ dài hoặc vị trí A/B/C",
+  GEN17: "Không tạo quy luật đoán theo vị trí A/B/C",
   GEN18: "Gói học viên không chứa key, script, bài mẫu",
   GEN19: "Không có câu hỏi thích ứng hay gợi ý trong khi thi",
   GEN20: "Chưa có audio đã nghe soát thì chưa phát hành Listening",
@@ -393,12 +393,6 @@ function gen17(context: Context): Result {
       if (run > 3) { problems.push(`${code}: ${run} câu liền có cùng đáp án`); break; }
     }
     if (n >= 6 && answers.every((answer, index) => answer === ["A", "B", "C"][index % 3])) problems.push(`${code}: đáp án theo chu kỳ A-B-C`);
-    const longest = items.filter(({ task }) => {
-      const lengths = (task.options ?? []).map((option) => option.label.trim().length);
-      const correct = task.options?.findIndex((option) => option.value === task.correctAnswer) ?? -1;
-      return correct >= 0 && lengths.every((length, index) => index === correct || length < lengths[correct]!);
-    }).length;
-    if (n >= 4 && longest / n > 0.5) problems.push(`${code}: đáp án đúng dài nhất ở ${longest}/${n} câu`);
   }
   return problems.length ? fail(problems) : pass(summaries.join(" · ") || "Không có câu khách quan.");
 }
