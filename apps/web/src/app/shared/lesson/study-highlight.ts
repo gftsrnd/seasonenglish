@@ -70,7 +70,8 @@ function pieceKind(piece: string): PieceKind | undefined {
   if (ENDING.test(value)) return "ending";
   if (VERB_PLACEHOLDER.test(value)) return "verb";
   const words = value.split(/\s+/u);
-  if (words.every((word) => AUX_WORDS.has(word)) && !(words.length === 1 && words[0] === "to")) return "aux";
+  // "do not", "is not", "will not": the full negative counts as the auxiliary.
+  if (words.every(isForm) && !words.every((word) => word === "to" || word === "not")) return "aux";
   if (pairForms(words)) return "pair";
   return undefined;
 }

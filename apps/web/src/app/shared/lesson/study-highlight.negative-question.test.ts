@@ -21,4 +21,13 @@ describe("negative and question forms of to be", () => {
     const line = "Subject + am/is/are + (not) + thành phần; Yes, I am. / No, he isn't.";
     expect(show(grammarFormulaSegments(line, grammarExampleMatcher([line])))).toBe("Subject + [am/is/are] + (not) + thành phần; Yes, I am. / No, he isn't.");
   });
+
+  it("treats full negatives (do not, does not, is not) like their short forms", () => {
+    const line = "Subject + do not/does not + base verb";
+    const m = grammarExampleMatcher([line]);
+    expect(show(grammarFormulaSegments(line, m))).toBe("Subject + [do not/does not] + [base verb]");
+    expect(show(grammarExampleSegments("We do not send the file.", m))).toBe("We [do] [not] [send] the file.");
+    const progressive = "Subject + is not + V-ing";
+    expect(show(grammarExampleSegments("He is not using it.", grammarExampleMatcher([progressive])))).toBe("He [is] [not] [using] it.");
+  });
 });
