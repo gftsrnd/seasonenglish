@@ -42,14 +42,15 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, image
     if (!correct && !timedOut) {
       play("error");
       setCombo(1);
-      setNotice(`Chưa đúng · Thử lại từ “${word.english}”.`);
+      // Never reveal the word before time runs out (13/11); the answer is shown only on timeout.
+      setNotice("Chưa đúng · Thử lại nhé.");
       setTyped("");
       return;
     }
     const nextAnswers = [...answers, { wordId: word.id, answer, attempts: 1, usedHint: false, combo }];
     const nextEvents = timedOut ? [...events, { type: "timeout" as const, wordId: word.id, answer }] : events;
     if (correct) { play("success"); setScore((value) => value + 10 * combo); setCombo((value) => Math.min(5, value + 1)); setNotice(`Đúng · ${word.english}`); }
-    else { play(timedOut ? "warning" : "error"); setCombo(1); setNotice(timedOut ? `Hết giờ · ${word.english}` : `Chưa đúng · Đáp án đúng: ${word.english}`); }
+    else { play(timedOut ? "warning" : "error"); setCombo(1); setNotice(timedOut ? `Hết giờ · Đáp án: ${word.english}` : `Chưa đúng · Đáp án đúng: ${word.english}`); }
     transitioning.current = true;
     setLocked(true);
     setAnswers(nextAnswers);

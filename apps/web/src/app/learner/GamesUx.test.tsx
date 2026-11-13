@@ -396,7 +396,7 @@ describe("learner game visual and interaction regressions", () => {
       for (const key of "rol") fireEvent.keyDown(window, { key });
       expect(screen.queryByText(/Chưa đúng/)).not.toBeInTheDocument();
       fireEvent.keyDown(window, { key: "x" });
-      expect(screen.getByText(/Chưa đúng · Thử lại từ/)).toBeInTheDocument();
+      expect(screen.getByText("Chưa đúng · Thử lại nhé.")).toBeInTheDocument();
       expect(container.querySelectorAll('[data-testid="typing-character"]:not(:empty)')).toHaveLength(0);
       act(() => { vi.advanceTimersByTime(1_500); });
       expect(onFinish).not.toHaveBeenCalled();
