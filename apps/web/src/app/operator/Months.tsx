@@ -657,8 +657,7 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
   return <OperatorPage title={`${kindLabel} ${dateLabel}`} hideRouteBack><PageTitle actions={<div className="row operator-page-title-actions">
     {onApprove && <Button primary className="operator-lesson-approve-button" disabled={busy} onClick={() => void onApprove()}><Check className="operator-button-icon" size={16} strokeWidth={2.5} aria-hidden="true" />Duyệt bài</Button>}
     {/* Severe findings keep the normal approval blocked; the Operator may still approve on purpose, after a warning. */}
-    {!onApprove && onApproveAnyway && <Button primary className="operator-lesson-approve-button" disabled aria-describedby={`monthly-approve-blocked-${lesson.lessonNumber}`}><Check className="operator-button-icon" size={16} strokeWidth={2.5} aria-hidden="true" />Duyệt bài</Button>}
-    {!onApprove && onApproveAnyway && <Button className="operator-lesson-approve-anyway-button" disabled={busy} onClick={() => void onApproveAnyway()}>Vẫn duyệt (còn {draftSevere} lỗi nặng)</Button>}
+    {!onApprove && onApproveAnyway && <Button className="btn-danger operator-lesson-approve-anyway-button" disabled={busy} aria-describedby={`monthly-approve-blocked-${lesson.lessonNumber}`} onClick={() => void onApproveAnyway()}>Vẫn duyệt (còn {draftSevere} lỗi nặng)</Button>}
     {!onApprove && onApproveAnyway && <span id={`monthly-approve-blocked-${lesson.lessonNumber}`} className="sr-only">Còn {draftSevere} lỗi nặng nên chưa duyệt bình thường được.</span>}
     {onRegenerate && <Button danger disabled={busy} onClick={() => void onRegenerate()}><Sparkles className="operator-button-icon" size={16} aria-hidden="true" />{busy ? "Đang sinh…" : "Sinh lại bằng AI"}</Button>}
     {onEdit && <Button className="operator-lesson-edit-button" disabled={busy} onClick={() => onEdit()}><Pencil className="operator-button-icon" size={16} aria-hidden="true" />Sửa tay</Button>}

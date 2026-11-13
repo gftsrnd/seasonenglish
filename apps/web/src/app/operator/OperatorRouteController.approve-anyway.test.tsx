@@ -40,7 +40,8 @@ describe("approve a monthly day despite severe findings (13/11)", () => {
     const user = userEvent.setup();
     const client = renderDay(day([severeFinding], "failed"));
     const anyway = await screen.findByRole("button", { name: "Vẫn duyệt (còn 1 lỗi nặng)" });
-    expect(screen.getByRole("button", { name: "Duyệt bài" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Duyệt bài" })).not.toBeInTheDocument();
+    expect(anyway).toHaveClass("btn-danger");
 
     await user.click(anyway);
     const dialog = await screen.findByRole("dialog", { name: "Vẫn duyệt bài học?" });
