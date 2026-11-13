@@ -21,20 +21,15 @@ function LessonWithExperience({ lesson }: { lesson: any }) {
 }
 
 describe("learner lesson study content", () => {
-  it("keeps the exact IPA mouth form closed until the right-side icon is opened", async () => {
-    const user = userEvent.setup();
+  it("shows the exact A1–A2 IPA mouth form inline, with no smiley toggle button", () => {
     const lesson = {
-      id: "lesson-mouth-form-opt-in", title: "Sound practice", dayNumber: 1, weekNumber: 1, weekTopic: "Work",
+      id: "lesson-mouth-form-inline", title: "Sound practice", dayNumber: 1, weekNumber: 1, weekTopic: "Work",
       durationMinutes: 10, cefr: "A1",
       content: { parts: [{ code: "pronunciation", title: "Phát âm", content: { focus: "/f/", words: [{ word: "fine", ipa: "/faɪn/" }] } }] },
       progress: { status: "in_progress", completedPartCodes: ["pronunciation"], evidence: {} }
     } as any;
     render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
-    const toggle = screen.getByRole("button", { name: "Xem khẩu hình âm /f/" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("img", { name: /răng trên chạm nhẹ môi dưới/i })).not.toBeInTheDocument();
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByRole("button", { name: /khẩu hình/iu })).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: /răng trên chạm nhẹ môi dưới/i })).toHaveAttribute("src", "/media/ipa-mouth-form/f%20(file).png");
   });
 
@@ -644,10 +639,11 @@ describe("learner lesson study content", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Từ bao trùm: accident/ }));
     const modal = screen.getByRole("dialog", { name: "Từ bao quát" });
-    const entries = modal.querySelectorAll(".vocabulary-relation-audio-item");
-    // The lesson word is already on the card; the umbrella popup lists only the other words.
-    expect(entries).toHaveLength(1);
-    expect(entries[0]).toHaveTextContent("slipped");
+    const entries = modal.querySelectorAll(".vocabulary-relation-word-card");
+    // The umbrella word card first; the lesson word is already on the card, so only the other words follow.
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toHaveTextContent("accident");
+    expect(entries[1]).toHaveTextContent("slipped");
     fireEvent.click(screen.getByRole("button", { name: "Nghe từ bao trùm: accident" }));
     fireEvent.click(screen.getByRole("button", { name: "Nghe từ cùng nhóm: slipped" }));
     expect(speak).toHaveBeenCalledWith("accident");

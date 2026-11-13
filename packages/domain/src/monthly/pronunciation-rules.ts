@@ -11,6 +11,15 @@
 import type { CefrLevel } from "@e4s/contracts";
 import { findMonthlyPronunciationCatalogItem, monthlyPronunciationCatalogKey } from "./pronunciation-catalog.js";
 
+export interface MonthlyPronunciationRuleCore {
+  /** Which written ending the example words carry. */
+  ending: "s" | "ed";
+  patternEn: string;
+  patternVi: string;
+  /** The sound the ending takes, in slashes (e.g. "/t/"). */
+  result: string;
+}
+
 export interface MonthlyPronunciationRule {
   ruleVi: string;
   ruleEn: string;
@@ -18,6 +27,11 @@ export interface MonthlyPronunciationRule {
   rememberEn: string;
   mistakeVi: string;
   mistakeEn: string;
+  /**
+   * The rule core shown as a small formula ("voiceless sound … + -ed → /t/"), only for the
+   * -s/-es and -ed ending items whose example words show the ending deterministically.
+   */
+  core?: MonthlyPronunciationRuleCore;
   /** Prompt-only generation/QA caution (English). */
   caution?: string;
 }
@@ -40,6 +54,7 @@ export const MONTHLY_PRONUNCIATION_RULES: Readonly<Record<string, MonthlyPronunc
     rememberEn: "Hand on your throat: if the last sound does not buzz (p, t, k, f), the -s does not buzz either → /s/.",
     mistakeVi: "Bỏ hẳn đuôi -s (\"two report\") hoặc đọc thành \"xờ\" kéo dài thêm âm tiết.",
     mistakeEn: "Dropping the -s (\"two report\") or adding an extra \"sờ\" syllable.",
+    core: { ending: "s", patternEn: "voiceless sound /p t k f θ/ + -s", patternVi: "âm vô thanh /p t k f θ/ + -s", result: "/s/" },
     caution: ENDING_CAUTION
   },
   "b1-s-z": {
@@ -49,6 +64,7 @@ export const MONTHLY_PRONUNCIATION_RULES: Readonly<Record<string, MonthlyPronunc
     rememberEn: "If the last sound buzzes (a vowel, l, n, m, d, g, v…), the -s buzzes too → /z/.",
     mistakeVi: "Đọc mọi đuôi -s thành /s/ (plans → /plæns/) hoặc bỏ mất đuôi.",
     mistakeEn: "Reading every -s as /s/ (plans → /plæns/) or dropping it.",
+    core: { ending: "s", patternEn: "vowel or voiced sound + -s", patternVi: "nguyên âm hoặc âm hữu thanh + -s", result: "/z/" },
     caution: ENDING_CAUTION
   },
   "b1-s-iz": {
@@ -58,6 +74,7 @@ export const MONTHLY_PRONUNCIATION_RULES: Readonly<Record<string, MonthlyPronunc
     rememberEn: "When the word already ends in a hissing sound (s, z, sh, ch, j), add a whole syllable /ɪz/.",
     mistakeVi: "Không thêm âm tiết (offices đọc như office) hoặc thêm /ɪz/ cả sau từ không có âm xuýt (works → /wɜːkɪz/).",
     mistakeEn: "Not adding the syllable (offices sounds like office) or adding /ɪz/ where there is no hissing sound (works → /wɜːkɪz/).",
+    core: { ending: "s", patternEn: "hissing sound /s z ʃ ʒ tʃ dʒ/ + -es", patternVi: "âm xuýt /s z ʃ ʒ tʃ dʒ/ + -es", result: "/ɪz/" },
     caution: `${ENDING_CAUTION} An /ɪz/ example must end in /s z ʃ ʒ tʃ dʒ/ before the ending.`
   },
   "b1-s-contraction": {
@@ -76,6 +93,7 @@ export const MONTHLY_PRONUNCIATION_RULES: Readonly<Record<string, MonthlyPronunc
     rememberEn: "If the last sound does not buzz (p, k, f, s, sh, ch), -ed does not buzz → /t/, with no extra syllable.",
     mistakeVi: "Đọc mọi -ed thành /ɪd/ (helped → \"hel-pid\") hoặc nuốt mất /t/ cuối.",
     mistakeEn: "Reading every -ed as /ɪd/ (helped → \"hel-pid\") or dropping the final /t/.",
+    core: { ending: "ed", patternEn: "voiceless sound /p k f s ʃ tʃ θ/ + -ed", patternVi: "âm vô thanh /p k f s ʃ tʃ θ/ + -ed", result: "/t/" },
     caution: `${ENDING_CAUTION} Never use a verb whose base ends in /t/ or /d/ (wanted, needed) for the /t/ item.`
   },
   "b1-ed-d": {
@@ -85,6 +103,7 @@ export const MONTHLY_PRONUNCIATION_RULES: Readonly<Record<string, MonthlyPronunc
     rememberEn: "If the last sound buzzes (a vowel, l, n, m, b, g, v, z), -ed buzzes → /d/, with no extra syllable.",
     mistakeVi: "Thêm âm tiết (planned → \"plan-nid\") hoặc đọc thành /t/ mạnh.",
     mistakeEn: "Adding a syllable (planned → \"plan-nid\") or saying a strong /t/.",
+    core: { ending: "ed", patternEn: "vowel or voiced sound + -ed", patternVi: "nguyên âm hoặc âm hữu thanh + -ed", result: "/d/" },
     caution: `${ENDING_CAUTION} Never use a verb whose base ends in /t/ or /d/ for the /d/ item.`
   },
   "b1-ed-id": {
@@ -94,6 +113,7 @@ export const MONTHLY_PRONUNCIATION_RULES: Readonly<Record<string, MonthlyPronunc
     rememberEn: "Only a base word ending in the sound /t/ or /d/ gets the extra syllable /ɪd/.",
     mistakeVi: "Dùng /ɪd/ cho mọi động từ (worked → \"wơ-kid\").",
     mistakeEn: "Using /ɪd/ for every verb (worked → \"wer-kid\").",
+    core: { ending: "ed", patternEn: "/t/ or /d/ + -ed", patternVi: "/t/ hoặc /d/ + -ed", result: "/ɪd/" },
     caution: `${ENDING_CAUTION} An /ɪd/ example must have /t/ or /d/ before the ending.`
   },
   "b1-ed-link": {
@@ -709,11 +729,17 @@ export interface MonthlyPronunciationRuleCopy {
   remember: string;
   mistakeLabel: string;
   mistake: string;
+  /** Rule core as a formula (pattern → result), when the item has one. */
+  core?: { pattern: string; result: string; ending: "s" | "ed" };
 }
 
 /** The learner-facing rule block in the lesson language. */
 export function monthlyPronunciationRuleCopy(rule: MonthlyPronunciationRule, language: "vi" | "en"): MonthlyPronunciationRuleCopy {
   return language === "en"
-    ? { rule: rule.ruleEn, rememberLabel: "How to remember", remember: rule.rememberEn, mistakeLabel: "Common mistake", mistake: rule.mistakeEn }
-    : { rule: rule.ruleVi, rememberLabel: "Cách nhớ", remember: rule.rememberVi, mistakeLabel: "Lỗi hay gặp", mistake: rule.mistakeVi };
+    ? { rule: rule.ruleEn, rememberLabel: "How to remember", remember: rule.rememberEn, mistakeLabel: "Common mistake", mistake: rule.mistakeEn, ...ruleCore(rule, rule.core?.patternEn) }
+    : { rule: rule.ruleVi, rememberLabel: "Cách nhớ", remember: rule.rememberVi, mistakeLabel: "Lỗi hay gặp", mistake: rule.mistakeVi, ...ruleCore(rule, rule.core?.patternVi) };
+}
+
+function ruleCore(rule: MonthlyPronunciationRule, pattern: string | undefined): Pick<MonthlyPronunciationRuleCopy, "core"> {
+  return rule.core && pattern ? { core: { pattern, result: rule.core.result, ending: rule.core.ending } } : {};
 }

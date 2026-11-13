@@ -90,9 +90,11 @@ export function MeaningPopupControl({ hint, label, lang, variant, children }: {
  * on the card plays the English sentence only, unchanged) plus, for A1–A2
  * examples that carry one, the translate icon with the Vietnamese popup.
  */
-export function GrammarExampleButton({ text, spoken, translation, listenLabel, onPlay }: {
+export function GrammarExampleButton({ text, display, spoken, translation, listenLabel, onPlay }: {
   /** English example as displayed. */
   text: string;
+  /** Optional rendering of `text` (same words, e.g. with the grammar slot marked). */
+  display?: ReactNode;
   /** English text sent to audio/TTS. */
   spoken: string;
   /** Vietnamese translation (A1–A2 only); no translate icon when absent. */
@@ -106,6 +108,6 @@ export function GrammarExampleButton({ text, spoken, translation, listenLabel, o
       type="button"
       aria-label={`${listenLabel}: ${spoken}`}
       onClick={onPlay}
-    ><Volume2 size={14} aria-hidden="true" />{text}</button>
+    ><Volume2 size={14} aria-hidden="true" />{display ?? text}</button>
   </MeaningPopupControl>;
 }

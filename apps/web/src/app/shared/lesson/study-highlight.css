@@ -1,0 +1,7 @@
+/* Grammar / pronunciation study blocks (learner lesson + operator preview). */
+.lesson-grammar-name{margin:0;color:#191510;font-size:1rem;line-height:1.4}
+/* Formula in its own subtle box: a slightly darker tint of the card, rounded like the example chips. */
+.lesson-study-formula-box{width:fit-content;max-width:100%;box-sizing:border-box;border-radius:8px;background:rgba(25,21,16,.05);padding:8px 11px}
+.lesson-study-formula-box .lesson-study-focus{margin:0}
+/* Key slot of a formula and the matching part of the examples: one accent from the palette. */
+.lesson-study-mark{color:var(--primary-dark,#2C5A8C)}

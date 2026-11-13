@@ -178,11 +178,6 @@ details.monthly-final-fold[open]>summary{margin-bottom:8px}
 .operator-monthly-lesson .lesson-study-explanation{margin:0;color:var(--muted)}
 .operator-monthly-lesson .lesson-pronunciation-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .operator-monthly-lesson .lesson-pronunciation-summary{position:relative}
-.operator-monthly-lesson .lesson-pronunciation-mouth{position:relative;flex:0 0 auto;margin-left:auto}
-.operator-monthly-lesson .lesson-pronunciation-mouth__toggle{display:grid;place-items:center;min-width:36px;min-height:36px;border-radius:999px;color:var(--primary)}
-.operator-monthly-lesson .lesson-pronunciation-mouth__panel{position:absolute;z-index:5;right:0;top:calc(100% + 6px);width:min(320px,calc(100vw - 48px));max-width:min(320px,80vw);padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:0 8px 28px rgba(0,0,0,.14);overflow:hidden}
-.operator-monthly-lesson .lesson-pronunciation-mouth__panel img{display:block;width:100%;max-width:100%;height:auto}
-.operator-monthly-lesson .lesson-pronunciation-mouth__panel p{margin:6px 2px 0;font-size:.82rem;line-height:1.4;color:var(--muted)}
 .operator-monthly-lesson .lesson-pronunciation-words{display:flex;flex-wrap:wrap;column-gap:18px;row-gap:12px;margin-top:10px}
 .operator-monthly-lesson .lesson-pronunciation-target-group{display:grid;gap:8px;min-width:0}
 .operator-monthly-lesson .lesson-pronunciation-target-group>div{display:flex;flex-wrap:wrap;gap:8px 12px}
@@ -204,8 +199,7 @@ details.monthly-final-fold[open]>summary{margin-bottom:8px}
 .operator-monthly-lesson .lesson-pronunciation-target-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .operator-monthly-lesson .lesson-pronunciation-target-head p{margin:0}
 .operator-monthly-lesson .lesson-pronunciation-target .lesson-pronunciation-words{display:flex;flex-wrap:wrap;gap:8px 12px;margin:0}
-.operator-monthly-lesson .lesson-pronunciation-target .lesson-pronunciation-mouth__toggle{display:grid;place-items:center;min-width:38px;min-height:38px;border-radius:999px;color:var(--primary)}
-.operator-monthly-lesson .lesson-pronunciation-mouth__inline{width:min(100%,560px);box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.operator-monthly-lesson .lesson-pronunciation-mouth__inline{width:min(100%,320px);box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
 .operator-monthly-lesson .lesson-pronunciation-mouth__inline img{display:block;width:100%;height:auto}
 .operator-monthly-lesson .lesson-pronunciation-mouth__inline p{margin:6px 2px 0;font-size:.85rem;line-height:1.4;color:var(--muted)}
 details.monthly-resource-editor-section>summary{display:flex;align-items:baseline;gap:10px;cursor:pointer;list-style:revert;padding:6px 0}

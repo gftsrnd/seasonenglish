@@ -10,11 +10,12 @@ const show = (code: "grammar" | "pronunciation", content: Record<string, unknown
   cefr="A1" language="vi" copy={learnerLessonCopy.vi} grammarAvailable sectionNumber={1}
   part={{ code, title: code, content } as never} speak={vi.fn()} openVocabularyModal={vi.fn()} />);
 
-it("keeps grammar study compact and places its objective below the formula, without an inline quiz", () => {
+it("keeps grammar study compact and places its objective above the formula box, without an inline quiz", () => {
   const objective = "Nhận biết cách thêm -s cho he, she, it.";
   const {container} = show("grammar", { dailyCode: "A1", objective, formula: "Subject + V / V-s", text: "Dùng thì hiện tại đơn để nói về lịch làm việc.", examples: ["The team meets on Monday."], items: [{prompt: "The team ____.", options:["meets","meet","meeting","met"],answer:"meets"}] });
-  const formula=screen.getByText("Subject + V / V-s");
-  expect(formula.compareDocumentPosition(screen.getByText(objective)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const formula=container.querySelector(".lesson-study-formula-box")!;
+  expect(formula).toHaveTextContent("Subject + V / V-s");
+  expect(screen.getByText(objective).compareDocumentPosition(formula) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(container.querySelector("fieldset")).toBeNull();
   expect(screen.queryByText("The team ____." )).not.toBeInTheDocument();
 });
