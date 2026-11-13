@@ -17,7 +17,26 @@
 .lesson-study-formula-box--wrong{background:#f8e3de;border:1px solid #e6b7ad}
 .lesson-study-formula-box--wrong .lesson-study-formula-label,.lesson-study-formula-box--wrong .lesson-study-focus{color:#7d271b}
 .lesson-study-formula-box--wrong .lesson-study-focus strong{text-decoration:line-through;text-decoration-thickness:1px}
-/* Wrong/right example pair in one chip: the wrong sentence red and struck through, the right one green. */
-.lesson-example-pair{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}
+/* Error-check formula: one neutral band, a row per rule. The rule's wrong form sits right after it (red, struck
+   through, a small ✗) and its notes are muted; on narrow screens the wrong form drops below, indented under its rule. */
+.lesson-grammar-rules .lesson-study-focus{display:grid;gap:6px}
+.lesson-grammar-rule{margin:0;display:flex;flex-wrap:wrap;justify-content:center;align-items:baseline;gap:2px 10px}
+.lesson-grammar-rule-note{font-weight:400;font-size:.92em;color:var(--muted,#6b645b)}
+.lesson-grammar-rule-wrong{display:inline-flex;align-items:baseline;gap:4px;font-weight:400;color:#9b2c1d}
+.lesson-grammar-rule-wrong s{text-decoration-thickness:1px}
+.lesson-grammar-rule-wrong-mark{font-size:.85em;font-weight:700}
+@media(max-width:560px){
+  .lesson-grammar-rules{text-align:left}
+  .lesson-grammar-rule{justify-content:flex-start}
+  .lesson-grammar-rule-wrong{padding-left:1.25em}
+}
+/* Wrong/right example pair in one chip: a small label before each part; the wrong sentence red and struck through,
+   the right one green. */
+.lesson-example-pair{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px}
+.lesson-example-pair-part{display:inline-flex;align-items:baseline;gap:5px}
+.lesson-example-pair-label{font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.lesson-example-pair-label--wrong{color:#9b2c1d}
+.lesson-example-pair-label--right{color:#294414}
+.lesson-example-pair-arrow{color:var(--muted,#6b645b)}
 .lesson-example-wrong{color:#7d271b;text-decoration:line-through;text-decoration-thickness:1px}
 .lesson-example-right{color:#294414}

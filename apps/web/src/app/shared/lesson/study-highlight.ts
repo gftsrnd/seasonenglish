@@ -123,7 +123,7 @@ function pairForms(words: readonly string[]): string[] | undefined {
   return undefined;
 }
 
-const cleanPieceText = (piece: string) => piece.trim().toLocaleLowerCase("en").replace(/’/gu, "'").replace(/[?.!,…]+$/u, "");
+const cleanPieceText = (piece: string) => piece.trim().toLocaleLowerCase("en").replace(/’/gu, "'").replace(/^\[(.*)\]$/u, "$1").replace(/[?.!,…]+$/u, "");
 const pieceWords = (piece: string) => cleanPieceText(piece).split(/\s+/u).filter(Boolean);
 const withoutNotes = (text: string) => text.replace(/\([^)]*\)/gu, " ").replace(/\s+/gu, " ").trim();
 
@@ -341,7 +341,11 @@ function clauses(line: string): { parts: string[]; seps: string[] } {
 export function grammarExampleMatcher(lines: readonly string[]): GrammarExampleMatcher | null {
   const matcher: GrammarExampleMatcher = { aux: new Set(), follow: [], subjectVerb: false, verbs: new Set(), words: new Set(), phrases: [], tenseForms: [], ed: false, ing: false, sForm: false, reporting: false, toInf: false };
   let any = false;
-  for (const raw of lines) {
+  // Error-check / "(NOT …)" lines are read rule by rule, as the formula box shows them (the wrong forms never count).
+  const patterns = lines.flatMap((line) => ERROR_CHECK_LABEL.test(line) || NOT_NOTE.test(line)
+    ? errorCheckRules(line.replace(/\s+/gu, " ").trim().replace(ERROR_CHECK_LABEL, "")).map((rule) => readErrorCheckRule(rule).pattern).filter(Boolean)
+    : [line]);
+  for (const raw of patterns) {
     let lineSubjectVerb = false;
     let linePast = false;
     for (const line of clauses(raw).parts.map(readFormulaLine)) {
@@ -607,7 +611,9 @@ export function pronunciationTargetSegments(ipa: string | undefined, target: str
 
 // ------------------------------------------------------------------ formula boxes (correct / wrong, two structures)
 
-export interface GrammarFormulaBox { tone: "neutral" | "correct" | "wrong"; label?: string; lines: string[] }
+/** One rule row of an error-check formula: the pattern (highlighted), its notes (muted) and its own wrong forms (red). */
+export interface GrammarFormulaRule { pattern: string; notes: string[]; wrong: string[] }
+export interface GrammarFormulaBox { tone: "neutral" | "correct" | "wrong"; label?: string; lines: string[]; rules?: GrammarFormulaRule[] }
 
 const CORRECT_MARKER = /^(?:✓|✔|✅|(?:đúng|correct|right)\s*:)/iu;
 const MARKER = /(✓|✔|✅|✗|✘|❌|(?<![\p{L}])(?:đúng|sai|correct|right|wrong|incorrect|not)\s*:)/iu;
@@ -629,6 +635,16 @@ function errorCheckRules(text: string): string[] {
     else rules.push(part);
   });
   return rules.map((rule) => rule.trim()).filter(Boolean);
+}
+
+/** "[subject] + state verb (NOT is knowing) (note)" → the pattern, its notes and the rule's own wrong forms. */
+function readErrorCheckRule(rule: string): GrammarFormulaRule {
+  const wrong = [...rule.matchAll(NOT_NOTES)].map((found) => found[1]!.trim()).filter(Boolean);
+  const rest = rule.replace(NOT_NOTES, " ");
+  // "(not)" is a slot of the pattern; every other parenthesis is a note.
+  const notes = (rest.match(/\([^)]*\)/gu) ?? []).filter((note) => !/^\(\s*not\s*\)$/iu.test(note));
+  const pattern = notes.reduce((value, note) => value.replace(note, " "), rest).replace(/\s+/gu, " ").trim();
+  return { pattern, notes, wrong };
 }
 
 /** "Wrong: She work in Hanoi. Right: She works in Hanoi." (also Sai:/Đúng:, Incorrect:/Correct:, ✗/✓, either order). */
@@ -661,19 +677,11 @@ export function grammarFormulaBoxes(formula: string, language: "vi" | "en", spli
   const text = formula.replace(/\s+/gu, " ").trim();
   const single: GrammarFormulaBox[] = [{ tone: "neutral", lines: splitLines(formula) }];
   if (!text) return single;
-  // (c) "Error check: …" and "(NOT …)" rules: never a two-structure compare; each rule on its own line.
-  const errorCheck = ERROR_CHECK_LABEL.test(text);
-  if (errorCheck || NOT_NOTE.test(text)) {
-    const rules = errorCheckRules(text.replace(ERROR_CHECK_LABEL, ""));
-    const wrong = rules.flatMap((rule) => [...rule.matchAll(NOT_NOTES)].map((found) => found[1]!.trim()).filter(Boolean));
-    const correct = rules.map((rule) => rule.replace(NOT_NOTES, "").replace(/\s+/gu, " ").trim()).filter(Boolean);
-    if (wrong.length && correct.length) {
-      return [
-        { tone: "correct", label: language === "en" ? "Correct" : "Đúng", lines: correct },
-        { tone: "wrong", label: language === "en" ? "Incorrect" : "Sai", lines: wrong }
-      ];
-    }
-    if (errorCheck) return [{ tone: "neutral", lines: correct.length ? correct : [text] }];
+  // (c) "Error check: …" and "(NOT …)" rules: one neutral box, never a two-structure compare, one row per rule; a
+  // "(NOT …)" wrong form stays on its own rule's row and other notes in parentheses become that row's muted notes.
+  if (ERROR_CHECK_LABEL.test(text) || NOT_NOTE.test(text)) {
+    const rules = errorCheckRules(text.replace(ERROR_CHECK_LABEL, "")).map(readErrorCheckRule).filter((rule) => rule.pattern || rule.wrong.length);
+    if (rules.length) return [{ tone: "neutral", lines: rules.map((rule) => rule.pattern), rules }];
   }
   // (b) correct vs wrong pattern.
   const parts = text.split(MARKER);
