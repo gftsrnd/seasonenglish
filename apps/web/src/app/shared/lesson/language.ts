@@ -92,6 +92,8 @@ export interface LearnerLessonCopy {
   };
   status: {
     wrongRetry: string;
+    /** Notice under an objective question after a first wrong answer (same wording at every level, in the lesson language). */
+    retryNotice: string;
     submitted: string;
     /** Speaking recording submitted, waiting for a mark: the one status line after submit. */
     submittedSpeaking: string;
@@ -212,7 +214,7 @@ export const learnerLessonCopy: Record<LearnerLessonLanguage, LearnerLessonCopy>
       sendAppeal: "Xác nhận gửi kháng nghị", cancel: "Huỷ"
     },
     status: {
-      wrongRetry: "Chưa đúng · còn lượt thử", submitted: "Đã gửi để kiểm tra", submittedSpeaking: "Đã nộp bản ghi âm · đang chờ chấm.", submittedWriting: "Đã nộp câu tự viết · đang chờ chấm.", wrongExhausted: "Đã hết lượt thử",
+      wrongRetry: "Chưa đúng · còn lượt thử", retryNotice: "Chưa đúng, bạn còn 1 lượt thử.", submitted: "Đã gửi để kiểm tra", submittedSpeaking: "Đã nộp bản ghi âm · đang chờ chấm.", submittedWriting: "Đã nộp câu tự viết · đang chờ chấm.", wrongExhausted: "Đã hết lượt thử",
       translated: "Đã xem bản dịch", appealed: "Đã gửi kháng nghị", correct: "Đúng", unanswered: "Chưa trả lời"
     },
     vocabularyPartOfSpeech: (value, word) => {
@@ -290,7 +292,7 @@ export const learnerLessonCopy: Record<LearnerLessonLanguage, LearnerLessonCopy>
       sendAppeal: "Submit appeal", cancel: "Cancel"
     },
     status: {
-      wrongRetry: "Incorrect · try again", submitted: "Submitted for review", submittedSpeaking: "Recording submitted · waiting to be marked.", submittedWriting: "Sentence submitted · waiting to be marked.", wrongExhausted: "No attempts left",
+      wrongRetry: "Incorrect · try again", retryNotice: "Not quite, you have 1 try left.", submitted: "Submitted for review", submittedSpeaking: "Recording submitted · waiting to be marked.", submittedWriting: "Sentence submitted · waiting to be marked.", wrongExhausted: "No attempts left",
       translated: "Translation opened", appealed: "Appeal submitted", correct: "Correct", unanswered: "Not answered"
     },
     vocabularyPartOfSpeech: (value, word) => {

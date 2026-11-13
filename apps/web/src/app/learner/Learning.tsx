@@ -509,6 +509,8 @@ function partStatusNotice(part: LessonPart, evidence: PartEvidence | undefined, 
   if (status === "appealed") return { tone: "info", text: copy.status.appealed };
   const tone = status === "correct" ? "ok" : "warn";
   const feedback = evidence?.feedback?.trim();
+  // The server's stock retry note ("Chưa đúng… còn 1/một lượt thử…") is shown in the lesson language at every level.
+  if (status === "wrong_retry" && (!feedback || /^chưa đúng.*lượt thử/iu.test(feedback))) return { tone, text: copy.status.retryNotice };
   if (feedback) return { tone, text: feedback };
   return partHasVisibleOutcome(evidence) ? { tone, text: partOutcomeLabel(status, copy) } : null;
 }
