@@ -159,10 +159,11 @@ export function evaluateMonthlyLessonQuality(
     if (dayWords.filter(word => exampleText.includes(word.toLocaleLowerCase("en-US"))).length < 2) severe.push(finding("MONTHLY_DAILY_GRAMMAR_WORDS", "Grammar examples must use at least two of today's core words", dayNumber, "grammar"));
     const questions = Array.isArray(grammar.items) ? grammar.items.filter(isRecord) : [];
     if (questions.length < 3 || questions.length > 5) severe.push(finding("MONTHLY_DAILY_GRAMMAR_PRACTICE", "Grammar needs 3–5 practice questions with answers and explanations", dayNumber, "grammar"));
-    for (const question of questions) {
-      const options = Array.isArray(question.options) ? question.options.filter((value): value is string => typeof value === "string") : [];
-      if (!asString(question.prompt) || options.length !== 4 || new Set(options.map(normalize)).size !== 4 || !options.some(option => normalize(option) === normalize(asString(question.answer))) || !asString(question.explanation)) severe.push(finding("MONTHLY_DAILY_GRAMMAR_QUESTION", "Every grammar question needs a prompt, 4 distinct options, an answer copied from them, and an explanation", dayNumber, "grammar"));
-    }
+    questions.forEach((question, index) => {
+      const problems = dailyGrammarQuestionProblems(question);
+      // One finding per broken question, labelled "grammar item N" so the Operator page names and opens that question.
+      if (problems.length) severe.push(finding("MONTHLY_DAILY_GRAMMAR_QUESTION", `Every grammar question needs a prompt, 4 distinct options, an answer copied from them, and an explanation. grammar item ${index + 1}: ${problems.join(", ")}`, dayNumber, "grammar"));
+    });
     if (day.grammarPlan?.recallMilestoneIds.length && !questions.some(question => day.grammarPlan!.recallMilestoneIds.includes(asString(question.milestoneId)))) severe.push(finding("MONTHLY_DAILY_GRAMMAR_RECALL", "Include the locked topic A recall question (every topic B day)", dayNumber, "grammar"));
     for (const issue of monthlyGrammarRoadmapDayIssues(day, contract.cefr, grammar, dayWords)) severe.push(finding(issue.code, issue.message, dayNumber, "grammar"));
     if (pronunciation?.stage !== day.pronunciationPlan?.stage || !monthlyPlanObjectivesMatch(pronunciation?.objective, day.pronunciationPlan?.objective, expected.coreWords)) severe.push(finding("MONTHLY_DAILY_PRONUNCIATION_STAGE", `Pronunciation must teach the locked daily stage and objective. Set pronunciation.stage to "${day.pronunciationPlan?.stage ?? ""}" and pronunciation.objective to exactly "${expected.pronunciationObjective ?? ""}" (copy verbatim)`, dayNumber, "pronunciation"));
@@ -398,6 +399,22 @@ function relationEntriesWithoutMeaning(contract: MonthlyCurriculumContract, core
 function arrayLength(value: unknown): number { return Array.isArray(value) ? value.length : 0; }
 function asString(value: unknown): string { return typeof value === "string" ? value : ""; }
 function normalize(value: string): string { return value.trim().toLocaleLowerCase("en-US"); }
+/** Choice comparison for daily grammar practice: case, repeated spaces and typographic apostrophes never decide a match (same rule as the integrity check and the learner page). */
+function choiceKey(value: string): string { return value.normalize("NFKC").replace(/[‘’ʼ]/gu, "'").replace(/\s+/gu, " ").trim().toLocaleLowerCase("en-US"); }
+
+/** Why a daily grammar practice question is not playable as a 4-option choice; stable English phrases the Operator page translates. */
+export function dailyGrammarQuestionProblems(question: Record<string, unknown>): string[] {
+  const problems: string[] = [];
+  const options = Array.isArray(question.options) ? question.options.filter((value): value is string => typeof value === "string" && Boolean(value.trim())) : [];
+  const answer = asString(question.answer).trim();
+  if (!asString(question.prompt).trim()) problems.push("prompt is missing");
+  if (options.length !== 4) problems.push(`needs 4 options (has ${options.length})`);
+  else if (new Set(options.map(choiceKey)).size !== 4) problems.push("options repeat");
+  if (!answer) problems.push("answer is missing");
+  else if (!options.some(option => choiceKey(option) === choiceKey(answer))) problems.push(`answer "${answer}" is not one of the options`);
+  if (!asString(question.explanation).trim()) problems.push("explanation is missing");
+  return problems;
+}
 function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 
 function samePronunciationExamples(

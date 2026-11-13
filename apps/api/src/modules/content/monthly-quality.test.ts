@@ -63,6 +63,27 @@ describe("monthly lesson quality", () => {
     grammar.objective = "Another objective"; grammar.items = [];
     expect(evaluateMonthlyLessonQuality(plan,1,candidate).severe.map(row => row.code)).toEqual(expect.arrayContaining(["MONTHLY_DAILY_GRAMMAR_OBJECTIVE","MONTHLY_DAILY_GRAMMAR_PRACTICE"]));
   });
+  it("names the broken grammar practice question and why (4175 A1 day 13: answer \"his\" with options my/mine/me/I)", () => {
+    const plan = contract(); plan.planSchemaVersion = 2;
+    const day = plan.daySpecs[0]!;
+    day.newLessonNumber = 1;
+    day.grammarPlan = {code:"A1",objective:"Identify facts in a workplace update",mode:"recognize",milestoneIds:["grammar-step"],recallMilestoneIds:[]};
+    day.pronunciationPlan = {slot:"P1",stage:"recognize",objective:"Identify and repeat the target",targetIds:["sound-1"],exampleIds:day.pronunciationExampleIds,exampleSet:1};
+    const candidate = lesson();
+    const grammar = candidate.parts.find(part => part.code === "grammar")!.content;
+    const good = (i: number) => ({id:"q"+i,prompt:"Chọn dạng đúng " + i,options:["send","sends","sending","sent"],answer:"send",explanation:"The plural subject uses the base form.",milestoneId:"grammar-step"});
+    const real = {id:"b5-4",prompt:"Chọn câu đúng: Whose detail is this? It is ____ detail.",options:["my","mine","me","I"],answer:"his",explanation:"Trước danh từ detail cần tính từ sở hữu his.",milestoneId:"grammar-step"};
+    Object.assign(grammar, {dailyCode:"A1",objective:day.grammarPlan.objective,examples:["We use core-one in our report.","She sends core-two today.","They review the plan every week."],items:[good(1),good(2),good(3),real]});
+    Object.assign(candidate.parts.find(part => part.code === "pronunciation")!.content, {stage:"recognize",objective:day.pronunciationPlan.objective});
+    const findings = evaluateMonthlyLessonQuality(plan,1,candidate).severe.filter(row => row.code === "MONTHLY_DAILY_GRAMMAR_QUESTION");
+    expect(findings.map(row => row.message)).toEqual([expect.stringContaining('grammar item 4: answer "his" is not one of the options')]);
+    // Not a false positive: case, spacing and a typographic apostrophe in the answer still match an option.
+    grammar.items = [good(1),{...good(2),answer:" Send "},{...good(3),options:["Anna's desk","Anna desk","Annas desk","Anna is desk"],answer:"Anna’s desk"},{...real,options:["his","mine","me","I"]}];
+    expect(evaluateMonthlyLessonQuality(plan,1,candidate).severe).toEqual([]);
+    // Only 3 options is still reported: daily grammar practice is 4-option at every level, A1 included.
+    grammar.items = [good(1),good(2),{...good(3),options:["send","sends","sent"]}];
+    expect(evaluateMonthlyLessonQuality(plan,1,candidate).severe.map(row => row.message)).toEqual([expect.stringContaining("grammar item 3: needs 4 options (has 3)")]);
+  });
   it("marks missing learner components and scope drift as severe", () => {
     const report = evaluateMonthlyLessonQuality(contract(), 1, lesson({
       parts: requiredCodes.filter((code) => code !== "speaking").map((code) => part(code))

@@ -115,7 +115,10 @@ function describeFinding(finding: MonthlyQualityFindingView, context: MonthlyFin
     case "MONTHLY_DAILY_GRAMMAR_REPEATED": return single("Có ví dụ ngữ pháp chép lại từ bài trước; viết ví dụ mới.");
     case "MONTHLY_DAILY_GRAMMAR_WORDS": return single("Ví dụ ngữ pháp cần dùng ít nhất 2 từ trọng tâm của hôm nay.");
     case "MONTHLY_DAILY_GRAMMAR_PRACTICE": return single("Phần ngữ pháp cần 3–5 câu luyện có đáp án và lời giải thích.");
-    case "MONTHLY_DAILY_GRAMMAR_QUESTION": return single("Mỗi câu ngữ pháp cần đề bài, 4 lựa chọn khác nhau, đáp án nằm trong các lựa chọn và lời giải thích.");
+    case "MONTHLY_DAILY_GRAMMAR_QUESTION":
+      // 13/11: the gate names the question ("grammar item 4: answer "his" is not one of the options"); older reports do not.
+      return perLabel(afterMarker(message, "explanation. "), (segment) => `${dailyGrammarQuestionProblems(segment.rest ?? "")}; sửa câu này trong Sửa tay.`)
+        ?? single("Mỗi câu ngữ pháp cần đề bài, 4 lựa chọn khác nhau, đáp án nằm trong các lựa chọn và lời giải thích.");
     case "MONTHLY_DAILY_GRAMMAR_RECALL": return single("Thiếu câu ôn lại chủ điểm A theo kế hoạch; thêm một câu.");
     case "MONTHLY_DAILY_GRAMMAR_RECALL_OFF_TOPIC": return single("Câu ôn chủ điểm A chưa kiểm tra đúng điểm ngữ pháp được gắn; viết lại câu này.");
     case "MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH": {
@@ -205,6 +208,18 @@ function optionContaining(parts: readonly Part[], segment: LabelSegment, word: s
 function asList(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }
 function quote(value: string): string { return `“${value}”`; }
 
+/** "answer "his" is not one of the options, explanation is missing" → Vietnamese, in the gate's order. */
+function dailyGrammarQuestionProblems(rest: string): string {
+  const problems = rest.split(/,\s+(?=(?:prompt|needs|options|answer|explanation)\b)/u).map((problem) => {
+    const answer = /^answer "(.*)" is not one of the options$/u.exec(problem);
+    if (answer) return `đáp án ${quote(answer[1]!)} không nằm trong 4 lựa chọn`;
+    const count = /^needs 4 options \(has (\d+)\)$/u.exec(problem);
+    if (count) return `cần đủ 4 lựa chọn (đang có ${count[1]})`;
+    return ({ "prompt is missing": "thiếu đề bài", "options repeat": "có lựa chọn bị trùng", "answer is missing": "chưa chọn đáp án", "explanation is missing": "thiếu lời giải thích" } as Record<string, string>)[problem] ?? problem;
+  });
+  const text = problems.join(", ");
+  return text ? text[0]!.toLocaleUpperCase("vi") + text.slice(1) : "Câu này chưa làm được";
+}
 
 /** Key prefix of the lines built from structural problems (`integrityIssues`), for the editor's jump-to-field. */
 export const MONTHLY_INTEGRITY_LINE_PREFIX = "integrity-";

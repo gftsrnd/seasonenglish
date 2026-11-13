@@ -387,7 +387,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     // The saved draft went through the same quality checks as an AI draft; open it so the Operator sees the result and can approve.
     const severe = report.severe?.length ?? 0;
     toast.show(severe
-      ? { message: `Đã lưu bản nháp ${label}, nhưng còn ${severe} lỗi nặng cần sửa trước khi duyệt.`, tone: "danger" }
+      ? { message: `Đã lưu bản nháp ${label}. Bài còn ${severe} lỗi nặng: xem danh sách ở đầu trang và bấm Sửa ở từng dòng.`, tone: "warn" }
       : { message: `Đã lưu bản nháp ${label}. Kiểm tra rồi bấm Duyệt bài.`, tone: "ok" });
     if (!preview || preview.frameworkId !== editor.frameworkId || preview.dayNumber !== editor.dayNumber) navigate(`${paths.months}/lesson/${editor.frameworkId}/${editor.dayNumber}?month=${month}`);
   }} headingOverride={`${editor.kind === "review" ? "Soạn bài ôn" : "Soạn bài"} ngày ${editor.date ? `${editor.date.slice(8, 10)}/${editor.date.slice(5, 7)}` : `#${editor.dayNumber}`} · ${editorCefr}`} onCancel={() => setEditor(undefined)} uploadMedia={client.uploadContentMedia} busy={busy} /> : null;

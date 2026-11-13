@@ -168,7 +168,7 @@ export function LessonFormEditor({
       if (!dialog || !section) return;
       const question = key.startsWith("review-") && line.item
         ? section.querySelector<HTMLElement>(line.variant ? `[data-review-variant="${reviewItemKey(line.component, line.item, line.variant)}"]` : `[data-review-item="${reviewItemKey(line.component, line.item)}"]`)
-        : null;
+        : key === "daily" && line.item ? section.querySelector<HTMLElement>(`[data-daily-item="${line.item}"]`) : null;
       const block = question ?? section;
       const field = line.option !== undefined ? block.querySelector<HTMLElement>(`[data-option-index="${line.option}"]`) : null;
       const target = field ?? block;
@@ -243,7 +243,9 @@ export function LessonFormEditor({
     setSaveError(undefined);
     try {
       const lesson = buildLesson(initial, state, { monthly, review: review ? reviewContents : undefined, translations: translatedLevel(cefr) });
-      if (dailyEdits && !review) lesson.parts = lesson.parts.map(part => part.code === "grammar" ? { ...part, content: { ...part.content, items: dailyEdits.items } } : part.code === "pronunciation" ? { ...part, content: { ...part.content, passage: dailyEdits.passage } } : part);
+      // The edited practice rows keep every stored field the form does not show (e.g. A1–A2 question/answer translations).
+      const storedItems = new Map((Array.isArray(dailyGrammar.items) ? dailyGrammar.items : []).map(record).map(item => [stringValue(item.id), item] as const));
+      if (dailyEdits && !review) lesson.parts = lesson.parts.map(part => part.code === "grammar" ? { ...part, content: { ...part.content, items: dailyEdits.items.map(item => ({ ...storedItems.get(stringValue(record(item).id)), ...record(item) })) } } : part.code === "pronunciation" ? { ...part, content: { ...part.content, passage: dailyEdits.passage } } : part);
       await onSave(lesson);
     } catch (reason) {
       setSaveError(describeSaveError(reason));

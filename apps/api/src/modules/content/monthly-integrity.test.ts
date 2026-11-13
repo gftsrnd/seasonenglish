@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { monthlyLessonIntegrityIssues, withMonthlyIntegrityIssues } from "./monthly-integrity.js";
+import { dailyGrammarQuestionProblems } from "./monthly-quality.js";
 
 /** Read-only copy of the 4175 A1 2026-12 day 13 (17/12, "Bài 11") draft whose "Vẫn duyệt" was refused on 13/11. */
 const day13 = JSON.parse(readFileSync(new URL("../../../test/fixtures/a1-2026-12-day13-grammar-answer.json", import.meta.url), "utf8")) as {
@@ -86,6 +87,9 @@ describe("4175 A1 2026-12 day 13: the grammar answer outside its options (13/11)
     items[1]!.answer = " he ";
     items[3]!.options = ["His", "mine", "me", "I"];
     expect(monthlyLessonIntegrityIssues("new", parts)).toEqual([]);
+    // The quality gate uses the same rule: only question 4's real mismatch is ever reported.
+    expect(items.map((item) => dailyGrammarQuestionProblems(item))).toEqual([[], [], [], [], []]);
+    expect(dailyGrammarQuestionProblems(grammarItems(day13Parts())[3]!)).toEqual(['answer "his" is not one of the options']);
   });
 
   it("annotates the Operator overview so the page can explain the block before any click", () => {

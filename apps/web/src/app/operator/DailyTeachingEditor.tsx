@@ -47,16 +47,17 @@ export function DailyTeachingEditor({ grammar, pronunciation, disabled, onChange
   const pronunciationObjective = monthlyReadablePlanObjective(text(pronunciation.objective));
   return <EditorSection title="Luyện tập theo ngày" disabled={disabled}>
     {grammarObjective ? <p className="small operator-daily-objective"><b>Mục tiêu ngữ pháp:</b> {grammarObjective}</p> : null}
-    {items.map((item, index) => <div className="operator-daily-question" role="group" aria-label={`Câu luyện tập ${index + 1}`} key={item.id}>
+    {items.map((item, index) => { const strayAnswer = Boolean(item.answer) && !item.options.includes(item.answer); return <div className="operator-daily-question" role="group" aria-label={`Câu luyện tập ${index + 1}`} data-daily-item={index + 1} key={item.id}>
       <div className="row between operator-daily-question-header"><b>Câu {index + 1}</b>{items.length > 3 ? <Button type="button" small onClick={() => update(items.filter((_, i) => i !== index))}>Bỏ câu</Button> : null}</div>
       <Field label="Câu hỏi"><textarea aria-label={`Câu ${index + 1} – Câu hỏi`} value={item.prompt} onChange={event => patch(index, row => ({ ...row, prompt: event.target.value }))} /></Field>
       <OptionFields prefix={`Câu ${index + 1}`} options={item.options} onChange={options => patch(index, row => ({ ...row, options, answer: row.options.includes(row.answer) && row.answer ? options[row.options.indexOf(row.answer)] ?? "" : row.answer }))} />
       <div className={milestones.length > 1 ? "grid cols-2" : undefined}>
-        <Field label="Đáp án đúng"><select aria-label={`Câu ${index + 1} – Đáp án đúng`} value={item.answer} onChange={event => patch(index, row => ({ ...row, answer: event.target.value }))}><option value="">Chọn đáp án</option>{item.options.filter(Boolean).map((option, i) => <option key={i} value={option}>{option}</option>)}</select></Field>
+        <Field label="Đáp án đúng"><select aria-label={`Câu ${index + 1} – Đáp án đúng`} value={item.answer} onChange={event => patch(index, row => ({ ...row, answer: event.target.value }))}><option value="">Chọn đáp án</option>{item.options.filter(Boolean).map((option, i) => <option key={i} value={option}>{option}</option>)}{strayAnswer ? <option value={item.answer}>{item.answer} (không có trong 4 lựa chọn)</option> : null}</select></Field>
         {milestones.length > 1 ? <Field label="Chủ điểm ngữ pháp"><select aria-label={`Câu ${index + 1} – Chủ điểm ngữ pháp`} value={item.milestoneId} onChange={event => patch(index, row => ({ ...row, milestoneId: event.target.value }))}><option value="">Chọn chủ điểm</option>{milestones.map(id => <option key={id} value={id}>{labels.get(id)}</option>)}</select></Field> : null}
       </div>
+      {strayAnswer ? <p className="xs danger" role="note">Đáp án đang lưu “{item.answer}” không nằm trong 4 lựa chọn. Sửa một lựa chọn cho đúng đáp án, hoặc chọn lại đáp án.</p> : null}
       <Field label="Giải thích"><textarea aria-label={`Câu ${index + 1} – Giải thích`} value={item.explanation} onChange={event => patch(index, row => ({ ...row, explanation: event.target.value }))} /></Field>
-    </div>)}
+    </div>; })}
     {items.length < 5 ? <div><Button type="button" small onClick={() => update([...items, emptyItem("grammar-" + Date.now(), soleMilestone)])}>Thêm câu luyện tập</Button></div> : null}
     {pronunciationObjective ? <p className="small operator-daily-objective"><b>Mục tiêu phát âm:</b> {pronunciationObjective}</p> : null}
     {Array.isArray(pronunciation.targetPositions) ? <Field label="Đoạn đọc luyện âm" hint="Đoạn văn phải chứa đủ các vị trí âm đã phân bổ cho ngày này."><textarea aria-label="Đoạn đọc luyện âm" value={passage} onChange={event => { setPassage(event.target.value); onChange(items, event.target.value); }} /></Field> : null}
