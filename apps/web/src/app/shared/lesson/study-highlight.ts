@@ -27,20 +27,82 @@ function merge(segments: HighlightSegment[]): HighlightSegment[] {
 
 /** Auxiliaries, modals and their negatives: a formula slot made only of these is a key slot. */
 const AUX_WORDS = new Set([
-  "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did",
+  "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did",
   "don't", "doesn't", "didn't", "isn't", "aren't", "wasn't", "weren't", "haven't", "hasn't", "hadn't",
   "will", "won't", "would", "wouldn't", "can", "can't", "cannot", "could", "couldn't", "should", "shouldn't",
   "must", "mustn't", "might", "may", "shall", "going", "to", "used", "'m", "'s", "'re", "'ll", "'ve", "'d"
 ]);
-/** Verb placeholders ("V-ing", "base verb", "V3", "past participle" …). */
-const VERB_PLACEHOLDER = /^(?:v(?:[0-3]|-?ing|-?ed|-?e?s|-inf)?|verb(?:-?ing|-?ed|-?e?s)?|(?:base|main) (?:verb|form)|(?:bare )?infinitive|past participle|past (?:simple )?form)$/u;
+/** Verb placeholders ("V-ing", "base verb", "V3", "past participle", "động từ" …). */
+const VERB_PLACEHOLDER = /^(?:v(?:[0-3]|-?ing|-?ed|-?e?s|\+e?s|-inf)?|verb(?:-?ing|-?ed|-?e?s|\+e?s)?|(?:base|main) (?:verb|form)|(?:bare )?infinitive|past participle|past (?:simple )?form|irregular(?: past)?(?: (?:form|verb))?|(?:stative|state) verbs?|present simple verb|động từ(?: (?:nguyên mẫu|nguyên thể|thêm -e?s))?|v nguyên mẫu)$/u;
+const TO_INFINITIVE = /^(?:to-infinitive|to infinitive|to-inf)$/u;
+const REPORTING_SLOT = /^reporting verbs?$/u;
 const ENDING = /^-[a-z]{1,3}$/u;
 const SUBJECT_PRONOUNS = new Set(["i", "you", "we", "they", "he", "she", "it"]);
+const OTHER_PRONOUNS = new Set(["me", "him", "her", "us", "them", "my", "your", "his", "its", "our", "their", "mine", "yours", "hers", "ours", "theirs"]);
 const DETERMINERS = new Set(["the", "a", "an", "my", "our", "your", "his", "her", "their", "this", "that"]);
 const ADVERBS_BETWEEN = new Set(["not", "never", "just", "already", "always", "usually", "often", "ever", "also", "still", "sometimes", "really", "yet"]);
+/** Clause connectors: a slot made of these ("when/while", "Because") is key, and the words are marked in the examples. */
+const CONNECTOR_WORDS = new Set(["when", "while", "before", "after", "because", "if", "unless", "until", "although", "though", "since"]);
+const CONNECTOR_PHRASES = ["as soon as", "even though", "even if"];
+/** and/but/or/so are key only as a list of connectors ("and/but/or/so/because"), never alone. */
+const COORDINATORS = new Set(["and", "but", "or", "so"]);
+const REPORTING_VERBS = new Set(["said", "told", "asked", "explained", "noted", "mentioned", "confirmed", "clarified", "reported", "suggested", "advised", "reminded", "warned", "promised", "agreed", "offered", "refused", "invited", "encouraged", "announced", "stated", "claimed", "admitted", "denied", "insisted", "recommended", "requested", "urged", "replied", "added", "argued", "complained", "informed", "instructed", "emphasised", "emphasized", "highlighted"]);
+/** Common irregular past / participle forms: marked only when the formula itself lists them. */
+const IRREGULAR_FORMS = new Set([
+  "went", "gone", "saw", "seen", "came", "took", "taken", "gave", "given", "made", "sent", "wrote", "written", "began", "begun", "became",
+  "knew", "known", "grew", "grown", "drew", "drawn", "flew", "flown", "chose", "chosen", "spoke", "spoken", "broke", "broken", "drove", "driven",
+  "rose", "risen", "fell", "fallen", "forgot", "forgotten", "got", "gotten", "paid", "heard", "left", "lost", "won", "led", "spent", "built",
+  "sold", "told", "said", "thought", "brought", "bought", "taught", "caught", "kept", "held", "met", "ran", "sat", "stood", "understood",
+  "found", "felt", "meant", "done", "ate", "eaten", "slept", "wore", "worn", "threw", "thrown", "woke", "woken", "lent", "dealt", "sought",
+  "fought", "shown", "proven"
+]);
+/** Words ending in -ed / -ing that are not verb forms. */
+const ED_STOP = new Set(["need", "feed", "speed", "indeed", "red", "bed", "seed", "weed", "deed", "greed", "breed", "bleed", "proceed", "succeed", "exceed", "shed", "hundred", "sacred", "naked", "wicked", "embed", "wed"]);
+const ING_STOP = new Set(["thing", "nothing", "something", "anything", "everything", "morning", "evening", "during", "ceiling", "king", "ring", "bring", "string", "spring", "swing", "sting", "wing", "meeting", "building", "training", "briefing", "booking", "wedding", "heading", "setting", "ending", "sibling", "pudding", "earring"]);
+const S_STOP = new Set(["always", "sometimes", "perhaps", "towards", "its", "this", "his", "hers", "ours", "yours", "theirs", "was", "has", "does", "plus", "thus", "yes", "less", "unless", "across", "news", "series", "sales", "lots", "means", "besides"]);
+/** Words that can follow a present-simple -s verb right after a short subject ("The client meets our team"). */
+const AFTER_S_VERB = new Set(["to", "at", "in", "on", "from", "for", "with", "by", "about", "into", "of", "up", "out", "over", "after", "before", "every", "each", "some", "all", "its", "that", "what", "when", "if", "and", "but", "us", "me", "him", "her", "them", "it", "you"]);
+/** Non-verbs often written after "to" ("move to late November"). */
+const NOT_AFTER_TO = new Set(["late", "early", "next", "last", "all", "each", "every", "one", "two", "three", "home", "lunch", "everyone", "everybody", "someone", "me", "him", "her", "us", "them", "it", "you", "do"]);
+const CLITIC_FORMS: Record<string, string[]> = { "'m": ["am"], "'re": ["are"], "'s": ["is", "has"], "'ll": ["will"], "'ve": ["have"], "'d": ["had", "would"] };
 
-type PieceKind = "aux" | "verb" | "ending" | "pair";
-interface Slot { text: string; kinds: PieceKind[]; neutral: boolean; aux: string[]; verb?: "ing" | "ed" | "any" }
+/** What a tense-name slot ("past continuous", "past simple") means in an example sentence. */
+interface TenseRule { aux?: string[]; verb?: "ing" | "ed" | "any"; ed?: boolean }
+const PAST_CONTINUOUS: TenseRule = { aux: ["was", "were", "wasn't", "weren't"], verb: "ing" };
+const PRESENT_CONTINUOUS: TenseRule = { aux: ["am", "is", "are", "isn't", "aren't", "'m", "'re", "'s"], verb: "ing" };
+const PAST_SIMPLE: TenseRule = { ed: true };
+const FUTURE_SIMPLE: TenseRule = { aux: ["will", "won't", "'ll"], verb: "any" };
+const TENSES = new Map<string, TenseRule>([
+  ["past continuous", PAST_CONTINUOUS], ["past progressive", PAST_CONTINUOUS],
+  ["present continuous", PRESENT_CONTINUOUS], ["present progressive", PRESENT_CONTINUOUS],
+  ["past simple", PAST_SIMPLE], ["simple past", PAST_SIMPLE],
+  ["present perfect", { aux: ["have", "has", "haven't", "hasn't", "'ve"], verb: "ed" }],
+  ["past perfect", { aux: ["had", "hadn't", "'d"], verb: "ed" }],
+  ["future simple", FUTURE_SIMPLE], ["simple future", FUTURE_SIMPLE],
+  // Present simple has no form that is safe to mark: the name is key in the formula only.
+  ["present simple", {}], ["simple present", {}]
+]);
+const TENSE_NAMES = [...TENSES.keys()].join("|");
+const TENSE_NAME = new RegExp(`^(?:the )?(${TENSE_NAMES})(?: tense)?$`, "u");
+/** A side that starts with a tense name ("Present Simple cho lịch cố định"); not "present perfect continuous". */
+const TENSE_LEAD = new RegExp(`^(?:the\\s+)?(${TENSE_NAMES})(?!\\s+(?:continuous|progressive|perfect))(?=$|[\\s(,:])`, "iu");
+const tenseOf = (value: string) => TENSES.get(value.toLocaleLowerCase("en").replace(/^the\s+/u, "").replace(/\s+tense$/u, "").replace(/\s+/gu, " "));
+/** A formula that names the -s form of the verb ("-s/-es", "V+s", "(s/es)", "thêm -s"). */
+const S_FORM = /(?<![a-z])-e?s\b|\bv\s?\+\s?e?s\b|\(e?s\s?\/\s?es\)|\bverb\s?\+\s?e?s\b/iu;
+
+type PieceKind = "aux" | "verb" | "ending" | "pair" | "subj" | "pron" | "connector" | "coord" | "tense" | "reporting" | "toinf" | "phrase";
+interface Slot {
+  text: string; kinds: PieceKind[]; neutral: boolean; aux: string[]; verb?: "ing" | "ed" | "any";
+  /** The slot names the -ing / -ed form itself ("V-ing", "verb-ed", "-ed", "irregular"). */
+  form?: "ing" | "ed";
+  connectors: string[]; tenses: TenseRule[]; pronouns: string[]; reporting: boolean; toInf: boolean;
+  /** A short compared phrase ("have got" in "have got (now) vs had (past)"). */
+  phrase?: string;
+  /** Only the first characters are key (the tense name of "Present Simple cho lịch cố định"). */
+  prefix?: number;
+  /** A neutral subject slot ("Subject", "I/We/They", "I usually") or a pronoun list: the next verb is the subject's verb. */
+  subjectLike: boolean;
+}
 
 /** "I'm", "she's", "they'll": a subject pronoun contracted with its auxiliary. */
 const PRONOUN_CONTRACTION = /^(?:i|you|we|they|he|she|it)(?:'m|'re|'s|'ll|'ve|'d)$/u;
@@ -61,14 +123,24 @@ function pairForms(words: readonly string[]): string[] | undefined {
   return undefined;
 }
 
-const pieceWords = (piece: string) => piece.trim().toLocaleLowerCase("en").replace(/’/gu, "'").replace(/[?.!,]+$/u, "").split(/\s+/u).filter(Boolean);
+const cleanPieceText = (piece: string) => piece.trim().toLocaleLowerCase("en").replace(/’/gu, "'").replace(/[?.!,…]+$/u, "");
+const pieceWords = (piece: string) => cleanPieceText(piece).split(/\s+/u).filter(Boolean);
+const withoutNotes = (text: string) => text.replace(/\([^)]*\)/gu, " ").replace(/\s+/gu, " ").trim();
 
-/** One "/"-separated piece of a slot: auxiliary word(s), a verb placeholder, an ending or a "pronoun + form" pair; otherwise undefined. */
+/** One "/"-separated piece of a slot: auxiliary word(s), a verb placeholder, an ending, a "pronoun + form" pair,
+ * a pronoun, a connector or a tense name; otherwise undefined. */
 function pieceKind(piece: string): PieceKind | undefined {
-  const value = piece.trim().toLocaleLowerCase("en").replace(/’/gu, "'").replace(/[?.!,]+$/u, "");
+  const value = cleanPieceText(piece);
   if (!value) return undefined;
   if (ENDING.test(value)) return "ending";
   if (VERB_PLACEHOLDER.test(value)) return "verb";
+  if (TO_INFINITIVE.test(value)) return "toinf";
+  if (REPORTING_SLOT.test(value)) return "reporting";
+  if (TENSE_NAME.test(value)) return "tense";
+  if (CONNECTOR_WORDS.has(value) || CONNECTOR_PHRASES.includes(value)) return "connector";
+  if (COORDINATORS.has(value)) return "coord";
+  if (SUBJECT_PRONOUNS.has(value)) return "subj";
+  if (OTHER_PRONOUNS.has(value)) return "pron";
   const words = value.split(/\s+/u);
   // "do not", "is not", "will not": the full negative counts as the auxiliary.
   if (words.every(isForm) && !words.every((word) => word === "to" || word === "not")) return "aux";
@@ -76,25 +148,83 @@ function pieceKind(piece: string): PieceKind | undefined {
   return undefined;
 }
 
-/** A slot is key when every piece of its main text (outside parentheses) is an auxiliary, a placeholder or an ending. */
+const emptySlot = (text: string): Slot => ({ text, kinds: [], neutral: true, aux: [], connectors: [], tenses: [], pronouns: [], reporting: false, toInf: false, subjectLike: false });
+
+/** A slot is key when every piece of its main text (outside parentheses) is a key piece. */
 function readSlot(text: string): Slot {
-  const main = text.replace(/\([^)]*\)/gu, " ").replace(/\s+/gu, " ").trim();
-  const pieces = main.split("/").map((piece) => piece.trim()).filter(Boolean);
-  const kinds = pieces.map(pieceKind);
-  const key = pieces.length > 0 && kinds.every(Boolean);
-  const lower = main.toLocaleLowerCase("en").replace(/[?.!,]+$/u, "");
-  const slot: Slot = { text, kinds: key ? kinds as PieceKind[] : [], neutral: !key, aux: [] };
-  if (!key) return slot;
+  const main = withoutNotes(text);
+  const pieces = main.split(/\s*\/\s*|\s+or\s+/u).map((piece) => piece.trim()).filter(Boolean);
+  const raw = pieces.map(pieceKind);
+  const hasPair = raw.includes("pair");
+  // "me / him / them", "my / his / their", "I / he / they (chủ ngữ)": a pronoun table; bare "I/We/They" is a subject.
+  const pronounList = raw.length > 0 && raw.every((kind) => kind === "subj" || kind === "pron") && (raw.includes("pron") || (raw.length >= 2 && /chủ ngữ|subject/iu.test(text)));
+  const connectorList = raw.length >= 2 && raw.every((kind) => kind === "connector" || kind === "coord");
+  const kinds = raw.map((kind) => kind === "subj" ? (pronounList ? "pron" : hasPair ? "subj" : undefined)
+    : kind === "pron" ? (pronounList ? "pron" : undefined)
+      : kind === "coord" ? (connectorList ? "connector" : undefined) : kind);
+  const key = pieces.length > 0 && kinds.every(Boolean) && !kinds.every((kind) => kind === "subj");
+  const slot = emptySlot(text);
+  if (!key) {
+    slot.subjectLike = Boolean(main) && !pieceWords(main).some((word) => AUX_WORDS.has(word) || CONNECTOR_WORDS.has(word));
+    return slot;
+  }
+  const keyKinds = kinds as PieceKind[];
+  slot.kinds = keyKinds;
+  slot.neutral = false;
+  const of = (kind: PieceKind) => pieces.filter((_, index) => keyKinds[index] === kind);
   slot.aux = [
-    ...pieces.filter((_, index) => kinds[index] === "aux").flatMap((piece) => piece.toLocaleLowerCase("en").split(/\s+/u)),
+    ...of("aux").flatMap((piece) => piece.toLocaleLowerCase("en").split(/\s+/u)),
     // "I am / He is / They are": only the forms are key, the pronouns stay plain.
-    ...pieces.filter((_, index) => kinds[index] === "pair").flatMap((piece) => pairForms(pieceWords(piece)) ?? [])
+    ...of("pair").flatMap((piece) => pairForms(pieceWords(piece)) ?? [])
   ].filter((word) => word !== "to");
-  if (kinds.includes("verb")) slot.verb = /ing\b/u.test(lower) ? "ing" : /(?:-|\b)ed\b|participle|v3/u.test(lower) && !/v-?s\b/u.test(lower) ? "ed" : "any";
+  slot.connectors = of("connector").map(cleanPieceText);
+  slot.pronouns = of("pron").map(cleanPieceText);
+  slot.tenses = of("tense").flatMap((piece) => tenseOf(cleanPieceText(piece)) ?? []);
+  slot.reporting = keyKinds.includes("reporting");
+  slot.toInf = keyKinds.includes("toinf");
+  slot.subjectLike = keyKinds.every((kind) => kind === "pron");
+  const verbPieces = pieces.map(cleanPieceText).filter((piece, index) => keyKinds[index] === "verb" || (keyKinds[index] === "ending" && /^-(?:ing|ed)$/u.test(piece)));
+  if (verbPieces.length) {
+    const verbs = verbPieces.join(" ");
+    slot.verb = /ing\b/u.test(verbs) ? "ing" : /(?:-|\b)ed\b|participle|v3|irregular/u.test(verbs) && !/v-?s\b/u.test(verbs) ? "ed" : "any";
+    if (verbPieces.some((piece) => /^(?:v-?|verb-?|-)ing$/u.test(piece))) slot.form = "ing";
+    else if (verbPieces.some((piece) => /^(?:v-?|verb-?|-)ed$|^irregular/u.test(piece))) slot.form = "ed";
+  }
   return slot;
 }
 
+/** A compared phrase side ("have got (now)"): its main text is key. */
+function phraseSlot(text: string): Slot {
+  return { ...emptySlot(text), kinds: ["phrase"], neutral: false, phrase: cleanPieceText(withoutNotes(text)) };
+}
+
+/** Splits at a separator outside parentheses, keeping the separators (the parts and separators rebuild the text). */
+function splitTop(text: string, separator: RegExp): { parts: string[]; seps: string[] } {
+  const parts: string[] = [];
+  const seps: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === "(") depth += 1;
+    else if (char === ")") depth = Math.max(0, depth - 1);
+    else if (depth === 0) {
+      separator.lastIndex = index;
+      const found = separator.exec(text);
+      if (found?.[0] && index > start) {
+        parts.push(text.slice(start, index));
+        seps.push(found[0]);
+        index += found[0].length - 1;
+        start = index + 1;
+      }
+    }
+  }
+  parts.push(text.slice(start));
+  return { parts, seps };
+}
+
 function slotSegments(slot: Slot): HighlightSegment[] {
+  if (slot.prefix !== undefined) return [{ text: slot.text.slice(0, slot.prefix), mark: true }, ...plain(slot.text.slice(slot.prefix))];
   const out: HighlightSegment[] = [];
   // Key text outside parentheses is marked; inside parentheses only endings ("-s/-es") are.
   for (const chunk of slot.text.split(/(\([^)]*\))/u)) {
@@ -103,7 +233,7 @@ function slotSegments(slot: Slot): HighlightSegment[] {
       for (const part of chunk.split(/((?<![A-Za-z])-[a-z]{1,3}(?:\/-[a-z]{1,3})*)(?![a-z])/u)) out.push({ text: part, mark: /^-[a-z]{1,3}(?:\/-[a-z]{1,3})*$/u.test(part) });
     } else if (slot.neutral) out.push({ text: chunk, mark: false });
     else if (slot.kinds.includes("pair")) {
-      // Piece by piece: a "pronoun + form" pair marks the form only; other key pieces are marked whole.
+      // Piece by piece: a "pronoun + form" pair marks the form only; a bare pronoun stays plain; other key pieces are marked whole.
       chunk.split(/(\/)/u).forEach((piece, index) => {
         if (index % 2) { out.push({ text: piece, mark: false }); return; }
         const lead = piece.match(/^\s*/u)![0];
@@ -115,19 +245,20 @@ function slotSegments(slot: Slot): HighlightSegment[] {
           // Only the forms are marked; the pronoun stays plain whichever side it is on.
           const forms = new Set(pairForms(pieceWords(body)) ?? []);
           for (const word of body.split(/(\s+)/u)) out.push({ text: word, mark: forms.has(word.toLocaleLowerCase("en").replace(/’/gu, "'")) });
-        } else out.push({ text: body, mark: Boolean(kind) });
+        } else out.push({ text: body, mark: Boolean(kind) && kind !== "subj" });
         out.push({ text: tail, mark: false });
       });
     } else {
-      const lead = chunk.match(/^\s*/u)![0];
-      const tail = chunk.match(/[\s?.!,]*$/u)![0];
-      out.push({ text: lead, mark: false }, { text: chunk.slice(lead.length, chunk.length - tail.length), mark: true }, { text: tail, mark: false });
+      // A leading "/" or "or" after a note ("V-ed (regular) / irregular") is a separator, not key text.
+      const lead = chunk.match(/^[\s/]*(?:or\s+)?/u)![0];
+      const tail = chunk.match(/[\s?.!,…]*$/u)![0];
+      out.push({ text: lead, mark: false }, { text: chunk.slice(lead.length, Math.max(lead.length, chunk.length - tail.length)), mark: true }, { text: tail, mark: false });
     }
   }
   return out;
 }
 
-interface FormulaLine { label: string; pattern: string; examples: string; slots: Slot[] }
+interface FormulaLine { label: string; pattern: string; examples: string; slots: Slot[]; seps: string[] }
 
 /** "Question: Do/Does + subject + V?" → label, pattern and the formula's own examples after ": ". */
 function readFormulaLine(line: string): FormulaLine {
@@ -138,93 +269,224 @@ function readFormulaLine(line: string): FormulaLine {
   let examples = "";
   const next = rest.indexOf(": ");
   if (next > 0 && rest.slice(0, next).includes("+")) { examples = rest.slice(next); rest = rest.slice(0, next); }
-  const formsOnly = !rest.includes(" + ") && rest.includes("/") && rest.split("/").every((piece) => { const kind = pieceKind(piece); return kind === "pair" || kind === "aux"; });
-  const slots = rest.includes(" + ") ? rest.split(" + ").map(readSlot) : formsOnly ? [readSlot(rest)] : [];
-  return { label, pattern: rest, examples, slots };
+  const done = (slots: Slot[], seps: string[] = []): FormulaLine => ({ label, pattern: rest, examples, slots, seps });
+  // "Subject + was/were + V-ing", "If + past simple, would + V": slots between " + " (and ", ") outside parentheses.
+  if (rest.includes(" + ")) { const split = splitTop(rest, /\s\+\s|,\s+/uy); return done(split.parts.map(readSlot), split.seps); }
+  const formsOnly = rest.includes("/") && rest.split("/").every((piece) => { const kind = pieceKind(piece); return kind === "pair" || kind === "aux"; });
+  if (formsOnly) return done([readSlot(rest)]);
+  const whole = readSlot(rest);
+  if (!whole.neutral && whole.kinds.every((kind) => kind === "pron")) return done([whole]);
+  // "Present Simple cho lịch cố định / Present Continuous cho việc …": the tense names lead each side.
+  const sides = splitTop(rest, /\s+vs\.?\s+|\s+\/\s+/iuy);
+  if (sides.parts.length >= 2 && sides.parts.every((side) => TENSE_LEAD.test(side))) {
+    return done(sides.parts.map((side) => {
+      const name = side.match(TENSE_LEAD)![0];
+      return { ...emptySlot(side), kinds: ["tense"], neutral: false, tenses: [tenseOf(name)!], prefix: name.length };
+    }), sides.seps);
+  }
+  // "have got (now) vs had (past)": two short phrases compared, each key.
+  if (/\s+vs\.?\s+/iu.test(rest)) {
+    const compared = splitTop(rest, /\s+vs\.?\s+/iuy);
+    const short = (side: string) => { const tokens = withoutNotes(side).split(/\s+/u).filter(Boolean); return tokens.length >= 1 && tokens.length <= 3 && tokens.every((token) => /^[A-Za-z][A-Za-z'’-]*$/u.test(token)); };
+    if (compared.parts.length >= 2 && compared.parts.every(short)) {
+      return done(compared.parts.map((side) => { const slot = readSlot(side); return slot.kinds.length === 1 && slot.kinds[0] === "tense" ? slot : phraseSlot(side); }), compared.seps);
+    }
+  }
+  return done([]);
 }
 
 /** Rules for marking example words, collected from all formula lines. */
-export interface GrammarExampleMatcher { aux: Set<string>; follow: Array<{ verb: "ing" | "ed" | "any"; skipSubject: boolean }>; subjectVerb: boolean; verbs: Set<string> }
+export interface GrammarExampleMatcher {
+  aux: Set<string>;
+  follow: Array<{ verb: "ing" | "ed" | "any"; skipSubject: boolean }>;
+  subjectVerb: boolean;
+  /** Verb forms named by the formula ("I work / She manages", listed irregular pasts). */
+  verbs: Set<string>;
+  /** Exact words that are key wherever they occur (pronoun tables, connectors). */
+  words: Set<string>;
+  /** Multi-word key phrases ("as soon as", "have got"). */
+  phrases: string[][];
+  /** Tense-name slots: the auxiliary is marked only together with the verb form that follows it. */
+  tenseForms: Array<{ aux: Set<string>; verb: "ing" | "ed" | "any" }>;
+  /** Any -ed / -ing verb form (outside a stoplist, not after a determiner). */
+  ed: boolean;
+  ing: boolean;
+  /** The -s verb after a short sentence-initial subject ("The client meets our team"). */
+  sForm: boolean;
+  reporting: boolean;
+  toInf: boolean;
+}
 
 function words(sentence: string): string[] {
   return sentence.match(/[A-Za-z][A-Za-z'’]*/gu)?.map((word) => word.toLocaleLowerCase("en").replace(/’/gu, "'")) ?? [];
 }
 
-/** Builds the example matcher of a (possibly multi-line) formula; null when no slot is key. */
-/** "I am not / He isn't + …; Am I…? / Is he…?": two patterns on one line (only when the line has no examples part). */
-function clauses(line: string): string[] {
-  return line.includes("; ") && !readFormulaLine(line).examples ? line.split(/;\s+/u) : [line];
+/** "I am not / He isn't + …; Am I…? / Is he…?": several patterns on one line. " || ", " | " and " · " always
+ * separate patterns; "; " does when the line has no examples part or every part is a "+" pattern. */
+function clauses(line: string): { parts: string[]; seps: string[] } {
+  const hard = splitTop(line, /\s+\|\|?\s+|\s+·\s+/uy);
+  const parts: string[] = [];
+  const seps: string[] = [];
+  hard.parts.forEach((part, index) => {
+    if (index) seps.push(hard.seps[index - 1]!);
+    const soft = part.includes("; ") ? splitTop(part, /;\s+/uy) : { parts: [part], seps: [] };
+    if (soft.parts.length > 1 && (!readFormulaLine(part).examples || soft.parts.every((piece) => piece.includes(" + ")))) {
+      soft.parts.forEach((piece, at) => { if (at) seps.push(soft.seps[at - 1]!); parts.push(piece); });
+    } else parts.push(part);
+  });
+  return { parts, seps };
 }
 
+/** Builds the example matcher of a (possibly multi-line) formula; null when no slot is key. */
 export function grammarExampleMatcher(lines: readonly string[]): GrammarExampleMatcher | null {
-  const matcher: GrammarExampleMatcher = { aux: new Set(), follow: [], subjectVerb: false, verbs: new Set() };
+  const matcher: GrammarExampleMatcher = { aux: new Set(), follow: [], subjectVerb: false, verbs: new Set(), words: new Set(), phrases: [], tenseForms: [], ed: false, ing: false, sForm: false, reporting: false, toInf: false };
   let any = false;
-  for (const line of lines.flatMap(clauses).map(readFormulaLine)) {
-    line.slots.forEach((slot, index) => {
-      if (slot.neutral) return;
-      any = true;
-      for (const word of slot.aux) matcher.aux.add(word);
-      if (!slot.verb) return;
-      const before = line.slots[index - 1];
-      const twoBack = line.slots[index - 2];
-      if (before && !before.neutral && before.aux.length) matcher.follow.push({ verb: slot.verb, skipSubject: false });
-      else if (before?.neutral && twoBack && !twoBack.neutral && twoBack.aux.length) matcher.follow.push({ verb: slot.verb, skipSubject: true });
-      else if (before?.neutral && index === 1) {
-        matcher.subjectVerb = true;
-        // The formula's own short examples ("I work / She manages / The team meets") name the verb forms.
-        for (const example of line.examples.replace(/^:\s*/u, "").split(/\s+\/\s+|;\s*/u)) {
-          const tokens = words(example);
-          if (!tokens.length || tokens.length > 4) continue;
-          const verb = SUBJECT_PRONOUNS.has(tokens[0]!) ? tokens[1] : DETERMINERS.has(tokens[0]!) ? tokens[2] : undefined;
-          if (verb && !AUX_WORDS.has(verb)) matcher.verbs.add(verb);
+  for (const raw of lines) {
+    let lineSubjectVerb = false;
+    let linePast = false;
+    for (const line of clauses(raw).parts.map(readFormulaLine)) {
+      line.slots.forEach((slot, index) => {
+        if (slot.neutral) return;
+        any = true;
+        for (const word of slot.aux) matcher.aux.add(word);
+        for (const connector of slot.connectors) {
+          if (connector.includes(" ")) matcher.phrases.push(connector.split(" "));
+          else matcher.words.add(connector);
         }
-      }
-    });
+        for (const pronoun of slot.pronouns) matcher.words.add(pronoun);
+        if (slot.phrase) matcher.phrases.push(slot.phrase.split(/\s+/u));
+        if (slot.reporting) matcher.reporting = true;
+        if (slot.toInf) matcher.toInf = true;
+        for (const tense of slot.tenses) {
+          if (tense.aux && tense.verb) matcher.tenseForms.push({ aux: new Set(tense.aux), verb: tense.verb });
+          if (tense.ed) { matcher.ed = true; linePast = true; }
+        }
+        if (!slot.verb) return;
+        const before = line.slots[index - 1];
+        const twoBack = line.slots[index - 2];
+        const afterAux = Boolean(before && !before.neutral && before.aux.length);
+        if (afterAux) matcher.follow.push({ verb: slot.verb, skipSubject: false });
+        else if (before?.neutral && twoBack && !twoBack.neutral && twoBack.aux.length) matcher.follow.push({ verb: slot.verb, skipSubject: true });
+        else if (before?.subjectLike && index === 1) {
+          matcher.subjectVerb = true;
+          lineSubjectVerb = true;
+          // The formula's own short examples ("I work / She manages / The team meets") name the verb forms.
+          for (const example of line.examples.replace(/^:\s*/u, "").split(/\s+\/\s+|;\s*/u)) {
+            const tokens = words(example);
+            if (!tokens.length || tokens.length > 4) continue;
+            const verb = SUBJECT_PRONOUNS.has(tokens[0]!) ? tokens[1] : DETERMINERS.has(tokens[0]!) ? tokens[2] : undefined;
+            if (verb && !AUX_WORDS.has(verb)) matcher.verbs.add(verb);
+          }
+        }
+        // "verb + -ed", "Subject + V-ed", "at risk of + V-ing": the named form itself, wherever it is.
+        if (slot.form && !afterAux) {
+          matcher[slot.form] = true;
+          if (slot.form === "ed") linePast = true;
+        }
+      });
+    }
+    // Irregular past forms count only when the formula itself lists them ("… then I sent it").
+    if (linePast) for (const word of words(raw)) if (IRREGULAR_FORMS.has(word)) matcher.verbs.add(word);
+    if (lineSubjectVerb && S_FORM.test(raw)) matcher.sForm = true;
   }
   return any ? matcher : null;
 }
 
-/** Marks the auxiliaries and verb forms of an example sentence that fill the formula's key slots. */
+/** Marks the auxiliaries, verb forms, connectors and compared phrases of an example sentence that fill the formula's key slots. */
 export function grammarExampleSegments(sentence: string, matcher: GrammarExampleMatcher | null): HighlightSegment[] {
   if (!matcher) return plain(sentence);
   const parts = sentence.split(/([A-Za-z][A-Za-z'’]*)/u);
   const tokens = parts.map((part, index) => index % 2 === 1 ? part.toLocaleLowerCase("en").replace(/’/gu, "'") : "");
   const wordIndexes = parts.map((_, index) => index).filter((index) => index % 2 === 1);
-  const marked = new Set<number>();
+  const tok = (position: number) => tokens[wordIndexes[position] ?? -1] ?? "";
+  // "all" marks the word; "clitic" marks only the contracted auxiliary of "I'm", "we're".
+  const marked = new Map<number, "all" | "clitic">();
+  const mark = (index: number | undefined, how: "all" | "clitic" = "all") => { if (index !== undefined && marked.get(index) !== "all") marked.set(index, how); };
+  const target = (position: number, skipSubject: boolean, allowBe = false) => {
+    let cursor = position + 1;
+    if (skipSubject && SUBJECT_PRONOUNS.has(tok(cursor))) cursor += 1;
+    while (ADVERBS_BETWEEN.has(tok(cursor))) cursor += 1;
+    const index = wordIndexes[cursor];
+    const word = index === undefined ? "" : tokens[index]!;
+    if (!word || (AUX_WORDS.has(word) && !(allowBe && (word === "be" || word === "have"))) || SUBJECT_PRONOUNS.has(word) || DETERMINERS.has(word) || OTHER_PRONOUNS.has(word)) return undefined;
+    return { index, word };
+  };
+  const auxHow = (set: Set<string>, token: string): "all" | "clitic" | undefined => {
+    if (set.has(token)) return "all";
+    if (PRONOUN_CONTRACTION.test(token)) { const clitic = token.slice(token.indexOf("'")); if (set.has(clitic) || CLITIC_FORMS[clitic]!.some((form) => set.has(form))) return "clitic"; }
+    return undefined;
+  };
+  const midCapital = (position: number) => position > 0 && /^[A-Z]/u.test(parts[wordIndexes[position]!]!);
+  const afterDeterminer = (position: number) => DETERMINERS.has(tok(position - 1));
   wordIndexes.forEach((index, position) => {
     const token = tokens[index]!;
-    if (matcher.aux.has(token)) {
-      marked.add(index);
+    const how = auxHow(matcher.aux, token);
+    if (how) {
+      mark(index, how);
       for (const rule of matcher.follow) {
-        let cursor = position + 1;
-        if (rule.skipSubject && SUBJECT_PRONOUNS.has(tokens[wordIndexes[cursor] ?? -1] ?? "")) cursor += 1;
-        while (ADVERBS_BETWEEN.has(tokens[wordIndexes[cursor] ?? -1] ?? "")) cursor += 1;
-        const target = wordIndexes[cursor];
-        const word = target === undefined ? "" : tokens[target]!;
-        if (!word || AUX_WORDS.has(word) || SUBJECT_PRONOUNS.has(word) || DETERMINERS.has(word)) continue;
+        const found = target(position, rule.skipSubject);
         // V-ing must end in -ing; V3/base forms can be irregular, so any verb-like word is accepted.
-        if (rule.verb !== "ing" || /..ing$/u.test(word)) marked.add(target!);
+        if (found && (rule.verb !== "ing" || /..ing$/u.test(found.word))) mark(found.index);
       }
     }
-    if (matcher.verbs.has(token)) marked.add(index);
+    for (const form of matcher.tenseForms) {
+      const tenseHow = auxHow(form.aux, token);
+      if (!tenseHow) continue;
+      const found = target(position, false, form.verb === "any");
+      const fits = found && (form.verb === "ing" ? /..ing$/u.test(found.word) : form.verb === "ed" ? /^[a-z]{2,}(?:ed|en)$/u.test(found.word) || IRREGULAR_FORMS.has(found.word) : true);
+      if (fits) { mark(index, tenseHow); mark(found.index); }
+    }
+    if (matcher.verbs.has(token) && !afterDeterminer(position)) mark(index);
+    if (matcher.words.has(token)) mark(index);
+    if (matcher.reporting && REPORTING_VERBS.has(token)) mark(index);
+    if (matcher.ed && /^[a-z]{2,}ed$/u.test(token) && !ED_STOP.has(token) && !AUX_WORDS.has(token) && !afterDeterminer(position) && !midCapital(position)) mark(index);
+    if (matcher.ing && /^[a-z]{2,}ing$/u.test(token) && !ING_STOP.has(token) && !afterDeterminer(position) && !midCapital(position)) mark(index);
+    if (matcher.toInf && token === "to") {
+      const next = wordIndexes[position + 1];
+      const word = tok(position + 1);
+      if (next !== undefined && parts[index + 1] === " " && /^[a-z]+$/u.test(parts[next]!) && !NOT_AFTER_TO.has(word) && !DETERMINERS.has(word) && !SUBJECT_PRONOUNS.has(word) && (!AUX_WORDS.has(word) || word === "be" || word === "have")) { mark(index); mark(next); }
+    }
   });
-  // "Subject + verb": the word right after a subject pronoun at the start of the sentence.
-  if (matcher.subjectVerb && wordIndexes.length > 1 && SUBJECT_PRONOUNS.has(tokens[wordIndexes[0]!]!)) {
-    let cursor = 1;
-    while (ADVERBS_BETWEEN.has(tokens[wordIndexes[cursor] ?? -1] ?? "")) cursor += 1;
-    const target = wordIndexes[cursor];
-    if (target !== undefined && !AUX_WORDS.has(tokens[target]!) && !DETERMINERS.has(tokens[target]!)) marked.add(target);
+  for (const phrase of matcher.phrases) {
+    for (let position = 0; position + phrase.length <= wordIndexes.length; position += 1) {
+      if (phrase.every((word, offset) => tok(position + offset) === word)) phrase.forEach((_, offset) => mark(wordIndexes[position + offset]));
+    }
   }
-  return merge(parts.map((text, index) => ({ text, mark: marked.has(index) })));
+  // "Subject + verb": the word right after a subject pronoun at the start of the sentence.
+  if (matcher.subjectVerb && wordIndexes.length > 1 && SUBJECT_PRONOUNS.has(tok(0))) {
+    let cursor = 1;
+    while (ADVERBS_BETWEEN.has(tok(cursor))) cursor += 1;
+    const index = wordIndexes[cursor];
+    if (index !== undefined && !AUX_WORDS.has(tokens[index]!) && !DETERMINERS.has(tokens[index]!)) mark(index);
+  }
+  // "-s" verb after a one-word subject: "The client meets our team", "Linh checks the plan". Only when the next word
+  // shows the verb has ended (a determiner, preposition or pronoun), so "Our team members work" stays plain.
+  if (matcher.sForm && wordIndexes.length >= 2) {
+    const sVerb = (position: number) => { const word = tok(position); return /^[a-z]{2,}s$/u.test(word) && !/(?:ss|us|is)$/u.test(word) && !S_STOP.has(word) && !AUX_WORDS.has(word) && !ADVERBS_BETWEEN.has(word); };
+    const ended = (position: number) => { const next = tok(position + 1); return !next || AFTER_S_VERB.has(next) || DETERMINERS.has(next); };
+    const verbAfter = (start: number) => { let cursor = start; while (ADVERBS_BETWEEN.has(tok(cursor))) cursor += 1; return sVerb(cursor) && ended(cursor) ? cursor : undefined; };
+    const first = tok(0);
+    const second = tok(1);
+    let found: number | undefined;
+    if (DETERMINERS.has(first) && second && !/s$/u.test(second) && !AUX_WORDS.has(second) && !OTHER_PRONOUNS.has(second)) found = verbAfter(2);
+    else if (/^[A-Z][a-z]+$/u.test(parts[wordIndexes[0]!]!) && parts[wordIndexes[0]! + 1] === " " && !SUBJECT_PRONOUNS.has(first) && !DETERMINERS.has(first) && !CONNECTOR_WORDS.has(first) && !COORDINATORS.has(first) && !AUX_WORDS.has(first)) found = verbAfter(1);
+    if (found !== undefined) mark(wordIndexes[found]);
+  }
+  return merge(parts.flatMap((text, index) => {
+    const how = marked.get(index);
+    if (how !== "clitic") return [{ text, mark: how === "all" }];
+    const cut = text.search(/['’]/u);
+    return [{ text: text.slice(0, cut), mark: false }, { text: text.slice(cut), mark: true }];
+  }));
 }
 
 /** One formula line with its key slots (and the matching words of its own examples) marked. */
 export function grammarFormulaSegments(line: string, matcher: GrammarExampleMatcher | null = grammarExampleMatcher([line])): HighlightSegment[] {
-  const parts = clauses(line);
-  if (parts.length > 1) return merge(parts.flatMap((part, index) => [...(index ? plain("; ") : []), ...grammarFormulaSegments(part, matcher)]));
+  const { parts, seps } = clauses(line);
+  if (parts.length > 1) return merge(parts.flatMap((part, index) => [...(index ? plain(seps[index - 1]!) : []), ...grammarFormulaSegments(part, matcher)]));
   const parsed = readFormulaLine(line);
   if (!parsed.slots.length || parsed.slots.every((slot) => slot.neutral && !/\(-[a-z]/u.test(slot.text))) return plain(line);
-  const pattern = parsed.slots.flatMap((slot, index) => [...(index ? plain(" + ") : []), ...slotSegments(slot)]);
+  const pattern = parsed.slots.flatMap((slot, index) => [...(index ? plain(parsed.seps[index - 1] ?? " + ") : []), ...slotSegments(slot)]);
   const examples = parsed.examples
     ? [...plain(parsed.examples.match(/^:\s*/u)![0]), ...parsed.examples.replace(/^:\s*/u, "").split(/(\s+\/\s+|;\s*)/u).flatMap((part, index) => index % 2 ? plain(part) : grammarExampleSegments(part, matcher))]
     : [];
