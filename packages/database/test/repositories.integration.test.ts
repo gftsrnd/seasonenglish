@@ -217,7 +217,7 @@ describe("E4S repositories", () => {
     ]);
     await expect(repositories.engagement.getSummary(DEMO_IDS.learner)).resolves.toEqual({
       points: 20,
-      badges: [{ key: "starter", label: "Khởi động" }]
+      badges: [{ key: "starter", label: "Khởi đầu" }]
     });
     await expect(repositories.notifications.listForLearner(DEMO_IDS.learner)).resolves.toEqual([]);
     await expect(repositories.files.listForOwner(DEMO_IDS.learner)).resolves.toEqual([]);

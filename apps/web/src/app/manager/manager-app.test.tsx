@@ -291,7 +291,7 @@ describe("new Manager app branch", () => {
     expect(custom).toHaveAttribute("aria-expanded", "false");
     await user.click(custom);
     expect(custom).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("button", { name: "Khởi động" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Khởi đầu" })).toHaveAttribute("aria-pressed", "true");
     await user.selectOptions(cases, "Có huy hiệu cấp cao nhưng thiếu cấp dưới");
     expect(screen.getByRole("status")).toHaveTextContent("Cấp 1/4 · Mùa xuân – gieo hạt");
   });
@@ -308,10 +308,10 @@ describe("new Manager app branch", () => {
     const preview = screen.getByRole("region", { name: "Xem trước hồ sơ học viên" });
     expect(within(preview).getByText("6 / 60")).toBeVisible();
 
-    const badge = screen.getByRole("button", { name: "Thợ mở khoá" });
-    expect(within(preview).queryByText("Thợ mở khoá")).not.toBeInTheDocument();
+    const badge = screen.getByRole("button", { name: "Thợ chữ" });
+    expect(within(preview).queryByText("Thợ chữ")).not.toBeInTheDocument();
     await user.click(badge);
-    const card = within(preview).getByText("Thợ mở khoá").closest("article")!;
+    const card = within(preview).getByText("Thợ chữ").closest("article")!;
     expect(within(card).getByRole("img", { name: "Đã đạt" })).toBeVisible();
     expect(within(preview).getByRole("button", { name: "Xem tất cả huy hiệu" })).toHaveAttribute("aria-expanded", "false");
     await user.click(badge);

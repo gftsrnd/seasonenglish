@@ -88,7 +88,7 @@ describe("practice, games, arena, rewards and survey API", () => {
     );
   }
 
-  it("keeps weekly practice in one screen and awards the Friday badge once", async () => {
+  it("keeps weekly practice in one screen and no longer awards the Friday badge for it", async () => {
     await pool.query("delete from practice_submissions where learner_id = $1", [DEMO_IDS.learner]);
     await pool.query(
       `update progress_records set status = 'in_progress', completed_at = null
@@ -177,11 +177,12 @@ describe("practice, games, arena, rewards and survey API", () => {
       payload: { requestId, text: validText }
     });
     expect(duplicate.statusCode).toBe(200);
+    // "Ôn tập đúng hẹn" now comes from the monthly Friday review completed on its day.
     const rewards = await pool.query(
       "select count(*)::int as count from reward_events where learner_id = $1 and source_type = 'weekly_practice'",
       [DEMO_IDS.learner]
     );
-    expect(rewards.rows[0].count).toBe(1);
+    expect(rewards.rows[0].count).toBe(0);
 
     const historicalWeekId = "10000000-0000-4000-8000-000000000098";
     await pool.query(

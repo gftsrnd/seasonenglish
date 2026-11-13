@@ -7,6 +7,7 @@ export * from "./media-repository.js";
 export * from "./monthly-content-repository.js";
 export { FROZEN_MONTHLY_ILLUSTRATIONS_SQL } from "./monthly-illustration-projection.js";
 export * from "./repositories.js";
+export * from "./reward-recompute.js";
 export * from "./schema.js";
 export * from "./seed.js";
 export * from "./staff-date-notices.js";

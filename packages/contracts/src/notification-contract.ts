@@ -39,7 +39,7 @@ export type InboxNotificationKind =
   | "course_ready" | "certificate_issued" | "challenge_received" | "challenge_passed" | "challenge_retry"
   | "monthly_exam_ready" | "level_exam_ready" | "monthly_survey_open"
   | "lesson_window_unapproved" | "lesson_window_unapproved_manager" | "test_date_active"
-  | "absence_warning" | "lesson_reopened";
+  | "absence_warning" | "lesson_reopened" | "badge_earned" | "season_reached";
 
 export interface InboxNotificationView {
   readonly id: string;

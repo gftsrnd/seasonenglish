@@ -23,7 +23,7 @@ describe("P2 reward ledger", () => {
 
   afterAll(async () => { await pool.end(); });
 
-  it("awards weekly practice +15 and full-week +20 once, while level challenges award zero", async () => {
+  it("pays nothing for the retired weekly practice or a full week (monthly rules), while level challenges award zero", async () => {
     await pool.query("delete from reward_events where learner_id = $1", [DEMO_IDS.learner]);
     await pool.query("delete from activities where learner_id = $1", [DEMO_IDS.learner]);
     await pool.query("delete from practice_appeals where learner_id = $1", [DEMO_IDS.learner]);
@@ -52,10 +52,8 @@ describe("P2 reward ledger", () => {
        group by re.source_type, re.points order by re.source_type`,
       [DEMO_IDS.learner]
     );
-    expect(ledger.rows).toEqual([
-      { source_type: "activity_points", points: 15, count: 1 },
-      { source_type: "full_week_bonus", points: 20, count: 1 }
-    ]);
+    // The monthly Friday review (+15) and full month (+20) replace these weekly rewards.
+    expect(ledger.rows).toEqual([{ source_type: "activity_points", points: 0, count: 1 }]);
 
     const challengeSessionId = randomUUID();
     await pool.query(

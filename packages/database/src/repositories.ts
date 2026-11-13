@@ -1102,6 +1102,16 @@ class LearningRepository {
   }
 
   async acknowledgeRewardAnnouncement(learnerId: string, announcementId: string): Promise<boolean> {
+    const seasonUp = /^season-up:([2-4])$/.exec(announcementId);
+    if (seasonUp) {
+      // The Season congratulation is shown once: closing it marks that Season (and lower ones) celebrated.
+      const result = await this.pool.query(
+        `update learner_season_milestones set celebrated_at = now()
+         where learner_id = $1 and season_level <= $2 and celebrated_at is null`,
+        [learnerId, Number(seasonUp[1])]
+      );
+      return Boolean(result.rowCount);
+    }
     const current = await this.learnerLifecycle(learnerId, 0, false);
     if (!current || current.rewardAnnouncement.kind === "normal"
       || current.rewardAnnouncement.announcementId !== announcementId) return false;
@@ -1147,7 +1157,7 @@ class LearningRepository {
     monthlyGoal: string | null;
     rewardAnnouncement: RewardAnnouncementView;
   } | null> {
-    const [identity, profileResult, levelup] = await Promise.all([
+    const [identity, profileResult, levelup, seasonMilestone] = await Promise.all([
       this.pool.query<{ cefr: CefrLevel | null; cefr_approved: boolean }>(
         `select e.cefr, e.cefr_approved from enrollments e
          join programs p on p.id = e.program_id and p.status = 'active'
@@ -1181,6 +1191,11 @@ class LearningRepository {
                and ae.payload->>'mode' = 'direct' and ae.payload->>'previousLevel' is distinct from ae.payload->>'targetLevel'
            ), '-infinity'::timestamptz)
          order by aa.started_at desc limit 1`, [learnerId]
+      ),
+      this.pool.query<{ season_level: number }>(
+        `select season_level from learner_season_milestones
+         where learner_id = $1 and celebrated_at is null
+         order by season_level desc limit 1`, [learnerId]
       )
     ]);
     const profile = profileObject(profileResult.rows[0]?.profile);
@@ -1225,6 +1240,27 @@ class LearningRepository {
     const acknowledged = Boolean(candidateId && lifecycle.rewardAnnouncementAcknowledged === candidateId);
     const announcementKind = acknowledged ? "normal" : candidateKind;
     const seasonName = seasonNameForDate(new Date());
+    // A newly reached Season waits behind a level announcement and is congratulated once.
+    const reachedSeason = announcementKind === "normal"
+      ? SEASONS.find((season) => season.level === seasonMilestone.rows[0]?.season_level) ?? null
+      : null;
+    if (reachedSeason) {
+      return {
+        levelUpPhase,
+        monthlyGoal: typeof profile.monthlyGoal === "string" && profile.monthlyGoal.trim() ? profile.monthlyGoal : null,
+        rewardAnnouncement: {
+          kind: "season-up",
+          points,
+          nextPoints: SEASONS.find((season) => season.level === reachedSeason.level + 1)?.pointsRequired ?? null,
+          seasonName: reachedSeason.name,
+          seasonLevel: reachedSeason.level,
+          level: enrollment?.cefr ?? null,
+          announcementId: `season-up:${reachedSeason.level}`,
+          source: "genuine",
+          rule: "Lên Season khi đủ điểm và mọi huy hiệu của Season đó; đi lần lượt, không nhảy cấp."
+        }
+      };
+    }
     return {
       levelUpPhase,
       monthlyGoal: typeof profile.monthlyGoal === "string" && profile.monthlyGoal.trim() ? profile.monthlyGoal : null,
@@ -1711,7 +1747,10 @@ class LearningRepository {
             });
           }
           const currentEvidence = lesson.progress.evidence;
-          const mergedEvidence = { ...currentEvidence, [input.partCode]: storedEvidence };
+          // Practising a part again after a correct answer is allowed, but the
+          // correct result stays the part's result (and the retry earns nothing).
+          const keepCorrect = currentEvidence[input.partCode]?.status === "correct";
+          const mergedEvidence = keepCorrect ? currentEvidence : { ...currentEvidence, [input.partCode]: storedEvidence };
           // A persisted writing response or Speaking upload is the learner's
           // terminal action even when automatic scoring is unavailable. Review
           // can enrich its feedback later without blocking the monthly path.
@@ -1733,7 +1772,7 @@ class LearningRepository {
             [randomUUID(), input.learnerId, input.lessonId, status, lesson.progress.score ?? null,
               JSON.stringify({ completedPartCodes, evidence: mergedEvidence })]
           );
-          if (storedEvidence.status === "correct" && storedEvidence.score && storedEvidence.score > 0) {
+          if (!keepCorrect && storedEvidence.status === "correct" && storedEvidence.score && storedEvidence.score > 0) {
             await awardLessonPartPoints(client, input.learnerId, attemptId, Math.max(1, 6 - storedEvidence.attempts));
           }
           await client.query("commit");
@@ -2224,6 +2263,13 @@ class LearningRepository {
       : null;
     const badgeCounts = requiredBadgeCountsForNext(points, earnedBadgeKeys);
     const assessmentViews = buildAssessmentSnapshots(assessments.rows);
+    // Same rule as reward(…, "done"): the badge certificate opens at C1 with an approved monthly final.
+    const badgeCertificateAvailable = row.cefr === "C1" && Boolean((await this.pool.query(
+      `select 1 from assessment_attempts aa
+       join assessment_versions av on av.id = aa.assessment_version_id
+       join assessment_definitions ad on ad.id = av.definition_id
+       where aa.learner_id = $1 and ad.kind = 'final' and aa.status = 'approved' limit 1`, [learnerId]
+    )).rowCount);
     return {
       learner: { id: row.id, displayName: row.display_name, cefr: row.cefr, profile: row.profile ?? {} },
       points,
@@ -2270,6 +2316,7 @@ class LearningRepository {
         requiredBadgeCount: badgeCounts.required
       },
       badgeRoadmap: roadmap,
+      badgeCertificateAvailable,
       levelReadiness: {
         ...readiness,
         ...(monthlyPolicy ? { eligible: monthlyPolicy.eligible } : {}),
@@ -3186,6 +3233,8 @@ async function applyLessonAttemptEvidence(client: PoolClient, learnerId: string,
   const stored = progress.rows[0]?.evidence;
   if (!progress.rowCount || !stored) return;
   const current = stored.evidence?.[row.part_code];
+  // A later attempt never replaces a part that is already correct from another attempt.
+  if (current?.status === "correct" && current.attempts !== row.attempt_number) return;
   const next: PartEvidence = {
     ...(current?.appealStatus ? { appealStatus: current.appealStatus } : {}),
     ...(current?.translationViewed !== undefined ? { translationViewed: current.translationViewed } : {}),
@@ -9818,14 +9867,6 @@ class EngagementRepository {
         taskKey: "weekly_practice"
       });
       if (activated) await client.query(
-          `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
-           select $1, $2, b.id, 0, 'weekly_practice', $3
-           from users u join badges b on b.organization_id = u.organization_id and b.badge_key = 'friday'
-           where u.id = $2
-           on conflict do nothing`,
-          [randomUUID(), input.learnerId, submissionId]
-        );
-      if (activated) await client.query(
           `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
            values ($1, $2, 'weekly_practice', 'practice_submission', $3, 10, $4::jsonb)`,
           [randomUUID(), input.learnerId, submissionId, JSON.stringify({ wordCount: input.text.trim().split(/\s+/).length })]
@@ -10450,11 +10491,14 @@ class EngagementRepository {
     }
     const badges = issuance?.badges_snapshot ?? row.badges;
     const signatures = issuance?.signatures_snapshot ?? { operatorName: row.operator_name, managerName: row.manager_name };
+    // The certificate names the learner's actual Season (same ladder as the profile).
+    const season = seasonForRewards(Number(row.points), new Set(row.badges.filter((badge) => badge.earned).map((badge) => badge.key)));
+    const [seasonName = season.name, seasonDescription = ""] = season.name.split(" – ");
     return {
       mode, learnerName: issuance?.learner_name ?? row.display_name, cefr: issuance?.level ?? row.cefr,
       cefrLabel: cefrDisplayLabel(issuance?.level ?? row.cefr),
-      points: Number(row.points), displayPoints: mode === "preview" ? 420 : Number(row.points),
-      season: { name: "Mùa đông", description: "vững vàng" }, simulated: mode === "preview", earnedBadgeCount,
+      points: Number(row.points), displayPoints: Number(row.points),
+      season: { name: seasonName, description: seasonDescription }, simulated: mode === "preview", earnedBadgeCount,
       requiredBadgeCount: badges.length, printable, certificateNumber: issuance?.certificate_code ?? generatedCode,
       completedAt: issuance?.issued_at.toISOString() ?? (mode === "done" ? row.completed_at : null)?.toISOString() ?? new Date().toISOString(),
       organizationName: issuance?.organization_name ?? row.organization_name,
@@ -14603,6 +14647,7 @@ async function awardLessonPartPoints(client: PoolClient, learnerId: string, atte
      on conflict do nothing`,
     [randomUUID(), learnerId, attemptId, points]
   );
+  await recordSeasonMilestones(client, learnerId);
 }
 
 /**
@@ -14631,22 +14676,59 @@ async function withLearnerRewardLock<T>(pool: Pool, learnerId: string, work: (cl
   }
 }
 
+/** Mini game results that earn points per learner per day (Asia/Ho_Chi_Minh). Further plays earn 0. */
+export const PAID_GAME_RESULTS_PER_DAY = 3;
+
+/**
+ * One activity earns points once. When the same action was recorded twice (a
+ * historical race), only the earliest row of that reference is paid.
+ */
+const FIRST_ACTIVITY_OF_REFERENCE_SQL = `(a.reference_id is null or not exists (
+  select 1 from activities twin
+  where twin.learner_id = a.learner_id and twin.activity_type = a.activity_type
+    and twin.reference_type = a.reference_type and twin.reference_id = a.reference_id and twin.id <> a.id
+    and ((twin.occurred_at, twin.id) < (a.occurred_at, a.id)
+      or exists (select 1 from reward_events paid where paid.learner_id = twin.learner_id
+        and paid.source_type = 'activity_points' and paid.source_id = twin.id and paid.badge_id is null))))`;
+
+/**
+ * Applies the reward rules of the monthly product to the learner's recorded
+ * activities. Points (lifetime ledger, reward_events):
+ * - new lesson completed the first time +10; the Friday review ("Ôn tuần") +15
+ * - valid Season turn +2; micro lesson +5
+ * - mini game +5 when the score is at least half of the maximum, for at most
+ *   three paid results a day (more plays are recorded but earn 0)
+ * - monthly final exam submitted +15; placement / level-up / exit test +10
+ * - whole month of the monthly calendar completed (every new and review lesson) +20, once a month
+ * Lesson parts (+5…+1, first correct answer only) are paid by awardLessonPartPoints.
+ * Badges are awarded once each, with a bell notification; a newly reached
+ * Season is recorded once (bell + congratulation modal).
+ */
 async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Promise<void> {
   if (!("release" in db)) {
     await withLearnerRewardLock(db, learnerId, (client) => syncLearnerRewards(client, learnerId));
     return;
   }
   await lockLearnerRewards(db, learnerId);
-  // One activity earns points once. When the same action was recorded twice
-  // (a historical race), only the earliest row of that reference is paid.
   await db.query(
     `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
      select gen_random_uuid(), a.learner_id, null,
-       case a.activity_type when 'lesson' then 10 when 'micro_lesson' then 5
-         when 'coach' then 2 when 'weekly_practice' then 15 when 'game' then 5 when 'assessment' then 10 else 0 end,
+       case
+         when a.activity_type = 'lesson' then case when exists (
+             select 1 from month_lessons ml join month_frameworks mf on mf.id = ml.framework_id
+             where ml.lesson_id = a.reference_id and ${MONTH_LESSON_IS_REVIEW_SQL}) then 15 else 10 end
+         when a.activity_type = 'micro_lesson' then 5
+         when a.activity_type = 'coach' then 2
+         when a.activity_type = 'assessment' then case when exists (
+             select 1 from assessment_attempts aa
+             join assessment_versions av on av.id = aa.assessment_version_id
+             join assessment_definitions ad on ad.id = av.definition_id
+             where aa.id = a.reference_id and ad.kind = 'final') then 15 else 10 end
+         else 0 end,
        'activity_points', a.id
      from activities a
      where a.learner_id = $1
+       and a.activity_type <> 'game'
        and (a.activity_type <> 'coach' or coalesce(
          (a.evidence->>'countsTowardGoal')::boolean,
          (a.evidence->>'relevant')::boolean,
@@ -14658,25 +14740,41 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
        ))
        and not exists (select 1 from reward_events re where re.learner_id = a.learner_id
          and re.source_type = 'activity_points' and re.source_id = a.id and re.badge_id is null)
-       and (a.reference_id is null or not exists (
-         select 1 from activities twin
-         where twin.learner_id = a.learner_id and twin.activity_type = a.activity_type
-           and twin.reference_type = a.reference_type and twin.reference_id = a.reference_id and twin.id <> a.id
-           and ((twin.occurred_at, twin.id) < (a.occurred_at, a.id)
-             or exists (select 1 from reward_events paid where paid.learner_id = twin.learner_id
-               and paid.source_type = 'activity_points' and paid.source_id = twin.id and paid.badge_id is null))))
+       and ${FIRST_ACTIVITY_OF_REFERENCE_SQL}
      on conflict (learner_id, source_type, source_id) where badge_id is null do nothing`,
     [learnerId]
   );
+  // Mini games: +5 for a result of at least 50 % of its maximum, the first three
+  // such results of each Vietnam day. Results already paid keep their slot.
+  await db.query(
+    `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
+     select gen_random_uuid(), ranked.learner_id, null, 5, 'activity_points', ranked.id
+     from (
+       select a.id, a.learner_id, paid.id is not null as paid,
+              row_number() over (
+                partition by (a.occurred_at at time zone 'Asia/Ho_Chi_Minh')::date
+                order by (paid.id is not null) desc, a.occurred_at, a.id
+              ) as position
+       from activities a
+       left join reward_events paid on paid.learner_id = a.learner_id and paid.source_type = 'activity_points'
+         and paid.source_id = a.id and paid.badge_id is null and paid.points > 0
+       where a.learner_id = $1 and a.activity_type = 'game'
+         and (paid.id is not null or (
+           jsonb_typeof(a.evidence->'score') = 'number' and jsonb_typeof(a.evidence->'maxScore') = 'number'
+           and (a.evidence->>'maxScore')::numeric > 0
+           and (a.evidence->>'score')::numeric * 2 >= (a.evidence->>'maxScore')::numeric
+           and not exists (select 1 from reward_events done where done.learner_id = a.learner_id
+             and done.source_type = 'activity_points' and done.source_id = a.id and done.badge_id is null)
+           and ${FIRST_ACTIVITY_OF_REFERENCE_SQL}))
+     ) ranked
+     where not ranked.paid and ranked.position <= $2
+     on conflict (learner_id, source_type, source_id) where badge_id is null do nothing`,
+    [learnerId, PAID_GAME_RESULTS_PER_DAY]
+  );
 
-  const [lessons, completeWeek, coach, words, firstTry, activityDays] = await Promise.all([
+  const [lessons, calendar, coach, words, firstTry, activityDays] = await Promise.all([
     db.query<{ count: string }>("select count(*)::text as count from progress_records where learner_id = $1 and status = 'completed'", [learnerId]),
-    db.query(`select 1 from program_weeks pw join enrollments e on e.program_id = pw.program_id and e.learner_id = $1
-      join lesson_sets ls on ls.program_week_id = pw.id and ls.cefr = e.cefr
-      join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
-      join lessons l on l.lesson_set_version_id = lsv.id
-      left join progress_records pr on pr.lesson_id = l.id and pr.learner_id = $1 and pr.status = 'completed'
-      group by pw.id having count(l.id) >= 5 and count(pr.id) = count(l.id) limit 1`, [learnerId]),
+    learnerMonthlyCalendarProgress(db, learnerId),
     db.query<{ count: string }>(`select count(*)::text as count from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
       where cs.learner_id = $1 and ct.speaker = 'learner' and coalesce(cs.scenario->>'kind', 'practice') = 'practice'
         and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true))`, [learnerId]),
@@ -14692,26 +14790,19 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
       "select distinct occurred_at::date::text as day from activities where learner_id = $1 order by day", [learnerId]
     )
   ]);
-  await db.query(
-    `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
-     select gen_random_uuid(), $1, null, 20, 'full_week_bonus', completed.program_week_id
-     from (
-       select pw.id as program_week_id
-       from program_weeks pw
-       join enrollments e on e.program_id = pw.program_id and e.learner_id = $1
-       join lesson_sets ls on ls.program_week_id = pw.id and ls.cefr = e.cefr
-       join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
-       join lessons l on l.lesson_set_version_id = lsv.id
-       left join progress_records pr on pr.lesson_id = l.id and pr.learner_id = $1 and pr.status = 'completed'
-       group by pw.id
-       having count(l.id) >= 5 and count(pr.id) = count(l.id)
-     ) completed
-     on conflict (learner_id, source_type, source_id) where badge_id is null do nothing`,
-    [learnerId]
-  );
+  const monthly = monthlyCalendarAchievements(calendar);
+  for (const monthId of monthly.completedMonthIds) {
+    await db.query(
+      `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
+       values (gen_random_uuid(), $1, null, 20, 'full_month_bonus', $2)
+       on conflict (learner_id, source_type, source_id) where badge_id is null do nothing`,
+      [learnerId, monthId]
+    );
+  }
   const earned = new Set<string>();
   if (Number(lessons.rows[0]?.count ?? 0) >= 1) earned.add("starter");
-  if (completeWeek.rowCount) earned.add("week_complete");
+  if (monthly.weekComplete) earned.add("week_complete");
+  if (monthly.fridayOnTime) earned.add("friday");
   if (Number(coach.rows[0]?.count ?? 0) >= 10) earned.add("coach_friend");
   if (Number(words.rows[0]?.count ?? 0) >= 15) earned.add("wordsmith");
   if (firstTry.rows.some((row) => isFirstTryLesson(row.evidence))) earned.add("first_try");
@@ -14720,15 +14811,152 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
   if (longest >= 5) earned.add("streak5");
 
   for (const badgeKey of earned) {
+    // A badge is awarded once; the bell notification is sent with that first award only.
     await db.query(
-      `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
-       select gen_random_uuid(), $1, b.id, 0, 'achievement', $1
-       from users u join badges b on b.organization_id = u.organization_id and b.badge_key = $2
-       where u.id = $1
-       on conflict (learner_id, badge_id) where badge_id is not null do nothing`,
+      `with awarded as (
+         insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
+         select gen_random_uuid(), $1, b.id, 0, 'achievement', $1
+         from users u join badges b on b.organization_id = u.organization_id and b.badge_key = $2
+         where u.id = $1
+         on conflict (learner_id, badge_id) where badge_id is not null do nothing
+         returning badge_id
+       )
+       select notify_inbox(b.organization_id, 'learner', $1, 'badge:' || b.badge_key, 'badge_earned', b.label)
+       from awarded join badges b on b.id = awarded.badge_id`,
       [learnerId, badgeKey]
     );
   }
+  await recordSeasonMilestones(db, learnerId);
+}
+
+/** One scheduled day of a monthly calendar the learner studies, with the learner's completion. */
+export interface MonthlyCalendarLessonProgress {
+  monthId: string;
+  frameworkId: string;
+  lessonCount: number;
+  kind: "new" | "review";
+  lessonDate: string | null;
+  completed: boolean;
+  /** Completed on its scheduled (organisation) date. */
+  onTime: boolean;
+}
+
+/**
+ * Every scheduled day (new lessons and Friday reviews) of the monthly calendars
+ * the learner has started, with completion. A scheduled day whose lesson is not
+ * approved yet counts as not completed.
+ */
+async function learnerMonthlyCalendarProgress(db: Pool | PoolClient, learnerId: string): Promise<MonthlyCalendarLessonProgress[]> {
+  const { rows } = await db.query<{
+    month_id: string; framework_id: string; lesson_count: number; kind: string | null; lesson_date: string | null; completed: boolean; on_time: boolean;
+  }>(
+    `select pm.id as month_id, mf.id as framework_id, pm.lesson_count, spec.kind, spec.lesson_date::text as lesson_date,
+            pr.id is not null as completed,
+            coalesce(pr.completed_on = spec.lesson_date, false) as on_time
+     from users u
+     join program_months pm on pm.organization_id = u.organization_id
+     join month_frameworks mf on mf.program_month_id = pm.id and mf.status = 'approved' and mf.published_at is not null
+     cross join lateral (
+       select item->>'kind' as kind, item->>'lessonNumber' as lesson_number,
+              coalesce(
+                (select scheduled.lesson_date from month_lessons scheduled
+                 where scheduled.framework_id = mf.id and scheduled.lesson_number::text = item->>'lessonNumber' limit 1),
+                case when item->>'date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (item->>'date')::date end
+              ) as lesson_date
+       from jsonb_array_elements(case when jsonb_typeof(mf.curriculum_contract->'daySpecs') = 'array'
+         then mf.curriculum_contract->'daySpecs' else '[]'::jsonb end) item
+     ) spec
+     left join month_lessons ml on ml.framework_id = mf.id and ml.lesson_number::text = spec.lesson_number
+       and ml.status = 'approved' and ml.lesson_id is not null and ml.scope_hash = mf.scope_hash
+     left join progress_records pr on pr.lesson_id = ml.lesson_id and pr.learner_id = u.id and pr.status = 'completed'
+     where u.id = $1
+       and exists (
+         select 1 from month_lessons started
+         join progress_records done on done.lesson_id = started.lesson_id
+         where started.framework_id = mf.id and done.learner_id = u.id and done.status = 'completed'
+       )`,
+    [learnerId]
+  );
+  return rows.map((row) => ({
+    monthId: row.month_id, frameworkId: row.framework_id, lessonCount: Number(row.lesson_count),
+    kind: row.kind === "review" ? "review" : "new", lessonDate: row.lesson_date, completed: row.completed, onTime: row.on_time
+  }));
+}
+
+/** Calendar weeks shorter than this (a month starting on a Friday, ending on a Monday) do not count as a whole week. */
+export const MIN_LESSONS_FOR_WEEK_BADGE = 3;
+
+/**
+ * Monthly-calendar achievements: months whose every scheduled day is completed
+ * (+20 bonus), a calendar week (Mon–Sun) of at least three lessons all completed
+ * ("Tuần trọn vẹn") and a Friday review completed on its own day ("Ôn tập đúng hẹn").
+ */
+export function monthlyCalendarAchievements(lessons: readonly MonthlyCalendarLessonProgress[]): {
+  completedMonthIds: string[]; weekComplete: boolean; fridayOnTime: boolean;
+} {
+  const frameworks = new Map<string, MonthlyCalendarLessonProgress[]>();
+  const weeks = new Map<string, MonthlyCalendarLessonProgress[]>();
+  for (const lesson of lessons) {
+    frameworks.set(lesson.frameworkId, [...(frameworks.get(lesson.frameworkId) ?? []), lesson]);
+    if (lesson.lessonDate) {
+      const key = `${lesson.frameworkId}:${isoWeekStart(lesson.lessonDate)}`;
+      weeks.set(key, [...(weeks.get(key) ?? []), lesson]);
+    }
+  }
+  const completedMonthIds = new Set<string>();
+  for (const days of frameworks.values()) {
+    const first = days[0]!;
+    if (days.length >= first.lessonCount && days.every((day) => day.completed)) completedMonthIds.add(first.monthId);
+  }
+  return {
+    completedMonthIds: [...completedMonthIds],
+    weekComplete: [...weeks.values()].some((days) => days.length >= MIN_LESSONS_FOR_WEEK_BADGE && days.every((day) => day.completed)),
+    fridayOnTime: lessons.some((lesson) => lesson.kind === "review" && lesson.onTime)
+  };
+}
+
+function isoWeekStart(date: string): string {
+  const day = new Date(`${date}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7));
+  return day.toISOString().slice(0, 10);
+}
+
+/**
+ * Records each Season the learner reached once. The highest newly reached Season
+ * gets a bell notification and waits for its congratulation modal; Seasons
+ * passed on the way in the same step are not celebrated separately.
+ */
+async function recordSeasonMilestones(client: PoolClient, learnerId: string): Promise<void> {
+  const totals = await client.query<{ organization_id: string; points: number; badge_keys: string[] }>(
+    `select u.organization_id,
+            coalesce((select sum(re.points) from reward_events re where re.learner_id = u.id), 0)::int as points,
+            coalesce((select array_agg(b.badge_key) from reward_events re join badges b on b.id = re.badge_id
+                      where re.learner_id = u.id), '{}'::text[]) as badge_keys
+     from users u where u.id = $1 and u.role = 'learner'`,
+    [learnerId]
+  );
+  const row = totals.rows[0];
+  if (!row) return;
+  const level = seasonForRewards(row.points, new Set(row.badge_keys)).level;
+  if (level < 2) return;
+  const inserted = await client.query<{ season_level: number }>(
+    `insert into learner_season_milestones (learner_id, season_level)
+     select $1, level from generate_series(2, $2::int) as level
+     on conflict do nothing
+     returning season_level`,
+    [learnerId, level]
+  );
+  if (!inserted.rowCount) return;
+  const highest = Math.max(...inserted.rows.map((item) => item.season_level));
+  await client.query(
+    `update learner_season_milestones set celebrated_at = now()
+     where learner_id = $1 and season_level < $2 and celebrated_at is null`,
+    [learnerId, highest]
+  );
+  await client.query(
+    "select notify_inbox($1, 'learner', $2, $3, 'season_reached', $4)",
+    [row.organization_id, learnerId, `season:${highest}`, String(highest)]
+  );
 }
 
 function isFirstTryLesson(record: Record<string, unknown>): boolean {

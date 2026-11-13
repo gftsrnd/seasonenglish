@@ -55,14 +55,14 @@ export const DEMO_IDS = {
 } as const;
 
 const badgeCatalog = [
-  ["00000000-0000-4000-8000-000000000821", "starter", "Khởi động", "Hoàn thành bài học đầu tiên", 2],
-  ["00000000-0000-4000-8000-000000000822", "streak3", "Chuỗi 3 ngày", "Học 3 ngày liên tiếp từ T2–T6", 2],
-  ["00000000-0000-4000-8000-000000000823", "week_complete", "Tuần trọn vẹn", "Hoàn thành toàn bộ bài trong một tuần", 3],
-  ["00000000-0000-4000-8000-000000000824", "friday", "Đúng hẹn thứ Sáu", "Nộp bài thực hành tuần đúng hạn", 3],
-  ["00000000-0000-4000-8000-000000000825", "coach_friend", "Bạn của Season", "Hoàn thành 10 lượt luyện với Season", 3],
-  ["00000000-0000-4000-8000-000000000826", "streak5", "Chuỗi 5 ngày", "Học đủ 5 ngày trong tuần", 4],
-  ["00000000-0000-4000-8000-000000000827", "first_try", "Chuẩn ngay lần đầu", "Bốn kỹ năng đúng ở lần thử đầu", 4],
-  ["00000000-0000-4000-8000-000000000828", "wordsmith", "Thợ mở khoá", "Mở đủ ô từ bí mật với Season", 4]
+  ["00000000-0000-4000-8000-000000000821", "starter", "Khởi đầu", "Hoàn thành bài học đầu tiên", 2],
+  ["00000000-0000-4000-8000-000000000822", "streak3", "Chuỗi 3 ngày", "Học 3 ngày làm việc liên tiếp (T2–T6)", 2],
+  ["00000000-0000-4000-8000-000000000823", "week_complete", "Tuần trọn vẹn", "Hoàn thành mọi bài của một tuần trong lịch học tháng", 3],
+  ["00000000-0000-4000-8000-000000000824", "friday", "Ôn tập đúng hẹn", "Hoàn thành bài Ôn tuần đúng ngày đã xếp lịch", 3],
+  ["00000000-0000-4000-8000-000000000825", "coach_friend", "Bạn của Season", "Có 10 lượt luyện hợp lệ với Season", 3],
+  ["00000000-0000-4000-8000-000000000826", "streak5", "Chuỗi 5 ngày", "Học 5 ngày làm việc liên tiếp (T2–T6)", 4],
+  ["00000000-0000-4000-8000-000000000827", "first_try", "Đúng ngay lần đầu", "Một bài có Nghe, Đọc, Viết, Nói đều đúng ngay lần đầu", 4],
+  ["00000000-0000-4000-8000-000000000828", "wordsmith", "Thợ chữ", "Dùng 15 từ khác nhau khi luyện với Season", 4]
 ] as const;
 
 const lessonTitles = [
@@ -590,10 +590,19 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
     [DEMO_IDS.activity, DEMO_IDS.learner, DEMO_IDS.lessons[0]]
   );
   for (const [id, key, label, description, seasonLevel] of badgeCatalog) {
+    // A new organisation already gets its badges from the database trigger
+    // (random ids); the demo organisation keeps its fixed ids while nothing
+    // references the trigger's rows yet.
+    await client.query(
+      `update badges set id = $1
+       where organization_id = $2 and badge_key = $3 and id <> $1
+         and not exists (select 1 from reward_events re where re.badge_id = badges.id)`,
+      [id, DEMO_IDS.organization, key]
+    );
     await client.query(
       `insert into badges (id, organization_id, badge_key, label, rule)
        values ($1, $2, $3, $4, $5::jsonb)
-       on conflict (id) do update set label = excluded.label, rule = excluded.rule`,
+       on conflict (organization_id, badge_key) do update set label = excluded.label, rule = excluded.rule`,
       [id, DEMO_IDS.organization, key, label, JSON.stringify({ description, seasonLevel })]
     );
   }
@@ -624,7 +633,8 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
     [DEMO_IDS.coachSession]
   );
   const assessments = [
-    [DEMO_IDS.placementDefinition, "placement-a", "placement", "Bài test đầu vào", DEMO_IDS.placementVersion, placementDefinition],     [DEMO_IDS.passCourseDefinition, "pass-course-form-a", "pass_course", "Pass Course – Form A", DEMO_IDS.passCourseVersion, passCourseFormADefinition]
+    [DEMO_IDS.placementDefinition, "placement-a", "placement", "Bài test đầu vào", DEMO_IDS.placementVersion, placementDefinition],
+     [DEMO_IDS.passCourseDefinition, "pass-course-form-a", "pass_course", "Pass Course – Form A", DEMO_IDS.passCourseVersion, passCourseFormADefinition]
   ] as const;
   for (const [definitionId, key, kind, title, versionId, blueprint] of assessments) {
     await client.query(

@@ -12,6 +12,18 @@ const SEASON_META = {
   4: { icon: "❄️", name: "Mùa đông – vững vàng", points: 360 } // media-scan: allow-avatar-reward -- deliberate reward symbol
 } as const;
 
+/** How points are earned (same rules as the server reward sync). */
+export const REWARD_POINT_RULES: ReadonlyArray<readonly [label: string, points: string]> = [
+  ["Hoàn thành 1 bài học mới (lần đầu)", "+10"],
+  ["Mỗi phần bài học làm đúng", "+5 lần 1, giảm 1 điểm mỗi lần làm lại (tối thiểu +1); chỉ tính lần đúng đầu tiên"],
+  ["Hoàn thành bài Ôn tuần (thứ Sáu)", "+15"],
+  ["1 lượt luyện hợp lệ với Season", "+2"],
+  ["Mini game đạt từ 50% điểm tối đa", "+5, tối đa 3 lượt có điểm mỗi ngày (chơi thêm vẫn được, không cộng điểm)"],
+  ["Nộp bài thi cuối tháng", "+15"],
+  ["Bài kiểm tra đầu vào, thi lên mức", "+10"],
+  ["Hoàn thành trọn lịch học tháng (mọi bài mới và bài ôn)", "+20, một lần mỗi tháng"]
+];
+
 type SeasonCardData = Pick<LearnerProgressView, "season" | "points" | "badgeRoadmap"> & { badgeCount: number };
 
 export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel }: {
@@ -83,7 +95,7 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
     </div>
     <div className="profile-season-actions"><button type="button" className="btn btn-sm" aria-controls={levelsId} aria-expanded={showAllBadges} onClick={() => setShowAllBadges((value) => !value)}>{showAllBadges ? "Thu gọn huy hiệu" : "Xem tất cả huy hiệu"}</button>
     {certificateAction}</div>
-    <details style={{ marginTop: 10 }}><summary className="small" style={{ fontWeight: 800, cursor: "pointer" }}>Cách tính điểm và lên cấp</summary><ul className="small" style={{ margin: "6px 0 0", paddingLeft: 20 }}><li>Hoàn thành 1 bài học: <b>+10</b></li><li>Mỗi phần Nghe/Đọc/Viết/Nói đúng: <b>+5 lần 1, giảm 1 điểm mỗi lần làm lại</b></li><li>1 lượt luyện với Season: <b>+2</b></li><li>Mở 1 ô từ bí mật: <b>+2</b></li><li>Hoàn thành bài thi tháng: <b>+15</b></li><li>Hoàn thành trọn lộ trình tháng: <b>+20</b></li><li>Lên cấp: đủ <b>điểm</b> và <b>mọi huy hiệu của cấp</b>; đi lần lượt, không nhảy cấp.</li></ul></details>
+    <details style={{ marginTop: 10 }}><summary className="small" style={{ fontWeight: 800, cursor: "pointer" }}>Cách tính điểm và lên cấp</summary><ul className="small" data-testid="reward-point-rules" style={{ margin: "6px 0 0", paddingLeft: 20 }}>{REWARD_POINT_RULES.map(([label, points]) => <li key={label}>{label}: <b>{points}</b></li>)}<li>Lên cấp: đủ <b>điểm</b> và <b>mọi huy hiệu của cấp</b>; đi lần lượt, không nhảy cấp.</li></ul></details>
   </section>;
 }
 

@@ -72,8 +72,9 @@ export function LearnerProfile({ view, actions, courseCompleted = false }: { vie
     <LearnerSupportCard from="profile" navigate={actions.navigate} />
     {courseCompleted ? <section className="card profile-progress-section"><div className="profile-completion-heading"><div><div className="eyebrow">Pass Course</div><h2>Đã hoàn thành khóa E4S</h2></div><AppLink className="btn" href="/reward/course" navigate={actions.navigate}>Xem chứng nhận</AppLink></div></section> : null}
     {level ? <SeasonProgressCard view={{ ...view, badgeCount: view.badges.length }} certificateAction={
-      <AppLink className="btn btn-sm" href={view.season.next ? "/reward/preview" : "/reward/done"} navigate={actions.navigate}>
-        {view.season.next ? "Xem trước chứng nhận" : "Xem chứng nhận huy hiệu"}
+      // Only a learner who can open the certificate gets the link to it; everyone else sees its preview.
+      <AppLink className="btn btn-sm" href={view.badgeCertificateAvailable ? "/reward/done" : "/reward/preview"} navigate={actions.navigate}>
+        {view.badgeCertificateAvailable ? "Xem chứng nhận huy hiệu" : "Xem trước chứng nhận"}
       </AppLink>
     } /> : null}
     <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá" style={{ background: "var(--mint)" }}><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Kết quả đánh giá</h2></div></div><div className={`profile-assessment-grid${courseCompleted || view.assessments.passCourse ? " grid cols-2" : ""}`}><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} />{courseCompleted ? <CourseAssessmentResult /> : view.assessments.passCourse ? <AssessmentResult label="Điểm đầu ra" result={view.assessments.passCourse} /> : null}</div>{view.surveyAvailable && !view.monthlyProgress && !view.monthlyPreparation ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>

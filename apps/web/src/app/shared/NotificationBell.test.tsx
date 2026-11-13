@@ -74,6 +74,21 @@ describe("NotificationBell", () => {
     expect(within(dialog).getByText("Một bài học đang được cập nhật")).toBeInTheDocument();
   });
 
+  it("tells the learner about a new badge and a new Season", async () => {
+    const items = [
+      { ...notification, id: "badge-week", kind: "badge_earned", context: "Tuần trọn vẹn" },
+      { ...notification, id: "season-3", kind: "season_reached", context: "3" }
+    ];
+    api.getNotificationInbox.mockImplementation(async (limit) => ({ items: limit ? items : [], unreadCount: 2, nextCursor: null }));
+    api.markInboxRead.mockResolvedValue({ unreadCount: 1 });
+    const user = userEvent.setup();
+    render(<MemoryRouter><NotificationBell /></MemoryRouter>);
+    await user.click(await screen.findByRole("button", { name: /2 chưa đọc/ }));
+    const dialog = screen.getByRole("dialog", { name: "Thông báo" });
+    expect(await within(dialog).findByText("Bạn vừa nhận huy hiệu Tuần trọn vẹn")).toBeInTheDocument();
+    expect(within(dialog).getByText("Chúc mừng! Bạn đã lên Mùa thu – gặt hái")).toBeInTheDocument();
+  });
+
   it("shows the test-date and unapproved upcoming-lesson notices with their dates", async () => {
     const items = [
       { ...notification, id: "test-date", kind: "test_date_active", context: "2026-11-09:2026-11-12" },

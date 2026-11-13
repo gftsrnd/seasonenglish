@@ -12,7 +12,7 @@ const expectedTables = [
   "assessment_decisions", "assessment_definitions", "assessment_responses",
   "assessment_scores", "assessment_versions", "audit_events", "auth_challenges", "badges",
   "coach_sessions", "coach_turns", "duels", "enrollments", "file_deletion_confirmations", "files", "game_results",
-  "content_lesson_level_settings", "game_sets", "idempotency_keys", "jobs", "learner_profiles", "learner_vocabulary_unlocks", "level_up_challenge_results", "lesson_set_versions",
+  "content_lesson_level_settings", "game_sets", "idempotency_keys", "jobs", "learner_profiles", "learner_season_milestones", "learner_vocabulary_unlocks", "level_up_challenge_results", "lesson_set_versions",
   "lesson_sets", "lesson_versions", "lessons", "lesson_part_appeals", "lesson_part_attempts", "media_assets", "micro_lessons", "notification_deliveries", "organization_settings", "organizations",
   "certificate_issuances", "level_up_retry_plans", "practice_appeals", "practice_submissions", "program_weeks", "programs", "progress_records", "scheduled_level_changes",
   "manager_destructive_confirmations", "manager_maintenance_backups", "manager_pin_reports", "month_framework_reopen_requests", "month_frameworks", "monthly_resource_generation_checkpoints", "month_lesson_corrections", "month_lessons", "program_months", "prompt_versions", "provider_configurations", "reminders", "reward_events", "rubric_versions", "sessions",

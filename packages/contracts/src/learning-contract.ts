@@ -19,10 +19,12 @@ export type PilotPhase = "before_pilot" | "in_pilot" | "after_pilot";
 export type LevelUpPhase = "none" | "eligible" | "testing" | "ungraded" | "challenge" | "requested" | "approved" | "failed";
 
 export interface RewardAnnouncementView {
-  kind: "normal" | "new-level-announcement" | "level-adjustment" | "top-level-redirect";
+  kind: "normal" | "new-level-announcement" | "level-adjustment" | "top-level-redirect" | "season-up";
   points: number;
   nextPoints: number | null;
   seasonName: string;
+  /** `season-up`: the reward Season (2–4) just reached. */
+  seasonLevel?: number;
   level?: CefrLevel | null;
   /** Stable server key used to acknowledge a one-time celebration. */
   announcementId?: string;
@@ -525,6 +527,8 @@ export interface LearnerProgressView {
     requiredBadgeCount: number;
   };
   badgeRoadmap: BadgeRoadmapItem[];
+  /** The learner can open the badge certificate ("/reward/done"); otherwise only its preview. */
+  badgeCertificateAvailable?: boolean;
   levelReadiness: LevelReadinessView;
   stats: { completedLessons: number; coachTurns: number; coachTurnsToday?: number; studyDays: number };
   assessments: { placement: AssessmentSnapshot | null; passCourse?: AssessmentSnapshot };
