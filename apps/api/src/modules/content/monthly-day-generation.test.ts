@@ -127,9 +127,8 @@ describe("monthly day generation", () => {
     }} as unknown as import("@e4s/ai").AiTaskRunner;
     const result=await generateMonthlyReviewWithAi(scope,5,runner,"Review prompt");
     expect(result.status,JSON.stringify(result.report.severe)).toBe("ready");
-    // The model wrote no step examples and the plan examples are never copied in: one grammar-only formula/example repair follows.
-    expect(calls).toHaveLength(3);
-    expect(calls[2]).toEqual(["grammar"]);
+    // The model wrote no step examples: the plan's reference examples fill the steps (never an empty step), so no extra repair call.
+    expect(calls).toHaveLength(2);
     // Study tab on the lesson task; exercises on the review task whose schema requires variants.
     expect(tasks.slice(0,2).sort()).toEqual(["monthly_lesson_day","monthly_review_exercises"]);
     const grammar=result.lesson!.parts.find(part=>part.code==="grammar")!;

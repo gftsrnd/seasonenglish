@@ -350,10 +350,13 @@ export function withMonthlyGrammarSteps<T extends { code?: string; content?: Rec
     return { ...part, content: { ...part.content, steps: steps.map((step, index) => {
       const own = fromModel ? existing[index]! : {};
       const ownExamples = list(own.examples);
+      const fromTopLevel = ownExamples.length ? [] : topLevelExamplesForStep(step.formula, topLevel);
+      // Last resort (13/11, B1 24/12): a step must never render with no example at all, so when the model
+      // gave none for it, the plan's reference examples (which cover every row) are shown instead.
       return {
         formula: step.formula,
         text: text(own.text) || text(own.usage) || step.usage || step.focus || "",
-        examples: ownExamples.length ? ownExamples : topLevelExamplesForStep(step.formula, topLevel)
+        examples: ownExamples.length ? ownExamples : fromTopLevel.length ? fromTopLevel : [...(step.examples ?? [])]
       };
     }) } };
   });

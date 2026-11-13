@@ -71,11 +71,11 @@ describe("withMonthlyGrammarSteps", () => {
     { formula: "S + V(s)", usage: "routines", examples: ["We send a report."] },
     { formula: "am/is/are + V-ing", focus: "now", examples: ["We are testing.", "He is fixing it.", "Extra."] }
   ];
-  it("adds one step entry per planned grammar step when the model returned a single formula, never copying the plan examples", () => {
+  it("adds one step entry per planned grammar step when the model returned a single formula, falling back to the plan examples only for a step left empty", () => {
     const [grammar] = withMonthlyGrammarSteps<{ code: string; content: Record<string, unknown> }>([{ code: "grammar", content: { formula: "S + V(s). am/is/are + V-ing", examples: ["The client is calling now.", "Our team is checking the invoice."] } }], steps);
     expect(grammar!.content!.steps).toEqual([
-      // "S + V(s)" cannot be read: no top-level example is assigned to it, and the plan example is not copied in.
-      { formula: "S + V(s)", text: "routines", examples: [] },
+      // "S + V(s)" cannot be read: no top-level example is assigned to it, so the plan example fills it (never an empty step).
+      { formula: "S + V(s)", text: "routines", examples: ["We send a report."] },
       { formula: "am/is/are + V-ing", text: "now", examples: ["The client is calling now.", "Our team is checking the invoice."] }
     ]);
   });
@@ -83,7 +83,7 @@ describe("withMonthlyGrammarSteps", () => {
     const own = [{ code: "grammar", content: { steps: [{ formula: "rewritten a", text: "giải thích A", examples: ["A1."] }, { formula: "rewritten b", text: "giải thích B" }] } }];
     expect(withMonthlyGrammarSteps<{ code: string; content: Record<string, unknown> }>(own, steps)[0]!.content!.steps).toEqual([
       { formula: "S + V(s)", text: "giải thích A", examples: ["A1."] },
-      { formula: "am/is/are + V-ing", text: "giải thích B", examples: [] }
+      { formula: "am/is/are + V-ing", text: "giải thích B", examples: ["We are testing.", "He is fixing it.", "Extra."] }
     ]);
     expect(withMonthlyGrammarSteps([{ code: "grammar", content: { formula: "x" } }], steps.slice(0, 1))[0]!.content).toEqual({ formula: "x" });
   });
@@ -110,16 +110,15 @@ describe("withMonthlyGrammarSteps on the live B1 2026-12 review steps", () => {
     expect(monthlyGrammarFormulaExampleIssues(grammar!.content)).toEqual([]);
   });
 
-  it("never copies the resource examples: a step the model wrote no example for takes matching top-level examples or stays empty", () => {
+  it("prefers the model's examples; a step the model wrote none for takes matching top-level examples, else the plan's reference examples (never empty)", () => {
     const top = ["Wrong: I am knowing the client. Right: I know the client.", "Our manager is always changing the plan.", "We have got a new laptop for the intern."];
     const [grammar] = withMonthlyGrammarSteps<Part>([{ code: "grammar", content: { formula: "x", examples: top } }], planSteps);
     const stepsOut = grammar!.content.steps as Array<{ examples: string[] }>;
     expect(stepsOut.flatMap((step) => step.examples).some((example) => resourceExamples.has(example))).toBe(false);
     expect(stepsOut[0]!.examples).toEqual(top.slice(0, 2));
     const [bare] = withMonthlyGrammarSteps<Part>([{ code: "grammar", content: { formula: "x" } }], planSteps);
-    expect((bare!.content.steps as Array<{ examples: string[] }>).map((step) => step.examples)).toEqual([[], []]);
-    // An empty step is reported (so the day's one-shot grammar repair writes its examples).
-    expect(monthlyGrammarFormulaExampleIssues(bare!.content).map((issue) => [issue.step, issue.rowsWithoutExample.length])).toEqual([[1, 2], [2, 3]]);
+    // 24/12: a step must never render empty, so the plan's reference examples (which cover every row) fill it.
+    expect((bare!.content.steps as Array<{ examples: string[] }>).map((step) => step.examples)).toEqual(planSteps.map((step) => step.examples));
   });
 
   it("the old copy (first two resource examples per step) stays reportable only as the advisory mismatch", () => {
