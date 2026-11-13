@@ -2258,6 +2258,8 @@ body:has(.app-operator) #modal > .dialog > .row {
   cursor: pointer;
 }
 
+.app-operator button.operator-profile-disclosure { display: flex; align-items: center; gap: 6px; }
+
 .app-operator button.operator-profile-disclosure:hover:not(:disabled),
 .app-operator button.operator-profile-disclosure:active:not(:disabled) {
   border: 0;
@@ -2718,12 +2720,6 @@ body:has(.app-operator) #modal > .dialog > .row {
   color: var(--muted);
 }
 
-.operator-assessment-preview-dialog .assessment-definition-preview-section-trigger > span:last-child {
-  flex: 0 0 auto;
-  font-size: 1.2rem;
-  transition: transform 120ms ease;
-}
-
 .operator-assessment-preview-dialog .assessment-definition-preview-section-trigger:hover {
   background: #fffdfa;
 }
@@ -2737,7 +2733,7 @@ body:has(.app-operator) #modal > .dialog > .row {
   color: #234c36;
 }
 
-.operator-assessment-preview-dialog .assessment-definition-preview-section-trigger.active > span:last-child {
+.operator-assessment-preview-dialog .assessment-definition-preview-section-trigger.active > .ui-chevron {
   transform: rotate(180deg);
 }
 
@@ -4005,8 +4001,7 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 }
 .operator-level-validation > details[open] > summary { margin-bottom: 10px; }
 .operator-level-validation > details > summary > b { flex: 1 1 auto; min-width: 0; }
-.operator-level-validation > details > summary::before { content: "\25B8"; flex: none; color: var(--muted); transition: transform .15s; }
-.operator-level-validation > details[open] > summary::before { transform: rotate(90deg); }
+.operator-level-validation > details[open] > summary::before { transform: none; }
 @media (max-width: 767px) {
   .operator-level-validation { padding: 10px 12px; }
   .operator-level-validation > details > summary { min-height: 44px; }
@@ -4037,7 +4032,6 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 }
 
 .operator-level-editor-dialog .operator-level-section > summary::-webkit-details-marker { display: none; }
-.operator-level-editor-dialog .operator-level-section > summary::after { content: "⌄"; color: var(--muted); font-size: 1.2rem; }
 .operator-level-editor-dialog .operator-level-section[open] > summary {
   position: sticky;
   top: 0;
@@ -4563,8 +4557,8 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 .operator-profile-more { margin-top: 10px; }
 .operator-profile-more > summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; font-weight: 650; color: var(--text); }
 .operator-profile-more > .operator-profile-rows { margin-top: 4px; }
-.operator-profile-more > summary::before { content: "\25B8"; margin-right: 8px; color: var(--muted); transition: transform .15s; }
-.operator-profile-more[open] > summary::before { transform: rotate(90deg); }
+.operator-profile-more > summary::before { margin-right: 8px; }
+.operator-profile-more[open] > summary::before { transform: none; }
 /* Level-form editor: the version-history header cells stayed on one line, so on phones "Số lượt thi" and
    "Phát hành" ran into each other. Let the header cells wrap. */
 .operator-level-form-dialog-body table th{white-space:normal;vertical-align:bottom;padding-inline:6px}

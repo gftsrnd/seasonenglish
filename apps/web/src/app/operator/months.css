@@ -131,8 +131,8 @@
 /* Collapsed core rows in the manual editor: word, part of speech, meaning and a clear expand cue. */
 .monthly-resource-editor-core>summary{list-style:none}
 .monthly-resource-editor-core>summary::-webkit-details-marker{display:none}
-.monthly-resource-editor-chevron{display:inline-block;width:12px;color:var(--muted);font-style:normal;transition:transform .15s}
-.monthly-resource-editor-core[open]>summary .monthly-resource-editor-chevron{transform:rotate(90deg)}
+.monthly-resource-editor-chevron{font-style:normal}
+.monthly-resource-editor-core[open]>summary .monthly-resource-editor-chevron{transform:none}
 .monthly-resource-editor-word{font-weight:700;color:var(--text)}
 .monthly-resource-editor-type{padding:1px 7px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:.72rem}
 .monthly-resource-editor-meaning{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

@@ -1785,18 +1785,8 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
   gap: 4px 8px;
 }
 
-.games-play-first .game-vocabulary-tools > summary::before {
-  content: "";
-  flex: none;
-  width: 6px;
-  height: 6px;
-  margin-inline-end: 2px;
-  border-block-start: 1px solid currentColor;
-  border-inline-end: 1px solid currentColor;
-  transform: rotate(45deg);
-}
-
-.games-play-first .game-vocabulary-tools[open] > summary::before { transform: rotate(135deg); }
+/* Chevron comes from the shared .ui-chevron rules in app.css. */
+.games-play-first .game-vocabulary-tools[open] > summary::before { transform: none; }
 
 /* Result card when saving failed: the notice is a `.banner` (from Notice), not `.notice`, so it fell into the
    icon column and stretched it. Give the notice and the actions their own full rows. */

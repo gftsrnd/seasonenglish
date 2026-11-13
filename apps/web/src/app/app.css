@@ -752,3 +752,46 @@ button,.btn{min-height:var(--hci-touch-target)}
 .welcome .art{z-index:2}
 .game-icon,.game-control-icon,.status-icon,.app-brand-mark,.avatar{flex-shrink:0}
 .card > .row > svg,.card > .row > .status-icon,.banner > svg{flex:0 0 auto}
+
+/* ---- shared disclosure chevron ----
+   One CSS-drawn chevron for every accordion / disclosure / select-like trigger (no "v" / "^" / arrow text glyphs).
+   It points down by default and rotates 180deg when open; `.ui-chevron--right` (and the right-pointing pseudo markers
+   below) start rotated -90deg and settle back to "down" when open. It is centred on the cross axis of its row. */
+:root{--ui-chevron-size:1.125rem;--ui-chevron-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")}
+.ui-chevron,
+.operator-level-editor-dialog .operator-level-section > summary::after,
+.coach-page .coach-vocabulary-details > summary h2::after,
+.operator-level-validation > details > summary::before,
+.operator-profile-more > summary::before,
+.manager-operator-summary::before{
+  content:"";display:inline-block;box-sizing:border-box;flex:none;align-self:center;
+  width:var(--ui-chevron-size);height:var(--ui-chevron-size);margin-block:auto;
+  background-color:currentColor;color:var(--muted);
+  -webkit-mask:var(--ui-chevron-mask) center/contain no-repeat;mask:var(--ui-chevron-mask) center/contain no-repeat;
+  transition:transform .15s ease;
+}
+.ui-chevron--right,
+.operator-level-validation > details > summary::before,
+.operator-profile-more > summary::before,
+.manager-operator-summary::before{transform:rotate(-90deg)}
+@media screen and (max-width:960px){
+  .manager-monthly-learner-list summary::before{
+    content:"";display:inline-block;box-sizing:border-box;flex:none;align-self:center;
+    width:var(--ui-chevron-size);height:var(--ui-chevron-size);background-color:currentColor;color:var(--muted);
+    -webkit-mask:var(--ui-chevron-mask) center/contain no-repeat;mask:var(--ui-chevron-mask) center/contain no-repeat;
+    transform:rotate(-90deg);transition:transform .15s ease;
+  }
+}
+@media (max-width:720px){
+  .games-play-first .game-vocabulary-tools > summary::before{
+    content:"";display:inline-block;box-sizing:border-box;flex:none;align-self:center;
+    width:var(--ui-chevron-size);height:var(--ui-chevron-size);background-color:currentColor;color:var(--muted);
+    -webkit-mask:var(--ui-chevron-mask) center/contain no-repeat;mask:var(--ui-chevron-mask) center/contain no-repeat;
+    transform:rotate(-90deg);transition:transform .15s ease;
+  }
+}
+/* Sections whose open state is expressed by aria-expanded / [open] on an ancestor. */
+[open] > summary > .ui-chevron:not(.ui-chevron--right),
+[aria-expanded="true"] > .ui-chevron:not(.ui-chevron--right){transform:rotate(180deg)}
+[open] > summary > .ui-chevron--right,
+[aria-expanded="true"] > .ui-chevron--right{transform:none}

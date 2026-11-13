@@ -501,15 +501,9 @@
   display: none;
 }
 
-.manager-operator-summary::before {
-  content: "›";
-  color: var(--muted);
-  font-size: 20px;
-  line-height: 1;
-}
-
+/* Disclosure chevron: drawn by the shared .ui-chevron rules in app.css (points right closed, down when open). */
 .manager-operator-row[open] .manager-operator-summary::before {
-  content: "⌄";
+  transform: none;
 }
 
 .manager-operator-name {
@@ -1597,7 +1591,7 @@
   .manager-monthly-learner-list > li { border-bottom: 1px solid var(--line); }
   .manager-monthly-learner-list summary {
     display: grid;
-    grid-template-columns: 12px minmax(0, 1fr);
+    grid-template-columns: 18px minmax(0, 1fr);
     align-items: center;
     gap: 8px;
     min-height: 44px;
@@ -1606,18 +1600,8 @@
     cursor: pointer;
   }
 
-  .manager-monthly-learner-list summary::before {
-    content: "";
-    flex: none;
-    width: 6px;
-    height: 6px;
-    margin-inline-end: 2px;
-    border-block-start: 1px solid currentColor;
-    border-inline-end: 1px solid currentColor;
-    transform: rotate(45deg);
-  }
-
-  .manager-monthly-learner-list details[open] summary::before { transform: rotate(135deg); }
+  /* Chevron comes from the shared .ui-chevron rules in app.css. */
+  .manager-monthly-learner-list details[open] summary::before { transform: none; }
   .manager-monthly-learner-summary,
   .manager-monthly-learner-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
   .manager-monthly-learner-name { gap: 4px 6px; }
