@@ -1100,7 +1100,7 @@ function VocabularyCard({
       }))
     : [];
   const relations: VocabularyRelationChip[] = [
-    ...(!hideUmbrella && item.umbrella && umbrellaWord ? [{ label: `${language === "en" ? copy.vocabulary.umbrellaWord.toUpperCase() : "TỪ BAO TRÙM"} ${umbrellaWord}`, ariaLabel: `${copy.vocabulary.umbrellaWord}: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: item.umbrella.siblings?.length ?? 0, onClick: item.umbrella.siblings?.length ? () => openModal({ kind: "umbrella", item }) : () => playVocabularyWord(speak, umbrellaWord, item.umbrella?.audioUrl) }] : []),
+    ...(!hideUmbrella && item.umbrella && umbrellaWord ? [{ label: `${language === "en" ? copy.vocabulary.umbrellaWord.toUpperCase() : "TỪ BAO TRÙM"} ${umbrellaWord}`, ariaLabel: `${copy.vocabulary.umbrellaWord}: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: item.umbrella.siblings?.length ?? 0, onClick: () => openModal({ kind: "umbrella", item }) }] : []),
     ...(item.synonyms?.length ? item.synonyms.filter((value): value is NonNullable<typeof value> & { word: string } => typeof value?.word === "string").map(value => {
       const detail = lexicalDetails.find((candidate) => candidate.kind === "synonym" && candidate.word.trim().toLocaleLowerCase() === value.word.trim().toLocaleLowerCase());
       return { label: `= ${value.word}`, ariaLabel: `${language === "en" ? "Listen to synonym" : "Nghe từ đồng nghĩa"}: ${value.word}`, tone: "synonym" as const, onClick: () => playVocabularyWord(speak, value.word, value.audioUrl), ...relationMeaning(value, isB1Plus) };
@@ -1111,8 +1111,7 @@ function VocabularyCard({
     }) : []),
     // Slang / formal sit with the other related words; Word family always closes the row.
     ...extendedRelations,
-    ...(item.family?.length === 1 && item.family[0] ? [{ label: `${language === "en" ? copy.vocabulary.wordFamily : "Họ từ"}: ${item.family[0].word}`, ariaLabel: `${language === "en" ? "Listen" : "Nghe"} ${language === "en" ? copy.vocabulary.wordFamily : "họ từ"}: ${item.family[0].word}`, icon: "family" as const, tone: "family" as const, onClick: () => playVocabularyWord(speak, item.family![0]!.word, item.family![0]!.audioUrl) }]
-      : item.family?.length ? [{ label: `${language === "en" ? copy.vocabulary.wordFamily : "Họ từ"} (${item.family.length})`, ariaLabel: `${language === "en" ? copy.vocabulary.wordFamily : "Word family"} (${item.family.length})`, icon: "family" as const, tone: "family" as const, onClick: () => openModal({ kind: "family", item }) }] : [])
+    ...(item.family?.length ? [{ label: `${language === "en" ? copy.vocabulary.wordFamily : "Họ từ"} (${item.family.length})`, ariaLabel: `${language === "en" ? copy.vocabulary.wordFamily : "Word family"} (${item.family.length})`, icon: "family" as const, tone: "family" as const, onClick: () => openModal({ kind: "family", item }) }] : [])
   ];
   return <SharedVocabularyCard item={item} loadImage={loadImage} speak={speak} relations={relations} language={language} />;
 }
