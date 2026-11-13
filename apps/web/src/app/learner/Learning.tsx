@@ -1176,7 +1176,7 @@ export function SharedVocabularyModal({
 
 function FamilyModal({ item, speak, language }: { item: LessonVocabularyItem; speak: (text: string) => void; language: LearnerLessonLanguage }) {
   const copy = learnerLessonCopy[language];
-  return <div className="stack" style={{ gap: 10, paddingTop: 8 }} aria-label={language === "en" ? "Word family" : "Các từ cùng họ"}>{item.family?.map((word) => <article className="card flat" style={{ minWidth: 0 }} key={`${word.word}-${word.type ?? ""}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><b>{word.word}</b>{word.type ? <span className="small muted"> · {word.type}</span> : null}<p className="small">{word.meaning}</p></div><button type="button" aria-label={`${copy.modal.listen} ${language === "en" ? "word family" : "từ cùng họ"}: ${word.word}`} style={listenButtonStyle} onClick={() => playVocabularyWord(speak, word.word, word.audioUrl)}><Volume2 size={14} aria-hidden="true" />{copy.modal.listen}</button></div></article>)}</div>;
+  return <div className="stack" style={{ gap: 10, paddingTop: 8 }} aria-label={language === "en" ? "Word family" : "Các từ cùng họ"}>{item.family?.map((word) => <RelationWordCard key={`${word.word}-${word.type ?? ""}`} word={word} listenLabel={`${copy.modal.listen} ${language === "en" ? "word family" : "từ cùng họ"}: ${word.word}`} speak={speak} language={language} />)}</div>;
 }
 
 function SynonymsModal({ item, list, speak, language }: { item: LessonVocabularyItem; list?: LessonVocabularyItem["synonyms"] | undefined; speak: (text: string) => void; language: LearnerLessonLanguage }) {
@@ -1188,8 +1188,43 @@ function SynonymsModal({ item, list, speak, language }: { item: LessonVocabulary
 function UmbrellaModal({ item, speak, language }: { item: LessonVocabularyItem; speak: (text: string) => void; language: LearnerLessonLanguage }) {
   const copy = learnerLessonCopy[language];
   if (!item.umbrella) return null;
-  const words = (item.umbrella.siblings ?? []).filter((word) => word.word.trim().toLocaleLowerCase() !== item.word.trim().toLocaleLowerCase()).map((word) => ({ ...word, current: false }));
-  return <div className="stack vocabulary-umbrella-content" style={{ gap: 12 }} aria-label={copy.vocabulary.umbrellaWord}><article className="card flat vocabulary-umbrella-summary" aria-label={`${copy.vocabulary.umbrellaWord}: ${item.umbrella.word}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">{copy.vocabulary.umbrellaWord}</div><h3>{item.umbrella.word}</h3><p>{item.umbrella.meaning}</p></div><button type="button" aria-label={`${copy.modal.listen} ${copy.vocabulary.umbrellaWord.toLocaleLowerCase()}: ${item.umbrella.word}`} style={listenButtonStyle} onClick={() => playVocabularyWord(speak, item.umbrella!.word, item.umbrella?.audioUrl)}><Volume2 size={14} aria-hidden="true" />{copy.modal.listen}</button></div></article>{words.length ? <div><div className="small muted">{copy.vocabulary.currentAndRelated}</div><div className="vocabulary-relation-audio-list">{words.map((word) => <button className="vocabulary-relation-audio-item" type="button" aria-label={`${copy.modal.listen} ${language === "en" ? "related word" : "từ cùng nhóm"}: ${word.word}`} key={word.word} onClick={() => playVocabularyWord(speak, word.word, word.audioUrl)}><span><strong>{word.word}</strong>{word.current ? <small className="vocabulary-current-word">{language === "en" ? "lesson word" : "từ của bài"}</small> : null}{word.meaning ? <small>{word.meaning}</small> : null}</span><Volume2 size={16} aria-hidden="true" /></button>)}</div></div> : null}</div>;
+  const umbrella = item.umbrella;
+  const words = (umbrella.siblings ?? []).filter((word) => word.word.trim().toLocaleLowerCase() !== item.word.trim().toLocaleLowerCase());
+  return <div className="stack vocabulary-umbrella-content" style={{ gap: 10 }} aria-label={copy.vocabulary.umbrellaWord}>
+    <RelationWordCard className="vocabulary-umbrella-summary" ariaLabel={`${copy.vocabulary.umbrellaWord}: ${umbrella.word}`} word={umbrella} listenLabel={`${copy.modal.listen} ${copy.vocabulary.umbrellaWord.toLocaleLowerCase()}: ${umbrella.word}`} speak={speak} language={language} />
+    {words.length ? <div className="small muted">{copy.vocabulary.currentAndRelated}</div> : null}
+    {words.map((word) => <RelationWordCard key={word.word} word={word} listenLabel={`${copy.modal.listen} ${language === "en" ? "related word" : "từ cùng nhóm"}: ${word.word}`} speak={speak} language={language} />)}
+  </div>;
+}
+
+/**
+ * One word of the umbrella / word-family modals, in the Slang & poetic card
+ * layout (13/11): "word · part of speech", IPA when the data has it, Listen,
+ * then its meaning. A1–A2 show the Vietnamese meaning; B1+ the English
+ * definition when the entry carries one, otherwise the stored meaning as before.
+ * No kind tag and no usage / source line.
+ */
+function RelationWordCard({ word, listenLabel, speak, language, className, ariaLabel }: {
+  word: { word: string; type?: string | undefined; meaning?: string | undefined; definition?: string | undefined; pronunciation?: string | undefined; audioUrl?: string | undefined };
+  listenLabel: string;
+  speak: (text: string) => void;
+  language: LearnerLessonLanguage;
+  className?: string;
+  ariaLabel?: string;
+}) {
+  const copy = learnerLessonCopy[language];
+  const meaning = ((language === "en" ? word.definition : undefined) ?? word.meaning)?.trim();
+  const ipa = word.pronunciation?.trim();
+  return <article className={`card flat vocabulary-relation-word-card${className ? ` ${className}` : ""}`} style={{ minWidth: 0 }} {...(ariaLabel ? { "aria-label": ariaLabel } : {})}>
+    <div className="row between" style={{ gap: 12, alignItems: "flex-start" }}>
+      <div style={{ minWidth: 0 }}>
+        <b>{word.word}</b>{word.type ? <span className="small muted"> · {word.type}</span> : null}
+        {ipa ? <div className="small muted vocabulary-register-ipa">{ipa}</div> : null}
+      </div>
+      <button type="button" aria-label={listenLabel} style={listenButtonStyle} onClick={() => playVocabularyWord(speak, word.word, word.audioUrl)}><Volume2 size={14} aria-hidden="true" />{copy.modal.listen}</button>
+    </div>
+    {meaning ? <p className="small">{meaning}</p> : null}
+  </article>;
 }
 
 function playVocabularyWord(speak: (text: string) => void, word: string, audioUrl?: string) {

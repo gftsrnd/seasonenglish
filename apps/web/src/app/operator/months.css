@@ -303,9 +303,6 @@ details.monthly-resource-editor-section[open]>summary{margin-bottom:8px}
 .monthly-publication h2 { margin: 0; font-size: 1rem; }
 .monthly-publication p { margin: 0; }
 .monthly-publication button { justify-self: start; }
-.monthly-publication .monthly-publication-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; color: var(--muted); font-weight: 400; text-decoration: none; }
-.monthly-publication-link svg { flex: none; color: var(--primary-dark); }
-.monthly-publication-link:is(:hover, :focus-visible) span { color: var(--text); text-decoration: underline; }
 .monthly-month-short { display: none; }
 .monthly-brief-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .monthly-brief-summary > b { min-width: 0; overflow-wrap: anywhere; }

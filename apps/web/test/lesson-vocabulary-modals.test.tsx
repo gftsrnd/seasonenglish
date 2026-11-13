@@ -76,6 +76,51 @@ describe("lesson vocabulary relation modals", () => {
     expect(within(modal).getAllByRole("button", { name: /nghe/i }).length).toBeGreaterThan(0);
   });
 
+  it("umbrella and word-family modals use the slang/poetic card layout without a kind tag or usage line (13/11)", async () => {
+    const user = userEvent.setup();
+    const callbacks = actions();
+    const item = (vocabularyPart.content as { items: Array<Record<string, unknown>> }).items[0]!;
+    const ipaLesson: LessonView = { ...lesson, content: { parts: [{ ...vocabularyPart, content: { items: [{
+      ...item,
+      family: [{ word: "colleague", type: "noun", pronunciation: "/ˈkɒliːɡ/", meaning: "đồng nghiệp" }, { word: "collegial", type: "adjective", meaning: "thân thiện như đồng nghiệp" }],
+      umbrella: { word: "people at work", meaning: "những người trong môi trường làm việc", siblings: [{ word: "manager", type: "noun", pronunciation: "/ˈmænɪdʒə/", meaning: "quản lý" }, { word: "colleague", meaning: "đồng nghiệp" }] }
+    }] } }] } };
+    render(<LearnerLesson view={{ lesson: ipaLesson }} actions={callbacks} />);
+    await user.click(screen.getByRole("button", { name: /Từ bao trùm: people at work/i }));
+    let modal = screen.getByTestId("modal.vocab-umbrella");
+    expect(within(modal).getByRole("heading", { name: "Từ bao quát" })).toBeInTheDocument();
+    let cards = within(modal).getAllByRole("article");
+    // Umbrella word + the other related words; the lesson word itself is not repeated.
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveTextContent("people at work");
+    expect(cards[0]).toHaveTextContent("những người trong môi trường làm việc");
+    expect(cards[1]).toHaveTextContent("manager · noun");
+    expect(cards[1]).toHaveTextContent("/ˈmænɪdʒə/");
+    expect(cards[1]).toHaveTextContent("quản lý");
+    for (const card of cards) {
+      expect(card.querySelector(".eyebrow")).toBeNull();
+      expect(card).not.toHaveTextContent(/When to use|Cách dùng|Found in|Xuất hiện trong/u);
+    }
+    await user.click(within(cards[1]!).getByRole("button", { name: "Nghe từ cùng nhóm: manager" }));
+    expect(callbacks.speak).toHaveBeenLastCalledWith("manager");
+    await user.click(within(modal).getByRole("button", { name: "Đóng" }));
+
+    await user.click(within(screen.getByRole("article", { name: /colleague/i })).getByRole("button", { name: "Word family (2)" }));
+    modal = screen.getByTestId("modal.vocab-family");
+    expect(within(modal).getByRole("heading", { name: "Họ từ" })).toBeInTheDocument();
+    cards = within(modal).getAllByRole("article");
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveTextContent("colleague · noun");
+    expect(cards[0]).toHaveTextContent("/ˈkɒliːɡ/");
+    expect(cards[0]).toHaveTextContent("đồng nghiệp");
+    expect(cards[1]).toHaveTextContent("collegial · adjective");
+    // No IPA in the data: none shown.
+    expect(cards[1]!.querySelector(".vocabulary-register-ipa")).toBeNull();
+    expect(cards[0]!.querySelector(".eyebrow")).toBeNull();
+    await user.click(within(cards[1]!).getByRole("button", { name: "Nghe từ cùng họ: collegial" }));
+    expect(callbacks.speak).toHaveBeenLastCalledWith("collegial");
+  });
+
   it("speaks synonym and antonym directly while keeping the family table centered", async () => {
     const user = userEvent.setup();
     const callbacks = actions();

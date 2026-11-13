@@ -166,10 +166,26 @@ export function attachMonthlyExpandedTerms(
     const umbrella = item && typeof item.umbrella === "object" && item.umbrella ? item.umbrella as Item : null;
     if (!umbrella) return item;
     const umbrellaWord = String(umbrella.word ?? "").toLocaleLowerCase();
-    const siblings = Array.isArray(umbrella.siblings) && umbrella.siblings.length ? umbrella.siblings : enriched
+    const siblings = Array.isArray(umbrella.siblings) && umbrella.siblings.length ? withCoreIpa(asWordEntries(umbrella.siblings), cores) : enriched
       .filter((other) => other !== item && other && typeof other.umbrella === "object" && String((other.umbrella as Item | null)?.word ?? "").toLocaleLowerCase() === umbrellaWord)
-      .map((other) => ({ word: other.word, ...(other.meaning ? { meaning: other.meaning } : {}) }));
+      .map((other) => ({ word: other.word, ...(other.type ? { type: other.type } : {}), ...(other.pronunciation ? { pronunciation: other.pronunciation } : {}), ...(other.meaning ? { meaning: other.meaning } : {}) }));
     return { ...item, umbrella: { ...umbrella, siblings } };
+  });
+}
+
+/**
+ * Family / umbrella words have no IPA of their own (support terms carry none);
+ * when such a word is also one of the month's core words, its audited IPA is
+ * shown. Nothing is invented: other words stay without IPA.
+ */
+function withCoreIpa(entries: Item[], cores: readonly MonthlyVocabularyCore[]): Item[] {
+  return entries.map((entry) => {
+    if (typeof entry.pronunciation === "string" && entry.pronunciation.trim()) return entry;
+    const key = String(entry.word ?? "").trim().toLocaleLowerCase();
+    const type = typeof entry.type === "string" ? entry.type.trim().toLocaleLowerCase() : "";
+    // Same spelling and, when both say it, the same part of speech (a homograph may sound different).
+    const ipa = cores.find((core) => core.word.trim().toLocaleLowerCase() === key && (!type || !core.type?.trim() || core.type.trim().toLocaleLowerCase() === type))?.ipa?.trim();
+    return ipa ? { ...entry, pronunciation: ipa } : entry;
   });
 }
 
@@ -189,7 +205,7 @@ function attachTerms(
     const unplanned = (relation: "synonym" | "antonym") => core && cefr && MONTHLY_CARD_LEVELS.has(cefr) ? (entry: Item) => monthlyModelRelationEntry(entry, relation, cefr) : undefined;
     item.synonyms = mergeEntries(item.synonyms, linked("synonym").map((term) => relationEntry(term, cefr)), unplanned("synonym"));
     item.antonyms = mergeEntries(item.antonyms, linked("antonym").map((term) => relationEntry(term, cefr)), unplanned("antonym"));
-    item.family = mergeEntries(item.family, linked("word_family").map((term) => ({ word: term.word, ...(term.type ? { type: term.type } : {}), ...(term.meaning ? { meaning: term.meaning } : {}) })));
+    item.family = withCoreIpa(mergeEntries(item.family, linked("word_family").map((term) => ({ word: term.word, ...(term.type ? { type: term.type } : {}), ...(term.meaning ? { meaning: term.meaning } : {}) }))), cores);
     const plannedCollocations = linked("collocation");
     const collocations = plannedCollocations.map((term) => term.word);
     // A1–A2: one Vietnamese line per phrase, aligned with collocations (planned phrases take the plan's meaning).
@@ -229,6 +245,7 @@ function attachTerms(
     }
     const umbrella = linked("umbrella")[0];
     if (umbrella && !(item.umbrella && typeof item.umbrella === "object")) item.umbrella = { word: umbrella.word, ...(umbrella.meaning ? { meaning: umbrella.meaning } : {}) };
+    if (item.umbrella && typeof item.umbrella === "object") item.umbrella = withCoreIpa([item.umbrella as Item], cores)[0];
     if (core) {
       // The month's frozen illustration (AI or uploaded) replaces any searched photo.
       if (core.imageUrl) {

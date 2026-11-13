@@ -164,10 +164,6 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
   const plannedDays = framework?.resources?.roadmap?.days ?? [];
   const pendingDayNumbers = (plannedDays.length ? plannedDays.map(day => day.lessonNumber) : calendar.effectiveDays.map((_, index) => index + 1))
     .filter(number => !framework?.lessons.some(day => day.lessonNumber === number && day.status === "approved"));
-  // Calendar cells are identified by date: a lesson number can repeat across weeks while a plan is being rebuilt.
-  const pendingLesson = framework?.lessons.find((item) => item.lessonNumber === pendingDayNumbers[0]);
-  const pendingCellIndex = pendingDayNumbers.length ? calendarCells.findIndex((cell) => !cell.outside && (pendingLesson ? cell.date === pendingLesson.lessonDate : cell.lessonNumber === pendingDayNumbers[0])) : -1;
-  const pendingTargetId = pendingCellIndex >= 0 ? monthlyDayCellId(calendarCells[pendingCellIndex]!.key) : undefined;
   const lockedDayTitle = "Chốt tài nguyên tháng trước khi sinh bài";
   const proposedResourceCounts = toResourceCounts(recommendedMonthlyResourceCriteria(month, cefr));
   const resourceCounts = framework?.resources ? {
@@ -487,12 +483,8 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
               ? <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void publishMonth()}>Công bố tháng</button>
               : <p className="small muted">Sẵn sàng công bố</p>)
             : briefLocked && resourcesApproved && pendingDayNumbers.length ? (
-              <a className="small monthly-publication-link" {...(pendingTargetId ? { href: "#" + pendingTargetId } : {})} onClick={(event) => {
-                if (!agenda || pendingCellIndex < 0 || !pendingTargetId) return;
-                event.preventDefault();
-                setAgendaSelection({ month, week: Math.floor(pendingCellIndex / 7) });
-                window.requestAnimationFrame(() => document.getElementById(pendingTargetId)?.scrollIntoView({ block: "center" }));
-              }}><span>Còn {pendingDayNumbers.length} bài cần duyệt</span><ChevronRight size={16} aria-hidden="true" /></a>
+              // A static reminder (13/11): the calendar below is where each day is opened.
+              <p className="small muted monthly-publication-pending">Còn {pendingDayNumbers.length} bài cần duyệt</p>
             ) : <p className="small muted">{!briefLocked ? "Chưa chốt chủ đề" : !resourcesApproved ? "Chưa duyệt tài nguyên" : "Chưa đủ điều kiện công bố"}</p>}
         </section>
       </div>;

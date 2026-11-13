@@ -43,6 +43,28 @@ describe("attachMonthlyExpandedTerms umbrella siblings", () => {
 
 import { withMonthlyGrammarSteps } from "../src/monthly/lesson-vocabulary.js";
 
+describe("attachMonthlyExpandedTerms umbrella / family IPA (13/11)", () => {
+  it("passes a sibling's IPA through and borrows a core word's IPA for a family/umbrella word, never inventing one", () => {
+    const cores = [
+      { id: "a", word: "email", type: "noun", ipa: "/ˈiːmeɪl/" },
+      { id: "b", word: "request", type: "noun", ipa: "/rɪˈkwest/" },
+      { id: "c", word: "message", type: "noun", ipa: "/ˈmesɪdʒ/" }
+    ];
+    const supports = [
+      { id: "u1", word: "message", relation: "umbrella", relatedCoreTermId: "a" },
+      { id: "u2", word: "message", relation: "umbrella", relatedCoreTermId: "b" },
+      { id: "f1", word: "request", type: "verb", relation: "word_family", relatedCoreTermId: "a" },
+      { id: "f2", word: "emailer", type: "noun", relation: "word_family", relatedCoreTermId: "a" },
+      { id: "f3", word: "request", type: "noun", relation: "word_family", relatedCoreTermId: "b" }
+    ];
+    const [email, request] = attachMonthlyExpandedTerms([{ word: "email", meaning: "thư" }, { word: "request", meaning: "yêu cầu" }], cores, supports);
+    expect(email!.umbrella).toEqual({ word: "message", pronunciation: "/ˈmesɪdʒ/", siblings: [{ word: "request", type: "noun", pronunciation: "/rɪˈkwest/", meaning: "yêu cầu" }] });
+    // "request" (verb) is not the core noun: no IPA; "emailer" is not a core word: no IPA.
+    expect(email!.family).toEqual([{ word: "request", type: "verb" }, { word: "emailer", type: "noun" }]);
+    expect(request!.family).toEqual([{ word: "request", type: "noun", pronunciation: "/rɪˈkwest/" }]);
+  });
+});
+
 describe("withMonthlyGrammarSteps", () => {
   const steps = [
     { formula: "S + V(s)", usage: "routines", examples: ["We send a report."] },

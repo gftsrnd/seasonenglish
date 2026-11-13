@@ -112,6 +112,8 @@ export interface LessonVocabularySynonym {
 export interface LessonVocabularyUmbrella {
   word: string;
   meaning: string;
+  /** IPA, only when the umbrella word is also one of the month's core words (never invented). */
+  pronunciation?: string;
   audioUrl?: string;
   siblings: LessonVocabularyFamilyWord[];
 }

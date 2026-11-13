@@ -381,7 +381,12 @@ describe("Operator monthly planner", () => {
     const card = within(screen.getByRole("region", { name: "Tiến độ công bố B1" }));
     expect(card.getByText(detail, { exact: true })).toBeInTheDocument();
     expect(card.queryByText(/Bài ngày|Bài ôn|Đề thi|Chờ công bố/)).not.toBeInTheDocument();
-    if (!ready) expect(card.getByRole("link")).toHaveAttribute("href", `#monthly-day-${buildMonthlyCalendar("2026-11").effectiveDays[0]}`);
+    // "Còn N bài cần duyệt" is a static reminder: no link, button or chevron.
+    if (!ready) {
+      expect(card.queryByRole("link")).not.toBeInTheDocument();
+      expect(card.getByText(detail, { exact: true }).tagName).toBe("P");
+      expect(screen.getByRole("region", { name: "Tiến độ công bố B1" }).querySelector("svg")).toBeNull();
+    }
     if (ready && !readOnly && !publishedOn) expect(card.getByRole("button", { name: "Công bố tháng" })).toBeEnabled();
     else expect(card.queryByRole("button")).not.toBeInTheDocument();
   });
