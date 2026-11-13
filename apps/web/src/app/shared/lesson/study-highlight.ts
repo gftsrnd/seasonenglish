@@ -45,12 +45,20 @@ interface Slot { text: string; kinds: PieceKind[]; neutral: boolean; aux: string
 /** "I'm", "she's", "they'll": a subject pronoun contracted with its auxiliary. */
 const PRONOUN_CONTRACTION = /^(?:i|you|we|they|he|she|it)(?:'m|'re|'s|'ll|'ve|'d)$/u;
 
-/** The auxiliary words of a "pronoun + form" piece ("He is" → is, "They are not" → are, not); undefined otherwise. */
+const isForm = (word: string) => AUX_WORDS.has(word) || word === "not";
+
+/** The auxiliary words of a "pronoun + form" piece ("He is" → is, "I am not" → am, not) or of a question
+ * piece ("Is he" → is); undefined otherwise. */
 function pairForms(words: readonly string[]): string[] | undefined {
   if (words.length === 1 && PRONOUN_CONTRACTION.test(words[0]!)) return [words[0]!];
-  if (words.length < 2 || !SUBJECT_PRONOUNS.has(words[0]!)) return undefined;
-  const forms = words.slice(1);
-  return forms.every((word) => AUX_WORDS.has(word)) && !forms.every((word) => word === "to") ? forms : undefined;
+  if (words.length < 2) return undefined;
+  if (SUBJECT_PRONOUNS.has(words[0]!)) {
+    const forms = words.slice(1);
+    return forms.every(isForm) && !forms.every((word) => word === "to" || word === "not") ? forms : undefined;
+  }
+  // Question order: "Am I", "Is he", "Aren't they".
+  if (words.length === 2 && AUX_WORDS.has(words[0]!) && words[0] !== "to" && SUBJECT_PRONOUNS.has(words[1]!)) return [words[0]!];
+  return undefined;
 }
 
 const pieceWords = (piece: string) => piece.trim().toLocaleLowerCase("en").replace(/’/gu, "'").replace(/[?.!,]+$/u, "").split(/\s+/u).filter(Boolean);
@@ -101,8 +109,13 @@ function slotSegments(slot: Slot): HighlightSegment[] {
         const tail = piece.match(/[\s?.!,]*$/u)![0];
         const body = piece.slice(lead.length, Math.max(lead.length, piece.length - tail.length));
         const kind = pieceKind(body);
-        const pronoun = kind === "pair" && pieceWords(body).length > 1 ? body.match(/^\S+\s+/u)?.[0] ?? "" : "";
-        out.push({ text: lead, mark: false }, { text: pronoun, mark: false }, { text: body.slice(pronoun.length), mark: Boolean(kind) }, { text: tail, mark: false });
+        out.push({ text: lead, mark: false });
+        if (kind === "pair" && pieceWords(body).length > 1) {
+          // Only the forms are marked; the pronoun stays plain whichever side it is on.
+          const forms = new Set(pairForms(pieceWords(body)) ?? []);
+          for (const word of body.split(/(\s+)/u)) out.push({ text: word, mark: forms.has(word.toLocaleLowerCase("en").replace(/’/gu, "'")) });
+        } else out.push({ text: body, mark: Boolean(kind) });
+        out.push({ text: tail, mark: false });
       });
     } else {
       const lead = chunk.match(/^\s*/u)![0];
@@ -124,7 +137,8 @@ function readFormulaLine(line: string): FormulaLine {
   let examples = "";
   const next = rest.indexOf(": ");
   if (next > 0 && rest.slice(0, next).includes("+")) { examples = rest.slice(next); rest = rest.slice(0, next); }
-  const slots = rest.includes(" + ") ? rest.split(" + ").map(readSlot) : [];
+  const formsOnly = !rest.includes(" + ") && rest.includes("/") && rest.split("/").every((piece) => { const kind = pieceKind(piece); return kind === "pair" || kind === "aux"; });
+  const slots = rest.includes(" + ") ? rest.split(" + ").map(readSlot) : formsOnly ? [readSlot(rest)] : [];
   return { label, pattern: rest, examples, slots };
 }
 
@@ -136,10 +150,15 @@ function words(sentence: string): string[] {
 }
 
 /** Builds the example matcher of a (possibly multi-line) formula; null when no slot is key. */
+/** "I am not / He isn't + …; Am I…? / Is he…?": two patterns on one line (only when the line has no examples part). */
+function clauses(line: string): string[] {
+  return line.includes("; ") && !readFormulaLine(line).examples ? line.split(/;\s+/u) : [line];
+}
+
 export function grammarExampleMatcher(lines: readonly string[]): GrammarExampleMatcher | null {
   const matcher: GrammarExampleMatcher = { aux: new Set(), follow: [], subjectVerb: false, verbs: new Set() };
   let any = false;
-  for (const line of lines.map(readFormulaLine)) {
+  for (const line of lines.flatMap(clauses).map(readFormulaLine)) {
     line.slots.forEach((slot, index) => {
       if (slot.neutral) return;
       any = true;
@@ -200,6 +219,8 @@ export function grammarExampleSegments(sentence: string, matcher: GrammarExample
 
 /** One formula line with its key slots (and the matching words of its own examples) marked. */
 export function grammarFormulaSegments(line: string, matcher: GrammarExampleMatcher | null = grammarExampleMatcher([line])): HighlightSegment[] {
+  const parts = clauses(line);
+  if (parts.length > 1) return merge(parts.flatMap((part, index) => [...(index ? plain("; ") : []), ...grammarFormulaSegments(part, matcher)]));
   const parsed = readFormulaLine(line);
   if (!parsed.slots.length || parsed.slots.every((slot) => slot.neutral && !/\(-[a-z]/u.test(slot.text))) return plain(line);
   const pattern = parsed.slots.flatMap((slot, index) => [...(index ? plain(" + ") : []), ...slotSegments(slot)]);

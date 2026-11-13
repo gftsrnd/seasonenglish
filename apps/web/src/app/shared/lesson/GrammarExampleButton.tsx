@@ -108,6 +108,6 @@ export function GrammarExampleButton({ text, display, spoken, translation, liste
       type="button"
       aria-label={`${listenLabel}: ${spoken}`}
       onClick={onPlay}
-    ><Volume2 size={14} aria-hidden="true" />{display ?? text}</button>
+    ><Volume2 size={14} aria-hidden="true" /><span className="lesson-example-text">{display ?? text}</span></button>
   </MeaningPopupControl>;
 }
