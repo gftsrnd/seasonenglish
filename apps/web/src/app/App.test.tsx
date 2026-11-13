@@ -160,18 +160,21 @@ describe("App session shell", () => {
     expect(await screen.findByRole("heading", { name: "Hỗ trợ học tập" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/support");
     const sections = screen.getByRole("navigation", { name: "Các mục hỗ trợ học tập" });
-    await waitFor(() => expect(screen.getByText("Theo dõi khiếu nại và góp ý của bạn.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Theo dõi khiếu nại của bạn.")).toBeInTheDocument());
     expect(within(sections).queryByRole("link", { name: "Kháng nghị" })).not.toBeInTheDocument();
-    expect(within(sections).getAllByRole("link").map(link => link.textContent)).toEqual(["Tất cả", "Khiếu nại", "Khảo sát tháng"]);
+    // No monthly survey before learning starts.
+    expect(within(sections).getAllByRole("link").map(link => link.textContent)).toEqual(["Tất cả", "Khiếu nại"]);
     await user.click(within(sections).getByRole("link", { name: "Khiếu nại" }));
     await user.click(await screen.findByRole("button", { name: "Gửi khiếu nại" }));
     expect(screen.getByLabelText("Lý do khiếu nại")).toBeVisible();
+    // Only account complaints apply before there are lessons or attendance.
+    expect(within(screen.getByLabelText("Loại khiếu nại")).getAllByRole("option").map(option => option.textContent)).toEqual(["Tài khoản"]);
     expect(screen.queryByRole("button", { name: "Gửi kháng nghị" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Về Tiến độ & hồ sơ" })).toHaveAttribute("href", "/profile");
   });
 
-  it("sends a typed appeals URL back to the All tab while the level is not approved", async () => {
-    window.history.replaceState({}, "", "/support?type=appeals");
+  it.each(["appeals", "feedback"])("sends a typed %s URL back to the All tab while the level is not approved", async (type) => {
+    window.history.replaceState({}, "", `/support?type=${type}`);
     learnerClient.getProgress.mockResolvedValue({ learner: { id: "learner-1", cefr: null } });
     learnerClient.getLearnerAppeals.mockResolvedValue({ appeals: [] });
     learnerClient.getAppealableAssessments.mockResolvedValue({ results: [{ attemptId: "exam-1", title: "Bài thi đầu vào", availableUntil: null }] });
@@ -181,6 +184,7 @@ describe("App session shell", () => {
     const sections = screen.getByRole("navigation", { name: "Các mục hỗ trợ học tập" });
     expect(within(sections).getByRole("link", { name: "Tất cả" })).toHaveAttribute("aria-current", "page");
     expect(within(sections).queryByRole("link", { name: "Kháng nghị" })).not.toBeInTheDocument();
+    expect(within(sections).queryByRole("link", { name: "Khảo sát tháng" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Bài thi có thể kháng nghị" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Gửi kháng nghị" })).not.toBeInTheDocument();
   });
@@ -206,6 +210,7 @@ describe("App session shell", () => {
     expect(learnerClient.createAssessmentAppeal).toHaveBeenCalledWith("exam-1", "Nhờ kiểm tra lại điểm phần nghe.");
     expect(await screen.findByText("Chờ xử lý")).toBeInTheDocument();
     expect(screen.getByText("Theo dõi khiếu nại, kháng nghị và góp ý của bạn.")).toBeInTheDocument();
+    expect(within(sections).getAllByRole("link").map(link => link.textContent)).toEqual(["Tất cả", "Khiếu nại", "Kháng nghị", "Khảo sát tháng"]);
   });
 
   it("maps every resolved season to a dedicated pattern asset", () => {

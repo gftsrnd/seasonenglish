@@ -72,6 +72,13 @@ describe("Appeals before the placement level is approved", () => {
     const complaint = await app.inject({ method: "POST", url: "/api/v1/learner/complaints", headers,
       payload: { kind: "account", reason: "Tôi chưa đổi được ảnh đại diện." } });
     expect(complaint.statusCode, complaint.body).toBeLessThan(300);
+
+    for (const kind of ["attendance", "lesson_count"]) {
+      const learningComplaint = await app.inject({ method: "POST", url: "/api/v1/learner/complaints", headers,
+        payload: { kind, reason: "Bài học hôm nay chưa được tính." } });
+      expect(learningComplaint.statusCode, learningComplaint.body).toBe(409);
+      expect(learningComplaint.json()).toMatchObject({ code: "LEARNER_COMPLAINT_NOT_APPLICABLE" });
+    }
   });
 
   it("opens the placement appeal once the level is approved", async () => {

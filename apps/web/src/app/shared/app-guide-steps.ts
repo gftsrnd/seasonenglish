@@ -8,12 +8,17 @@ export type GuideStep = readonly [selector: string, title: string, text: string,
 
 const learnerSteps: Record<string, readonly GuideStep[]> = {
   "/home": [
-    // Trang chủ trước khi có trình độ: thẻ 3 bước (bước đang làm theo trạng thái) và thẻ hỗ trợ.
-    [".onboarding-steps", "Ba bước bắt đầu", "Làm lần lượt **Hồ sơ cá nhân**, **Test đầu vào**, rồi chờ **Vận hành duyệt mức**. Nhãn mỗi bước cho biết bước nào **đã xong** và bạn **đang ở** đâu."],
-    ['.onboarding-steps .st.done:has(a[href="/onboard"])', "Hồ sơ đã lưu", "Hồ sơ đã xong. Bấm **Xem / sửa hồ sơ** nếu cần đổi công việc, mục tiêu hay cách học."],
-    ['.onboarding-steps .st.cur:has(a[href="/onboard"])', "Điền hồ sơ", "Bấm **Điền hồ sơ**, khoảng **2 phút**, để bài học sát công việc của bạn. Đã lưu nháp thì bấm **Tiếp tục phần đã lưu**."],
-    ['.onboarding-steps .st.cur:has(a[href="/test/placement"])', "Làm test đầu vào", "Bài có **4 phần** Nghe, Đọc, Viết, Nói, tối đa **75 phút**. Chuẩn bị **tai nghe** và **micro**, rồi bấm **Bắt đầu test**; không cần ôn trước."],
-    [".onboarding-steps .st.cur:not(:has(a))", "Chờ duyệt mức", "Bài test đã gửi, **Vận hành** đang xem điểm để xếp mức. Bạn không cần làm gì thêm; bài học **tự mở** khi có mức."],
+    // Trang chủ trước khi có trình độ: một bước cho mỗi thẻ theo thứ tự trên màn (đầu khối, thẻ 1, 2, 3), rồi thẻ hỗ trợ.
+    // Mỗi thẻ trỏ đúng thẻ của nó qua data-onboarding-step, theo trạng thái đã xong / đang làm / sắp tới.
+    // Đầu khối trỏ vào tiêu đề, không trỏ cả khối: cả khối bắt đầu từ thẻ 1 nên bước kế tiếp sẽ như quay lại thẻ 1.
+    [".onboarding-steps > h2", "Ba bước bắt đầu", "Làm lần lượt **Hồ sơ cá nhân**, **Test đầu vào**, rồi chờ **Vận hành duyệt mức**. Nhãn mỗi bước cho biết bước nào **đã xong** và bạn **đang ở** đâu."],
+    ['.onboarding-steps [data-onboarding-step="1"].done', "Hồ sơ đã lưu", "Hồ sơ đã xong. Bấm **Xem / sửa hồ sơ** nếu cần đổi công việc, mục tiêu hay cách học."],
+    ['.onboarding-steps [data-onboarding-step="1"].cur', "Điền hồ sơ", "Bấm **Điền hồ sơ**, khoảng **2 phút**, để bài học sát công việc của bạn. Đã lưu nháp thì bấm **Tiếp tục phần đã lưu**."],
+    ['.onboarding-steps [data-onboarding-step="2"].todo', "Test đầu vào", "Lưu hồ sơ xong, bước này mở nút **Bắt đầu test**: **4 phần** Nghe, Đọc, Viết, Nói, tối đa **75 phút**. Không cần ôn trước."],
+    ['.onboarding-steps [data-onboarding-step="2"].cur', "Làm test đầu vào", "Bài có **4 phần** Nghe, Đọc, Viết, Nói, tối đa **75 phút**. Chuẩn bị **tai nghe** và **micro**, rồi bấm **Bắt đầu test**; không cần ôn trước."],
+    ['.onboarding-steps [data-onboarding-step="2"].done', "Đã nộp test", "Bài test đầu vào đã nộp, bạn không cần làm lại. Điểm bài test là căn cứ để **Vận hành** xếp mức cho bạn."],
+    ['.onboarding-steps [data-onboarding-step="3"].todo', "Vận hành duyệt mức", "Nộp test xong, **Vận hành** xem điểm để xếp mức. Bạn không cần làm gì thêm; bài học **tự mở** khi có mức."],
+    ['.onboarding-steps [data-onboarding-step="3"].cur', "Chờ duyệt mức", "Bài test đã gửi, **Vận hành** đang xem điểm để xếp mức. Bạn không cần làm gì thêm; bài học **tự mở** khi có mức."],
     [".learner-support-entry", "Hỗ trợ học tập", "Gặp vấn đề với tài khoản, hồ sơ hay bài test thì mở thẻ này để gửi **khiếu nại** và xem **phản hồi** đã nhận."],
     ['[data-home-block="primary"]:has(a[href^="/lesson/"])', "Bài học hôm nay", "Bấm bài được đề xuất để học hoặc học tiếp. **Bài học bù** hay **bài ôn** cần làm trước cũng hiện ở đây."],
     ['[data-home-block="primary"]:has(a[href^="/support"]):not(:has(a[href^="/lesson/"]))', "Bài học đang khóa", "Bạn đã bỏ lỡ bài thi tháng trước. Bấm **Gửi đơn xin mở** và nêu lý do để Quản lý xem xét."],
@@ -106,17 +111,18 @@ const learnerSteps: Record<string, readonly GuideStep[]> = {
   ],
   "/support": [
     // Thẻ Tất cả chỉ có bảng lịch sử: thêm hàng mục để người học biết gửi khiếu nại, kháng nghị ở đâu.
-    // Trước khi trình độ được duyệt, mục Kháng nghị bị ẩn nên bước không nhắc tới kháng nghị.
+    // Trước khi trình độ được duyệt, mục Kháng nghị và Khảo sát tháng bị ẩn, khiếu nại chỉ có loại Tài khoản.
     ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):has(.request-tabs a[href*="type=appeals"]) .request-tabs', "Các mục hỗ trợ", "Mở **Khiếu nại** để báo lỗi điểm danh, bài học hay tài khoản, **Kháng nghị** để xin chấm lại bài thi, **Khảo sát tháng** để góp ý."],
-    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):not(:has(.request-tabs a[href*="type=appeals"])) .request-tabs', "Các mục hỗ trợ", "Mở **Khiếu nại** để báo lỗi điểm danh, bài học hay tài khoản, hoặc **Khảo sát tháng** để góp ý về khóa học."],
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):not(:has(.request-tabs a[href*="type=appeals"])) .request-tabs', "Các mục hỗ trợ", "Mở **Khiếu nại** để báo vấn đề về **tài khoản**. Các mục học tập khác mở khi bạn bắt đầu học."],
     ['[aria-labelledby="learner-complaint-title"]', "Khiếu nại mới", "Chọn **loại khiếu nại**, ghi ngày hoặc màn hình xảy ra, nêu **lý do** và đính kèm ảnh nếu có, rồi bấm **Gửi cho Quản lý**.", true],
     [".learner-support-action:has(.assessment-appeal-status)", "Bài có thể kháng nghị", "Bấm **Gửi kháng nghị** ở bài còn hạn, nêu lý do từ **10 ký tự**, chọn trình độ đề xuất nếu được hỏi, rồi gửi cho Vận hành."],
     [".card:has(> .monthly-survey-form), .monthly-survey-form", "Khảo sát tháng", "Trả lời các câu có **dấu sao** rồi bấm **Gửi phản hồi**. Có nhiều tháng đang mở thì chọn tháng ở đầu thẻ."],
-    ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=complaints"]) .request-card', "Khiếu nại đã gửi", "Mỗi hàng có **trạng thái** và ngày gửi; bấm **Chi tiết** để đọc phản hồi. **Gửi khiếu nại** báo vấn đề về điểm danh, bài học hoặc tài khoản."],
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=complaints"]):has(.request-tabs a[href*="type=appeals"]) .request-card', "Khiếu nại đã gửi", "Mỗi hàng có **trạng thái** và ngày gửi; bấm **Chi tiết** để đọc phản hồi. **Gửi khiếu nại** báo vấn đề về điểm danh, bài học hoặc tài khoản."],
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=complaints"]):not(:has(.request-tabs a[href*="type=appeals"])) .request-card', "Khiếu nại đã gửi", "Mỗi hàng có **trạng thái** và ngày gửi; bấm **Chi tiết** để đọc phản hồi. **Gửi khiếu nại** báo vấn đề về tài khoản."],
     ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=appeals"]) .request-card', "Kháng nghị đã gửi", "Mỗi hàng có **trạng thái** và ngày gửi. Bấm **Chi tiết** để đọc phản hồi của Vận hành."],
     ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=feedback"]) .request-card', "Khảo sát đã gửi", "Các khảo sát bạn đã trả lời. Bấm **Chi tiết** để xem lại câu trả lời của tháng đó."],
     ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):has(.request-tabs a[href*="type=appeals"]) .request-card', "Lịch sử hỗ trợ", "Khiếu nại, kháng nghị và khảo sát đã gửi, kèm **trạng thái**. Bấm **Chi tiết** để đọc nội dung và phản hồi."],
-    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):not(:has(.request-tabs a[href*="type=appeals"])) .request-card', "Lịch sử hỗ trợ", "Khiếu nại và khảo sát đã gửi, kèm **trạng thái**. Bấm **Chi tiết** để đọc nội dung và phản hồi."],
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):not(:has(.request-tabs a[href*="type=appeals"])) .request-card', "Lịch sử hỗ trợ", "Khiếu nại đã gửi, kèm **trạng thái**. Bấm **Chi tiết** để đọc nội dung và phản hồi."],
   ],
 };
 

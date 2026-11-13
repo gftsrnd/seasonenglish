@@ -17,6 +17,8 @@ const appealLabels = { lesson: "Bài học", assessment: "Bài thi", practice: "
 const evidenceKinds = { lesson: "lesson_part", assessment: "assessment", practice: "weekly_practice" } as const;
 const lessonPartNames: Record<string, string> = { listening: "Nghe", reading: "Đọc", speaking: "Nói", writing: "Viết", word_class: "Từ loại", word_use: "Cách dùng từ" };
 const complaintKinds = ["attendance", "lesson_count", "account"] as const;
+/** Before the level is approved there are no lessons or attendance yet: only account complaints apply (the API enforces the same). */
+const onboardingComplaintKinds = ["account"] as const;
 
 const supportFilters = [
   { value: "all", label: "Tất cả" },
@@ -26,7 +28,7 @@ const supportFilters = [
 ] as const;
 
 type SupportData = {
-  /** Appeals open only once the placement level is approved; unknown (load failed) keeps them closed. */
+  /** Appeals, monthly surveys and learning complaints open only once the placement level is approved; unknown (load failed) keeps them closed. */
   levelApproved?: boolean;
   complaints?: LearnerComplaintView[];
   appeals?: LearnerAcademicAppealView[];
@@ -38,10 +40,13 @@ export function LearnerRequestHistory() {
   const requested = params.get("type") ?? params.get("tab");
   const [data, setData] = useState<SupportData>();
   const appealsOpen = data?.levelApproved === true;
-  const filters = supportFilters.filter(item => item.value !== "appeals" || appealsOpen);
+  // A monthly survey asks about a month of lessons: it opens with the lessons, once the level is approved.
+  const surveysOpen = data?.levelApproved === true;
+  const filters = supportFilters.filter(item => (item.value !== "appeals" || appealsOpen) && (item.value !== "feedback" || surveysOpen));
   const requestedFilter = supportFilters.find(item => item.value === requested)?.value ?? "all";
-  // Before the level is approved there is nothing to appeal: a typed ?type=appeals URL falls back to All.
-  const filter = requestedFilter === "appeals" && data?.levelApproved === false ? "all" : requestedFilter;
+  // Before the level is approved there is nothing to appeal or survey: a typed ?type=appeals/feedback URL falls back to All.
+  const learningOnlyFilter = requestedFilter === "appeals" || requestedFilter === "feedback";
+  const filter = learningOnlyFilter && data?.levelApproved === false ? "all" : requestedFilter;
   const focusedId = params.get("id");
   const [expandedRequest, setExpandedRequest] = useState<{ filter: typeof filter; focusedId: string | null; id: string | null }>();
   const openRequestId = expandedRequest?.filter === filter && expandedRequest.focusedId === focusedId ? expandedRequest.id : focusedId;
@@ -81,7 +86,7 @@ export function LearnerRequestHistory() {
   }, [revision]);
 
   useEffect(() => {
-    if (requestedFilter !== "appeals" || data?.levelApproved !== false) return;
+    if (!learningOnlyFilter || data?.levelApproved !== false) return;
     const next = new URLSearchParams(params);
     next.delete("type");
     next.delete("tab");
@@ -94,7 +99,7 @@ export function LearnerRequestHistory() {
 
   const showComplaints = filter === "all" || filter === "complaints";
   const showAppeals = appealsOpen && (filter === "all" || filter === "appeals");
-  const showFeedback = filter === "all" || filter === "feedback";
+  const showFeedback = surveysOpen && (filter === "all" || filter === "feedback");
   const history = [
     ...(showComplaints ? data?.complaints ?? [] : []).map(item => ({ ...item, date: item.submittedAt, kindLabel: "Khiếu nại",
       title: complaintLabels[item.kind], evidenceKind: "complaint" as const })),
@@ -136,13 +141,13 @@ export function LearnerRequestHistory() {
     };
   });
   const rows = [...history, ...feedbackRows].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
-  const requestError = data && ((showComplaints && !data.complaints) || (showAppeals && !data.appeals) || (filter === "appeals" && (!appealsOpen || !data.results)));
+  const requestError = data && ((showComplaints && !data.complaints) || (showAppeals && !data.appeals) || (filter === "appeals" && (!appealsOpen || !data.results)) || (filter === "feedback" && !surveysOpen));
   const surveyError = showFeedback && surveys.loadError;
-  const loading = (filter !== "feedback" && !data) || (showFeedback && !surveys.view && !surveys.loadError);
+  const loading = !data || (showFeedback && !surveys.view && !surveys.loadError);
   const listLabel = "Lịch sử hỗ trợ";
 
   return <div className="app-learner-page learner-support-page request-workspace">
-    <PageTitle title="Hỗ trợ học tập" detail={data?.levelApproved === false ? "Theo dõi khiếu nại và góp ý của bạn." : "Theo dõi khiếu nại, kháng nghị và góp ý của bạn."}
+    <PageTitle title="Hỗ trợ học tập" detail={data?.levelApproved === false ? "Theo dõi khiếu nại của bạn." : "Theo dõi khiếu nại, kháng nghị và góp ý của bạn."}
       aside={<Link className="btn" to={fromProfile ? "/profile" : "/home"}>{fromProfile ? "Về Tiến độ & hồ sơ" : "Về Trang chủ"}</Link>} />
     <nav className="request-tabs" aria-label="Các mục hỗ trợ học tập">
       {filters.map(item => {
@@ -154,9 +159,9 @@ export function LearnerRequestHistory() {
         </Link>;
       })}
     </nav>
-    {filter === "feedback" ? <LearnerMonthlySurveys surveys={surveys} month={params.get("month")} key={params.get("month") ?? ""} /> : null}
+    {filter === "feedback" && surveysOpen ? <LearnerMonthlySurveys surveys={surveys} month={params.get("month")} key={params.get("month") ?? ""} /> : null}
     {notice ? <p role="status">{notice}</p> : null}
-    {composing && data?.complaints ? <ComplaintForm lessonUnlock={lessonUnlock} complaints={data.complaints}
+    {composing && data?.complaints ? <ComplaintForm lessonUnlock={lessonUnlock} complaints={data.complaints} learning={data.levelApproved === true}
       cancel={() => setComplaintFormOpen(false)} submitted={() => { setComplaintFormOpen(false); setNotice("Đã gửi khiếu nại cho Quản lý."); refresh(); }} /> : null}
     {filter === "appeals" && appealsOpen && data?.results?.length ? <section className="card learner-support-action">
       <h2>Bài thi có thể kháng nghị</h2>
@@ -180,8 +185,9 @@ export function LearnerRequestHistory() {
   </div>;
 }
 
-function ComplaintForm({ complaints, submitted, cancel, lessonUnlock }: { complaints: LearnerComplaintView[]; submitted: () => void; cancel: () => void; lessonUnlock: boolean }) {
-  const [kind, setKind] = useState<LearnerComplaintKind>(lessonUnlock ? "lesson_unlock" : "attendance");
+function ComplaintForm({ complaints, submitted, cancel, lessonUnlock, learning }: { complaints: LearnerComplaintView[]; submitted: () => void; cancel: () => void; lessonUnlock: boolean; learning: boolean }) {
+  const kinds: readonly LearnerComplaintKind[] = learning ? complaintKinds : onboardingComplaintKinds;
+  const [kind, setKind] = useState<LearnerComplaintKind>(lessonUnlock ? "lesson_unlock" : kinds[0]!);
   const [reason, setReason] = useState("");
   const [evidence, setEvidence] = useState<RequestEvidenceDraft>({});
   const [busy, setBusy] = useState(false);
@@ -203,7 +209,8 @@ function ComplaintForm({ complaints, submitted, cancel, lessonUnlock }: { compla
   return <section className="card learner-support-action" aria-labelledby="learner-complaint-title">
       <h2 id="learner-complaint-title">Khiếu nại mới</h2>
       <form className="learner-support-form" onSubmit={submit} aria-busy={busy}>
-        {lessonUnlock ? <b>Mở khóa bài học tháng</b> : <label>Loại khiếu nại<select value={kind} onChange={event => setKind(event.target.value as LearnerComplaintKind)}>{complaintKinds.map(value => <option value={value} key={value}>{complaintLabels[value]}</option>)}</select></label>}
+        {lessonUnlock ? <b>Mở khóa bài học tháng</b> : <label>Loại khiếu nại<select value={kind} onChange={event => setKind(event.target.value as LearnerComplaintKind)}>{kinds.map(value => <option value={value} key={value}>{complaintLabels[value]}</option>)}</select></label>}
+        {!lessonUnlock && !learning ? <p className="small muted">Khiếu nại về <b>điểm danh</b> và <b>số bài học</b> mở khi bạn bắt đầu học.</p> : null}
         <RequestEvidenceFields value={evidence} onChange={setEvidence} label="Màn hình hoặc ngày xảy ra" placeholder="Ví dụ: Điểm danh ngày 06/11" disabled={busy} />
         <label>Lý do khiếu nại<textarea rows={3} value={reason} minLength={5} maxLength={2000} required onChange={event => setReason(event.target.value)} /></label>
         {pending ? <p role="status">Bạn đã có khiếu nại loại này đang chờ.</p> : null}

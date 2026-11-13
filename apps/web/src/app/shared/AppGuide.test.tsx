@@ -459,25 +459,25 @@ describe("AppGuide", () => {
     expect(walkSteps()).toEqual(["Lộ trình đang chuẩn bị", "Luyện trong lúc chờ", "Hồ sơ và đầu vào"]);
   });
 
-  it("guides a new learner's home through the setup card, the current step and support", async () => {
+  it("guides a new learner's home card by card, then support", async () => {
     const content = (stage: 1 | 2 | 3) => <><AppGuide role="learner" pathname="/home" compact />
       <div className="app-learner-page">
         <section className="card setup onboarding-steps"><h2>3 bước để bắt đầu học</h2>
-          <div className={`st ${stage === 1 ? "cur" : "done"}`}><h3>Hồ sơ cá nhân</h3><a href="/onboard">{stage === 1 ? "Điền hồ sơ" : "Xem / sửa hồ sơ"}</a></div>
-          <div className={`st ${stage === 2 ? "cur" : stage > 2 ? "done" : "todo"}`}><h3>Test đầu vào</h3>{stage === 2 && <a href="/test/placement">Bắt đầu test</a>}</div>
-          <div className={`st ${stage === 3 ? "cur" : "todo"}`}><h3>Vận hành duyệt mức</h3></div>
+          <div className={`st ${stage === 1 ? "cur" : "done"}`} data-onboarding-step="1"><h3>Hồ sơ cá nhân</h3><a href="/onboard">{stage === 1 ? "Điền hồ sơ" : "Xem / sửa hồ sơ"}</a></div>
+          <div className={`st ${stage === 2 ? "cur" : stage > 2 ? "done" : "todo"}`} data-onboarding-step="2"><h3>Test đầu vào</h3>{stage === 2 && <a href="/test/placement">Bắt đầu test</a>}</div>
+          <div className={`st ${stage === 3 ? "cur" : "todo"}`} data-onboarding-step="3"><h3>Vận hành duyệt mức</h3></div>
         </section>
         <a className="card learner-support-entry" href="/support?from=home">Hỗ trợ học tập</a>
       </div>
     </>;
     const { rerender } = render(content(1));
-    expect(walkSteps()).toEqual(["Ba bước bắt đầu", "Điền hồ sơ", "Hỗ trợ học tập"]);
+    expect(walkSteps()).toEqual(["Ba bước bắt đầu", "Điền hồ sơ", "Test đầu vào", "Vận hành duyệt mức", "Hỗ trợ học tập"]);
     rerender(content(2));
     await act(async () => { await new Promise(requestAnimationFrame); });
-    expect(walkSteps()).toEqual(["Ba bước bắt đầu", "Hồ sơ đã lưu", "Làm test đầu vào", "Hỗ trợ học tập"]);
+    expect(walkSteps()).toEqual(["Ba bước bắt đầu", "Hồ sơ đã lưu", "Làm test đầu vào", "Vận hành duyệt mức", "Hỗ trợ học tập"]);
     rerender(content(3));
     await act(async () => { await new Promise(requestAnimationFrame); });
-    expect(walkSteps()).toEqual(["Ba bước bắt đầu", "Hồ sơ đã lưu", "Chờ duyệt mức", "Hỗ trợ học tập"]);
+    expect(walkSteps()).toEqual(["Ba bước bắt đầu", "Hồ sơ đã lưu", "Đã nộp test", "Chờ duyệt mức", "Hỗ trợ học tập"]);
   });
 
   it("explains the support sections on the All tab before the history", () => {

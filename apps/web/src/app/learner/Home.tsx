@@ -222,7 +222,7 @@ function OnboardingHome({ view, actions }: { view: LearnerHomeView; actions: Lea
       : step === 2
         ? "Vì sao cần? Để xếp đúng mức CEFR: bài quá dễ thì chán, quá khó thì nản. Không cần ôn trước."
         : text;
-    return <div className={`st ${current ? "cur" : done ? "done" : "todo"}`} key={title}>
+    return <div className={`st ${current ? "cur" : done ? "done" : "todo"}`} data-onboarding-step={step} key={title}>
       <span className="num">{done ? "✓" : step}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="row between" style={{ alignItems: "flex-start", gap: 8 }}><h3>{title}</h3><span className={`badge ${done ? "ok" : current ? "primary" : ""}`}>{badge}</span></div>

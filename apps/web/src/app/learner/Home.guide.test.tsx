@@ -78,6 +78,31 @@ describe("learner home guide", () => {
     ]);
   });
 
+  /** Title and target of each step; a target is the onboarding card number, the block heading or the support card. */
+  function resolvedWalk(home: LearnerHomeView) {
+    const { unmount } = render(<LearnerHome view={home} actions={actions} />);
+    const steps = findSteps(guideDefinitions("learner", "/home")!, document);
+    const walk = steps.map(({ title, target }) => [title,
+      target.dataset.onboardingStep ? `card ${target.dataset.onboardingStep}`
+        : target.matches(".onboarding-steps > h2") ? "heading"
+          : target.matches(".learner-support-entry") ? "support" : target.className] as const);
+    const distinct = new Set(steps.map(({ target }) => target)).size;
+    unmount();
+    return { walk, distinct };
+  }
+
+  it.each([
+    ["onboardingProfile", ["Ba bước bắt đầu", "Điền hồ sơ", "Test đầu vào", "Vận hành duyệt mức"]],
+    ["onboardingTest", ["Ba bước bắt đầu", "Hồ sơ đã lưu", "Làm test đầu vào", "Vận hành duyệt mức"]],
+    ["onboardingApproval", ["Ba bước bắt đầu", "Hồ sơ đã lưu", "Đã nộp test", "Chờ duyệt mức"]]
+  ] as const)("walks the %s home card by card, never returning to card 1", (fixture, titles) => {
+    const { walk, distinct } = resolvedWalk(fixtures[fixture]!);
+    expect(walk).toEqual([
+      [titles[0], "heading"], [titles[1], "card 1"], [titles[2], "card 2"], [titles[3], "card 3"], ["Hỗ trợ học tập", "support"]
+    ]);
+    expect(distinct).toBe(walk.length);
+  });
+
   it("resolves every declared learner home step against a rendered home", () => {
     const resolved = new Set(Object.values(fixtures).flatMap(resolvedTitles));
     const declared = guideDefinitions("learner", "/home")!.map(([, title]) => title);

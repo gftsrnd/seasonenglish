@@ -53,6 +53,7 @@ it("shows the submitted rating with its original question and date in learner hi
   vi.spyOn(learnerApiClient, "getLearnerComplaints").mockResolvedValue({ complaints: [] });
   vi.spyOn(learnerApiClient, "getLearnerAppeals").mockResolvedValue({ appeals: [] });
   vi.spyOn(learnerApiClient, "getAppealableAssessments").mockResolvedValue({ results: [] });
+  vi.spyOn(learnerApiClient, "getProgress").mockResolvedValue({ learner: { cefr: "A2" } } as Awaited<ReturnType<typeof learnerApiClient.getProgress>>);
   render(<MemoryRouter initialEntries={["/support?type=feedback"]}><LearnerRequestHistory /></MemoryRouter>);
 
   expect(screen.queryByRole("link", { name: "Quay lại Hỗ trợ" })).not.toBeInTheDocument();
@@ -72,5 +73,19 @@ it("shows the submitted rating with its original question and date in learner hi
   expect(history.getByRole("time")).toHaveAttribute("datetime", date);
   await user.click(within(summary).getByRole("button", { name: "Thu gọn" }));
   expect(history.queryByText("4/5")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Gửi phản hồi" })).toBeNull();
+});
+
+it("hides the monthly survey from a learner who has not started learning", async () => {
+  vi.spyOn(monthlySurveyApi, "getLearner").mockResolvedValue({ currentMonth: month, surveys: [{ form: published, submission: null }] });
+  vi.spyOn(learnerApiClient, "getLearnerComplaints").mockResolvedValue({ complaints: [] });
+  vi.spyOn(learnerApiClient, "getLearnerAppeals").mockResolvedValue({ appeals: [] });
+  vi.spyOn(learnerApiClient, "getAppealableAssessments").mockResolvedValue({ results: [] });
+  vi.spyOn(learnerApiClient, "getProgress").mockResolvedValue({ learner: { cefr: null } } as unknown as Awaited<ReturnType<typeof learnerApiClient.getProgress>>);
+  render(<MemoryRouter initialEntries={["/support"]}><LearnerRequestHistory /></MemoryRouter>);
+
+  expect(await screen.findByText("Theo dõi khiếu nại của bạn.")).toBeVisible();
+  expect(screen.queryByRole("link", { name: "Khảo sát tháng" })).toBeNull();
+  expect(screen.queryByRole("radio", { name: "4 sao" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Gửi phản hồi" })).toBeNull();
 });

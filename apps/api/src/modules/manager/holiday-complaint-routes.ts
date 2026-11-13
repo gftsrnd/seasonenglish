@@ -9,6 +9,7 @@ import { autoApproveExpiredEligibilityComplaints, learnerMonthlyAccess } from "@
 import { monthlyExamEligibility } from "../learning/routes.js";
 
 const complaintKind = z.enum(["exam_eligibility", "lesson_unlock", "account_unlock", "attendance", "lesson_count", "account"]);
+const learningComplaintKinds: ReadonlySet<string> = new Set(["attendance", "lesson_count"]);
 const createComplaintInput = z.object({ kind: complaintKind, reason: z.string().trim().min(5).max(2000), ...requestEvidenceFields });
 const decisionInput = z.object({ decision: z.enum(["approved", "rejected"]), resolution: z.string().trim().min(1).max(2000) });
 const holidayInput = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).refine(({ date }) => {
@@ -88,6 +89,10 @@ export function registerHolidayComplaintRoutes(app: FastifyInstance, pool: Pool)
     const session = request.e4sSession!;
     if (session.accountStatus === "disabled" && parsed.data.kind !== "account_unlock") {
       return reply.code(403).send({ code: "FORBIDDEN" });
+    }
+    // Attendance and lesson-count complaints only apply once learning has started (placement level approved).
+    if (learningComplaintKinds.has(parsed.data.kind) && !(await learnerMonthlyAccess(pool, session.user.id))?.cefr) {
+      return reply.code(409).send({ code: "LEARNER_COMPLAINT_NOT_APPLICABLE" });
     }
     const requestId = randomUUID();
     const dueHours = parsed.data.kind === "exam_eligibility" ? 24 : null;
