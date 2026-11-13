@@ -175,7 +175,7 @@ export function evaluateMonthlyLessonQuality(
       const requiredWords = expected.targetPositionWords;
       if (JSON.stringify(actual) !== JSON.stringify(planned) || !hasExactTargetOccurrences(passage, requiredWords)) {
         const counts = [...requiredWords.reduce((map, word) => map.set(word, (map.get(word) ?? 0) + 1), new Map<string, number>())].map(([word, count]) => `"${word}" ×${count}`).join(", ");
-        severe.push(finding("MONTHLY_COMBINED_PRONUNCIATION_POSITIONS", `Read-aloud needs exactly 8 taught target positions, two per monthly target, present in the passage. pronunciation.targetPositions must be exactly [${required.map(position => `{soundId "${position.soundId}", exampleId "${position.exampleId}"}`).join(", ")}] and pronunciation.passage must contain each of these words exactly this many times (whole words): ${counts}`, dayNumber, "pronunciation"));
+        severe.push(finding("MONTHLY_COMBINED_PRONUNCIATION_POSITIONS", `Read-aloud needs exactly 8 taught target positions, two per monthly target, present in the passage. pronunciation.targetPositions must be exactly [${required.map(position => `{soundId "${position.soundId}", exampleId "${position.exampleId}"}`).join(", ")}] and pronunciation.passage must contain each of these words exactly this many times (whole words): ${counts}. A word inside a listed phrase counts only for that phrase, so a word that is also a phrase target (e.g. "called" and "called us") must appear once on its own AND once inside the phrase`, dayNumber, "pronunciation"));
       }
     }
   }
