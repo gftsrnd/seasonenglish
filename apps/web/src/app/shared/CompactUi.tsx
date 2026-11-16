@@ -89,7 +89,9 @@ export function InfoTip({ text, label = "Giải thích" }: { text: ReactNode; la
 export function SectionTip({ text, label, desktop = false }: { text: ReactNode; label?: string; desktop?: boolean }) {
   const compact = useCompactUi();
   const ref = useRef<HTMLSpanElement>(null);
-  const shown = compact || desktop;
+  // Desktop never shows the ⓘ (owner decision 2026-11-16): `desktop` is kept for callers but ignored.
+  void desktop;
+  const shown = compact;
   useLayoutEffect(() => {
     const heading = ref.current?.closest("h1, h2, h3, h4");
     if (!heading) return;
