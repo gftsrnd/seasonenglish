@@ -48,7 +48,7 @@ import { errorCode, errorMessage, GENERIC_ERROR_MESSAGE } from "../shared/error-
 import type { AudioEvidence } from "../shared/media/audio-evidence.js";
 import { formatScore, formatScoreOutOf } from "../shared/format-score.js";
 import { adaptAssessmentOverview, adaptLevelForms, adaptLessonMatrix, adaptLessonSet, adaptPrompts, adaptReview, adaptWeeks } from "./adapters.js";
-import type { Cefr, LessonSetActionKey, OperatorReviewActions, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
+import type { Cefr, LessonSetActionKey, LevelFormTarget, OperatorReviewActions, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
 import { describeBatchLevelResults, generateLessonWeeksBatchSettled, lessonGenerationJobsSnapshot, startLessonGenerationJob, subscribeLessonGenerationJobs } from "./lesson-generation.js";
 
 export type OperatorApiClient = typeof apiClient;
@@ -662,6 +662,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     ...(typeof client.changeAssessmentReviewLearnerLevel !== "function" ? { changeLevel: unavailable("endpoint đổi level trực tiếp"), demote: unavailable("endpoint hạ mức"), setLevelDirect: unavailable("endpoint xếp mức trực tiếp") } : {}),
     ...(typeof client.updateAssessmentReviewMonthlyGoal !== "function" ? { editGoal: unavailable("endpoint sửa mục tiêu tháng") } : {}),
     ...(typeof client.setAssessmentReviewLevelUpOverride !== "function" ? { levelUpOverride: unavailable("endpoint cho phép thi lên mức") } : {}),
+    ...(typeof client.grantPlacementRetake !== "function" ? { placementRetake: unavailable("endpoint cho thi lại bài đầu vào") } : {}),
     ...(typeof client.getAssessmentReviewLearner !== "function" ? { viewProfile: unavailable("endpoint đọc hồ sơ theo học viên") } : {}),
     ...(typeof client.requestAssessmentReviewLearnerDeletion !== "function" ? { deleteLearner: unavailable("endpoint xoá học viên") } : {}),
     ...(typeof client.rescoreAssessment !== "function"
@@ -796,6 +797,16 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
       refresh(client.decideAssessment(id, { status: "approved", approvedLevel: target, reason: "Duyệt yêu cầu lên mức" }));
     },
     onRejectLevelRequest: id => { if (readOnly || typeof client.decideAssessment !== "function") return; void modal.prompt({ title: "Từ chối yêu cầu lên mức", message: "Học viên sẽ nhìn thấy nội dung này.", label: "Lý do từ chối", confirmLabel: "Từ chối", tone: "danger" }).then(reason => { if (reason?.trim()) refresh(client.decideAssessment(id, { status: "needs_retry", reason: reason.trim() })); }); },
+    onGrantPlacementRetake: learnerId => {
+      if (readOnly || typeof client.grantPlacementRetake !== "function") return;
+      void modal.prompt({ title: "Cho thi lại 1 lần", message: "Học viên được làm lại bài đầu vào một lần, trên đề thi lại mới đã phát hành. Sau lượt này Vận hành xếp lớp; không thi lại thêm.", label: "Lý do (học viên sẽ thấy)", confirmLabel: "Cho thi lại 1 lần" })
+        .then(reason => { if (reason?.trim()) refresh(client.grantPlacementRetake!(learnerId, { reason: reason.trim() })); });
+    },
+    onRetryPlacementOnce: attemptId => {
+      if (readOnly || typeof client.decideAssessment !== "function") return;
+      void modal.prompt({ title: "Cho thi lại 1 lần", message: "Không duyệt mức lần này. Học viên làm lại bài đầu vào một lần trên đề thi lại mới; sau đó Vận hành xếp lớp và không thi lại thêm.", label: "Lý do (học viên sẽ thấy)", confirmLabel: "Cho thi lại 1 lần" })
+        .then(reason => { if (reason?.trim()) refresh(client.decideAssessment(attemptId, { status: "needs_retry", reason: reason.trim(), grantRetake: true })); });
+    },
     onViewTest: showAttempt, onRescore: rescore, onDeleteLearner: id => requestDeletion(learnerIdFor(id)), onViewChallenge: showChallenge,
     onDemote: id => changeLevel(id, "recommend_lower"), onChangeLevel: id => changeLevel(id, "direct"), onEditGoal: editGoal, onToggleLevelUpOverride: (id, allowed) => { void toggleLevelUpOverride(id, allowed); }, onViewProfile: showProfile, onTogglePendingProfile: togglePendingProfile, onSetLevelDirect: id => changeLevel(id, "direct"),
     onOpenAppeals: () => readOnly ? navigate(paths.review, { state: { reviewTab: "appeals" } }) : navigate(`${paths.review}?tab=appeals`), onOpenSettings: () => navigate("/settings"), onOpenWeeks: () => navigate(paths.months), onOpenLevelForms: () => navigate(paths.levelForms)
@@ -1087,7 +1098,9 @@ function promotionPreview(detail: AssessmentLevelFormDetailView): AssessmentForm
   const listening = detail.sections.filter(section => section.code === "listening").flatMap(section => section.groups);
   return {
     ...detail,
-    kind: "level_up",
+    // The placement retake form is a placement form; it has no single target level.
+    kind: detail.targetLevel === "placement-retake" ? "placement" : "level_up",
+    targetLevel: detail.targetLevel === "placement-retake" ? null : detail.targetLevel,
     editable: detail.status === "draft",
     totalMinutes: detail.sections.reduce((total, section) => total + section.durationMinutes, 0),
     totalScore: detail.sections.reduce((total, section) => total + section.maxScore, 0),
@@ -1100,7 +1113,7 @@ function LevelFormsRoute({ client, readOnly, embedded = false }: { client: Opera
   const navigate = useNavigate();
   const paths = useOperatorRoutePaths();
   const [data, setData] = useState<AssessmentLevelFormSlotView[]>();
-  const [generating, setGenerating] = useState<Cefr | null>(null);
+  const [generating, setGenerating] = useState<LevelFormTarget | null>(null);
   const [error, setError] = useState<string>();
   const [dialog, setDialog] = useState<{ detail: AssessmentLevelFormDetailView; editing: boolean }>();
   const capabilities = useCapabilities(client);
@@ -1123,11 +1136,11 @@ function LevelFormsRoute({ client, readOnly, embedded = false }: { client: Opera
   };
   return <><OperatorLevelForms readOnly={readOnly} embedded={embedded} unavailable={missing} view={adaptLevelForms(data, { aiConnected: capabilities?.ai ?? false, generatingTarget: generating })} actions={{
     onBack: () => navigate(paths.root), onOpenSettings: () => navigate("/settings"),
-    onGenerate: target => { if (readOnly) return; setGenerating(target); refresh(client.generateAssessmentLevelForm(target as Exclude<CefrLevel, "A1">), `Đã sinh bản nháp đề thi lên mức ${target}.`); },
+    onGenerate: target => { if (readOnly) return; setGenerating(target); refresh(client.generateAssessmentLevelForm(target), target === "placement-retake" ? "Đã sinh bản nháp đề thi lại bài đầu vào." : `Đã sinh bản nháp đề thi lên mức ${target}.`); },
     onCreateManual: target => {
       if (readOnly) return;
       setGenerating(target);
-      void client.createManualAssessmentLevelForm(target as Exclude<CefrLevel, "A1">)
+      void client.createManualAssessmentLevelForm(target)
         .then(form => client.getAssessmentLevelForm(form.versionId))
         .then(detail => { setDialog({ detail, editing: true }); return reload(); }, notifyError)
         .finally(() => setGenerating(null));

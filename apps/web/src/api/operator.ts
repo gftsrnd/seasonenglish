@@ -12,6 +12,7 @@ import type {
   ManualAssessmentScoreInput,
   ContentWeekInput, ContentWeekSuggestionView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
 } from "@e4s/contracts";
+import type { AssessmentLevelFormTarget, AssessmentPlacementRetakeGrantView } from "@e4s/contracts";
 import type { ReopenRequestView, MonthFrameworkReopenRequestView, MonthlyResourceEditInput, MonthlyFinalDraftView, MonthlyFinalUpdateInput, MonthlyOperatorOverviewView, SharedMonthBriefView } from "@e4s/contracts";
 import type { MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { request, uploadMultipart } from "./runtime.js";
@@ -62,14 +63,16 @@ export interface OperatorApiClient {
   changeAssessmentReviewLearnerLevel(learnerId: string, input: AssessmentLevelChangeInput): Promise<AssessmentLevelChangeView>;
   updateAssessmentReviewMonthlyGoal(learnerId: string, monthlyGoal: string): Promise<AssessmentMonthlyGoalView>;
   setAssessmentReviewLevelUpOverride?(learnerId: string, input: { allowed: boolean; reason: string }): Promise<AssessmentLevelUpOverrideView>;
+  /** Grants the learner's one placement retake ("Cho thi lại 1 lần"). */
+  grantPlacementRetake?(learnerId: string, input: { reason: string }): Promise<AssessmentPlacementRetakeGrantView>;
   requestAssessmentReviewLearnerDeletion(learnerId: string, reason: string): Promise<AssessmentDeletionRequestView>;
   decideAssessment(attemptId: string, input: AssessmentDecisionInput): Promise<AssessmentDecisionView>;
   resolveTopicReport(reportId: string): Promise<{ saved: boolean }>;
   getAssessmentLevelForms(): Promise<AssessmentLevelFormSlotView[]>;
   getAssessmentFormPreviews(kind: "placement" | "level_up" | "final" | "pass_course"): Promise<AssessmentFormPreviewCollectionView>;
   getAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormDetailView>;
-  generateAssessmentLevelForm(targetLevel: Exclude<CefrLevel, "A1">): Promise<AssessmentLevelFormView>;
-  createManualAssessmentLevelForm(targetLevel: Exclude<CefrLevel, "A1">): Promise<AssessmentLevelFormView>;
+  generateAssessmentLevelForm(targetLevel: AssessmentLevelFormTarget): Promise<AssessmentLevelFormView>;
+  createManualAssessmentLevelForm(targetLevel: AssessmentLevelFormTarget): Promise<AssessmentLevelFormView>;
   updateAssessmentLevelForm(versionId: string, input: AssessmentLevelFormUpdateInput): Promise<AssessmentLevelFormDetailView>;
   copyAssessmentLevelFormToDraft(versionId: string): Promise<AssessmentLevelFormDetailView>;
   publishAssessmentLevelForm(versionId: string, confirmation?: { answersReviewed: true }): Promise<AssessmentLevelFormView>;
@@ -191,6 +194,7 @@ export const operatorApiClient: OperatorApiClient = {
   changeAssessmentReviewLearnerLevel: (learnerId, input) => request(`/api/v1/assessment-reviews/learners/${encodeURIComponent(learnerId)}/level`, { method: "PATCH", body: JSON.stringify(input) }),
   updateAssessmentReviewMonthlyGoal: (learnerId, monthlyGoal) => request(`/api/v1/assessment-reviews/learners/${encodeURIComponent(learnerId)}/monthly-goal`, { method: "PATCH", body: JSON.stringify({ monthlyGoal }) }),
   setAssessmentReviewLevelUpOverride: (learnerId, input) => request(`/api/v1/assessment-reviews/learners/${encodeURIComponent(learnerId)}/level-up-override`, { method: "PUT", body: JSON.stringify(input) }),
+  grantPlacementRetake: (learnerId, input) => request(`/api/v1/assessment-reviews/learners/${encodeURIComponent(learnerId)}/placement-retake`, { method: "POST", body: JSON.stringify(input) }),
   requestAssessmentReviewLearnerDeletion: (learnerId, reason) => request(`/api/v1/assessment-reviews/learners/${encodeURIComponent(learnerId)}/deletion-requests`, { method: "POST", body: JSON.stringify({ reason }) }),
   decideAssessment: (attemptId, input) => request(`/api/v1/assessment-reviews/${encodeURIComponent(attemptId)}/decision`, { method: "POST", body: JSON.stringify(input) }),
   resolveTopicReport: (reportId) => request(`/api/v1/assessment-reviews/topic-reports/${encodeURIComponent(reportId)}/resolution`, { method: "POST", body: "{}" }),

@@ -149,6 +149,7 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
     return <div className="app-learner-page test-page">
       <PageTitle title={assessmentHeading(view)} aside={compact ? undefined : <AppLink className="btn btn-sm" href="/home" navigate={actions.navigate}>Về trang chủ</AppLink>} />
       <section className={compact ? "card assessment-prep-compact" : "card"}>
+        {definition.kind === "placement" && view.placementRetake?.status === "granted" ? <PlacementRetakeNotice reason={view.placementRetake.reason} /> : null}
         {compact ? <>
           {definition.kind !== "placement" ? <h2>{definition.title}</h2> : null}
           <p className="assessment-prep-overview">{definition.sections.length} kỹ năng · {timed ? `${definition.totalMinutes} phút` : "Không tính giờ"} · {formatScore(definition.totalScore)} điểm</p>
@@ -210,6 +211,7 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
       <section className="card" role="status" aria-live="polite" aria-busy={submitting || undefined}>
         <h2>{submitting ? <><span className="spinner" aria-hidden="true" /> Đang chấm bài…</> : pendingCopy.title}</h2>
         <p>{submitting ? "Season đang tổng hợp kết quả. Đừng đóng trang này nhé." : pendingCopy.detail}</p>
+        {!submitting && definition.kind === "placement" && view.placementRetake?.status === "granted" ? <PlacementRetakeNotice reason={view.placementRetake.reason} pendingForm /> : null}
         {!submitting && view.attempt.totalScore != null ? <AssessmentResult attempt={view.attempt} /> : null}
         <ErrorText message={view.submitError ?? localError} />
       </section>
@@ -705,7 +707,20 @@ function assessmentPendingCopy(view: AssessmentView): { title: string; detail: s
     return { title: "Pass Course đang chờ xét", detail: "Vận hành đang đối chiếu bốn kỹ năng và tổng điểm. Bạn có 72 giờ để kháng nghị sau khi có kết quả." };
   }
   if (status === "approved") return { title: "Test đầu vào đã được duyệt", detail: "Mức học sẽ được mở theo hồ sơ của bạn ngay khi hệ thống cập nhật." };
+  const retake = view.placementRetake;
+  if (retake?.status === "used" && retake.retakeAttemptId === view.attempt?.id) {
+    return { title: "Bài thi lại đã được nộp", detail: "Bạn đã dùng lượt thi lại duy nhất. Vận hành sẽ xem kết quả và xếp lớp cho bạn; đây là quyết định cuối cùng, không có lượt thi lại thêm." };
+  }
+  if (status === "needs_retry") {
+    if (retake?.status === "granted") return { title: "Bạn được thi lại 1 lần", detail: "Đề thi lại mới đang được chuẩn bị. Khi đề sẵn sàng, bạn sẽ làm lại bài đầu vào trên trang này." };
+    return { title: "Test đầu vào chưa đủ để duyệt mức", detail: "Vận hành chưa duyệt mức từ bài này. Vận hành sẽ cho bạn thi lại một lần trên đề mới hoặc xếp lớp trực tiếp; bạn sẽ nhận thông báo." };
+  }
   return { title: "Test đầu vào đã được nộp", detail: "Vận hành sẽ xem lại kết quả trước khi duyệt mức. Bạn không cần làm lại bài trong lúc chờ." };
+}
+
+/** "Bạn được thi lại 1 lần…": the one Operator-granted placement retake, on a new form. */
+function PlacementRetakeNotice({ reason, pendingForm = false }: { reason: string; pendingForm?: boolean }) {
+  return <Notice><span role="status" className="assessment-retake-notice"><b>Bạn được thi lại 1 lần.</b> {pendingForm ? "Đề thi lại mới đang được chuẩn bị." : "Bài thi lại dùng một đề mới, cùng cấu trúc bốn kỹ năng."} Sau lượt thi lại, Vận hành sẽ xếp lớp cho bạn dựa trên kết quả; không có lượt thi lại thêm.{reason.trim() ? <> Lời nhắn của Vận hành: <i>{reason}</i></> : null}</span></Notice>;
 }
 
 function assessmentTargetLevel(view: AssessmentView) {

@@ -9,7 +9,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL
 
 const expectedTables = [
   "activities", "ai_runs", "ai_tasks", "appeals", "assessment_attempts", "assessment_audio_plays",
-  "assessment_decisions", "assessment_definitions", "assessment_responses",
+  "assessment_decisions", "assessment_definitions", "assessment_responses", "assessment_retake_grants",
   "assessment_scores", "assessment_versions", "audit_events", "auth_challenges", "badges",
   "coach_sessions", "coach_turns", "duels", "enrollments", "file_deletion_confirmations", "files", "game_results",
   "content_lesson_level_settings", "game_sets", "idempotency_keys", "jobs", "learner_level_periods", "learner_profiles", "learner_season_milestones", "learner_vocabulary_unlocks", "level_up_challenge_results", "lesson_set_versions",

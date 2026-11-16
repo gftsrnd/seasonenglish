@@ -23,7 +23,9 @@ export interface LevelFormQualityIssue {
     | "LEVEL_FORM_NEAR_DUPLICATE_QUESTIONS"
     | "LEVEL_FORM_ANSWER_POSITION_BIAS"
     | "LEVEL_FORM_STATEMENT_UNSUPPORTED"
-    | "LEVEL_FORM_REPEATED_CONTEXT";
+    | "LEVEL_FORM_REPEATED_CONTEXT"
+    /** Placement retake only: an item, script/passage sentence or prompt copied from placement-a. */
+    | "LEVEL_FORM_COPIES_PLACEMENT";
   severity: LevelFormQualitySeverity;
   section: "listening" | "reading" | "form";
   /** 0-based question index inside the section, when the issue is about one question. */

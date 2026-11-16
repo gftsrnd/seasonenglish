@@ -58,7 +58,13 @@ export interface PendingPlacement {
   rescoreBusy?: boolean | undefined;
   deletionPending?: boolean | undefined;
   reviewFlags?: Array<"pending_score" | "incomplete" | "typed_speaking" | "borderline" | "skill_gap">;
+  /** Placement only: the learner's one retake (not granted / granted / used). */
+  placementRetake?: PlacementRetakeState | undefined;
+  /** This attempt is the learner's retake: the Operator's decision is the final placement. */
+  isPlacementRetake?: boolean | undefined;
 }
+
+export type PlacementRetakeState = "not_granted" | "granted" | "used";
 
 export interface LevelRequest {
   id: string;
@@ -94,6 +100,7 @@ export interface ApprovedLearner {
   testId?: string | null;
   /** Staff exception open: the learner may take the level-up test now. */
   levelUpAllowed?: boolean;
+  placementRetake?: PlacementRetakeState;
 }
 
 export interface UnassessedLearner {
@@ -101,6 +108,7 @@ export interface UnassessedLearner {
   name: string;
   profileSummary?: string | null;
   hasProfile?: boolean;
+  placementRetake?: PlacementRetakeState;
 }
 
 export interface OperatorDashboardView {
@@ -139,13 +147,17 @@ export interface OperatorDashboardActions {
   onAssignWeeklyPractice?(id: string): void;
   onTogglePendingProfile?: (id: string) => void;
   onSetLevelDirect(id: string): void;
+  /** "Cho thi lại 1 lần" from the learner's record (learner id). */
+  onGrantPlacementRetake?(learnerId: string): void;
+  /** "Cho thi lại 1 lần" from a pending placement decision (attempt id): needs_retry + grant. */
+  onRetryPlacementOnce?(attemptId: string): void;
   onOpenAppeals(): void;
   onOpenSettings(): void;
   onOpenWeeks(): void;
   onOpenLevelForms(): void;
 }
 
-export type DashboardActionKey = "approvePlacement" | "viewTest" | "rescore" | "deleteLearner" | "decideLevelRequest" | "viewChallenge" | "demote" | "changeLevel" | "editGoal" | "viewProfile" | "assignWeeklyPractice" | "setLevelDirect" | "levelUpOverride";
+export type DashboardActionKey = "approvePlacement" | "viewTest" | "rescore" | "deleteLearner" | "decideLevelRequest" | "viewChallenge" | "demote" | "changeLevel" | "editGoal" | "viewProfile" | "assignWeeklyPractice" | "setLevelDirect" | "levelUpOverride" | "placementRetake";
 
 export interface LevelFormSummary {
   id: string;
@@ -164,17 +176,20 @@ export interface LevelFormSummary {
 
 export interface OperatorLevelFormsView {
   aiConnected: boolean;
-  generatingTarget: Cefr | null;
+  generatingTarget: LevelFormTarget | null;
   generateState?: AsyncState | undefined;
   generateError?: string | null | undefined;
-  targets: Array<{ target: Exclude<Cefr, "A1">; forms: LevelFormSummary[] }>;
+  targets: Array<{ target: LevelFormTarget; forms: LevelFormSummary[] }>;
 }
+
+/** A level-up target, or "placement-retake" for the AI-generated placement retake form. */
+export type LevelFormTarget = Exclude<Cefr, "A1"> | "placement-retake";
 
 export interface OperatorLevelFormsActions {
   onBack(): void;
   onOpenSettings(): void;
-  onGenerate(target: Cefr): void;
-  onCreateManual?(target: Cefr): void;
+  onGenerate(target: LevelFormTarget): void;
+  onCreateManual?(target: LevelFormTarget): void;
   onView(id: string): void;
   onEdit?(id: string, fromPublished?: boolean): void;
   onDelete(id: string): void;

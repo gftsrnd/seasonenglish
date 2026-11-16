@@ -391,7 +391,8 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
       expect.objectContaining({ targetLevel: "A2", publishedForm: null }),
       expect.objectContaining({ targetLevel: "B1", publishedForm: expect.objectContaining({ title: levelFormTitle, listeningTaskCount: 20, readingTaskCount: 40 }) }),
       expect.objectContaining({ targetLevel: "B2", publishedForm: null }),
-      expect.objectContaining({ targetLevel: "C1", publishedForm: null })
+      expect.objectContaining({ targetLevel: "C1", publishedForm: null }),
+      expect.objectContaining({ targetLevel: "placement-retake", publishedForm: null })
     ]);
     const managerDecision = await app.inject({
       method: "POST",

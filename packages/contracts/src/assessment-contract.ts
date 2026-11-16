@@ -157,6 +157,37 @@ export interface AssessmentView {
   runtime?: AssessmentRuntimeView;
   appeal?: AssessmentAppealView | null;
   appealTarget?: AssessmentAppealTargetView | null;
+  /** Placement only: the learner's one Operator-granted retake, when there is one. */
+  placementRetake?: AssessmentPlacementRetakeView | null;
+}
+
+/** Per-learner state of the one allowed retake: never granted, granted but not started, or used. */
+export type AssessmentRetakeStatus = "not_granted" | "granted" | "used";
+
+/**
+ * The single placement retake (owner decision 11/2026). "granted": the next start creates a NEW
+ * attempt on the published placement-retake form. "used": the retake attempt exists; after it is
+ * submitted the Operator places the learner and that placement is final.
+ */
+export interface AssessmentPlacementRetakeView {
+  status: "granted" | "used";
+  reason: string;
+  grantedAt: string;
+  usedAt: string | null;
+  retakeAttemptId: string | null;
+}
+
+export interface AssessmentPlacementRetakeGrantInput {
+  reason: string;
+}
+
+export interface AssessmentPlacementRetakeGrantView {
+  learnerId: string;
+  status: "granted";
+  sourceAttemptId: string | null;
+  reason: string;
+  grantedBy: string;
+  grantedAt: string;
 }
 
 export interface AssessmentAppealTargetView {
@@ -194,6 +225,10 @@ export interface AssessmentReviewQueueItem {
   sectionScores: Partial<Record<AssessmentSectionCode, number>>;
   suggestedLevel: CefrLevel | null;
   reviewFlags?: Array<"pending_score" | "incomplete" | "typed_speaking" | "borderline" | "skill_gap">;
+  /** Placement only: retake state of this learner; a used retake makes this decision final. */
+  placementRetake?: AssessmentRetakeStatus;
+  /** True when this attempt is the learner's one placement retake (the Operator's final placement). */
+  isPlacementRetake?: boolean;
   challenge?: { completedTurns: number; requiredTurns: 6; average: number; offTopic: number; complete: boolean; passed: boolean };
 }
 
@@ -201,6 +236,8 @@ export interface AssessmentDecisionInput {
   status: "approved" | "needs_retry";
   approvedLevel?: CefrLevel;
   reason: string;
+  /** Placement + needs_retry only: also grant the one retake ("Cho thi lại 1 lần"). */
+  grantRetake?: boolean;
 }
 
 export interface AssessmentDecisionView {
@@ -220,6 +257,7 @@ export interface AssessmentApprovedLearnerView {
   monthlyGoal: string | null;
   /** Open staff exception letting the learner take the level-up test now. */
   levelUpOverride?: AssessmentLevelUpOverrideSummary | null;
+  placementRetake?: AssessmentRetakeStatus;
 }
 
 export interface AssessmentUnassessedLearnerView {
@@ -228,6 +266,7 @@ export interface AssessmentUnassessedLearnerView {
   profileComplete: boolean;
   lifecycle?: "not_started" | "in_progress" | "needs_retry";
   lastAttemptAt?: string | null;
+  placementRetake?: AssessmentRetakeStatus;
 }
 
 export type AssessmentReviewFlowPhase = "testing" | "ungraded" | "challenge" | "failed";
@@ -304,8 +343,14 @@ export interface AssessmentLevelFormView {
   publicationBlockerCount?: number;
 }
 
+/**
+ * A level-form slot: one per level-up target, plus "placement-retake" for the AI-generated
+ * placement retake form (mixed A1–C1 banding, same 20/40/2/4 structure as placement-a).
+ */
+export type AssessmentLevelFormTarget = Exclude<CefrLevel, "A1"> | "placement-retake";
+
 export interface AssessmentLevelFormSlotView {
-  targetLevel: Exclude<CefrLevel, "A1">;
+  targetLevel: AssessmentLevelFormTarget;
   publishedForm: AssessmentLevelFormView | null;
   draftForm: AssessmentLevelFormView | null;
 }
@@ -316,7 +361,7 @@ export interface AssessmentLevelFormSlotView {
  * keys and warnings are only exposed when an Operator opens a concrete version.
  */
 export interface AssessmentLevelFormDetailView extends AssessmentLevelFormView {
-  targetLevel: Exclude<CefrLevel, "A1">;
+  targetLevel: AssessmentLevelFormTarget;
   sections: Array<{
     code: AssessmentSectionCode;
     title: string;

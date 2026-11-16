@@ -273,7 +273,7 @@ export interface DashboardAdapterContext {
 }
 
 export function adaptAssessmentOverview(source: AssessmentReviewOverviewView, context: DashboardAdapterContext): OperatorDashboardView {
-  const mapUnassessed = (item: AssessmentReviewOverviewView["unassessedLearners"][number]) => ({ id: item.learnerId, name: item.learnerName, hasProfile: item.profileComplete, profileSummary: item.profileComplete ? "Đã điền hồ sơ" : "Chưa điền hồ sơ" });
+  const mapUnassessed = (item: AssessmentReviewOverviewView["unassessedLearners"][number]) => ({ id: item.learnerId, name: item.learnerName, hasProfile: item.profileComplete, profileSummary: item.profileComplete ? "Đã điền hồ sơ" : "Chưa điền hồ sơ", ...(item.placementRetake ? { placementRetake: item.placementRetake } : {}) });
   return {
     week: {
       ...(context.currentWeek == null ? {} : { current: context.currentWeek }),
@@ -298,7 +298,7 @@ export function adaptAssessmentOverview(source: AssessmentReviewOverviewView, co
           ...(score?.heuristic ? { heuristic: true } : {})
         };
       });
-      return { id: item.attemptId, learnerId: item.learnerId, name: item.learnerName, kind: item.kind === "final" ? "final" : item.kind === "pass-course" ? "pass-course" : "placement", submittedAt: operatorDateTime(item.submittedAt), total: detail?.total ?? undefined, rawLevel: detail?.rawLevel, aiSuggestedCefr: item.suggestedLevel as Cefr | null, sectionScores, reviewFlags: item.reviewFlags ?? [], rationale: detail?.rationale, monthlyGoal: detail?.monthlyGoal, profileSummary: detail?.profileSummary ?? (item.profileComplete === undefined ? undefined : item.profileComplete ? "Đã điền hồ sơ" : "Chưa điền hồ sơ"), suggestedLevel: (item.suggestedLevel ?? detail?.rawLevel) as Cefr | undefined, levels: CEFR_LEVELS, aiScored: detail?.aiScored, humanScored: detail?.humanScored, aiScoringStatus: detail?.aiScoringStatus, aiScoringErrorCode: detail?.aiScoringErrorCode, canRescore: true, rescoreBusy: context.rescoreBusy === item.attemptId };
+      return { id: item.attemptId, learnerId: item.learnerId, name: item.learnerName, kind: item.kind === "final" ? "final" : item.kind === "pass-course" ? "pass-course" : "placement", submittedAt: operatorDateTime(item.submittedAt), total: detail?.total ?? undefined, rawLevel: detail?.rawLevel, aiSuggestedCefr: item.suggestedLevel as Cefr | null, sectionScores, reviewFlags: item.reviewFlags ?? [], rationale: detail?.rationale, monthlyGoal: detail?.monthlyGoal, profileSummary: detail?.profileSummary ?? (item.profileComplete === undefined ? undefined : item.profileComplete ? "Đã điền hồ sơ" : "Chưa điền hồ sơ"), suggestedLevel: (item.suggestedLevel ?? detail?.rawLevel) as Cefr | undefined, levels: CEFR_LEVELS, aiScored: detail?.aiScored, humanScored: detail?.humanScored, aiScoringStatus: detail?.aiScoringStatus, aiScoringErrorCode: detail?.aiScoringErrorCode, canRescore: true, rescoreBusy: context.rescoreBusy === item.attemptId, placementRetake: item.placementRetake, isPlacementRetake: item.isPlacementRetake };
     }),
     levelRequests: source.pendingLevelUp.map(item => {
       const levels = context.levelRequestDetails?.[item.attemptId];
@@ -307,7 +307,7 @@ export function adaptAssessmentOverview(source: AssessmentReviewOverviewView, co
     ready: source.levelSignals.ready.map(item => ({ id: item.learnerId, name: item.learnerName, cefr: item.currentLevel as Cefr, target: item.targetLevel as Cefr, metrics: item.metrics.map(metric => `${metric.label} ${metric.display}`).join(" · ") })),
     weak: source.levelSignals.weak.map(item => ({ id: item.learnerId, name: item.learnerName, cefr: item.currentLevel as Cefr, metrics: item.wrongWeeks.map(week => `tuần ${week.weekNumber}: ${formatPercent(week.wrongPercent)} sai (${week.partCount} phần)`).join(" · ") })),
     inFlow: (source.levelSignals.inFlow ?? []).map(item => ({ id: item.learnerId, name: item.learnerName, cefr: item.currentLevel as Cefr, target: item.targetLevel as Cefr, metrics: item.metrics, testId: item.assessmentAttemptId, challengeId: item.challengeAttemptId })),
-    approved: source.approvedLearners.map(item => ({ id: item.learnerId, name: item.learnerName, cefr: item.currentLevel as Cefr, placementScore: item.placementScore, monthlyGoal: item.monthlyGoal, levelUpAllowed: Boolean(item.levelUpOverride) })),
+    approved: source.approvedLearners.map(item => ({ id: item.learnerId, name: item.learnerName, cefr: item.currentLevel as Cefr, placementScore: item.placementScore, monthlyGoal: item.monthlyGoal, levelUpAllowed: Boolean(item.levelUpOverride), ...(item.placementRetake ? { placementRetake: item.placementRetake } : {}) })),
     unassessed: source.unassessedLearners.map(mapUnassessed),
     inProgress: (source.inProgressLearners ?? []).map(mapUnassessed),
     retry: (source.retryLearners ?? []).map(mapUnassessed)
@@ -329,7 +329,7 @@ function compactPlanTitle(value: string, topic: string): string {
   return words.slice(0, 7).join(" ") + (words.length > 7 ? "…" : "");
 }
 
-export function adaptLevelForms(slots: AssessmentLevelFormSlotView[], options: { aiConnected: boolean; generatingTarget?: Cefr | null; generateError?: string | null }): OperatorLevelFormsView {
+export function adaptLevelForms(slots: AssessmentLevelFormSlotView[], options: { aiConnected: boolean; generatingTarget?: OperatorLevelFormsView["generatingTarget"]; generateError?: string | null }): OperatorLevelFormsView {
   return {
     aiConnected: options.aiConnected,
     generatingTarget: options.generatingTarget ?? null,
@@ -337,7 +337,7 @@ export function adaptLevelForms(slots: AssessmentLevelFormSlotView[], options: {
     targets: slots.map(slot => {
       const form = slot.draftForm ?? slot.publishedForm;
       return {
-        target: slot.targetLevel as Exclude<Cefr, "A1">,
+        target: slot.targetLevel,
         forms: form ? [{ id: form.versionId, title: form.title, status: form.status === "published" ? "approved" as const : "draft" as const, createdAt: form.publishedAt ? operatorDateTime(form.publishedAt) : `v${form.version}`, byName: form.status === "published" ? "Đã phát hành" : "Bản nháp", listeningQuestions: form.listeningTaskCount, readingQuestions: form.readingTaskCount, attempts: form.attemptCount, inUse: form.status === "published", ...(form.publicationReady === undefined ? {} : { publicationReady: form.publicationReady }), ...(form.publicationBlockerCount === undefined ? {} : { publicationBlockerCount: form.publicationBlockerCount }) }] : []
       };
     })

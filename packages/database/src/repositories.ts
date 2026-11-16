@@ -10,6 +10,7 @@ import { FROZEN_MONTHLY_ILLUSTRATIONS_SQL, withFrozenMonthlyIllustrations, type 
 import { generationFindingsFromPayload } from "./generation-findings.js";
 import { MonthlyContentRepository } from "./monthly-content-repository.js";
 import { learnerLevelStartedOnSql } from "./learner-level-start.js";
+import { grantPlacementRetakeInTransaction, PLACEMENT_RETAKE_ASSESSMENT_KEY, PlacementRetakeError } from "./placement-retake.js";
 import type {
   AccountRole,
   AudioArtifactInput,
@@ -22,6 +23,7 @@ import type {
   AssessmentDeletionRequestView,
   AssessmentLevelFormDeleteView,
   AssessmentLevelFormDetailView,
+  AssessmentLevelFormTarget,
   AssessmentLevelFormUpdateInput,
   AssessmentLevelChangeInput,
   AssessmentLevelUpOverrideView,
@@ -561,7 +563,7 @@ export interface AssessmentLevelFormRecord {
   versionId: string;
   title: string;
   version: number;
-  targetLevel: Exclude<CefrLevel, "A1">;
+  targetLevel: AssessmentLevelFormTarget;
   publishedAt: Date | null;
   listeningTaskCount: number;
   readingTaskCount: number;
@@ -5615,6 +5617,17 @@ function sectionTaskCount(blueprint: StoredAssessmentDefinition, code: Assessmen
 }
 
 /** The only publishable level-up shape is the placement-format assessment. */
+/**
+ * Level-form review/edit/publish also serves the AI-generated placement retake form: a
+ * `placement` definition keyed `placement-retake` with the same 20/40/2/4 structure.
+ */
+const LEVEL_FORM_DEFINITION_SQL = `(ad.kind = 'level_up' or (ad.kind = 'placement' and ad.assessment_key = '${PLACEMENT_RETAKE_ASSESSMENT_KEY}'))`;
+const LEVEL_FORM_TARGET_SQL = `(case when ad.assessment_key = '${PLACEMENT_RETAKE_ASSESSMENT_KEY}' then '${PLACEMENT_RETAKE_ASSESSMENT_KEY}' else nullif(av.blueprint->>'targetLevel', '') end)`;
+
+function levelFormTarget(value: string | null | undefined): AssessmentLevelFormTarget | null {
+  return value === PLACEMENT_RETAKE_ASSESSMENT_KEY || value === "A2" || value === "B1" || value === "B2" || value === "C1" ? value : null;
+}
+
 function hasCanonicalLevelFormStructure(blueprint: StoredAssessmentDefinition): boolean {
   const expected: Record<AssessmentSectionCode, { duration: number; score: number; tasks: number }> = {
     listening: { duration: 15, score: 20, tasks: 20 },
@@ -5848,6 +5861,8 @@ class AssessmentRepository {
        from assessment_definitions ad
        join assessment_versions av on av.definition_id = ad.id
        where ad.kind = $1 and av.status = 'published'
+         -- The placement retake form is only ever started through a granted retake.
+         and ad.assessment_key <> '${PLACEMENT_RETAKE_ASSESSMENT_KEY}'
        order by av.version desc
        limit 1`,
       [databaseKind]
@@ -5883,7 +5898,7 @@ class AssessmentRepository {
               av.version, av.blueprint
        from assessment_versions av
        join assessment_definitions ad on ad.id = av.definition_id
-       where av.id = $1 and (av.status = 'published' or (ad.kind = 'final' and av.published_at is not null))
+       where av.id = $1 and (av.status = 'published' or ((ad.kind = 'final' or ad.assessment_key = '${PLACEMENT_RETAKE_ASSESSMENT_KEY}') and av.published_at is not null))
        limit 1`,
       [versionId]
     );
@@ -7947,22 +7962,24 @@ class AssessmentRepository {
       blueprint: StoredAssessmentDefinition;
       published_at: Date | null;
       attempt_count: string;
+      target_level: string | null;
     }>(
       `select ad.id as definition_id, av.id as version_id, ad.title, av.version,
-              av.blueprint, av.published_at, count(aa.id)::text as attempt_count
+              av.blueprint, av.published_at, count(aa.id)::text as attempt_count,
+              ${LEVEL_FORM_TARGET_SQL} as target_level
        from assessment_definitions ad
        join users reviewer on reviewer.id = $1 and reviewer.organization_id = ad.organization_id
        join assessment_versions av on av.definition_id = ad.id and av.status in ('draft', 'published')
        left join assessment_attempts aa on aa.assessment_version_id = av.id
-       where ad.kind = 'level_up'
+       where ${LEVEL_FORM_DEFINITION_SQL}
        group by ad.id, av.id, ad.title, av.version, av.blueprint, av.published_at
        order by av.published_at desc nulls last`,
       [reviewerId]
     );
     return result.rows.flatMap((row) => {
       if (!hasCanonicalLevelFormStructure(row.blueprint)) return [];
-      const targetLevel = row.blueprint.targetLevel;
-      if (!targetLevel || targetLevel === "A1") return [];
+      const targetLevel = levelFormTarget(row.target_level);
+      if (!targetLevel) return [];
       const publicationBlockerCount = levelFormPublicationBlockerCount(row.blueprint);
       const sectionCount = (code: AssessmentSectionCode) => row.blueprint.sections
         .find((section) => section.code === code)?.groups.reduce((total, group) => total + group.tasks.length, 0) ?? 0;
@@ -7984,35 +8001,35 @@ class AssessmentRepository {
   }
 
   /** Return every persisted version for one target level, including retired history. */
-  async listLevelFormVersions(reviewerId: string, targetLevel: Exclude<CefrLevel, "A1">): Promise<AssessmentLevelFormRecord[]> {
+  async listLevelFormVersions(reviewerId: string, targetLevel: AssessmentLevelFormTarget): Promise<AssessmentLevelFormRecord[]> {
     const result = await this.pool.query<{
       definition_id: string;
       version_id: string;
       title: string;
       version: number;
-      target_level: Exclude<CefrLevel, "A1"> | null;
+      target_level: string | null;
       blueprint: StoredAssessmentDefinition;
       published_at: Date | null;
       status: "draft" | "published" | "retired";
       attempt_count: string;
     }>(
       `select ad.id as definition_id, av.id as version_id, ad.title, av.version,
-              nullif(av.blueprint->>'targetLevel', '') as target_level,
+              ${LEVEL_FORM_TARGET_SQL} as target_level,
               av.blueprint, av.published_at, av.status,
               count(aa.id)::text as attempt_count
        from assessment_definitions ad
        join users reviewer on reviewer.id = $1 and reviewer.organization_id = ad.organization_id
        join assessment_versions av on av.definition_id = ad.id
        left join assessment_attempts aa on aa.assessment_version_id = av.id
-       where ad.kind = 'level_up' and coalesce(av.blueprint->>'targetLevel', '') = $2
+       where ${LEVEL_FORM_DEFINITION_SQL} and coalesce(${LEVEL_FORM_TARGET_SQL}, '') = $2
        group by ad.id, av.id, ad.title, av.version, av.blueprint, av.published_at, av.status
        order by av.version desc`,
       [reviewerId, targetLevel]
     );
     return result.rows.flatMap((row) => {
       if (!hasCanonicalLevelFormStructure(row.blueprint)) return [];
-      const blueprintTarget = row.target_level ?? row.blueprint.targetLevel;
-      if (!blueprintTarget || blueprintTarget === "A1") return [];
+      const blueprintTarget = levelFormTarget(row.target_level ?? row.blueprint.targetLevel);
+      if (!blueprintTarget) return [];
       const publicationBlockerCount = levelFormPublicationBlockerCount(row.blueprint);
       const sectionCount = (code: AssessmentSectionCode) => row.blueprint.sections
         .find((section) => section.code === code)?.groups.reduce((total, group) => total + group.tasks.length, 0) ?? 0;
@@ -8039,18 +8056,18 @@ class AssessmentRepository {
       version_id: string;
       title: string;
       version: number;
-      target_level: Exclude<CefrLevel, "A1"> | null;
+      target_level: string | null;
       blueprint: StoredAssessmentDefinition;
       published_at: Date | null;
       status: "draft" | "published" | "retired";
       attempt_count: string;
     }>(
       `select ad.id as definition_id, av.id as version_id, ad.title, av.version,
-              nullif(av.blueprint->>'targetLevel', '') as target_level,
+              ${LEVEL_FORM_TARGET_SQL} as target_level,
               av.blueprint, av.published_at, av.status,
               count(aa.id)::text as attempt_count
        from assessment_versions av
-       join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'level_up'
+       join assessment_definitions ad on ad.id = av.definition_id and ${LEVEL_FORM_DEFINITION_SQL}
        join users reviewer on reviewer.id = $1 and reviewer.organization_id = ad.organization_id
        left join assessment_attempts aa on aa.assessment_version_id = av.id
        where av.id = $2
@@ -8058,8 +8075,8 @@ class AssessmentRepository {
       [reviewerId, versionId]
     );
     const row = result.rows[0];
-    const targetLevel = row?.target_level ?? row?.blueprint.targetLevel;
-    if (!row || !targetLevel || targetLevel === "A1") return null;
+    const targetLevel = levelFormTarget(row?.target_level ?? row?.blueprint.targetLevel);
+    if (!row || !targetLevel) return null;
     const publicationBlockerCount = levelFormPublicationBlockerCount(row.blueprint);
     const summary = {
       definitionId: row.definition_id,
@@ -8151,7 +8168,7 @@ class AssessmentRepository {
         `select ad.organization_id, ad.id as definition_id, av.blueprint,
                 (select count(*)::text from assessment_attempts aa where aa.assessment_version_id = av.id) as attempt_count
          from assessment_versions av
-         join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'level_up'
+         join assessment_definitions ad on ad.id = av.definition_id and ${LEVEL_FORM_DEFINITION_SQL}
          join users reviewer on reviewer.id = $1 and reviewer.organization_id = ad.organization_id
          where av.id = $2 and av.status = 'draft'
          for update of av`,
@@ -8190,7 +8207,7 @@ class AssessmentRepository {
       const source = await client.query<{ organization_id: string; definition_id: string; blueprint: StoredAssessmentDefinition }>(
         `select ad.organization_id, ad.id as definition_id, av.blueprint
          from assessment_versions av
-         join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'level_up'
+         join assessment_definitions ad on ad.id = av.definition_id and ${LEVEL_FORM_DEFINITION_SQL}
          join users reviewer on reviewer.id = $1 and reviewer.organization_id = ad.organization_id
          where av.id = $2 and av.status in ('published', 'retired')
          for update of av`,
@@ -8225,7 +8242,7 @@ class AssessmentRepository {
       const target = await client.query<{ organization_id: string; status: "draft" | "published" | "retired"; attempt_count: string }>(
         `select ad.organization_id, av.status, count(aa.id)::text as attempt_count
          from assessment_versions av
-         join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'level_up'
+         join assessment_definitions ad on ad.id = av.definition_id and ${LEVEL_FORM_DEFINITION_SQL}
          join users reviewer on reviewer.id = $1 and reviewer.organization_id = ad.organization_id
          left join assessment_attempts aa on aa.assessment_version_id = av.id
          where av.id = $2
@@ -8251,7 +8268,7 @@ class AssessmentRepository {
     } finally { client.release(); }
   }
 
-  async createLevelFormDraft(reviewerId: string, targetLevel: Exclude<CefrLevel, "A1">, blueprint: StoredAssessmentDefinition): Promise<AssessmentLevelFormRecord> {
+  async createLevelFormDraft(reviewerId: string, targetLevel: AssessmentLevelFormTarget, blueprint: StoredAssessmentDefinition): Promise<AssessmentLevelFormRecord> {
     const client = await this.pool.connect();
     let versionId = "";
     try {
@@ -8259,12 +8276,13 @@ class AssessmentRepository {
       const actor = await client.query<{ organization_id: string }>("select organization_id from users where id = $1", [reviewerId]);
       const organizationId = actor.rows[0]?.organization_id;
       if (!organizationId) throw new Error("ASSESSMENT_REVIEWER_NOT_FOUND");
-      const key = `level-up-${targetLevel.toLowerCase()}`;
+      const placementRetake = targetLevel === PLACEMENT_RETAKE_ASSESSMENT_KEY;
+      const key = placementRetake ? PLACEMENT_RETAKE_ASSESSMENT_KEY : `level-up-${targetLevel.toLowerCase()}`;
       const existing = await client.query<{ id: string }>("select id from assessment_definitions where organization_id = $1 and assessment_key = $2 for update", [organizationId, key]);
       const definitionId = existing.rows[0]?.id ?? randomUUID();
       if (!existing.rows[0]) await client.query(
-        "insert into assessment_definitions (id, organization_id, assessment_key, kind, title) values ($1, $2, $3, 'level_up', $4)",
-        [definitionId, organizationId, key, blueprint.title]
+        "insert into assessment_definitions (id, organization_id, assessment_key, kind, title) values ($1, $2, $3, $4, $5)",
+        [definitionId, organizationId, key, placementRetake ? "placement" : "level_up", blueprint.title]
       );
       else await client.query("update assessment_definitions set title = $2 where id = $1", [definitionId, blueprint.title]);
       await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'draft'", [definitionId]);
@@ -8284,7 +8302,7 @@ class AssessmentRepository {
     try {
       await client.query("begin");
       const target = await client.query<{ definition_id: string; blueprint: StoredAssessmentDefinition }>(
-        `select av.definition_id, av.blueprint from assessment_versions av join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'level_up'
+        `select av.definition_id, av.blueprint from assessment_versions av join assessment_definitions ad on ad.id = av.definition_id and ${LEVEL_FORM_DEFINITION_SQL}
          join users reviewer on reviewer.id = $1 and reviewer.organization_id = ad.organization_id
          where av.id = $2 and av.status = 'draft' for update of av`, [reviewerId, versionId]
       );
@@ -8309,6 +8327,8 @@ class AssessmentRepository {
     status: "approved" | "needs_retry";
     approvedLevel: CefrLevel | null;
     reason: string;
+    /** Placement + needs_retry: also grant the learner's one retake in the same transaction. */
+    grantRetake?: boolean;
   }): Promise<AssessmentDecisionRecord | null> {
     const client = await this.pool.connect();
     try {
@@ -8366,6 +8386,15 @@ class AssessmentRepository {
         await client.query("rollback");
         return null;
       }
+      if (input.grantRetake && (attempt.kind !== "placement" || input.status !== "needs_retry")) {
+        await client.query("rollback");
+        return null;
+      }
+      // After the one retake the Operator places the learner: that decision is final.
+      if (attempt.kind === "placement" && input.status === "needs_retry" && attempt.status === "pending_review") {
+        const retake = await client.query("select 1 from assessment_retake_grants where retake_attempt_id = $1 and kind = 'placement'", [input.attemptId]);
+        if (retake.rowCount) throw new PlacementRetakeError("PLACEMENT_RETAKE_FINAL");
+      }
 
       let passCourseScore: number | undefined;
       if (attempt.kind === "pass_course") {
@@ -8405,6 +8434,10 @@ class AssessmentRepository {
       );
       const previous = existing.rows[0];
       if (attempt.status !== "pending_review" && previous) {
+        if (input.grantRetake) {
+          if (previous.status !== "retry") { await client.query("rollback"); return null; }
+          await grantPlacementRetakeInTransaction(client, { learnerId: attempt.learner_id, reviewerId: input.reviewerId, reason: input.reason });
+        }
         await client.query("commit");
         return {
           attemptId: input.attemptId,
@@ -8431,6 +8464,9 @@ class AssessmentRepository {
         `update assessment_attempts set status = $2, updated_at = $3 where id = $1`,
         [input.attemptId, input.status, decidedAt]
       );
+      if (input.grantRetake) {
+        await grantPlacementRetakeInTransaction(client, { learnerId: attempt.learner_id, reviewerId: input.reviewerId, reason: input.reason });
+      }
       await client.query(
         `update appeals
          set status = $2, resolution = $3, resolved_by = $4, resolved_at = $5

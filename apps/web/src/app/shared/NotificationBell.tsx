@@ -135,6 +135,8 @@ function notificationContent(item: InboxNotificationView): NotificationContent {
     case "assessment_result":
     case "assessment_retry":
       return { title: item.kind === "assessment_retry" ? `Có hướng dẫn thi lại ${exam}` : `Có kết quả ${exam}`, description: "Mở trang học để xem kết quả và bước tiếp theo.", path: item.context === "pass_course" ? item.kind === "assessment_result" ? "/reward/course" : "/support?tab=appeals" : item.context === "final" ? "/monthly" : "/profile", action: "Xem kết quả" };
+    case "retake_granted":
+      return { title: "Bạn được thi lại 1 lần", description: "Vận hành cho bạn làm lại bài đầu vào một lần trên đề mới. Sau lượt này, Vận hành sẽ xếp lớp cho bạn.", path: "/test/placement", action: "Mở bài thi lại" };
     case "appeal_received":
       return { title: `Có kháng nghị ${appealSubject}`, description: "Học viên đã gửi lý do để Vận hành xem xét và phản hồi.", path: `/op/review?tab=appeals${focus}`, action: "Mở kháng nghị" };
     case "appeal_approved":

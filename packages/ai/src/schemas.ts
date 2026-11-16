@@ -1903,9 +1903,13 @@ const assessmentChoiceSchema = z.object({
 /**
  * A level-up test follows the placement assessment shape. It is generated
  * for a target CEFR level, not seeded as a reusable fixed form.
+ * scope "placement_retake" (targetLevel "A1-C1") generates the one placement
+ * retake form: the same structure with mixed A1–C1 items for placement banding.
  */
+export const levelFormTargetLevelSchema = z.enum(["A2", "B1", "B2", "C1", "A1-C1"]);
 export const levelFormInputSchema = z.object({
-  targetLevel: z.enum(["A2", "B1", "B2", "C1"]),
+  targetLevel: levelFormTargetLevelSchema,
+  scope: z.enum(["level_up", "placement_retake"]).optional(),
   context: z.literal("workplace_english"), listeningQuestions: z.literal(20), readingQuestions: z.literal(40)
 });
 
@@ -1951,7 +1955,7 @@ function sectionSchema(textKey: "script" | "passage", minQuestionCount: number, 
 }
 
 export const levelFormReadingRepairInputSchema = z.object({
-  targetLevel: z.enum(["A2", "B1", "B2", "C1"]),
+  targetLevel: levelFormTargetLevelSchema,
   passage: z.string().trim().min(160).max(12_000),
   existingPrompts: z.array(z.string().trim().min(1).max(1_000)).min(35).max(39)
 });

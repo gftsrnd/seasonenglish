@@ -43,7 +43,7 @@ export function OperatorLevelForms({ view, actions, readOnly = false, unavailabl
       const hasForm = group.forms.length > 0;
       const generateBlocked = blocked("generate") || readOnlyReason || (!view.aiConnected ? "AI hệ thống tạm chưa sẵn sàng" : undefined);
       const groupGenerating = view.generatingTarget === group.target || (view.generateState === "loading" && !view.generatingTarget);
-      return <div className={embedded ? "operator-level-group operator-level-group--embedded" : "card operator-level-group"} key={group.target}><div className="row between operator-card-header operator-level-group-header"><div><span className="operator-level-kicker">Mức đích</span><h3>{group.target}</h3></div>{hasForm ? <Badge tone={approved ? "ok" : "warn"}>{approved ? "Đã duyệt" : "Đang chỉnh sửa"}</Badge> : <div className="row operator-level-form-actions"><Badge tone="warn">Chưa có đề</Badge><Button small disabled={Boolean(readOnlyReason) || generating || mutationBusy || !actions.onCreateManual} title={readOnlyReason} onClick={() => actions.onCreateManual?.(group.target)}>Soạn tay</Button><Button small primary busy={groupGenerating} disabled={Boolean(generateBlocked) || generating || mutationBusy} title={generateBlocked || (generating ? "Đang sinh đề" : undefined)} onClick={() => actions.onGenerate(group.target)}>{groupGenerating ? "Đang sinh…" : "Sinh đề bằng AI"}</Button></div>}</div>
+      return <div className={embedded ? "operator-level-group operator-level-group--embedded" : "card operator-level-group"} key={group.target}><div className="row between operator-card-header operator-level-group-header"><div>{group.target === "placement-retake" ? <><span className="operator-level-kicker">Bài đầu vào</span><h3>Đề thi lại (1 lần)</h3><p className="xs muted operator-level-retake-note">Đề mới, độ khó trộn A1–C1 như bài đầu vào; không lặp câu của đề gốc. Học viên chỉ làm khi được cho thi lại.</p></> : <><span className="operator-level-kicker">Mức đích</span><h3>{group.target}</h3></>}</div>{hasForm ? <Badge tone={approved ? "ok" : "warn"}>{approved ? "Đã duyệt" : "Đang chỉnh sửa"}</Badge> : <div className="row operator-level-form-actions"><Badge tone="warn">Chưa có đề</Badge><Button small disabled={Boolean(readOnlyReason) || generating || mutationBusy || !actions.onCreateManual} title={readOnlyReason} onClick={() => actions.onCreateManual?.(group.target)}>Soạn tay</Button><Button small primary busy={groupGenerating} disabled={Boolean(generateBlocked) || generating || mutationBusy} title={generateBlocked || (generating ? "Đang sinh đề" : undefined)} onClick={() => actions.onGenerate(group.target)}>{groupGenerating ? "Đang sinh…" : "Sinh đề bằng AI"}</Button></div>}</div>
         {group.forms.length ? <div className="list" style={{ marginTop: 8 }}>{group.forms.map(form => {
           const isApproved = form.status === "approved";
           const deleteBusy = view.deletingId === form.id;
@@ -70,7 +70,7 @@ export function OperatorLevelForms({ view, actions, readOnly = false, unavailabl
 }
 
 /** The fields the shared assessment editor needs; level-up details and monthly finals both provide them. */
-export type LevelFormEditorDetail = Pick<AssessmentLevelFormDetailView, "title" | "status" | "sections" | "warnings" | "versions" | "deleteReason"> & { targetLevel?: CefrLevel; autoFixed?: string[] };
+export type LevelFormEditorDetail = Pick<AssessmentLevelFormDetailView, "title" | "status" | "sections" | "warnings" | "versions" | "deleteReason"> & { targetLevel?: CefrLevel | "placement-retake"; autoFixed?: string[] };
 
 type LevelFormDetailProps = {
   detail: LevelFormEditorDetail | AssessmentLevelFormDetailView;
@@ -304,7 +304,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
 
   return <div className="modal-backdrop operator-modal-scope operator-detail-modal" role="presentation"><section ref={dialogRef} className="dialog wide operator-detail-dialog operator-assessment-preview-dialog operator-level-editor-dialog" role="dialog" aria-modal="true" aria-label={dialogLabel ?? `Chi tiết ${detail.title}`} tabIndex={-1}>
     <div className="operator-level-form-dialog-header">
-      <div className="operator-level-form-dialog-title"><span className="operator-level-kicker">{kicker ?? `Đề lên mức ${detail.targetLevel ?? ""}`}</span><h3>{detail.title}</h3><p className="small muted">{detail.status === "published" ? "Đã phát hành" : detail.status === "retired" ? "Đã lưu lịch sử" : "Bản nháp"}</p></div>
+      <div className="operator-level-form-dialog-title"><span className="operator-level-kicker">{kicker ?? (detail.targetLevel === "placement-retake" ? "Đề thi lại bài đầu vào" : `Đề lên mức ${detail.targetLevel ?? ""}`)}</span><h3>{detail.title}</h3><p className="small muted">{detail.status === "published" ? "Đã phát hành" : detail.status === "retired" ? "Đã lưu lịch sử" : "Bản nháp"}</p></div>
       <div className="row operator-level-form-dialog-actions">
         {editing && !readOnly ? <button className="btn-sm btn-primary" type="button" disabled={saving || publishing || Boolean(audioJob)} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</button> : null}
         <button className="btn-sm" type="button" disabled={saving || publishing || Boolean(audioJob)} onClick={() => void close()}>Đóng</button>
