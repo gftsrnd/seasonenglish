@@ -48,21 +48,39 @@ export function MeaningPopupControl({ hint, label, lang, variant, children }: {
     };
   }, [open]);
 
-  // Keep the popup inside the viewport (16px gutter): a control near the right edge shifts it left,
-  // one near the bottom opens it above the control when there is room.
+  // The popup is positioned against the viewport (position: fixed), so it never adds height to a
+  // scrolling lesson panel: an absolute popup at the panel's end grew its scroll area, the panel
+  // scrolled, the pointer left the control and the popup flickered (16/11). It sits under the control,
+  // above it when the viewport has no room below, inside a 16px gutter, and follows scrolling.
   const popup = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
     const element = popup.current;
     if (!open || !element || typeof window === "undefined") return;
-    element.style.left = "";
-    delete element.dataset.placement;
-    const rect = element.getBoundingClientRect();
-    const viewport = document.documentElement.clientWidth || window.innerWidth;
-    const overflow = rect.right - (viewport - 16);
-    if (overflow > 0) element.style.left = `${-Math.min(overflow, Math.max(0, rect.left - 16))}px`;
-    const height = window.innerHeight || document.documentElement.clientHeight;
-    const anchor = wrapper.current?.getBoundingClientRect();
-    if (height && anchor && rect.bottom > height - 8 && anchor.top - rect.height - 6 >= 8) element.dataset.placement = "top";
+    const place = () => {
+      const anchor = wrapper.current?.getBoundingClientRect();
+      if (!anchor) return;
+      const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      element.style.position = "fixed";
+      element.style.top = "0px";
+      element.style.left = "0px";
+      element.style.bottom = "auto";
+      const rect = element.getBoundingClientRect();
+      const left = Math.max(16, Math.min(anchor.left, viewportWidth - 16 - rect.width));
+      const below = anchor.bottom + 6;
+      const above = anchor.top - 6 - rect.height;
+      const top = below + rect.height > viewportHeight - 8 && above >= 8 ? above : below;
+      element.dataset.placement = top === above ? "top" : "bottom";
+      element.style.left = `${left}px`;
+      element.style.top = `${top}px`;
+    };
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
   }, [open]);
 
   if (!text) return <>{children}</>;
