@@ -1245,6 +1245,13 @@ function UmbrellaModal({ item, speak, language }: { item: LessonVocabularyItem; 
  * No kind tag and no usage / source line. Used by the learner lesson, the
  * operator lesson preview and the operator vocabulary card alike.
  */
+const RELATION_NAMES_AS_TYPE = new Set(["word_family", "word family", "umbrella", "synonym", "antonym", "collocation", "family"]);
+/** The part of speech to show; a relation name stored as the type ("word_family") is a data slip, never shown. */
+function wordClassLabel(type: string | undefined): string | undefined {
+  const value = type?.trim();
+  return value && !RELATION_NAMES_AS_TYPE.has(value.toLowerCase()) ? value : undefined;
+}
+
 function RelationWordCard({ word, listenLabel, speak, language, className, ariaLabel }: {
   word: { word: string; type?: string | undefined; meaning?: string | undefined; definition?: string | undefined; pronunciation?: string | undefined; audioUrl?: string | undefined };
   listenLabel: string;
@@ -1259,7 +1266,7 @@ function RelationWordCard({ word, listenLabel, speak, language, className, ariaL
   return <article className={`card flat vocabulary-relation-word-card${className ? ` ${className}` : ""}`} style={{ minWidth: 0 }} {...(ariaLabel ? { "aria-label": ariaLabel } : {})}>
     <div className="row between" style={{ gap: 12, alignItems: "flex-start" }}>
       <div style={{ minWidth: 0 }}>
-        <b>{word.word}</b>{word.type ? <span className="small muted"> · {word.type}</span> : null}
+        <b>{word.word}</b>{wordClassLabel(word.type) ? <span className="small muted"> · {wordClassLabel(word.type)}</span> : null}
         {ipa ? <div className="small muted vocabulary-register-ipa">{ipa}</div> : null}
       </div>
       <button type="button" aria-label={listenLabel} style={listenButtonStyle} onClick={() => playVocabularyWord(speak, word.word, word.audioUrl)}><Volume2 size={14} aria-hidden="true" />{copy.modal.listen}</button>
@@ -1304,7 +1311,7 @@ function RegisterModal({ item, detail, speak, language }: { item: LessonVocabula
       <div className="row between" style={{ gap: 12, alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>
           <div className="eyebrow">{label}</div>
-          <b>{word.word}</b>{word.type ? <span className="small muted"> · {word.type}</span> : null}
+          <b>{word.word}</b>{wordClassLabel(word.type) ? <span className="small muted"> · {wordClassLabel(word.type)}</span> : null}
           {word.ipa ? <div className="small muted vocabulary-register-ipa">{word.ipa}</div> : null}
         </div>
         <button type="button" aria-label={`${copy.modal.listen} ${label.toLocaleLowerCase()}: ${word.word}`} style={listenButtonStyle} onClick={() => speak(word.word)}><Volume2 size={14} aria-hidden="true" />{copy.modal.listen}</button>
