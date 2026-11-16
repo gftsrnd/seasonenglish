@@ -254,7 +254,10 @@ body > .vocabulary-relation-modal .vocabulary-umbrella-content {
   margin-top: 16px;
 }
 
-body > .vocabulary-relation-modal .vocabulary-umbrella-summary {
+/* Every word card in the vocabulary modals (umbrella, word family, slang & poetic) shares the umbrella card tint. */
+body > .vocabulary-relation-modal .vocabulary-umbrella-summary,
+body > .vocabulary-relation-modal .vocabulary-relation-word-card,
+body > .vocabulary-relation-modal .vocabulary-register-card {
   border-color: #ddd8d0;
   background: #f5f4f1;
 }
