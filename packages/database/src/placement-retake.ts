@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type { AssessmentRetakeStatus, AssessmentSectionCode } from "@e4s/contracts";
-import type { StoredAssessmentDefinition } from "./assessment-blueprints.js";
+import { placementDefinition, type StoredAssessmentDefinition } from "./assessment-blueprints.js";
 
 /**
  * One placement retake per learner (owner decision 11/2026).
@@ -63,6 +63,169 @@ export function placementRetakeGrantRefusal(input: {
   if (input.latestPlacementStatus !== "needs_retry" && input.latestPlacementStatus !== "approved") return "PLACEMENT_RETAKE_NOT_AVAILABLE";
   if (!input.publishedRetakeForm) return "PLACEMENT_RETAKE_FORM_NOT_PUBLISHED";
   return null;
+}
+
+/**
+ * The retake form must have exactly placement-a's structure (owner decision): the same sections,
+ * durations and points, the same groups with the same item counts and item scores (Listening
+ * 4 × 1 + 6 × 1 + 5 × 2 = 20, Reading 4 × 10 × 1 = 40, Writing 7 + 13, Speaking 4 × 5), the same
+ * response types and the same writing word limits. Derived from the canonical blueprint so the
+ * two can never drift apart.
+ */
+export interface PlacementStructure {
+  totalMinutes: number;
+  totalScore: number;
+  sections: Array<{
+    code: AssessmentSectionCode;
+    durationMinutes: number;
+    maxScore: number;
+    groups: Array<Array<{ responseType: string; maxScore: number; minWords?: number; maxWords?: number }>>;
+  }>;
+}
+
+export function placementStructureOf(definition: StoredAssessmentDefinition): PlacementStructure {
+  return {
+    totalMinutes: definition.totalMinutes,
+    totalScore: definition.totalScore,
+    sections: definition.sections.map((section) => ({
+      code: section.code,
+      durationMinutes: section.durationMinutes,
+      maxScore: section.maxScore,
+      groups: section.groups.map((group) => group.tasks.map((task) => ({
+        responseType: task.responseType,
+        maxScore: task.maxScore,
+        ...(task.minWords === undefined ? {} : { minWords: task.minWords }),
+        ...(task.maxWords === undefined ? {} : { maxWords: task.maxWords })
+      })))
+    }))
+  };
+}
+
+export const PLACEMENT_RETAKE_STRUCTURE: PlacementStructure = placementStructureOf(placementDefinition);
+
+const SECTION_NAMES: Record<AssessmentSectionCode, string> = { listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" };
+
+/** Deterministic structure check of a retake form against placement-a. Empty = identical structure. */
+export function placementRetakeStructureIssues(blueprint: StoredAssessmentDefinition, expected: PlacementStructure = PLACEMENT_RETAKE_STRUCTURE): string[] {
+  const issues: string[] = [];
+  const actual = placementStructureOf(blueprint);
+  if (actual.totalMinutes !== expected.totalMinutes || actual.totalScore !== expected.totalScore) {
+    issues.push(`Tổng phải là ${expected.totalMinutes} phút / ${expected.totalScore} điểm như đề đầu vào gốc.`);
+  }
+  if (actual.sections.map((section) => section.code).join() !== expected.sections.map((section) => section.code).join()) {
+    issues.push("Đề thi lại phải có đúng bốn phần Nghe, Đọc, Viết, Nói theo thứ tự của đề đầu vào gốc.");
+    return issues;
+  }
+  expected.sections.forEach((want, index) => {
+    const have = actual.sections[index]!;
+    const name = SECTION_NAMES[want.code];
+    if (have.durationMinutes !== want.durationMinutes || have.maxScore !== want.maxScore) {
+      issues.push(`Phần ${name} phải là ${want.durationMinutes} phút / ${want.maxScore} điểm.`);
+    }
+    const counts = (groups: PlacementStructure["sections"][number]["groups"]) => groups.map((group) => group.length);
+    if (counts(have.groups).join() !== counts(want.groups).join()) {
+      issues.push(`Phần ${name} phải có ${want.groups.length} nhóm với ${counts(want.groups).join(" + ")} câu (hiện có ${counts(have.groups).join(" + ") || "0"}).`);
+      return;
+    }
+    want.groups.forEach((group, groupIndex) => group.forEach((task, taskIndex) => {
+      const got = have.groups[groupIndex]![taskIndex]!;
+      if (got.maxScore !== task.maxScore || got.responseType !== task.responseType || got.minWords !== task.minWords || got.maxWords !== task.maxWords) {
+        issues.push(`Phần ${name}, nhóm ${groupIndex + 1}, câu ${taskIndex + 1}: phải là ${task.maxScore} điểm${task.minWords ? `, ${task.minWords}–${task.maxWords} từ` : ""} như đề đầu vào gốc.`);
+      }
+    }));
+  });
+  return issues;
+}
+
+export function hasPlacementRetakeStructure(blueprint: StoredAssessmentDefinition): boolean {
+  return placementRetakeStructureIssues(blueprint).length === 0;
+}
+
+/** Hours after the placement decision in which an approved learner may ask for the retake (= appeal window). */
+export const PLACEMENT_RETAKE_REQUEST_WINDOW_HOURS = 72;
+
+/**
+ * Pure request window. A learner sent back (needs_retry) may ask while no retake was granted;
+ * an approved-but-unhappy learner only within 72 hours of the placement decision.
+ */
+export function placementRetakeRequestWindow(input: { status: string; decidedAt: Date | null; now: Date }): { open: boolean; availableUntil: Date | null } {
+  if (input.status === "needs_retry") return { open: true, availableUntil: null };
+  if (input.status !== "approved" || !input.decidedAt) return { open: false, availableUntil: null };
+  const availableUntil = new Date(input.decidedAt.getTime() + PLACEMENT_RETAKE_REQUEST_WINDOW_HOURS * 3_600_000);
+  return { open: input.now.getTime() <= availableUntil.getTime(), availableUntil };
+}
+
+export const PLACEMENT_RETAKE_REQUEST_REASON = "Xin thi lại bài đầu vào";
+
+export interface PlacementRetakeRequestState {
+  /** The placement result the learner may ask a retake for, while the window is open. */
+  target: { attemptId: string; title: string; availableUntil: Date | null } | null;
+  /** The learner's retake request (appeals row with request_kind 'retake'), if any. */
+  request: { id: string; status: "pending" | "accepted" | "rejected"; resolution: string | null; createdAt: Date; resolvedAt: Date | null } | null;
+  retake: AssessmentRetakeStatus;
+}
+
+export async function findPlacementRetakeRequestState(db: Db, learnerId: string, now: Date = new Date()): Promise<PlacementRetakeRequestState> {
+  const grant = await findPlacementRetakeGrant(db, learnerId);
+  const requestRow = await db.query<{ id: string; status: "pending" | "accepted" | "rejected"; resolution: string | null; created_at: Date; resolved_at: Date | null }>(
+    `select id, status, resolution, created_at, resolved_at from appeals
+     where learner_id = $1 and request_kind = 'retake' order by created_at desc limit 1`,
+    [learnerId]
+  );
+  const request = requestRow.rows[0] ? {
+    id: requestRow.rows[0].id, status: requestRow.rows[0].status, resolution: requestRow.rows[0].resolution,
+    createdAt: requestRow.rows[0].created_at, resolvedAt: requestRow.rows[0].resolved_at
+  } : null;
+  let target: PlacementRetakeRequestState["target"] = null;
+  if (!grant && !request) {
+    // The latest decided placement attempt; one request per learner (the retake is once only).
+    const latest = await db.query<{ id: string; status: string; title: string; decided_at: Date | null; has_appeal: boolean }>(
+      `select aa.id, aa.status, 'Test đầu vào' as title, decision.decided_at,
+              exists(select 1 from appeals a where a.attempt_id = aa.id) as has_appeal
+       from assessment_attempts aa
+       join assessment_versions av on av.id = aa.assessment_version_id
+       join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'placement'
+       left join assessment_decisions decision on decision.attempt_id = aa.id
+       where aa.learner_id = $1
+       order by aa.started_at desc limit 1`,
+      [learnerId]
+    );
+    const row = latest.rows[0];
+    const window = row ? placementRetakeRequestWindow({ status: row.status, decidedAt: row.decided_at, now }) : null;
+    if (row && window?.open && !row.has_appeal) target = { attemptId: row.id, title: row.title, availableUntil: window.availableUntil };
+  }
+  return { target, request, retake: placementRetakeStatus(grant) };
+}
+
+/**
+ * "Xin thi lại": the learner's retake request, stored on the existing appeal plumbing (appeals row,
+ * request_kind 'retake') so the Operator's appeal queue, bell items and decision endpoint apply.
+ * Accepting it grants the retake (see applyAcceptedAppealLevel). Null when the window is closed.
+ */
+export async function createPlacementRetakeRequest(pool: Pool, learnerId: string, now: Date = new Date()): Promise<{ id: string; createdAt: Date } | null> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query("select id from users where id = $1 for update", [learnerId]);
+    const state = await findPlacementRetakeRequestState(client, learnerId, now);
+    if (!state.target) { await client.query("rollback"); return null; }
+    const id = randomUUID();
+    const expiresAt = state.target.availableUntil ?? new Date(now.getTime() + PLACEMENT_RETAKE_REQUEST_WINDOW_HOURS * 3_600_000);
+    const inserted = await client.query<{ created_at: Date }>(
+      `insert into appeals (id, attempt_id, learner_id, reason, expires_at, request_kind)
+       values ($1, $2, $3, $4, $5, 'retake')
+       on conflict (attempt_id) where status = 'pending' do nothing
+       returning created_at`,
+      [id, state.target.attemptId, learnerId, PLACEMENT_RETAKE_REQUEST_REASON, expiresAt]
+    );
+    await client.query("commit");
+    return inserted.rows[0] ? { id, createdAt: inserted.rows[0].created_at } : null;
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 interface GrantRow {

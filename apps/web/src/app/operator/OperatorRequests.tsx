@@ -138,7 +138,7 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
         }
       }
       const resolution = await modal.prompt({
-        title: accepted ? "Chấp nhận kháng nghị" : "Từ chối kháng nghị",
+        title: item.requestKind === "retake" ? (accepted ? "Duyệt cho thi lại 1 lần" : "Từ chối yêu cầu thi lại") : accepted ? "Chấp nhận kháng nghị" : "Từ chối kháng nghị",
         label: "Nội dung xử lý / giải thích cho học viên", multiline: { minLength: 1, maxLength: 2_000 },
         confirmLabel: accepted ? "Chấp nhận" : "Từ chối", tone: accepted ? "primary" : "danger"
       });
@@ -215,7 +215,7 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
         const detailId = `appeal-detail-${item.id}`;
         return {
           id: item.id,
-          kind: "Kháng nghị",
+          kind: item.requestKind === "retake" ? "Yêu cầu thi lại" : "Kháng nghị",
           content: <><b>{view.title}</b><p className="small muted">{item.learnerName} · {appealLabels[item.kind]}</p><p>{item.reason}</p>
             {item.resolution ? <p className="small muted">Phản hồi: {item.resolution}</p> : null}</>,
           status: item.overdue ? <Badge tone="danger">Quá hạn xử lý</Badge> : <StatusBadge status={item.status} />,

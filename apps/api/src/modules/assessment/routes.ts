@@ -10,6 +10,7 @@ import type {
   AssessmentLevelFormDeleteView,
   AssessmentLevelFormTarget,
   AssessmentPlacementRetakeGrantView,
+  AssessmentPlacementRetakeRequestView,
   AssessmentPlacementRetakeView,
   AssessmentLevelFormUpdateInput,
   AssessmentFormPreviewCollectionView,
@@ -29,6 +30,8 @@ import { assessmentGradingOutputSchema, levelFormOutputSchema, type AiTaskRunner
 import {
   createRepositories,
   findPlacementRetakeGrant,
+  createPlacementRetakeRequest,
+  findPlacementRetakeRequestState,
   findPublishedPlacementRetakeForm,
   grantPlacementRetake,
   listPlacementRetakeStates,
@@ -65,7 +68,8 @@ import {
 import { autoFixLevelFormOutput } from "./level-form-auto-fix.js";
 import {
   PASS_COURSE_RETAKE_ENABLED, PLACEMENT_RETAKE_FORM_PROMPT, PLACEMENT_RETAKE_READING_REPAIR_PROMPT, PLACEMENT_RETAKE_SLICE_GUIDANCE,
-  PLACEMENT_RETAKE_TARGET, PLACEMENT_RETAKE_TITLE, placementRetakeAiInput, placementRetakeCopyIssues
+  PLACEMENT_RETAKE_TARGET, PLACEMENT_RETAKE_TITLE, placementRetakeAiInput, placementRetakeBlueprint, placementRetakeCopyIssues,
+  placementRetakeQualityInput, placementRetakeStructureGateIssues
 } from "./placement-retake-form.js";
 
 /** A level-up target level, or the placement retake form slot. */
@@ -637,8 +641,9 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       });
       if (!assembled.quality.passed) throw new LevelFormQualityError(assembled.quality.severe);
       if (placementRetake) {
-        const copies = placementRetakeCopyIssues(assembled.shuffled);
-        if (copies.length) throw new LevelFormQualityError(copies);
+        // Deterministic: placement-a's exact structure and scoring, and nothing copied from it.
+        const issues = [...placementRetakeStructureGateIssues(assembled.blueprint), ...placementRetakeCopyIssues(assembled.shuffled)];
+        if (issues.length) throw new LevelFormQualityError(issues);
       }
       // Listening audio right after generation; a TTS failure keeps the form (marked on the group) for the manual buttons.
       // An unchanged part script keeps the audio of the earlier draft/published form (no new synthesis).
@@ -829,6 +834,32 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     return { results: await repositories.assessments.listAppealableResults(learnerId) };
   });
 
+  /**
+   * Placement: the support page shows only "Xin thi lại" (no free-text appeal), while a request
+   * is possible: sent back, or approved and within 72 hours of the decision. The request is an
+   * appeal row the Operator accepts (= grants the one retake) or rejects.
+   */
+  const placementRetakeRequestView = async (learnerId: string): Promise<AssessmentPlacementRetakeRequestView> => {
+    const state = await findPlacementRetakeRequestState(pool, learnerId);
+    return {
+      target: state.target ? { ...state.target, availableUntil: state.target.availableUntil?.toISOString() ?? null } : null,
+      request: state.request ? { ...state.request, createdAt: state.request.createdAt.toISOString(), resolvedAt: state.request.resolvedAt?.toISOString() ?? null } : null,
+      retake: state.retake
+    };
+  };
+
+  app.get("/api/v1/learner/placement-retake-request", { preHandler: learnerOnly }, async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
+    return placementRetakeRequestView(request.e4sSession!.user.id);
+  });
+
+  app.post("/api/v1/learner/placement-retake-request", { preHandler: learnerOnly }, async (request, reply) => {
+    const learnerId = request.e4sSession!.user.id;
+    const created = await createPlacementRetakeRequest(pool, learnerId);
+    if (!created) return reply.code(409).send({ code: "PLACEMENT_RETAKE_REQUEST_NOT_AVAILABLE", message: "Đã hết thời hạn xin thi lại hoặc bạn đã gửi yêu cầu." });
+    return reply.code(201).send(await placementRetakeRequestView(learnerId));
+  });
+
   app.post("/api/v1/assessment-attempts/:attemptId/appeals", { preHandler: learnerOnly }, async (request, reply) => {
     const params = attemptParam.safeParse(request.params);
     const body = appealInput.safeParse(request.body);
@@ -846,11 +877,18 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const appealId = z.uuid().safeParse((request.params as { appealId?: string }).appealId);
     const body = appealResolutionInput.safeParse(request.body);
     if (!appealId.success || !body.success) return reply.code(400).send({ code: "ASSESSMENT_APPEAL_DECISION_INVALID" });
-    const resolved = await repositories.assessments.resolveAssessmentAppeal({
-      appealId: appealId.data,
-      reviewerId: request.e4sSession!.user.id,
-      ...body.data
-    });
+    let resolved: Awaited<ReturnType<typeof repositories.assessments.resolveAssessmentAppeal>>;
+    try {
+      resolved = await repositories.assessments.resolveAssessmentAppeal({
+        appealId: appealId.data,
+        reviewerId: request.e4sSession!.user.id,
+        ...body.data
+      });
+    } catch (error) {
+      // Accepting a "Xin thi lại" request grants the retake; its rules can refuse it.
+      if (error instanceof PlacementRetakeError) return reply.code(409).send({ code: error.code });
+      throw error;
+    }
     return resolved
       ? { ...resolved, resolvedAt: resolved.resolvedAt.toISOString() }
       : reply.code(409).send({ code: "ASSESSMENT_APPEAL_NOT_RESOLVABLE" });
@@ -1329,6 +1367,7 @@ function levelFormIdentity(targetLevel: LevelFormTarget, manual = false): Pick<S
 }
 
 function manualLevelFormBlueprint(targetLevel: LevelFormTarget): StoredAssessmentDefinition {
+  if (targetLevel === PLACEMENT_RETAKE_TARGET) return placementRetakeBlueprint(null, { manual: true });
   const { speakingInstruction, ...identity } = levelFormIdentity(targetLevel, true);
   const choices = () => ["A", "B", "C", "D"].map((value) => ({ value, label: "" }));
   const choiceTasks = (prefix: "L" | "R", count: number) => Array.from({ length: count }, (_, index) => ({
@@ -1424,12 +1463,21 @@ export function withLevelFormQualityWarnings(detail: AssessmentLevelFormDetailVi
   const choiceTasks = detail.sections.filter((section) => section.code === "listening" || section.code === "reading")
     .flatMap((section) => section.groups.flatMap((group) => group.tasks.filter((task) => task.responseType === "single_choice")));
   const complete = choiceTasks.length > 0 && choiceTasks.every((task) => task.prompt.trim() && task.correctAnswer && (task.options ?? []).length >= 2 && (task.options ?? []).every((option) => option.label.trim()));
-  if (!complete) return detail;
-  const report = evaluateLevelFormQuality(levelFormQualityInputFromSections(detail.sections));
+  const retake = detail.targetLevel === PLACEMENT_RETAKE_TARGET;
+  // The retake form must keep placement-a's exact structure, also after Operator edits.
+  const structure = retake ? placementRetakeStructureGateIssues({
+    key: PLACEMENT_RETAKE_TARGET, kind: "placement", title: detail.title, version: detail.version,
+    totalMinutes: detail.sections.reduce((total, section) => total + section.durationMinutes, 0),
+    totalScore: detail.sections.reduce((total, section) => total + section.maxScore, 0),
+    sections: detail.sections as StoredAssessmentDefinition["sections"]
+  }).map((issue) => ({ code: "quality_check" as const, message: issue.message, severity: "error" as const })) : [];
+  if (!complete) return structure.length ? { ...detail, warnings: [...detail.warnings, ...structure] } : detail;
+  const report = evaluateLevelFormQuality(retake ? placementRetakeQualityInput(detail.sections) : levelFormQualityInputFromSections(detail.sections));
   return {
     ...detail,
     warnings: [
       ...detail.warnings,
+      ...structure,
       ...[...report.severe, ...report.light].map((issue) => ({ code: "quality_check" as const, message: issue.message, severity: issue.severity === "severe" ? "error" as const : "warning" as const }))
     ]
   };
@@ -1442,6 +1490,7 @@ function levelFormBlueprint(targetLevel: LevelFormTarget, output: LevelFormTaskO
     options: question.options.map((label, optionIndex) => ({ value: options[optionIndex]!, label })),
     correctAnswer: options[question.correctIndex]!
   }));
+  if (targetLevel === PLACEMENT_RETAKE_TARGET) return placementRetakeBlueprint(output);
   const listeningParts = splitLevelFormListeningParts(output.listening.script);
   const { speakingInstruction, ...identity } = levelFormIdentity(targetLevel);
   return {

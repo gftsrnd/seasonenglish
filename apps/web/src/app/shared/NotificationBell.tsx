@@ -99,7 +99,7 @@ type NotificationContent = {
   resolveTopicReport?: string;
 };
 
-function notificationContent(item: InboxNotificationView): NotificationContent {
+export function notificationContent(item: InboxNotificationView): NotificationContent {
   const exam = assessmentNames[item.context] ?? "bài thi";
   const examTab = assessmentTabs[item.context] ?? "placement";
   const examAttempt = item.relatedId ? `&attemptId=${encodeURIComponent(item.relatedId)}` : "";
@@ -134,13 +134,17 @@ function notificationContent(item: InboxNotificationView): NotificationContent {
       return { title: "Nhận xét Season bị gián đoạn", description: "Tiến độ lượt luyện hợp lệ vẫn được ghi nhận. Bạn có thể kiểm tra kết nối AI trong Cài đặt.", path: "/settings", action: "Mở Cài đặt" };
     case "assessment_result":
     case "assessment_retry":
+      // Placement: the result opens Hỗ trợ học tập, where the learner may ask "Xin thi lại" once.
+      if (item.context === "placement") return { title: item.kind === "assessment_retry" ? "Test đầu vào chưa được duyệt mức" : "Có kết quả Test đầu vào", description: item.kind === "assessment_retry" ? "Xem kết quả. Bạn có thể xin thi lại một lần tại Hỗ trợ học tập." : "Xem kết quả. Nếu chưa hài lòng, bạn có thể xin thi lại một lần trong 72 giờ tại Hỗ trợ học tập.", path: "/support?tab=appeals", action: "Xem kết quả" };
       return { title: item.kind === "assessment_retry" ? `Có hướng dẫn thi lại ${exam}` : `Có kết quả ${exam}`, description: "Mở trang học để xem kết quả và bước tiếp theo.", path: item.context === "pass_course" ? item.kind === "assessment_result" ? "/reward/course" : "/support?tab=appeals" : item.context === "final" ? "/monthly" : "/profile", action: "Xem kết quả" };
     case "retake_granted":
-      return { title: "Bạn được thi lại 1 lần", description: "Vận hành cho bạn làm lại bài đầu vào một lần trên đề mới. Sau lượt này, Vận hành sẽ xếp lớp cho bạn.", path: "/test/placement", action: "Mở bài thi lại" };
+      return { title: "Bạn được thi lại 1 lần", description: "Vận hành đã duyệt cho bạn làm lại bài đầu vào một lần. Sau lượt này, Vận hành sẽ xếp lớp cho bạn.", path: "/test/placement", action: "Mở bài thi lại" };
     case "appeal_received":
+      if (item.context === "retake") return { title: "Yêu cầu thi lại", description: "Học viên xin thi lại bài đầu vào một lần. Duyệt để cho thi lại, hoặc từ chối.", path: `/op/review?tab=appeals${focus}`, action: "Mở yêu cầu" };
       return { title: `Có kháng nghị ${appealSubject}`, description: "Học viên đã gửi lý do để Vận hành xem xét và phản hồi.", path: `/op/review?tab=appeals${focus}`, action: "Mở kháng nghị" };
     case "appeal_approved":
     case "appeal_rejected":
+      if (item.context === "retake") return { title: item.kind === "appeal_approved" ? "Yêu cầu thi lại đã được duyệt" : "Yêu cầu thi lại bị từ chối", description: "Xem phản hồi của Vận hành tại Hỗ trợ học tập.", path: "/support?tab=appeals", action: "Xem phản hồi" };
       return { title: `Kháng nghị ${appealSubject} ${item.kind === "appeal_approved" ? "đã được chấp nhận" : "bị từ chối"}`, description: "Bạn có thể đọc phản hồi của Vận hành tại Hỗ trợ học tập.", path: `/support?tab=appeals${focus}`, action: "Xem kháng nghị" };
     case "learning_reminder":
       return { title: "Nhắc bạn tiếp tục học", description: "Quản lý đã nhắc bạn quay lại mục tiêu học tập.", path: "/home", action: "Về Trang chủ" };

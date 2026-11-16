@@ -1654,6 +1654,8 @@ export function registerContentRoutes(
       if (error instanceof Error && ["LESSON_EXERCISE_CORRECTION_REQUIRED", "LESSON_EXERCISE_CHANGED", "LESSON_EXERCISE_ANSWER_NOT_AN_OPTION"].includes(error.message)) {
         return reply.code(409).send({ code: error.message });
       }
+      // Accepting a "Xin thi lại" request grants the placement retake; its rules can refuse it.
+      if (error instanceof Error && error.message.startsWith("PLACEMENT_RETAKE_")) return reply.code(409).send({ code: error.message });
       throw error;
     }
   });

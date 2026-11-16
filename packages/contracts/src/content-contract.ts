@@ -228,6 +228,8 @@ export interface ContentReviewView {
     createdAt: string; resolution: string;
     overdue?: boolean;
     proposedLevel?: CefrLevel;
+    /** "retake": the learner's "Xin thi lại" request for the placement test; accepting it grants the one retake. */
+    requestKind?: "retake";
     kind: "assessment" | "weekly_practice" | "lesson_part";
     submissionId: string | null;
     attemptId?: string | null;

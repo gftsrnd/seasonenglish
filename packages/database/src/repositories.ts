@@ -10,7 +10,7 @@ import { FROZEN_MONTHLY_ILLUSTRATIONS_SQL, withFrozenMonthlyIllustrations, type 
 import { generationFindingsFromPayload } from "./generation-findings.js";
 import { MonthlyContentRepository } from "./monthly-content-repository.js";
 import { learnerLevelStartedOnSql } from "./learner-level-start.js";
-import { grantPlacementRetakeInTransaction, PLACEMENT_RETAKE_ASSESSMENT_KEY, PlacementRetakeError } from "./placement-retake.js";
+import { grantPlacementRetakeInTransaction, hasPlacementRetakeStructure, PLACEMENT_RETAKE_ASSESSMENT_KEY, PLACEMENT_RETAKE_STRUCTURE, PlacementRetakeError } from "./placement-retake.js";
 import type {
   AccountRole,
   AudioArtifactInput,
@@ -4561,7 +4561,12 @@ class ContentRepository {
         if (elapsed >= 2) overdue.add(row.id);
       }
     }
+    const retakeRequests = new Set((await this.pool.query<{ id: string }>(
+      "select id from appeals where id = any($1::uuid[]) and request_kind = 'retake'",
+      [result.rows.filter((row) => row.kind === "assessment").map((row) => row.id)]
+    )).rows.map((row) => row.id));
     return result.rows.map((row) => ({
+        ...(retakeRequests.has(row.id) ? { requestKind: "retake" as const } : {}),
         ...(() => {
           const content = row.part_content ?? {};
           const options = lessonExerciseOptions(content);
@@ -5628,6 +5633,18 @@ function levelFormTarget(value: string | null | undefined): AssessmentLevelFormT
   return value === PLACEMENT_RETAKE_ASSESSMENT_KEY || value === "A2" || value === "B1" || value === "B2" || value === "C1" ? value : null;
 }
 
+/** Expected item counts per section: placement-a's for the retake form, 20/40/2/4 for level-up. */
+function levelFormExpectedCounts(target: AssessmentLevelFormTarget | null): Record<AssessmentSectionCode, number> {
+  if (target !== PLACEMENT_RETAKE_ASSESSMENT_KEY) return { listening: 20, reading: 40, writing: 2, speaking: 4 };
+  const count = (code: AssessmentSectionCode) => PLACEMENT_RETAKE_STRUCTURE.sections.find((section) => section.code === code)?.groups.reduce((total, group) => total + group.length, 0) ?? 0;
+  return { listening: count("listening"), reading: count("reading"), writing: count("writing"), speaking: count("speaking") };
+}
+
+/** The placement retake form must match placement-a exactly; level-up forms the 20/40/2/4 frame. */
+function hasLevelFormStructure(blueprint: StoredAssessmentDefinition, target: AssessmentLevelFormTarget | null): boolean {
+  return target === PLACEMENT_RETAKE_ASSESSMENT_KEY ? hasPlacementRetakeStructure(blueprint) : hasCanonicalLevelFormStructure(blueprint);
+}
+
 function hasCanonicalLevelFormStructure(blueprint: StoredAssessmentDefinition): boolean {
   const expected: Record<AssessmentSectionCode, { duration: number; score: number; tasks: number }> = {
     listening: { duration: 15, score: 20, tasks: 20 },
@@ -5661,8 +5678,8 @@ function hasCompleteLevelFormContent(blueprint: StoredAssessmentDefinition): boo
 
 /** A compact count for list actions. Detail view exposes the exact grouped
  * reasons; publication still applies the full content validation above. */
-function levelFormPublicationBlockerCount(blueprint: StoredAssessmentDefinition): number {
-  const expectedCounts: Record<AssessmentSectionCode, number> = { listening: 20, reading: 40, writing: 2, speaking: 4 };
+function levelFormPublicationBlockerCount(blueprint: StoredAssessmentDefinition, target: AssessmentLevelFormTarget | null = null): number {
+  const expectedCounts = levelFormExpectedCounts(target);
   let blockers = 0;
   for (const code of ["listening", "reading", "writing", "speaking"] as const) {
     const section = blueprint.sections.find((item) => item.code === code);
@@ -5768,7 +5785,8 @@ const learnerAssessmentAppealCandidates = `
   left join assessment_decisions decision on decision.attempt_id = aa.id
   where aa.learner_id = $1 and aa.status in ('approved', 'needs_retry')
     and decision.status in ('approved', 'retry', 'rejected') and decision.decided_at is not null
-    and (definition.kind in ('placement', 'level_up', 'pass_course')
+    -- Placement has no free-text appeal: the learner asks "Xin thi lại" (placement-retake.ts).
+    and (definition.kind in ('level_up', 'pass_course')
       or (definition.kind = 'final' and definition.assessment_key like 'monthly-final-%'))
     and not exists (select 1 from appeals a where a.attempt_id = aa.id)
     and exists (select 1 from enrollments approved where approved.learner_id = aa.learner_id
@@ -7536,8 +7554,8 @@ class AssessmentRepository {
    * Product rule: biên bản 30/10 mục 11 & 6.
    */
   async applyAcceptedAppealLevel(client: PoolClient, actorId: string, appealId: string, resolution: string): Promise<void> {
-    const appeal = await client.query<{ learner_id: string; proposed_level: CefrLevel | null; kind: string; current: CefrLevel | null }>(
-      `select a.learner_id, a.proposed_level, d.kind,
+    const appeal = await client.query<{ learner_id: string; proposed_level: CefrLevel | null; kind: string; current: CefrLevel | null; request_kind: string }>(
+      `select a.learner_id, a.proposed_level, d.kind, a.request_kind,
               (select e.cefr from enrollments e where e.learner_id = a.learner_id order by e.enrolled_at desc limit 1) as current
        from appeals a join assessment_attempts aa on aa.id = a.attempt_id
        join assessment_versions v on v.id = aa.assessment_version_id join assessment_definitions d on d.id = v.definition_id
@@ -7545,6 +7563,11 @@ class AssessmentRepository {
       [appealId]
     );
     const row = appeal.rows[0];
+    // An accepted "Xin thi lại" request is the Operator's grant of the one placement retake.
+    if (row?.request_kind === "retake") {
+      await grantPlacementRetakeInTransaction(client, { learnerId: row.learner_id, reviewerId: actorId, reason: resolution });
+      return;
+    }
     // Only tests that set a level (placement, level-up); the monthly final and Pass Course appeals change scores.
     if (!row?.proposed_level || !["placement", "level_up"].includes(row.kind) || row.proposed_level === row.current) return;
     await this.changeLearnerLevel(actorId, row.learner_id, {
@@ -7977,10 +8000,9 @@ class AssessmentRepository {
       [reviewerId]
     );
     return result.rows.flatMap((row) => {
-      if (!hasCanonicalLevelFormStructure(row.blueprint)) return [];
       const targetLevel = levelFormTarget(row.target_level);
-      if (!targetLevel) return [];
-      const publicationBlockerCount = levelFormPublicationBlockerCount(row.blueprint);
+      if (!targetLevel || !hasLevelFormStructure(row.blueprint, targetLevel)) return [];
+      const publicationBlockerCount = levelFormPublicationBlockerCount(row.blueprint, targetLevel);
       const sectionCount = (code: AssessmentSectionCode) => row.blueprint.sections
         .find((section) => section.code === code)?.groups.reduce((total, group) => total + group.tasks.length, 0) ?? 0;
       return [{
@@ -8027,10 +8049,9 @@ class AssessmentRepository {
       [reviewerId, targetLevel]
     );
     return result.rows.flatMap((row) => {
-      if (!hasCanonicalLevelFormStructure(row.blueprint)) return [];
       const blueprintTarget = levelFormTarget(row.target_level ?? row.blueprint.targetLevel);
-      if (!blueprintTarget) return [];
-      const publicationBlockerCount = levelFormPublicationBlockerCount(row.blueprint);
+      if (!blueprintTarget || !hasLevelFormStructure(row.blueprint, blueprintTarget)) return [];
+      const publicationBlockerCount = levelFormPublicationBlockerCount(row.blueprint, blueprintTarget);
       const sectionCount = (code: AssessmentSectionCode) => row.blueprint.sections
         .find((section) => section.code === code)?.groups.reduce((total, group) => total + group.tasks.length, 0) ?? 0;
       return [{
@@ -8077,7 +8098,7 @@ class AssessmentRepository {
     const row = result.rows[0];
     const targetLevel = levelFormTarget(row?.target_level ?? row?.blueprint.targetLevel);
     if (!row || !targetLevel) return null;
-    const publicationBlockerCount = levelFormPublicationBlockerCount(row.blueprint);
+    const publicationBlockerCount = levelFormPublicationBlockerCount(row.blueprint, targetLevel);
     const summary = {
       definitionId: row.definition_id,
       versionId: row.version_id,
@@ -8097,7 +8118,7 @@ class AssessmentRepository {
       publishedAt: version.publishedAt?.toISOString() ?? null
     }));
     const warnings: AssessmentLevelFormDetailView["warnings"] = [];
-    const expectedCounts: Record<AssessmentSectionCode, number> = { listening: 20, reading: 40, writing: 2, speaking: 4 };
+    const expectedCounts = levelFormExpectedCounts(targetLevel);
     const present = new Set(row.blueprint.sections.map((section) => section.code));
     for (const code of ["listening", "reading", "writing", "speaking"] as const) {
       const count = sectionTaskCount(row.blueprint, code);
@@ -8301,15 +8322,15 @@ class AssessmentRepository {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
-      const target = await client.query<{ definition_id: string; blueprint: StoredAssessmentDefinition }>(
-        `select av.definition_id, av.blueprint from assessment_versions av join assessment_definitions ad on ad.id = av.definition_id and ${LEVEL_FORM_DEFINITION_SQL}
+      const target = await client.query<{ definition_id: string; blueprint: StoredAssessmentDefinition; assessment_key: string }>(
+        `select av.definition_id, av.blueprint, ad.assessment_key from assessment_versions av join assessment_definitions ad on ad.id = av.definition_id and ${LEVEL_FORM_DEFINITION_SQL}
          join users reviewer on reviewer.id = $1 and reviewer.organization_id = ad.organization_id
          where av.id = $2 and av.status = 'draft' for update of av`, [reviewerId, versionId]
       );
       const definitionId = target.rows[0]?.definition_id;
       if (!definitionId) { await client.query("rollback"); return null; }
       const blueprint = target.rows[0]!.blueprint;
-      if (!hasCanonicalLevelFormStructure(blueprint)) throw new Error("LEVEL_FORM_STRUCTURE_INVALID");
+      if (!hasLevelFormStructure(blueprint, levelFormTarget(target.rows[0]!.assessment_key === PLACEMENT_RETAKE_ASSESSMENT_KEY ? PLACEMENT_RETAKE_ASSESSMENT_KEY : blueprint.targetLevel))) throw new Error("LEVEL_FORM_STRUCTURE_INVALID");
       if (!hasCompleteLevelFormContent(blueprint)) throw new Error("LEVEL_FORM_CONTENT_INCOMPLETE");
       const listening = blueprint.sections.find((section) => section.code === "listening");
       const missingAudio = !listening || listening.groups.some((group) => group.stimulus?.type !== "audio_script" || !group.stimulus.audioSrc?.trim());

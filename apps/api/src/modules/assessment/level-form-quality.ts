@@ -25,7 +25,9 @@ export interface LevelFormQualityIssue {
     | "LEVEL_FORM_STATEMENT_UNSUPPORTED"
     | "LEVEL_FORM_REPEATED_CONTEXT"
     /** Placement retake only: an item, script/passage sentence or prompt copied from placement-a. */
-    | "LEVEL_FORM_COPIES_PLACEMENT";
+    | "LEVEL_FORM_COPIES_PLACEMENT"
+    /** Placement retake only: counts, points or word limits differ from placement-a. */
+    | "LEVEL_FORM_PLACEMENT_STRUCTURE";
   severity: LevelFormQualitySeverity;
   section: "listening" | "reading" | "form";
   /** 0-based question index inside the section, when the issue is about one question. */

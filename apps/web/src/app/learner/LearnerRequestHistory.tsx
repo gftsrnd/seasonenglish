@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router";
 import type { AssessmentAppealTargetView, LearnerAcademicAppealView, LearnerComplaintKind, LearnerComplaintView } from "@e4s/contracts";
 import { learnerApiClient } from "../../api/learner.js";
 import { AssessmentAppealForm } from "./AssessmentAppealForm.js";
+import { PlacementRetakeRequest } from "./PlacementRetakeRequest.js";
 import { PageTitle } from "./ui.js";
 import { RequestEvidenceDetails, RequestEvidenceFields, requestEvidenceArgs, type RequestEvidenceDraft } from "../shared/RequestEvidence.js";
 import { RequestTable } from "../shared/RequestTable.js";
@@ -163,6 +164,7 @@ export function LearnerRequestHistory() {
     {notice ? <p role="status">{notice}</p> : null}
     {composing && data?.complaints ? <ComplaintForm lessonUnlock={lessonUnlock} complaints={data.complaints} learning={data.levelApproved === true}
       cancel={() => setComplaintFormOpen(false)} submitted={() => { setComplaintFormOpen(false); setNotice("Đã gửi khiếu nại cho Quản lý."); refresh(); }} /> : null}
+    {filter === "all" || filter === "appeals" ? <PlacementRetakeRequest onSent={() => { setNotice("Đã gửi yêu cầu thi lại cho Vận hành."); refresh(); }} /> : null}
     {filter === "appeals" && appealsOpen && data?.results?.length ? <section className="card learner-support-action">
       <h2>Bài thi có thể kháng nghị</h2>
       <ul className="request-history-items">{data.results.map(result => <li key={result.attemptId}>

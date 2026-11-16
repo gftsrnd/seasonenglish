@@ -799,12 +799,12 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     onRejectLevelRequest: id => { if (readOnly || typeof client.decideAssessment !== "function") return; void modal.prompt({ title: "Từ chối yêu cầu lên mức", message: "Học viên sẽ nhìn thấy nội dung này.", label: "Lý do từ chối", confirmLabel: "Từ chối", tone: "danger" }).then(reason => { if (reason?.trim()) refresh(client.decideAssessment(id, { status: "needs_retry", reason: reason.trim() })); }); },
     onGrantPlacementRetake: learnerId => {
       if (readOnly || typeof client.grantPlacementRetake !== "function") return;
-      void modal.prompt({ title: "Cho thi lại 1 lần", message: "Học viên được làm lại bài đầu vào một lần, trên đề thi lại mới đã phát hành. Sau lượt này Vận hành xếp lớp; không thi lại thêm.", label: "Lý do (học viên sẽ thấy)", confirmLabel: "Cho thi lại 1 lần" })
+      void modal.prompt({ title: "Cho thi lại 1 lần", message: "Học viên được làm lại bài đầu vào một lần, trên đề thi lại đã phát hành. Sau lượt này Vận hành xếp lớp; không thi lại thêm.", label: "Lý do (học viên sẽ thấy)", confirmLabel: "Cho thi lại 1 lần" })
         .then(reason => { if (reason?.trim()) refresh(client.grantPlacementRetake!(learnerId, { reason: reason.trim() })); });
     },
     onRetryPlacementOnce: attemptId => {
       if (readOnly || typeof client.decideAssessment !== "function") return;
-      void modal.prompt({ title: "Cho thi lại 1 lần", message: "Không duyệt mức lần này. Học viên làm lại bài đầu vào một lần trên đề thi lại mới; sau đó Vận hành xếp lớp và không thi lại thêm.", label: "Lý do (học viên sẽ thấy)", confirmLabel: "Cho thi lại 1 lần" })
+      void modal.prompt({ title: "Cho thi lại 1 lần", message: "Không duyệt mức lần này. Học viên làm lại bài đầu vào một lần trên đề thi lại đã phát hành; sau đó Vận hành xếp lớp và không thi lại thêm.", label: "Lý do (học viên sẽ thấy)", confirmLabel: "Cho thi lại 1 lần" })
         .then(reason => { if (reason?.trim()) refresh(client.decideAssessment(attemptId, { status: "needs_retry", reason: reason.trim(), grantRetake: true })); });
     },
     onViewTest: showAttempt, onRescore: rescore, onDeleteLearner: id => requestDeletion(learnerIdFor(id)), onViewChallenge: showChallenge,

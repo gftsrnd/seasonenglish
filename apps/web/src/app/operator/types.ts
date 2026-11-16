@@ -405,6 +405,8 @@ export interface ReviewCoachTurn {
 export interface ReviewAppeal {
   overdue?: boolean;
   proposedLevel?: Cefr;
+  /** The learner's "Xin thi lại" request for the placement test: accepting it grants the one retake. */
+  retakeRequest?: boolean;
   scope?: string | null | undefined;
   hasEvidence?: boolean | undefined;
   id: string;

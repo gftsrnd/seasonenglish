@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AiTaskRunner } from "@e4s/ai";
-import { placementDefinition } from "@e4s/database";
+import { placementDefinition, placementRetakeStructureIssues } from "@e4s/database";
 import { aiSlices, neutralQuestions } from "./support/level-form-fixture.js";
 
 const LEARNER_ID = "00000000-0000-4000-8000-0000000000bb";
@@ -23,7 +23,8 @@ const repositories = vi.hoisted(() => ({
     assessmentViolationLimit: vi.fn(),
     claimAttemptSession: vi.fn(),
     findAppeal: vi.fn(),
-    listAppealableResults: vi.fn()
+    listAppealableResults: vi.fn(),
+    resolveAssessmentAppeal: vi.fn()
   },
   aiRuns: { activeTaskPrompt: vi.fn(), recordSucceeded: vi.fn() }
 }));
@@ -32,7 +33,9 @@ const retakeDb = vi.hoisted(() => ({
   findPublishedPlacementRetakeForm: vi.fn(),
   grantPlacementRetake: vi.fn(),
   startPlacementRetakeAttempt: vi.fn(),
-  listPlacementRetakeStates: vi.fn()
+  listPlacementRetakeStates: vi.fn(),
+  findPlacementRetakeRequestState: vi.fn(),
+  createPlacementRetakeRequest: vi.fn()
 }));
 vi.mock("@e4s/database", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@e4s/database")>()),
@@ -96,7 +99,7 @@ beforeEach(() => {
 });
 
 describe("placement retake form generation (level-up generator, placement mode)", () => {
-  it("generates a draft placement-retake form with the 20/40/2/4 placement structure and a mixed A1–C1 prompt", async () => {
+  it("generates a draft placement-retake form with exactly placement-a's structure and scoring, from a mixed A1–C1 prompt", async () => {
     const { runner, runTask } = fakeRunner(aiSlices());
     const server = await app(runner);
     const response = await server.inject({ method: "POST", url: "/api/v1/assessment-level-forms/placement-retake/generate" });
@@ -114,8 +117,30 @@ describe("placement retake form generation (level-up generator, placement mode)"
     expect(blueprint.targetLevel).toBeUndefined();
     const count = (code: string) => blueprint.sections.find((section: { code: string }) => section.code === code)
       .groups.reduce((total: number, group: { tasks: unknown[] }) => total + group.tasks.length, 0);
-    expect([count("listening"), count("reading"), count("writing"), count("speaking")]).toEqual([20, 40, 2, 4]);
+    expect([count("listening"), count("reading"), count("writing"), count("speaking")]).toEqual([15, 40, 2, 4]);
     expect(blueprint.sections.map((section: { maxScore: number }) => section.maxScore)).toEqual([20, 40, 20, 20]);
+    // Item scores and word limits are placement-a's: Listening 4 × 1 + 6 × 1 + 5 × 2, Writing 7 + 13.
+    const scores = (code: string) => blueprint.sections.find((section: { code: string }) => section.code === code)
+      .groups.map((group: { tasks: Array<{ maxScore: number }> }) => group.tasks.map((task) => task.maxScore));
+    expect(scores("listening")).toEqual([[1, 1, 1, 1], [1, 1, 1, 1, 1, 1], [2, 2, 2, 2, 2]]);
+    expect(scores("writing")).toEqual([[7], [13]]);
+    expect(scores("speaking")).toEqual([[5], [5], [5], [5]]);
+    expect(placementRetakeStructureIssues(blueprint)).toEqual([]);
+    // Questions 1–4, 5–10 and 13–17 of the five 4-question parts are kept, in that order.
+    const listeningPrompts = blueprint.sections[0].groups.flatMap((group: { tasks: Array<{ prompt: string }> }) => group.tasks.map((task) => task.prompt));
+    expect(listeningPrompts[0]).toContain("item 1?");
+    expect(listeningPrompts[10]).toContain("item 13?");
+    await server.close();
+  });
+
+  it("enforces placement-a's counts deterministically on the retake form and its manual draft", async () => {
+    expect(placementRetakeStructureIssues({ ...placementDefinition, sections: placementDefinition.sections.map((section) => section.code !== "listening" ? section : {
+      ...section, groups: [...section.groups, { ...section.groups[0]!, key: "LX" }]
+    }) })).toEqual([expect.stringContaining("Phần Nghe phải có 3 nhóm với 4 + 6 + 5 câu")]);
+    const server = await app();
+    const response = await server.inject({ method: "POST", url: "/api/v1/assessment-level-forms/placement-retake/manual-draft" });
+    expect(response.statusCode).toBe(201);
+    expect(placementRetakeStructureIssues(repositories.assessments.createLevelFormDraft.mock.calls[0]![2])).toEqual([]);
     await server.close();
   });
 
@@ -219,6 +244,46 @@ describe("learner placement lifecycle with a granted retake", () => {
     const response = await server.inject({ method: "POST", url: "/api/v1/assessments/placement/start" });
     expect(response.statusCode).toBe(409);
     expect(response.json().code).toBe("PLACEMENT_RETAKE_FORM_NOT_PUBLISHED");
+    await server.close();
+  });
+});
+
+describe("learner retake request ('Xin thi lại') and the Operator's decision", () => {
+  const until = new Date("2026-11-19T02:00:00Z");
+
+  it("shows the request button state while the 72 h window is open and creates the request", async () => {
+    retakeDb.findPlacementRetakeRequestState.mockResolvedValueOnce({ target: { attemptId: OLD_ATTEMPT_ID, title: "Test đầu vào", availableUntil: until }, request: null, retake: "not_granted" })
+      .mockResolvedValueOnce({ target: null, request: { id: "r1", status: "pending", resolution: null, createdAt: new Date("2026-11-16T03:00:00Z"), resolvedAt: null }, retake: "not_granted" });
+    retakeDb.createPlacementRetakeRequest.mockResolvedValue({ id: "r1", createdAt: new Date() });
+    const server = await app();
+    const open = await server.inject({ method: "GET", url: "/api/v1/learner/placement-retake-request" });
+    expect(open.json()).toEqual({ target: { attemptId: OLD_ATTEMPT_ID, title: "Test đầu vào", availableUntil: until.toISOString() }, request: null, retake: "not_granted" });
+    const sent = await server.inject({ method: "POST", url: "/api/v1/learner/placement-retake-request" });
+    expect(sent.statusCode, sent.body).toBe(201);
+    expect(sent.json().request).toEqual(expect.objectContaining({ id: "r1", status: "pending" }));
+    await server.close();
+  });
+
+  it("refuses the request once the window has expired", async () => {
+    retakeDb.createPlacementRetakeRequest.mockResolvedValue(null);
+    const server = await app();
+    const response = await server.inject({ method: "POST", url: "/api/v1/learner/placement-retake-request" });
+    expect(response.statusCode).toBe(409);
+    expect(response.json().code).toBe("PLACEMENT_RETAKE_REQUEST_NOT_AVAILABLE");
+    await server.close();
+  });
+
+  it("maps a refused grant on approval to 409 and passes approve/reject through the appeal decision", async () => {
+    repositories.assessments.resolveAssessmentAppeal
+      .mockResolvedValueOnce({ id: "r1", status: "rejected", resolution: "Kết quả phù hợp", resolvedAt: new Date() })
+      .mockRejectedValueOnce(new PlacementRetakeError("PLACEMENT_RETAKE_FORM_NOT_PUBLISHED"));
+    const server = await app();
+    const url = "/api/v1/assessment-appeals/00000000-0000-4000-8000-0000000000r1/decision".replace("r1", "e1");
+    const rejected = await server.inject({ method: "POST", url, payload: { status: "rejected", resolution: "Kết quả phù hợp" } });
+    expect(rejected.statusCode, rejected.body).toBe(200);
+    const refused = await server.inject({ method: "POST", url, payload: { status: "accepted", resolution: "Cho thi lại" } });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json()).toEqual({ code: "PLACEMENT_RETAKE_FORM_NOT_PUBLISHED" });
     await server.close();
   });
 });

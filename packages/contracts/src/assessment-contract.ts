@@ -177,6 +177,16 @@ export interface AssessmentPlacementRetakeView {
   retakeAttemptId: string | null;
 }
 
+/**
+ * Learner support page, placement only: the "Xin thi lại" button (no free-text appeal). target is
+ * set while a request is possible (sent back, or approved and within 72 h of the decision).
+ */
+export interface AssessmentPlacementRetakeRequestView {
+  target: { attemptId: string; title: string; availableUntil: string | null } | null;
+  request: { id: string; status: "pending" | "accepted" | "rejected"; resolution: string | null; createdAt: string; resolvedAt: string | null } | null;
+  retake: AssessmentRetakeStatus;
+}
+
 export interface AssessmentPlacementRetakeGrantInput {
   reason: string;
 }

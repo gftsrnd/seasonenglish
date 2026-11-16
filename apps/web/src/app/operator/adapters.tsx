@@ -798,6 +798,7 @@ export function adaptReviewAppeal(item: ContentReviewView["appeals"][number]): R
     status: item.status, reason: item.reason, decidedSummary: item.resolution || null,
     ...(item.overdue ? { overdue: true } : {}),
     ...(item.proposedLevel ? { proposedLevel: item.proposedLevel } : {}),
+    ...(item.requestKind === "retake" ? { retakeRequest: true } : {}),
     scope: item.scope, hasEvidence: item.hasEvidence,
     currentScore: item.currentScore,
     ...(item.question ? { question: item.question } : {}),
