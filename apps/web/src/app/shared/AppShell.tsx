@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import { BookOpen, CalendarDays, ChartColumn, Check, CloudSnow, CloudSun, FileText, Flower2, Gamepad2, Gift, GraduationCap, House, Leaf, LogOut, MessageSquare, MoonStar, Music2, Pencil, Search, Settings, Snowflake, Sparkles, Sprout, Star, Sun, TreePine, UserRound, Volume2, Waves, Wind } from "lucide-react";
 import type { AccountRole, CefrLevel, SessionView } from "@e4s/contracts";
-import { BRAND_NAME, ResponsiveBrandMark } from "./BrandMark.js";
+import { SeasonMark } from "./SeasonMark.js";
 import { AVATAR_BG, AVATAR_COLOR_HEX, AvatarMark } from "../learner/ProfileReward.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import { cancelAllExclusiveAudio } from "../../features/experience/audio-precedence.js";
@@ -214,8 +214,9 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
 
   return <>
     <header className="topbar app-shell-topbar">
-      <Link className="brand app-shell-brand" aria-label={BRAND_NAME} title={BRAND_NAME} style={{ color: "inherit", textDecoration: "none" }} to={role === "learner" ? "/home" : role === "operator" ? "/op" : "/mgr"}>
-        <ResponsiveBrandMark />
+      <Link className="brand" style={{ color: "inherit", textDecoration: "none" }} to={role === "learner" ? "/home" : role === "operator" ? "/op" : "/mgr"}>
+        <span className="avatar" style={{ width: 34, height: 34, background: "var(--primary-soft)", display: "inline-grid", placeItems: "center", flexShrink: 0 }}><SeasonMark className="app-brand-mark" /></span>
+        <span>Season English <span className="muted" style={{ fontWeight: 400, fontSize: ".85rem" }}>· {organisationName}</span></span>
       </Link>
       <nav aria-label={role === "learner" ? "Điều hướng người học" : role === "operator" ? "Điều hướng người vận hành" : "Điều hướng quản lý"}>{links()}</nav>
       <SeasonDecoration className="shell-season-decoration" />
