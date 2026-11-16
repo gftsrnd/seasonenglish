@@ -1744,3 +1744,6 @@ table[aria-label="Lịch sử nhắc học"] td:nth-child(3){overflow-wrap:anywh
 .manager-operations-month { display: grid; gap: 2px; justify-items: end; }
 .manager-operations-month select { width: auto; min-width: 0; }
 .manager-operations-month-summary { margin: 6px 0 0; }
+
+.manager-operational-help { margin: 2px 0 8px; }
+.manager-account-create-title { margin-top: 0; }

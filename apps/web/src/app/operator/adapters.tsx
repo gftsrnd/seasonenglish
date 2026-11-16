@@ -38,6 +38,9 @@ import { formatPercent, formatScoreOutOf } from "../shared/format-score.js";
 import { learnerLessonLanguageForCefr, lessonCopyForCefr, type LearnerLessonLanguage } from "../shared/lesson/language.js";
 import { lessonPartsForTab, lessonPracticeCodes, sharedLessonGrammarAvailable } from "../shared/lesson/structure.js";
 import { LessonPromptText, normalizeLessonBlankPrompt, SharedLessonPartContent, SharedVocabularyModal, type VocabularyModalState } from "../learner/Learning.js";
+import { useCompactUi } from "../shared/CompactUi.js";
+import { useMediaQuery as useMediaQuery_ } from "../shared/useMediaQuery.js";
+import { ChevronLeft as ChevronLeftIcon_, ChevronRight as ChevronRightIcon_ } from "lucide-react";
 
 const CEFR_LEVELS: Cefr[] = ["A1", "A2", "B1", "B2", "C1"];
 const REVIEW_TAB_MAP = { submissions: "subs", coach: "coach", weekly_practices: "weekly", appeals: "appeals", attempts: "attempts", assessments: "tests" } as const;
@@ -377,7 +380,13 @@ export function OperatorLessonPreview({ cefr, lessonId, parts, resolveVocabulary
   const copy = lessonCopyForCefr(cefr);
   const visible = lessonPartsForTab(parts, tab);
   const grammarAvailable = sharedLessonGrammarAvailable(parts);
-  return <div className="operator-lesson-preview lesson-page"><div className="lesson-surface"><div className="ltabs" role="tablist" aria-label={copy.tabsAria}><button type="button" className={tab === "study" ? "active" : ""} role="tab" aria-selected={tab === "study"} onClick={() => setTab("study")}>1. {studyTabLabel ?? copy.studyTab}</button><button type="button" className={tab === "practice" ? "active" : ""} role="tab" aria-selected={tab === "practice"} onClick={() => setTab("practice")}>2. {copy.practiceTab}</button></div><div className="lesson-parts" aria-label={tab === "study" ? copy.studyTab : copy.practiceTab}>{tab === "practice" && practiceContent ? practiceContent : visible.map((part, index) => {
+  // Phones/tablets: the review view is split into a few full section pages
+  // (Study: goals + words / grammar / sounds; Practice: 2-3 exercises per page)
+  // with a compact section switcher, instead of one long scroll. Desktop shows every part.
+  const compactUi = useCompactUi();
+  const tabletUi = useMediaQuery_("(min-width: 601px)");
+  const [pageIndex, setPageIndex] = useState(0);
+  const renderPart = (part: (typeof visible)[number], index: number) => {
     const exerciseNumber = visible.slice(0, index).filter(candidate => candidate.code !== "instruction").length + 1;
     const content = part.code === "instruction" ? { ...part.content, steps: lessonInstructionSteps(parts, tab, language) } : part.content;
     const displayPart = { ...part, content };
@@ -396,7 +405,19 @@ export function OperatorLessonPreview({ cefr, lessonId, parts, resolveVocabulary
           collapsibleVocabulary={collapsibleVocabulary}
           resolveVocabularyImage={resolveVocabularyImage ? (itemIndex) => resolveVocabularyImage(lessonId, itemIndex) : undefined}
         />}</section>;
-  })}</div></div>{vocabularyModal ? <SharedVocabularyModal state={vocabularyModal} speak={operatorLessonSpeak} language={language} close={() => setVocabularyModal(null)} /> : null}</div>;
+  };
+  const sectionPages = compactUi && !(tab === "practice" && practiceContent) ? operatorLessonSectionPages(visible, tab, tabletUi, language) : null;
+  const currentPage = sectionPages ? Math.min(pageIndex, sectionPages.length - 1) : 0;
+  const switchTab = (next: "study" | "practice") => { setTab(next); setPageIndex(0); };
+  return <div className="operator-lesson-preview lesson-page"><div className="lesson-surface"><div className="ltabs" role="tablist" aria-label={copy.tabsAria}><button type="button" className={tab === "study" ? "active" : ""} role="tab" aria-selected={tab === "study"} onClick={() => switchTab("study")}>1. {studyTabLabel ?? copy.studyTab}</button><button type="button" className={tab === "practice" ? "active" : ""} role="tab" aria-selected={tab === "practice"} onClick={() => switchTab("practice")}>2. {copy.practiceTab}</button></div>
+    {sectionPages && sectionPages.length > 1 ? <nav className="lesson-section-pager" aria-label="Chuyển mục bài học">
+      <button type="button" className="btn-sm btn-ghost list-pager-step" aria-label="Mục trước" disabled={currentPage <= 0} onClick={() => setPageIndex(currentPage - 1)}><ChevronLeftIcon_ size={16} aria-hidden="true" /></button>
+      <select aria-label="Chọn mục" value={currentPage} onChange={(event) => setPageIndex(Number(event.target.value))}>{sectionPages.map((page, index) => <option key={page.key} value={index}>{index + 1}/{sectionPages.length} · {page.label}</option>)}</select>
+      <button type="button" className="btn-sm btn-ghost list-pager-step" aria-label="Mục sau" disabled={currentPage >= sectionPages.length - 1} onClick={() => setPageIndex(currentPage + 1)}><ChevronRightIcon_ size={16} aria-hidden="true" /></button>
+    </nav> : null}
+    <div className="lesson-parts" aria-label={tab === "study" ? copy.studyTab : copy.practiceTab}>{tab === "practice" && practiceContent ? practiceContent : sectionPages ? sectionPages[currentPage]?.items.map(({ part, index }) => renderPart(part, index)) : visible.map((part, index) => renderPart(part, index))}</div>
+    {sectionPages && sectionPages.length > 1 ? <nav className="lesson-section-pager lesson-section-pager--bottom" aria-label="Chuyển mục bài học (cuối trang)"><button type="button" className="btn-sm btn-ghost list-pager-step" aria-label="Mục trước" disabled={currentPage <= 0} onClick={() => { setPageIndex(currentPage - 1); window.scrollTo?.({ top: 0 }); }}><ChevronLeftIcon_ size={16} aria-hidden="true" /></button><span className="list-pager-status">{currentPage + 1}/{sectionPages.length} · {sectionPages[currentPage]?.label}</span><button type="button" className="btn-sm btn-ghost list-pager-step" aria-label="Mục sau" disabled={currentPage >= sectionPages.length - 1} onClick={() => setPageIndex(currentPage + 1)}><ChevronRightIcon_ size={16} aria-hidden="true" /></button></nav> : null}
+  </div>{vocabularyModal ? <SharedVocabularyModal state={vocabularyModal} speak={operatorLessonSpeak} language={language} close={() => setVocabularyModal(null)} /> : null}</div>;
 }
 
 export type OperatorLessonPart = ContentLessonSetVersionView["lessons"][number]["parts"][number];
@@ -840,4 +861,38 @@ export function adaptPrompts(source: ContentPromptSettingsView, options: { saveS
     if (!key) throw new Error(`Unknown content prompt key: ${group.key}`);
     return [[key, PROMPT_LABELS[key], group.content, group.status, group.version]];
   }) };
+}
+
+type LessonSectionPage<P> = { key: string; label: string; items: Array<{ part: P; index: number }> };
+/**
+ * A few full section pages for the operator review view on phones/tablets.
+ * Study: goals + instructions + words / grammar / sounds (tablets: 2 pages).
+ * Practice: 2 exercises per page (tablets: 3), the instructions ride on page 1.
+ */
+export function operatorLessonSectionPages<P extends { code: string }>(parts: readonly P[], tab: "study" | "practice", tablet: boolean, language: string): Array<LessonSectionPage<P>> {
+  const en = language === "en";
+  const name = (code: string) => (en
+    ? { objective: "Objectives", instruction: "Instructions", vocabulary: "Vocabulary", grammar: "Grammar", pronunciation: "Pronunciation" }
+    : { objective: "Mục tiêu", instruction: "Hướng dẫn", vocabulary: "Từ vựng", grammar: "Ngữ pháp", pronunciation: "Phát âm" } as Record<string, string>)[code] ?? code;
+  const items = parts.map((part, index) => ({ part, index }));
+  const page = (group: typeof items, label: string): LessonSectionPage<P> => ({ key: group.map((item) => `${item.part.code}-${item.index}`).join("+"), label, items: group });
+  if (tab === "study") {
+    const first = items.filter((item) => ["objective", "instruction", "vocabulary"].includes(item.part.code));
+    const grammar = items.filter((item) => item.part.code === "grammar");
+    const rest = items.filter((item) => !first.includes(item) && !grammar.includes(item));
+    const groups = tablet ? [first, [...grammar, ...rest]] : [first, grammar, rest];
+    // Short operator labels for the switcher ("Mục tiêu & từ vựng", "Ngữ pháp", "Phát âm").
+    const short = (group: typeof items) => { const codes = new Set(group.map((item) => item.part.code)); if (codes.has("vocabulary") || codes.has("objective")) return "Mục tiêu & từ vựng"; if (codes.has("grammar") && codes.has("pronunciation")) return "Ngữ pháp & phát âm"; if (codes.has("grammar")) return "Ngữ pháp"; if (codes.has("pronunciation")) return "Phát âm"; return name(group[0]!.part.code); };
+    return groups.filter((group) => group.length).map((group) => page(group, short(group)));
+  }
+  const intro = items.filter((item) => item.part.code === "instruction" || item.part.code === "objective");
+  const exercises = items.filter((item) => !intro.includes(item));
+  const perPage = tablet ? 3 : 2;
+  const pages: Array<LessonSectionPage<P>> = [];
+  for (let start = 0; start < exercises.length; start += perPage) {
+    const group = exercises.slice(start, start + perPage);
+    const label = `Bài ${start + 1}–${start + group.length}`;
+    pages.push(page(start === 0 ? [...intro, ...group] : group, group.length === 1 ? `Bài ${start + 1}` : label));
+  }
+  return pages.length ? pages : [page(items, "Bài tập")];
 }

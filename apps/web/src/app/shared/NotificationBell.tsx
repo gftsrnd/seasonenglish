@@ -9,6 +9,8 @@ import { useDialog } from "./ModalProvider.js";
 import { rewardBadgeIconForLabel } from "./reward-badge-icons.js";
 import { monthlyUncountedCountsFromText } from "./monthly-uncounted.js";
 import "./notification-bell.css";
+import { ModalCloseButton } from "./CompactUi.js";
+import { Pager, usePaged } from "./Pager.js";
 
 const assessmentNames: Record<string, string> = {
   placement: "bài đầu vào",
@@ -248,6 +250,9 @@ export function NotificationBell() {
   const [pages, setPages] = useState<Record<"all" | "unread", NotificationInboxView | undefined>>({ all: undefined, unread: undefined });
   const filter = unreadOnly ? "unread" : "all";
   const page = pages[filter];
+  // Phones/tablets page the loaded notifications (3 / 4 per page) with the pager as the popup's footer; desktop lists them all.
+  const feedPaged = usePaged(page?.items ?? [], { phone: 3, tablet: 3 });
+  const onLastFeedPage = feedPaged.page >= feedPaged.pages;
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [reload, setReload] = useState(0);
@@ -261,7 +266,8 @@ export function NotificationBell() {
   const [arrivalHeld, setArrivalHeld] = useState(false);
   const [arrivalPosition, setArrivalPosition] = useState<{ top: number; left: number; width: number }>();
   const close = () => setOpen(false);
-  useDialog(open, dialog, close);
+  // Focus the popup itself on open (no focus ring parked on the close button).
+  useDialog(open, dialog, close, dialog);
   useLayoutEffect(() => { if (feed.current) feed.current.scrollTop = 0; }, [open, filter]);
 
   const announce = (next: Arrival | null) => {
@@ -439,7 +445,7 @@ export function NotificationBell() {
       <section ref={dialog} className="dialog inbox-dialog" style={loadingHeight ? { minHeight: `min(${loadingHeight}px, calc(100dvh - 32px))` } : undefined} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
         <header className="inbox-heading">
           <h3 id={titleId}>Thông báo</h3>
-          <button type="button" className="app-modal-close" aria-label="Đóng thông báo" onClick={close}><X size={20} aria-hidden="true" /></button>
+          <ModalCloseButton label="Đóng thông báo" onClick={close} />
         </header>
         <div className="inbox-controls">
           <button type="button" className={unreadOnly ? "btn-sm" : "btn-sm btn-primary"} aria-pressed={!unreadOnly} disabled={pending} onClick={() => changeFilter(false)}>Tất cả</button>
@@ -451,7 +457,7 @@ export function NotificationBell() {
           {!page && !error ? <p role="status" className="muted">Đang tải thông báo…</p> : null}
           {page?.items.length === 0 ? <p className="muted">{unreadOnly ? "Bạn đã đọc hết thông báo." : "Chưa có thông báo."}</p> : null}
           {page?.items.length ? <ul>
-            {page.items.map((item) => {
+            {feedPaged.visible.map((item) => {
               const content = notificationContent(item);
               const category = notificationCategory(item.kind);
               return <li key={item.id} data-category={category} className={item.readAt ? "inbox-item" : "inbox-item inbox-item--unread"}>
@@ -462,8 +468,9 @@ export function NotificationBell() {
               </li>;
             })}
           </ul> : null}
-          {page?.nextCursor ? <button type="button" className="btn-sm" disabled={pending} onClick={() => void loadMore()}>Xem thông báo cũ hơn</button> : null}
+          {page?.nextCursor && onLastFeedPage ? <button type="button" className="btn-sm" disabled={pending} onClick={() => void loadMore()}>Xem thông báo cũ hơn</button> : null}
         </div>
+        <Pager {...feedPaged} label="thông báo" />
       </section>
     </div>, document.body) : null}
     {arrival && !open ? createPortal(<div className="inbox-arrival" role="status" aria-live="polite" data-testid="inbox-arrival"

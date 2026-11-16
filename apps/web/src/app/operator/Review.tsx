@@ -14,6 +14,11 @@ import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { formatScore, formatScoreOutOf } from "../shared/format-score.js";
 import { LineField } from "../shared/LineField.js";
 import { errorMessage } from "../shared/error-message.js";
+import { Paged, PagedList } from "../shared/Pager.js";
+import { ScrollJumpButton, useScrollJump } from "../shared/ScrollJump.js";
+import { X as XIcon_ } from "lucide-react";
+import { ActionLabel, Description } from "../shared/CompactUi.js";
+import { ModalCloseButton } from "../shared/CompactUi.js";
 
 const TABS: Array<[ReviewTab, string]> = [["coach", "Phản hồi Season"], ["appeals", "Kháng nghị"], ["attempts", "Cảnh báo bài tập"]];
 
@@ -301,7 +306,7 @@ export function OperatorReview({ view, actions, readOnly = false, unavailable = 
     }
     if (view.activeTab === "subs") return <Empty>Chưa có bài tháng đã nộp. Bài nộp tuần cũ không được hiển thị trong luồng tháng.</Empty>;
 
-    if (view.activeTab === "coach") return view.coachTurns.length ? <div className="card operator-review-panel"><p className="small muted operator-review-intro">Đọc mẫu phản hồi AI coach; kiểm tra lệch mức, lỗi hoặc khen quá tay rồi sửa prompt nếu cần.</p><div className="operator-coach-list">{groupReviewItemsByLearner(view.coachTurns).map(group => <details className="operator-review-learner-group" key={group.learnerName}><summary><b>{group.learnerName}</b><span className="xs muted">{group.items.length} phản hồi</span></summary><div className="operator-review-group-items">{group.items.map(item => <div className="item" key={item.id}><div className="body small"><div className="row between operator-review-item-heading"><span>{item.cefr && <LevelChip level={item.cefr} />} <span className="xs muted">{item.week ? `Tuần ${item.week} · ` : ""}{item.at}</span></span><Button small disabled={readOnly} onClick={() => actions.onMarkCoachTurn(item.id, !item.checked)}>{item.checked ? "Đã kiểm" : "Đánh dấu đã kiểm"}</Button></div><div className="operator-review-copy"><span className="muted">Học viên:</span> {item.userText}</div><div className="operator-review-copy"><span className="muted">Coach:</span> {item.reply}</div>{item.audioArtifact ? <AudioEvidencePanel label={`Bản ghi âm Season của ${item.learnerName}`} evidence={{ ...item.audioArtifact, transcript: item.audioArtifact.transcript ?? item.userText }} {...(actions.onDeleteAudio ? { onDelete: actions.onDeleteAudio } : {})} /> : null}<Rubric value={item.rubric} /><Suggestions items={item.suggestions} /></div></div>)}</div></details>)}</div></div> : <Empty>Chưa có lượt luyện nào.</Empty>;
+    if (view.activeTab === "coach") return view.coachTurns.length ? <div className="card operator-review-panel"><Description className="small muted operator-review-intro" text="Đọc mẫu phản hồi AI coach; kiểm tra lệch mức, lỗi hoặc khen quá tay rồi sửa prompt nếu cần." /><div className="operator-coach-list">{groupReviewItemsByLearner(view.coachTurns).map(group => <details className="operator-review-learner-group" key={group.learnerName}><summary><b>{group.learnerName}</b><span className="xs muted">{group.items.length} phản hồi</span></summary><div className="operator-review-group-items">{<PagedList items={group.items} label="phản hồi">{item => <div className="item" key={item.id}><div className="body small"><div className="row between operator-review-item-heading"><span>{item.cefr && <LevelChip level={item.cefr} />} <span className="xs muted">{item.week ? `Tuần ${item.week} · ` : ""}{item.at}</span></span><Button small disabled={readOnly} onClick={() => actions.onMarkCoachTurn(item.id, !item.checked)}>{item.checked ? "Đã kiểm" : "Đánh dấu đã kiểm"}</Button></div><div className="operator-review-copy"><span className="muted">Học viên:</span> {item.userText}</div><div className="operator-review-copy"><span className="muted">Coach:</span> {item.reply}</div>{item.audioArtifact ? <AudioEvidencePanel label={`Bản ghi âm Season của ${item.learnerName}`} evidence={{ ...item.audioArtifact, transcript: item.audioArtifact.transcript ?? item.userText }} {...(actions.onDeleteAudio ? { onDelete: actions.onDeleteAudio } : {})} /> : null}<Rubric value={item.rubric} /><Suggestions items={item.suggestions} /></div></div>}</PagedList>}</div></details>)}</div></div> : <Empty>Chưa có lượt luyện nào.</Empty>;
 
     if (view.activeTab === "weekly") return <Empty>Chưa có bài tháng. Bài tháng chỉ xuất hiện sau khi Người vận hành tạo và duyệt lịch học tháng.</Empty>;
 
@@ -310,10 +315,10 @@ export function OperatorReview({ view, actions, readOnly = false, unavailable = 
     if (view.activeTab === "attempts") return view.attempts.length ? <div className="card"><p className="small muted operator-status-legend">Mỗi kỹ năng tối đa 2 lượt: <span><Check className="operator-inline-icon" size={14} strokeWidth={2.5} aria-hidden="true" /> đúng</span>, <span><X className="operator-inline-icon" size={14} strokeWidth={2.5} aria-hidden="true" /> hết lượt vẫn sai/đã hiện đáp án</span>, … đang làm.</p><div className="operator-attempt-learner-list">{groupAttemptsByLearner(view.attempts).map(group => { const first = group.items[0]!; const total = group.items.reduce((sum, item) => sum + item.total, 0); return <details className="operator-review-learner-group" data-testid="attempt-learner-group" key={group.learnerId}><summary><span><b>{first.learnerName}</b> {first.cefr && <LevelChip level={first.cefr} />}</span><span className="xs muted">{group.items.length} bài · {total} lượt</span></summary><div className="table-wrap"><table><thead><tr><th>Bài</th><th>Nghe</th><th>Đọc</th><th>Viết</th><th>Từ loại</th><th>Dùng từ</th><th>Nói</th><th>Tổng lần</th></tr></thead><tbody>{group.items.map(item => <tr key={item.id}><td className="small">{item.lesson}</td><td>{item.listening}</td><td>{item.reading}</td><td>{item.writing}</td><td>{item.wordClass}</td><td>{item.wordUse}</td><td>{item.speaking}{item.audioArtifact ? <AudioEvidencePanel label={`Bản ghi âm bài học của ${item.learnerName}`} evidence={item.audioArtifact} {...(actions.onDeleteAudio ? { onDelete: actions.onDeleteAudio } : {})} /> : null}</td><td><b>{item.total}</b></td></tr>)}</tbody></table></div></details>; })}</div></div> : <Empty>Chưa có học viên nào làm bài thực hành.</Empty>;
 
     const assessmentLabel = (kind: typeof view.tests[number]["kind"]) => kind === "placement" ? "Đầu vào" : kind === "final" ? "Bài thi tháng" : kind === "pass_course" ? "Đề đầu ra" : "Lên mức";
-    return view.tests.length ? <div className="card"><div className="table-wrap operator-action-table-wrap">
+    return view.tests.length ? <div className="card"><Paged items={view.tests} label="lượt làm bài">{tests => <div className="table-wrap operator-action-table-wrap">
       <table className="operator-action-table operator-results-table" role="table" aria-label="Lượt làm bài thi">
         <thead><tr><th scope="col">Người học</th><th scope="col">Loại</th><th scope="col">Nộp</th><th scope="col">Tổng</th><th scope="col" aria-label="Thao tác" /></tr></thead>
-        <tbody>{view.tests.map(item => <tr role="row" key={item.id}>
+        <tbody>{tests.map(item => <tr role="row" key={item.id}>
           <td className="operator-result-name">{item.learnerName}</td>
           <td className="operator-result-type">{assessmentLabel(item.kind)}{item.status && assessmentStatusLabels[item.status] ? <span className="operator-result-status"> · {assessmentStatusLabels[item.status]}</span> : null}</td>
           <td className="operator-result-desktop-detail">{item.submittedAt || "—"}</td>
@@ -321,7 +326,7 @@ export function OperatorReview({ view, actions, readOnly = false, unavailable = 
           <td className="operator-result-action"><Button small disabled={Boolean(blocked("viewTest"))} title={blocked("viewTest")} onClick={() => actions.onViewTest(item.id)}>Xem</Button></td>
         </tr>)}</tbody>
       </table>
-    </div></div> : <Empty>Chưa có bài test.</Empty>;
+    </div>}</Paged></div> : <Empty>Chưa có bài test.</Empty>;
   };
 
   const content = <>{!embedded && <PageTitle><h1>Chấm & Kháng nghị</h1><p className="muted">Kiểm tra phản hồi Season, xử lý kháng nghị và theo dõi cảnh báo bài tập.</p></PageTitle>}{actionError && <div className="banner danger" role="alert" style={{ marginBottom: 12 }}><div className="body small">{actionError.message}</div></div>}{mode === "weekly" && !embedded && <div className="tabs operator-review-tabs" role="tablist" aria-label="Nhóm nội dung cần kiểm tra">{TABS.map(([key, label]) => <button type="button" role="tab" aria-selected={view.activeTab === key} className={view.activeTab === key ? "active" : ""} key={key} onClick={() => actions.onTabChange(key)}>{key === "attempts" ? label : `${label} (${key === "weekly" || key === "subs" ? 0 : view.counts[key] ?? 0}${key === "subs" ? " chưa đọc" : ""})`}</button>)}</div>}{body()}</>;
@@ -338,6 +343,8 @@ const assessmentStatusLabels: Record<string, string> = {
 export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualScore, savingManualScore = false, onDeleteAudio, onRescore, rescoring = false }: { detail: ContentReviewAssessmentDetailView; onClose(): void; onSaveManualScore?: (input: ManualScoreInput) => void; savingManualScore?: boolean; onDeleteAudio?: (evidence: AudioEvidence) => void | Promise<void>; onRescore?: () => void; rescoring?: boolean }) {
   const compact = useMediaQuery("(max-width: 900px)");
   const dialogRef = useRef<HTMLElement>(null);
+  // The long test detail scrolls inside the dialog: same up/down jump button as the pages.
+  const scroll = useScrollJump(true);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
@@ -534,8 +541,9 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     }
   ];
 
-  return <div className="modal-backdrop operator-modal-scope operator-detail-modal" role="presentation"><section ref={dialogRef} className="dialog wide operator-detail-dialog operator-assessment-dialog" role="dialog" aria-modal="true" aria-label={`Chi tiết bài test của ${detail.learnerName}`} tabIndex={-1}>
-    <div className="row between"><div><h3 id="operator-review-detail-title">Bài test · {detail.learnerName}</h3><p className="small muted">{detail.title} · {assessmentStatusLabels[detail.status] ?? detail.status} · Nộp {operatorDateTime(detail.submittedAt)} · Bắt đầu {operatorDateTime(detail.startedAt)} · Tổng điểm: {detail.totalScore == null ? "Chờ đủ 4 kỹ năng" : formatScoreOutOf(detail.totalScore, 100)}</p></div><button className="btn-sm" type="button" onClick={onClose}>Đóng</button></div>
+  return <div className="modal-backdrop operator-modal-scope operator-detail-modal" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} className="dialog wide operator-detail-dialog operator-assessment-dialog" role="dialog" aria-modal="true" aria-label={`Chi tiết bài test của ${detail.learnerName}`} tabIndex={-1}>
+    <div className="row between"><div><h3 id="operator-review-detail-title">Bài test · {detail.learnerName}</h3><p className="small muted">{detail.title} · {assessmentStatusLabels[detail.status] ?? detail.status} · Nộp {operatorDateTime(detail.submittedAt)} · Bắt đầu {operatorDateTime(detail.startedAt)} · Tổng điểm: {detail.totalScore == null ? "Chờ đủ 4 kỹ năng" : formatScoreOutOf(detail.totalScore, 100)}</p></div><ModalCloseButton onClick={onClose} /></div>
+    <div ref={scroll.start} className="app-scroll-edge" aria-hidden="true" />
     <h4>Điểm theo 4 kỹ năng</h4>
     {compact ? <ul className="operator-skill-scores" aria-label="Điểm theo 4 kỹ năng">
       {scoreRows.map(row => <li key={row.label} className={row.total ? "operator-total-row" : undefined}>
@@ -572,5 +580,7 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     </div></section>
     {detail.decision && <div className="banner info"><div className="body small">Quyết định: {detail.decision.status} · {detail.decision.approvedLevel ?? "—"} · {detail.decision.reason}</div></div>}
     {detail.appeal && <div className="banner warn"><div className="body small">Kháng nghị: {detail.appeal.status} · {detail.appeal.reason}{detail.appeal.resolution ? ` · ${detail.appeal.resolution}` : ""}</div></div>}
+    <div ref={scroll.end} className="app-scroll-edge" aria-hidden="true" />
+    {scroll.visible && <ScrollJumpButton atTop={scroll.atTop} onClick={scroll.jump} inExam />}
   </section></div>;
 }

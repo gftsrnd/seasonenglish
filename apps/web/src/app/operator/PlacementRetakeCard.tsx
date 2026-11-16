@@ -2,6 +2,8 @@ import type { AssessmentLevelFormSlotView, AssessmentLevelFormView } from "@e4s/
 import { Badge, Button } from "./primitives.js";
 import { operatorDateTime } from "./adapters.js";
 import type { LevelFormActionKey } from "./types.js";
+import { OPERATOR_TIPS } from "./section-tips.js";
+import { SectionTip } from "../shared/CompactUi.js";
 
 export interface PlacementRetakeCardActions {
   onGenerate(): void;
@@ -35,7 +37,7 @@ export function PlacementRetakeCard({ slot, aiConnected, generating, readOnly = 
     <div className="row between operator-card-header">
       <div>
         <p className="xs muted">BÀI ĐẦU VÀO</p>
-        <h2>Đề thi lại (1 lần)</h2>
+        <h2>Đề thi lại (1 lần)<SectionTip text={OPERATOR_TIPS.retake} label="Đề thi lại là gì?" /></h2>
         <p className="xs muted operator-level-retake-note">Một đề thi lại duy nhất, cùng cấu trúc và cách tính điểm với đề đầu vào gốc (Nghe 15 câu · Đọc 40 · Viết 2 · Nói 4); độ khó trộn A1–C1, không lặp câu của đề gốc. Học viên chỉ làm khi Vận hành duyệt thi lại.</p>
       </div>
       <div className="row operator-level-form-actions">

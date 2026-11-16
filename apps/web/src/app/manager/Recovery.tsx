@@ -1,3 +1,4 @@
+import { Description } from "../shared/CompactUi.js";
 import { OperationalCards, type TrashedAccount } from "./shared.js";
 
 export type ManagerRecoveryProps = {
@@ -25,6 +26,6 @@ export function ManagerRecovery({ trashedAccounts, onRestore, onPurge, error, lo
       {...(loading ? { loading } : {})}
       {...(busy ? { busy } : {})}
     />
-    {!loading && !trashedAccounts.length ? <div className="manager-recovery-empty"><b>Thùng rác trống</b><p className="small muted">Hiện không có tài khoản nào cần khôi phục.</p></div> : null}
+    {!loading && !trashedAccounts.length ? <div className="manager-recovery-empty"><b>Thùng rác trống</b><Description text="Hiện không có tài khoản nào cần khôi phục." /></div> : null}
   </div>;
 }

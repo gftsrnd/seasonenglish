@@ -1,21 +1,14 @@
-import { currentSeasonTheme } from "../games/season-visual.js";
-
-/** Existing Season English brand mark. Kept unchanged by the artwork cleanup. */
+/**
+ * Season English brand mark: the four-season pinwheel chosen by the product owner
+ * (spring green, summer yellow, autumn orange, winter blue, clockwise from top left).
+ * Same mark in every season; only the icon spots use it, never the "Season English" text.
+ */
 export function SeasonMark({ className }: { className?: string }) {
-  const theme = currentSeasonTheme();
-  const shared = { className: `season-mark ${className ?? ""}`.trim(), "data-testid": "season-mark", viewBox: "0 0 32 32", "aria-hidden": true } as const;
-  // media-scan: allow-brand -- existing product branding, not content artwork
-  if (theme === "summer") return <svg {...shared}><g stroke="var(--accent)" strokeWidth="2.6" strokeLinecap="round"><path d="M16 2.5v3.5M16 26v3.5M2.5 16H6M26 16h3.5M6.5 6.5l2.4 2.4M23.1 23.1l2.4 2.4M6.5 25.5l2.4-2.4M23.1 8.9l2.4-2.4" /></g><circle cx="16" cy="16" r="7.5" fill="var(--accent)" /></svg>;
-  // media-scan: allow-brand -- existing product branding, not content artwork
-  if (theme === "spring") return <svg {...shared}><g fill="var(--accent)"><circle cx="16" cy="7.5" r="4.6" /><circle cx="24.1" cy="13.4" r="4.6" /><circle cx="21" cy="22.9" r="4.6" /><circle cx="11" cy="22.9" r="4.6" /><circle cx="7.9" cy="13.4" r="4.6" /></g><circle cx="16" cy="16" r="3.6" fill="var(--primary)" /></svg>;
-  // media-scan: allow-brand -- existing product branding, not content artwork
-  if (theme === "autumn") return <svg {...shared}><path d="M6 26C6 13 14 6 27 6c0 13-7 21-21 20z" fill="var(--primary)" /><path d="M6 26c4-7 9-12 15-16" fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" /></svg>;
-  // media-scan: allow-brand -- existing product branding, not content artwork
-  if (theme === "winter") return <svg {...shared}><g fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round"><path d="M16 3v26M4.7 9.5l22.6 13M4.7 22.5l22.6-13" /><path d="M16 3l-3 3M16 3l3 3M16 29l-3-3M16 29l3-3M4.7 9.5l4 1M4.7 9.5l1-4M27.3 22.5l-4-1M27.3 22.5l-1 4M4.7 22.5l1 4M4.7 22.5l4-1M27.3 9.5l-1-4M27.3 9.5l-4 1" /></g></svg>;
-  // media-scan: allow-brand -- existing product branding, not content artwork
-  if (theme === "tet") return <svg {...shared}><path d="M16 4.5c2.6 0 4.2 2.4 3.4 5.2 2.9-.3 4.9 1.8 4.1 4.3 2.5 1.4 2.5 4.4 0 5.8.8 2.5-1.2 4.6-4.1 4.3.8 2.8-.8 5.2-3.4 5.2s-4.2-2.4-3.4-5.2c-2.9.3-4.9-1.8-4.1-4.3-2.5-1.4-2.5-4.4 0-5.8-.8-2.5 1.2-4.6 4.1-4.3-.8-2.8.8-5.2 3.4-5.2z" fill="var(--primary)" stroke="var(--accent)" strokeWidth="1.2" /><circle cx="16" cy="16" r="3.2" fill="var(--accent)" /></svg>;
-  // media-scan: allow-brand -- existing product branding, not content artwork
-  if (theme === "midautumn") return <svg {...shared}><path d="M16 3v3" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" /><rect x="11" y="6" width="10" height="3" rx="1.5" fill="var(--accent)" /><path d="M8 11c0-1.7 3.6-2.5 8-2.5s8 .8 8 2.5v9c0 1.7-3.6 2.5-8 2.5s-8-.8-8-2.5z" fill="var(--primary)" /><path d="M12.5 9v13.5M19.5 9v13.5" stroke="var(--accent)" strokeWidth="1.4" opacity=".6" /><rect x="11" y="22" width="10" height="3" rx="1.5" fill="var(--accent)" /><path d="M14 25v4M18 25v4" stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round" /></svg>;
-  // media-scan: allow-brand -- existing product branding, not content artwork
-  return <svg {...shared}><path d="M16 3l3.6 7.6 8.3 1-6.1 5.7 1.6 8.2L16 21.4l-7.4 4.1 1.6-8.2-6.1-5.7 8.3-1z" fill="var(--primary)" stroke="var(--accent)" strokeWidth="1.6" strokeLinejoin="round" /></svg>;
+  // media-scan: allow-brand -- product branding, not content artwork
+  return <svg className={`season-mark season-mark--logo ${className ?? ""}`.trim()} data-testid="season-mark" viewBox="0 0 256 256" aria-hidden="true">
+    <path fill="#69BC38" d="M123 122C97 126 73 105 72 79C71 53 94 32 121 29C138 27 146 36 146 48C146 67 133 73 122 85C108 100 109 111 123 122Z" />
+    <path fill="#F9AB18" d="M129 121C128 102 137 85 152 72C166 60 177 62 186 48Q188 45 190 50C196 63 208 65 220 66C215 82 222 92 235 99C225 107 224 116 226 124C224 131 218 140 210 145C203 124 185 113 164 112C150 111 139 116 129 121Z" />
+    <path fill="#F66932" d="M130 128C157 120 181 133 191 154C204 181 192 211 162 223C162 212 163 200 161 192C160 187 155 187 153 191C147 205 145 216 142 226C122 226 105 221 106 208C105 198 112 188 122 177C140 158 140 144 130 128Z" />
+    <path fill="#398ADF" d="M125 129C126 151 113 173 91 182C75 190 60 191 45 187C45 179 48 172 51 167C37 165 27 159 20 153Q30 141 47 133C40 127 34 120 30 112C50 100 67 101 80 114C94 131 107 140 125 129Z" />
+  </svg>;
 }

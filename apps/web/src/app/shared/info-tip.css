@@ -1,0 +1,44 @@
+/* ⓘ guidance tips next to section/card titles (InfoTip / SectionTip in CompactUi.tsx).
+   Base styles for every width; phone/tablet sizing lives in responsive-phone.css. */
+.section-tip { display: contents; }
+/* The word joiner glues the ⓘ to the last word of the title (generated, so it is not part of the title text). */
+.info-tip::before { content: "\2060"; }
+.info-tip { display: inline; white-space: nowrap; margin-inline-start: 4px; font-size: 1rem; font-weight: 400; letter-spacing: 0; }
+.info-tip > .info-tip-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  vertical-align: middle;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  margin-top: -3px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.info-tip > .info-tip-button:hover, .info-tip > .info-tip-button[aria-expanded="true"] { color: var(--primary-dark, var(--primary)); background: var(--surface-3, rgb(0 0 0 / 5%)); }
+.info-tip-popover {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / .14);
+  color: var(--text);
+  font-family: var(--font-body, inherit);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.5;
+  text-align: start;
+  text-transform: none;
+  white-space: normal;
+}

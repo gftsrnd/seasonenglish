@@ -1,0 +1,920 @@
+/*
+ * Phone-first usability pass (round 2): flatter containers, denser rows,
+ * shorter copy and chips that flow several per row.
+ *
+ * Phones are ≤ 600px, tablets ≤ 1024px. Desktop (≥ 1180px) is untouched: every
+ * rule sits inside a width media query. Like responsive-compact.css, this file
+ * loads before the lazily loaded role stylesheets, so selectors start with
+ * `:root:root` to outrank them regardless of load order.
+ */
+
+/* 0. Phone type and spacing scale (≤ 480px). Phones looked like a desktop
+   squeezed into 390px: 15px body copy, 28–35px titles, 18–24px card padding,
+   44px buttons. These tokens scale every screen at once; the sections below
+   only fix what still breaks. Tablets keep their own sizes. */
+@media (max-width: 480px) {
+  :root {
+    --phone-text: 14px;
+    --phone-meta: 12.5px;
+    --phone-h1: 21px;
+    --phone-h2: 17px;
+    --phone-h3: 15.5px;
+    --phone-card-pad: 12px;
+    --phone-gap: 10px;
+    --phone-btn-h: 32px;
+    --phone-field-h: 34px;
+    --touch-min: 30px;
+    --hci-touch-target: 30px;
+    --hci-space-group: 10px;
+    --hci-space-section: 14px;
+    font-size: 14px; /* every rem-based size scales by 14/16 */
+  }
+  :root:root body { font-size: var(--phone-text); }
+  /* Screens redefine the touch target lower in the tree; pin the phone value there too. */
+  :root:root :is(body, #root, .app-operator, .manager-page, .settings-page, .app-learner-page, .modal-backdrop, [role="dialog"]) { --hci-touch-target: var(--phone-btn-h); --touch-min: var(--phone-btn-h); }
+
+  /* Titles: page h1 ~21px, section h2 ~17px, card h3 ~15.5px. */
+  :root:root :is(main, .dialog, [role="dialog"]) h1 { font-size: var(--phone-h1) !important; line-height: 1.25 !important; letter-spacing: -.01em; }
+  :root:root :is(main, .dialog, [role="dialog"]) h2 { font-size: var(--phone-h2) !important; line-height: 1.3 !important; }
+  :root:root :is(main, .dialog, [role="dialog"]) h3 { font-size: var(--phone-h3) !important; line-height: 1.3 !important; }
+  :root:root :is(main, .dialog, [role="dialog"]) h4 { font-size: 14px !important; }
+  :root:root :is(main, .dialog, [role="dialog"]) :is(.small, small, .muted.small, .page-title p) { font-size: var(--phone-meta); }
+  :root:root main .page-title { margin-bottom: 10px; }
+
+  /* Cards: 12px padding, 10px between cards; a card inside a card loses its
+     own border and shadow and most of its padding (one visible level only). */
+  :root:root :is(.card, .dialog, .panel) { padding: var(--phone-card-pad); border-radius: 14px; }
+  :root:root .card + .card { margin-top: var(--phone-gap); }
+  :root:root :is(.grid, .stack) { gap: var(--phone-gap); }
+  :root:root .section { margin-top: 14px; }
+  :root:root:root :is(.card, .dialog, [role="dialog"]) :is(.card, .item) { padding: 10px; box-shadow: none; }
+  :root:root :is(.card, .dialog, [role="dialog"]) .card { border-color: transparent; }
+  :root:root [role="dialog"] .grid.cols-2 { align-items: start; }
+  :root:root .card .card .card { padding: 0; background: transparent; }
+
+  /* Buttons: one line, ~34px tall, smaller label. */
+  :root:root :is(button, .btn, a.btn, .btn-sm):not(.link-button):not([role="tab"]):not(.word-chip):not(.lesson-example-card):not(.vocabulary-card-sound):not(.chip):not(.lesson-example-translate):not(.manager-password-toggle):not(.app-scroll-jump):not(.password-toggle) {
+    min-height: var(--phone-btn-h);
+    padding-block: 4px;
+    padding-inline: 10px;
+    border-radius: 9px;
+    font-size: 13px;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  :root:root :is(.btn-sm, a.btn-sm) { padding-inline: 9px; font-size: 12.5px; }
+  /* Action buttons size to their label; no full-width blocks. */
+  :root:root :is(form, .card, .dialog, [role="dialog"]) :is(button, .btn)[type="submit"],
+  :root:root :is(.card, .dialog) .row > :is(button, .btn) { width: auto; }
+
+  /* Form fields: ~36px tall, tight padding, 16px text (iOS does not zoom on
+     focus), smaller placeholders and labels, textareas start at 2–3 rows and grow. */
+  :root:root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select) {
+    height: var(--phone-field-h);
+    min-height: 0 !important;
+    padding: 6px 8px;
+    border-radius: 9px;
+    font-size: 14px;
+    line-height: 1.25;
+  }
+  /* Textareas never clip: no fixed height, at least ~2 lines, they grow with
+     the text; any grid row holding one sizes to it (screens that fixed a
+     50–74px row made the text run under the next label). */
+  :root:root:root textarea { min-height: 56px !important; height: auto !important; padding: 6px 8px; font-weight: 400; border-radius: 9px; font-size: 14px; line-height: 1.35; field-sizing: content; max-height: 50vh; overflow-y: auto; }
+  :root:root:root :has(> textarea) { grid-template-rows: none !important; grid-auto-rows: auto !important; height: auto !important; max-height: none !important; }
+  :root:root:root :has(> label > textarea, > .field > textarea) { grid-template-rows: none !important; grid-auto-rows: auto !important; }
+  :root:root :is(input, textarea)::placeholder { font-size: 13px; }
+  :root:root :is(.field, label.field, .form-field) { gap: 4px; }
+  :root:root :is(.field, label.field, .form-field) > :is(span, .label):first-child,
+  :root:root label > .field-label { font-size: 12.5px; }
+  /* Badges and chips: 12px, light padding. */
+  :root:root :is(.badge, .chip, .pill) { min-height: 0; padding: 2px 8px; font-size: 12px; line-height: 1.4; }
+}
+
+
+/* A. Lesson (learner lesson + operator day view) on phones: one container level.
+   page card → lesson surface → part card → word card used to eat ~160px of a
+   390px screen, leaving a 230px text column where every chip took a full row.
+   Only the part card keeps its border; the others become flat. */
+@media (max-width: 600px) {
+  :root:root .app-operator .card.operator-monthly-lesson { padding: 0; border: 0; background: transparent; box-shadow: none; }
+  :root:root .lesson-page .lesson-surface { padding: 0; border: 0; background: transparent; box-shadow: none; gap: 10px; }
+  :root:root .lesson-page .lesson-parts { gap: 10px; }
+  :root:root .lesson-page .lesson-surface > .lesson-parts > section,
+  :root:root .lesson-page .lesson-part { padding: 12px; border-radius: 12px; }
+  :root:root .lesson-page .vocabulary-list { gap: 0; }
+  :root:root .lesson-page .word-card.vocabulary-card {
+    padding: 12px 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    gap: 8px;
+  }
+  :root:root .lesson-page .vocabulary-list > .word-card.vocabulary-card:first-child { border-top: 0; padding-top: 4px; }
+  :root:root .lesson-page :is(.lesson-vocabulary-group, .lesson-vocabulary-group-items) { padding: 0; border: 0; background: transparent; box-shadow: none; }
+  /* Chips flow several per row: tighter padding, shrink to their text. */
+  :root:root .lesson-page .vocabulary-card-phrase-list { gap: 6px; }
+  :root:root .lesson-page :is(.vocabulary-card-phrase-list .vocabulary-card-sound, .vocabulary-card-relations .chip) {
+    width: auto;
+    flex: 0 1 auto;
+    min-height: 30px !important;
+    padding: 4px 8px;
+    gap: 4px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    line-height: 1.25;
+  }
+  :root:root .lesson-page .vocabulary-card-relations { display: flex; flex-wrap: wrap; gap: 6px; }
+  :root:root .lesson-page .lesson-example-wrap { width: auto; }
+  :root:root .lesson-page .lesson-example-list { gap: 6px; }
+  :root:root .lesson-page .lesson-example-card { padding: 8px 10px; }
+}
+
+/* B. Cài đặt › Người dùng: the account rows are styled by the manager stylesheet
+   (responsive-manager.css, owned by the manager work); nothing here, so the two
+   files never fight over the same row. */
+@media (max-width: 1024px) {
+  /* Pager for long lists (Pager.tsx): ‹ Trang 2/9 ›, centred under the list. */
+  :root:root .list-pager { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 8px 0 0; }
+  :root:root .list-pager-status { min-width: 6.5em; color: var(--muted); font-size: 12.5px; text-align: center; font-variant-numeric: tabular-nums; }
+  :root:root .list-pager .list-pager-step { display: grid; place-items: center; width: 32px; min-width: 32px !important; height: 30px; min-height: 30px !important; padding: 0 !important; }
+}
+
+/* C. Operator month page on phones: resource metrics as readable two-column
+   rows ("54  Từ cốt lõi", number and one-line 13px label side by side, no
+   helper sentence), no page/section helper sentences. */
+@media (max-width: 600px) {
+  :root:root .operator-months-header > p,
+  :root:root .operator-months-page .monthly-section-title + p.small.muted { display: none; }
+  /* Compact stat chips that size to their text and wrap: number + label on one line
+     ("48 Từ cốt lõi", images use "Ảnh" on phones, Months.tsx), the same pill
+     look as the status chips elsewhere; no grey box. */
+  :root:root .operator-months-page .monthly-resource-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0 10px;
+    padding: 0;
+    background: transparent;
+  }
+  :root:root .operator-months-page .monthly-resource-cards button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: auto;
+    min-width: 0;
+    min-height: 30px !important;
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    box-shadow: none;
+    text-align: center;
+  }
+  :root:root .operator-months-page .monthly-resource-cards button span { display: none; }
+  :root:root .operator-months-page .monthly-plan-open-button { font-size: 13px; white-space: nowrap; }
+  :root:root .operator-months-page .monthly-plan-row { flex-wrap: nowrap; gap: 8px; }
+  :root:root .operator-months-page .monthly-resource-cards button b { flex: none; font-size: 13px; font-weight: 800; }
+  :root:root .operator-months-page .monthly-resource-cards button strong {
+    min-width: 0;
+    max-width: none;
+    overflow: hidden;
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* D. Manager › Tiến độ nhóm on phones: compact learner rows (level · name ·
+   Hồ sơ, then status · week dots · lessons), compact KPI tiles, and 3 rows per
+   list before "Xem thêm" (Progress.tsx). */
+@media (max-width: 600px) {
+  @container manager-progress (max-width: 580px) {
+    /* Two lines per learner: level · name (ellipsis) · Hồ sơ, then
+       status · week dots · lessons · details toggle. tr::after breaks the line. */
+    :root:root:root .manager-progress-table .manager-progress-record {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 8px;
+      padding: 8px 2px;
+    }
+    :root:root:root .manager-progress-table .manager-progress-record::after { content: ""; order: 4; flex-basis: 100%; height: 0; }
+    :root:root .manager-progress-record > .manager-progress-level { order: 1; }
+    :root:root .manager-progress-record > .manager-progress-name { order: 2; flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    :root:root .manager-progress-record > .manager-progress-profile { order: 3; }
+    :root:root .manager-progress-record > .manager-progress-status { order: 5; }
+    :root:root .manager-progress-record > .manager-progress-rhythm { order: 6; white-space: nowrap; }
+    :root:root .manager-progress-record > .manager-progress-lessons { order: 7; margin-inline-start: auto; white-space: nowrap; }
+    :root:root .manager-progress-record > .manager-progress-compact-details { order: 8; }
+    :root:root .manager-progress-record:has(details[open]) > .manager-progress-compact-details { flex-basis: 100%; }
+    :root:root .manager-progress-rhythm .manager-progress-compact-label { display: none; }
+    :root:root .manager-progress-table .manager-progress-profile button { min-height: var(--phone-btn-h, 34px); padding-inline: 10px; }
+    /* "Chi tiết tiến độ" becomes a small ⓘ-style toggle at the end of line 2. */
+    :root:root .manager-progress-compact-details summary {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      min-height: 28px !important;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      font-size: 0;
+      list-style: none;
+    }
+    :root:root .manager-progress-compact-details summary::-webkit-details-marker { display: none; }
+    :root:root .manager-progress-compact-details summary::after { content: "…"; font-size: 14px; line-height: 1; }
+  }
+  :root:root .manager-progress-page .card.section { padding: 12px; }
+  :root:root .manager-progress-page .manager-progress-card-header { gap: 8px; }
+  :root:root .manager-progress-page .manager-progress-card-actions { flex-wrap: nowrap; gap: 6px; }
+  :root:root .manager-progress-page .manager-progress-card-actions .btn { min-height: 40px; padding: 6px 10px; font-size: .85rem; }
+  /* Pending lists: one line per learner (name + badge, short status, Hồ sơ). */
+  :root:root .manager-progress-page .manager-progress-list > .item { padding: 8px 10px; gap: 8px; align-items: center; }
+  :root:root .manager-progress-page .manager-progress-list > .item .btn-sm { padding-inline: 10px; }
+  /* KPI tiles: number and short label only, three across. */
+  :root:root .manager-progress-page .manager-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  :root:root .manager-progress-page .manager-kpi-grid .kpi { padding: 8px; min-height: 0; }
+  :root:root .manager-progress-page .manager-kpi-grid .kpi .val { font-size: 1.2rem; }
+}
+
+/* E. Operator › Duyệt trình độ on phones (Dashboard.tsx also limits the lists
+   to 3 rows + "Xem thêm"). */
+@media (max-width: 480px) {
+  /* Chờ duyệt: name on line 1; submit time/total and chips share line 2
+     (chips scroll sideways instead of wrapping onto more rows). */
+  :root:root .operator-pending-review-summary {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 4px 8px;
+  }
+  :root:root .operator-pending-review-summary > div:first-child { display: contents; }
+  :root:root .operator-pending-review-summary .name { grid-column: 1 / -1; font-size: 15px !important; }
+  :root:root .operator-pending-review-summary > div:first-child > .xs { grid-column: 1; white-space: nowrap; }
+  :root:root .operator-pending-review-summary > .row {
+    grid-column: 2;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 4px;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  :root:root .operator-pending-review-summary > .row > .badge { flex: none; }
+  /* Tín hiệu đổi mức: two small stat tiles side by side; the "(14 ngày gần
+     nhất · đề thi lên mức)" suffix is hidden so the heading stays one line. */
+  :root:root [data-guide="op-signals"] > h3 > .small { display: none; }
+  :root:root [data-guide="op-signals"] > .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  :root:root [data-guide="op-signals"] > .grid > .card { padding: 10px; }
+  :root:root [data-guide="op-signals"] > .grid > .card h4 { font-size: 13px !important; line-height: 1.3; }
+  :root:root [data-guide="op-signals"] > .grid > .card > p { font-size: 12px; line-height: 1.35; }
+  /* Đang làm test / Chưa làm test / Cần làm lại: one-line status, compact Hồ sơ. */
+  :root:root .operator-bounded-list > .item { padding: 8px 10px; gap: 8px; align-items: center; }
+  :root:root .operator-bounded-list > .item .body { min-width: 0; }
+  :root:root .operator-bounded-list > .item .body > .xs.muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root .operator-bounded-list > .item .title { font-size: 14px; font-weight: 600; }
+  :root:root #root :is(.operator-bounded-list, .operator-approved-list, .operator-pending-list) { max-height: none !important; overflow-y: visible !important; }
+}
+
+/* F. Lesson preview / lesson page on phones: compact title actions; the
+   objectives and instructions blocks use normal-weight text with a small
+   uppercase heading instead of large all-bold copy. */
+@media (max-width: 480px) {
+  :root:root .operator-page-title-actions > :is(button, .btn) { min-height: var(--phone-btn-h) !important; padding: 4px 10px; }
+  :root:root .lesson-page :is(.lesson-part--objective, .lesson-part--instruction) {
+    padding: 10px 12px !important;
+    font-weight: 400 !important;
+  }
+  :root:root .lesson-page :is(.lesson-part--objective, .lesson-part--instruction) :is(li, p, span) { font-weight: 400 !important; font-size: 13.5px; line-height: 1.45; }
+  :root:root .lesson-page :is(.lesson-part--objective, .lesson-part--instruction) :is(h2, h3) {
+    margin-bottom: 4px;
+    font-size: 12.5px !important;
+    letter-spacing: .06em;
+  }
+  :root:root .lesson-page :is(.lesson-part--objective, .lesson-part--instruction) .lesson-objective-lead { font-weight: 600 !important; }
+  :root:root .lesson-page :is(.lesson-part--objective, .lesson-part--instruction) :is(ul, ol) { margin-block: 4px 0; padding-inline-start: 18px; }
+  :root:root .lesson-page :is(.lesson-part--objective, .lesson-part--instruction) li + li { margin-top: 2px; }
+}
+
+/* G. Month resource panels on phones: word lists as compact one-line rows
+   (number · word · IPA · meaning) without the redundant "HEADWORD"/"TỪ ĐƠN"
+   tag; illustrations as a two-column thumbnail grid. */
+@media (max-width: 480px) {
+  :root:root .monthly-resource-panel { padding: 12px; }
+  :root:root .monthly-resource-panel .monthly-resource-collection {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    margin: 6px 0;
+  }
+  :root:root .monthly-resource-panel .monthly-resource-collection > li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 8px;
+    padding: 7px 2px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+    font-size: 13.5px;
+  }
+  :root:root .monthly-resource-panel .monthly-resource-collection > li > small { display: none; }
+  :root:root .monthly-resource-panel .monthly-resource-collection > li > i { min-width: 1.4em; color: var(--muted); font-style: normal; font-size: 12px; }
+  :root:root .monthly-resource-panel .monthly-resource-collection > li > b { font-size: 14px; }
+  :root:root .monthly-resource-panel .monthly-resource-collection > li > em { order: 1; color: var(--muted); font-size: 12.5px; }
+  :root:root .monthly-resource-panel .monthly-resource-collection > li > span { order: 2; flex-basis: 100%; padding-inline-start: calc(1.4em + 8px); color: var(--muted); font-size: 13px; }
+  :root:root .monthly-illustration-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px; }
+  :root:root .monthly-illustration-tile { padding: 6px; font-size: 12.5px; }
+  :root:root .monthly-illustration-frame { aspect-ratio: 1; max-height: none; }
+}
+
+/* H. Phản hồi Season / review queues on phones: no scroll box inside the
+   page; the learner group keeps one border and its replies sit flat inside it
+   (no card-in-card), with lighter action buttons. */
+@media (max-width: 480px) {
+  :root:root #root :is(.operator-coach-list, .operator-review-card-list) { max-height: none !important; overflow-y: visible !important; padding: 0; }
+  :root:root .operator-review-learner-group > .operator-review-group-items { padding: 0 10px; border: 0; }
+  :root:root .operator-review-group-items > .item {
+    padding: 10px 0;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+  }
+  :root:root .operator-review-group-items > .item:last-child { border-bottom: 0; }
+  :root:root .operator-review-item-heading .btn-sm { font-weight: 500; }
+  :root:root .operator-review-group-items .body { font-size: 13.5px; }
+}
+@media (max-width: 480px) {
+  /* Empty signal tiles: the count "(0)" already says it; drop the sentence. */
+  :root:root [data-guide="op-signals"] > .grid > .card > p.small.muted { display: none; }
+  :root:root [data-guide="op-signals"] > .grid > .card h4 { margin: 0 !important; }
+}
+
+/* I. Kết quả bài thi on phones: results flow in the card (3 rows, then
+   "Xem thêm", Review.tsx) instead of a nested scroll box; the retake card
+   drops its long explanation (structure and status are shown on the card). */
+@media (max-width: 480px) {
+  :root:root #root .card > .operator-action-table-wrap { max-height: none !important; overflow-y: visible !important; border: 0; }
+  :root:root .operator-level-retake-note { display: none; }
+  :root:root .operator-results-table tbody tr { align-items: center; }
+}
+@media (max-width: 480px) {
+  /* Sticky panel/editor headers bled to the old 16–18px padding. */
+  :root:root :is(.monthly-resource-panel > header, .operator-editor-sticky-header) { margin-inline: calc(-1 * var(--phone-card-pad)); padding-inline: var(--phone-card-pad); }
+}
+
+/* J. Operator day view on phones: less repetition, denser answer lists.
+   - The lesson card repeated the page subtitle as its own heading.
+   - Multiple-choice parts already tick the correct option, so the separate
+     "Đáp án đúng" box is dropped there (kept for written/spoken answers). */
+@media (max-width: 480px) {
+  :root:root .card.operator-monthly-lesson > .operator-card-header > h3 { display: none; }
+  :root:root .operator-answer-options { gap: 4px; }
+  :root:root .operator-answer-choice { padding: 6px 10px; font-size: 13.5px; line-height: 1.35; align-items: center; }
+  :root:root .operator-practice-review:has(.operator-answer-options) .operator-correct-answer { display: none; }
+  :root:root .operator-correct-answer { padding: 8px 10px; font-size: 13.5px; }
+  :root:root .lesson-page .lesson-reading-passage { padding: 10px 12px; line-height: 1.55; }
+}
+@media (max-width: 480px) {
+  /* Chips with a translate icon: a narrower icon slot so two to three chips fit per row. */
+  :root:root .lesson-page .lesson-example-wrap { --meaning-icon-width: 28px; }
+  :root:root .lesson-page .lesson-example-wrap.lesson-example-wrap > :first-child { padding-right: calc(var(--meaning-icon-width) + 6px) !important; }
+}
+@media (max-width: 480px) {
+  /* The draft-findings box no longer sticks over the lesson on phones (it
+     covered ~300px of a 844px screen); it scrolls away with the page. */
+  :root:root .operator-monthly-findings-dock { position: static; }
+}
+@media (max-width: 480px) {
+  /* Sửa tay: the long rules paragraph repeats the per-field hints. */
+  :root:root .operator-lesson-editor > .operator-editor-description { display: none; }
+  :root:root .operator-lesson-editor :is(fieldset, details) { padding: 8px 10px; }
+}
+@media (max-width: 1024px) {
+  /* The word's speaker button is 40px on touch screens; its column was 36px. */
+  :root:root .lesson-page .vocabulary-card-main { grid-template-columns: minmax(0, 1fr) auto; }
+}
+
+/* K. Round 4 (operator review on a real phone/tablet). */
+@media (max-width: 1024px) {
+  /* Xem đề thi: the sections grid sized itself to the widest table/row
+     (450px in a 326px modal), so text and tables ran off the right edge.
+     The grid now fits the modal, text wraps, and tables scroll inside their
+     own box. */
+  :root:root .assessment-definition-preview-sections { grid-template-columns: minmax(0, 1fr); }
+  :root:root .assessment-definition-preview-sections > *,
+  :root:root .assessment-definition-preview-section,
+  :root:root .assessment-definition-preview-section * { min-width: 0; overflow-wrap: anywhere; }
+  :root:root .assessment-definition-preview-section-trigger { white-space: normal; text-align: start; }
+  :root:root .assessment-definition-preview-section table { display: block; max-width: 100%; overflow-x: auto; overflow-wrap: normal; }
+  :root:root .assessment-definition-preview-section :is(th, td) { overflow-wrap: normal; }
+}
+@media (max-width: 480px) {
+  /* Chờ duyệt rows: chips wrap after the submit time instead of being cut. */
+  :root:root .operator-pending-review-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+  :root:root .operator-pending-review-summary > div:first-child { display: contents; }
+  :root:root .operator-pending-review-summary .name { flex-basis: 100%; }
+  :root:root .operator-pending-review-summary > div:first-child > .xs { white-space: nowrap; }
+  :root:root .operator-pending-review-summary > .row { display: contents; }
+  /* Expanded row: everything stays inside the card; scores one per line with
+     the percentage; actions wrap as compact buttons. */
+  :root:root .operator-pending-review { min-width: 0; max-width: 100%; }
+  :root:root .operator-pending-review-body { min-width: 0; }
+  :root:root .operator-pending-review-body .grid.cols-2 { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  :root:root .operator-pending-review-body .grid.cols-2 .row > .xs.muted { width: 44px !important; flex: none; }
+  :root:root .operator-pending-review-body .grid.cols-2 .row > .progress { min-width: 0; }
+  :root:root .operator-pending-review-body .grid.cols-2 .row > .xs:last-child { flex: none; min-width: 52px !important; }
+  :root:root .operator-pending-review-body > .row { flex-wrap: wrap; gap: 6px; }
+  :root:root .operator-pending-review-body > .row > * { flex: 0 1 auto; max-width: 100%; }
+  :root:root:root .operator-pending-review-body > .row { display: flex !important; flex-wrap: wrap; }
+  :root:root:root .operator-pending-review-body > .row > :is(button, .btn):not(:has(> .action-icon-only)) { width: auto !important; }
+  /* Icon buttons (Xem bài làm, Xoá học viên) grouped at the end of the row. */
+  :root:root:root .operator-pending-review-body > .row > :has(> .action-icon-only) { order: 10; margin-left: 0 !important; }
+  :root:root:root .operator-pending-review-body > .row > :has(> .action-icon-only):first-of-type { margin-left: auto !important; }
+
+  :root:root .operator-profile-disclosure { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; justify-content: flex-start; }
+}
+@media (max-width: 1024px) {
+  /* Xem đề thi: the sticky section header ("Nói · 4 câu · 15 phút") let the
+     lines scrolling under it peek out at its rounded corners and sides, so the
+     text looked cut. A surface-coloured band around it now hides what is
+     underneath, with a soft edge below. */
+  :root:root .assessment-definition-preview-section-trigger.active {
+    box-shadow: 0 -8px 0 0 var(--surface), 8px 0 0 0 var(--surface), -8px 0 0 0 var(--surface), 0 10px 10px -8px rgb(0 0 0 / .18);
+  }
+  :root:root .assessment-definition-preview-section { scroll-margin-top: 56px; }
+}
+@media (max-width: 480px) {
+  /* Phát âm resource panel: one tight card per sound. The IPA chip and the
+     "Luyện nhận diện và phát âm /iː/" line repeat the title, and "Từ luyện tập"
+     repeats the sets below; each set is its label + chips on one flowing line. */
+  :root:root .monthly-pronunciation-card { padding: 10px; gap: 6px; }
+  :root:root .monthly-pronunciation-card > header { gap: 8px; align-items: center; }
+  :root:root .monthly-pronunciation-card > header h3 { font-size: 14.5px !important; margin: 0; }
+  :root:root .monthly-pronunciation-card .monthly-pronunciation-ipa,
+  :root:root .monthly-pronunciation-card .monthly-pronunciation-purpose,
+  :root:root .monthly-pronunciation-card .monthly-pronunciation-examples > span { display: none; }
+  :root:root .monthly-pronunciation-card .monthly-roadmap-days { margin: 0 0 4px; font-size: 12px; }
+  :root:root .monthly-pronunciation-card .monthly-pronunciation-examples > .monthly-resource-chips { display: grid; gap: 6px; }
+  :root:root .monthly-pronunciation-example-set { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  :root:root .monthly-pronunciation-example-set > b { flex-basis: 100%; font-size: 12.5px; font-weight: 600; }
+  :root:root .monthly-pronunciation-example-set > .monthly-resource-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  :root:root .monthly-pronunciation-example-set > .monthly-resource-chips > * { padding: 2px 8px; font-size: 12.5px; min-height: 0; }
+}
+
+@media (max-width: 480px) {
+  /* Vocabulary cards: denser chips. The umbrella word is a chip like the
+     others (same height and size), not a bold orange bar; less space between words. */
+  :root:root .lesson-page .vocabulary-card-relations .chip.umb { font-weight: 600; letter-spacing: 0; text-transform: none; box-shadow: none; }
+  :root:root .lesson-page .vocabulary-card-relations .chip :is(svg) { width: 14px; height: 14px; }
+  :root:root .lesson-page .word-card.vocabulary-card { padding-block: 10px; gap: 6px; }
+  :root:root .lesson-page .vocabulary-card-label { margin: 2px 0 0; }
+  :root:root .lesson-page :is(.vocabulary-card-phrases, .vocabulary-card-relations) { gap: 5px; }
+  :root:root .lesson-page .vocabulary-card-heading .vocabulary-card-sound--icon { width: 32px; min-width: 32px !important; height: 32px; min-height: 32px !important; padding: 0; }
+}
+@media (max-width: 480px) {
+  /* Cài đặt › Yêu cầu đổi đề: one form with a small switch (Settings.tsx),
+     2-row textarea that grows with the text, compact send button. */
+  :root:root .settings-test-change-switch { display: inline-flex; gap: 2px; margin: 4px 0 8px; padding: 2px; border-radius: 10px; background: var(--surface-2); }
+  :root:root .settings-test-change-switch > button { min-height: 28px !important; padding: 2px 12px; border: 0; border-radius: 8px; background: transparent; box-shadow: none; font-size: 13px; }
+  :root:root .settings-test-change-switch > button.active { background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / .12); font-weight: 600; }
+  :root:root .settings-test-change-requests .settings-test-change-request > h4 { display: none; }
+  :root:root .settings-test-change-request textarea { min-height: 56px; field-sizing: content; max-height: 160px; }
+  :root:root .settings-test-change-request .field { margin-bottom: 8px; }
+}
+@media (max-width: 480px) {
+  :root:root .settings-test-change-requests .settings-test-change-request { padding: 0; border: 0; background: transparent; box-shadow: none; }
+  :root:root:root .settings-test-change-request :is(button, .btn) { width: auto !important; justify-self: start; align-self: flex-start; padding-inline: 16px; }
+}
+
+@media (max-width: 480px) {
+  /* Cài đặt accordion: every section is its own rounded card with a gap
+     (collapsed sections were square-edged and touched each other). */
+  :root:root .settings-page[data-compact] .settings-panel { border-radius: 12px; overflow: visible; }
+  /* Not overflow:hidden, so the title-row ⓘ tip can open below a collapsed panel; corners are rounded per part instead. */
+  :root:root:root .settings-page[data-compact] .settings-panel > .settings-panel-head { border-radius: 11px; }
+  :root:root:root .settings-page[data-compact] .settings-panel[data-expanded] > .settings-panel-head { border-end-start-radius: 0; border-end-end-radius: 0; }
+  :root:root:root .settings-page[data-compact] .settings-panel-content > :last-child { border-end-start-radius: 11px; border-end-end-radius: 11px; }
+  :root:root .settings-page[data-compact] .settings-panel + .settings-panel { margin-top: 8px; }
+  :root:root:root .settings-panel-head { border-radius: 0; min-height: 40px; padding-inline-end: 12px; }
+  :root:root:root .settings-panel-head > .settings-panel-toggle { border-radius: 0; padding: 8px 2px 8px 12px; min-height: 40px; }
+  :root:root:root .settings-page :is(button, .btn).btn-primary { width: auto !important; justify-self: start; align-self: flex-start; }
+}
+@media (max-width: 600px) {
+  /* Saved exam rows: the month badge sits on its own line above the title. */
+  :root:root .operator-assessment-form-row .operator-assessment-form-month { grid-row: 1; grid-column: 1; margin: 0 !important; }
+  :root:root .operator-assessment-form-row:has(.operator-assessment-form-month) .operator-assessment-form-info > b { grid-row: 2; grid-column: 1 / -1; }
+}
+
+/* L. Round 5: icon buttons, short descriptions and ⓘ tips (CompactUi.tsx). */
+@media (max-width: 1024px) {
+  :root:root:root :is(button, .btn, a.btn, a.btn-sm):has(> .action-icon-only) {
+    display: inline-grid;
+    place-items: center;
+    width: var(--icon-btn, 36px) !important;
+    min-width: var(--icon-btn, 36px) !important;
+    max-width: var(--icon-btn, 36px) !important;
+    height: var(--icon-btn, 36px) !important;
+    min-height: var(--icon-btn, 36px) !important;
+    padding: 0 !important;
+    flex: none !important;
+  }
+  .action-icon-only { display: inline-grid; place-items: center; line-height: 0; }
+  .action-icon-text { display: inline-flex; align-items: center; gap: 5px; }
+  .info-tip { position: relative; display: inline; white-space: nowrap; margin-inline-start: 4px; }
+  :root:root:root .info-tip > .info-tip-button {
+    display: inline-grid;
+    flex: none;
+    vertical-align: middle;
+    margin-top: -3px;
+    place-items: center;
+    width: 26px;
+    min-width: 26px !important;
+    height: 26px;
+    min-height: 26px !important;
+    padding: 0 !important;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--muted);
+  }
+  .info-tip-popover {
+    position: absolute;
+    z-index: 40;
+    inset-block-start: calc(100% + 4px);
+    inset-inline-start: -8px;
+    width: max-content;
+    max-width: min(280px, 80vw);
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: 0 8px 24px rgb(0 0 0 / .14);
+    color: var(--text);
+    font-size: 12.5px;
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1.45;
+    text-transform: none;
+    white-space: normal;
+  }
+}
+@media (max-width: 480px) {
+  :root { --icon-btn: var(--phone-btn-h); }
+}
+@media (max-width: 1024px) {
+  /* Calendar "Xem" and picture actions: icon buttons on phones/tablets. */
+  :root:root:root .monthly-day-action.monthly-view-day { width: var(--icon-btn, 36px); min-width: var(--icon-btn, 36px) !important; padding: 0 !important; justify-content: center; }
+  :root:root .monthly-day-action.monthly-view-day > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  :root:root:root .monthly-illustration-action:has(> .action-icon-only) { display: inline-grid; place-items: center; width: var(--icon-btn, 36px); height: var(--icon-btn, 36px); padding: 0; }
+  :root:root .monthly-illustration-actions { display: flex; flex-wrap: nowrap; gap: 6px; }
+  /* Icon groups sit together; a lone text action keeps its own place. */
+  :root:root .operator-level-form-actions,
+  :root:root .operator-assessment-form-actions { flex-wrap: nowrap; gap: 6px; }
+}
+@media (max-width: 480px) {
+  /* Chờ duyệt (expanded): the "Hồ sơ: …" disclosure ends with "…" instead of
+     being cut; the level select matches the 30px buttons next to it. */
+  :root:root:root .operator-profile-disclosure { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
+  :root:root .operator-profile-disclosure > .ui-chevron { display: inline-block; vertical-align: middle; margin-inline-end: 4px; }
+  :root:root:root .operator-pending-review-body > .row > select { flex: 1 1 130px; height: var(--phone-btn-h); padding: 0 8px; border-radius: 9px; font-size: 13px; line-height: calc(var(--phone-btn-h) - 2px); }
+  :root:root .operator-pending-review-body > .row { align-items: center; }
+}
+
+@media (min-width: 481px) and (max-width: 1024px) {
+  /* Tablet: all review actions on one row — select, text actions, then the icon group. */
+  :root:root:root .operator-pending-review-body > .row { display: flex !important; flex-wrap: wrap; align-items: center; gap: 6px; }
+  :root:root:root .operator-pending-review-body > .row > :is(button, .btn):not(:has(> .action-icon-only)) { width: auto !important; flex: 0 0 auto; }
+  :root:root:root .operator-pending-review-body > .row > select { width: auto !important; flex: 0 1 150px; min-width: 120px; height: 40px; min-height: 40px; padding-block: 0; line-height: 38px; font-size: 14.5px; }
+  :root:root:root .operator-pending-review-body > .row > :is(button, .btn):not(:has(> .action-icon-only)) { padding-inline: 10px; }
+  /* Lists are paged on tablets too, so no scroll box inside the card. */
+  :root:root #root :is(.operator-pending-list, .operator-bounded-list, .operator-approved-list) { max-height: none !important; overflow-y: visible !important; }
+  :root:root:root .operator-pending-review-body > .row > :has(> .action-icon-only) { order: 10; margin-left: 0 !important; }
+  :root:root:root .operator-pending-review-body > .row > :has(> .action-icon-only):first-of-type { margin-left: auto !important; }
+  :root { --icon-btn: 40px; }
+}
+@media (max-width: 1024px) {
+  /* Descriptions that repeat the title or what the screen already shows. */
+  :root:root .section-tab-description,
+  :root:root .operator-months-header > p,
+  :root:root .operator-months-page .monthly-section-title + p.small.muted,
+  :root:root .operator-level-retake-note,
+  :root:root .operator-lesson-editor > .operator-editor-description,
+  :root:root .monthly-intro-detail,
+  :root:root [data-guide="op-signals"] > .grid > .card > p.small.muted { display: none; }
+}
+
+@media (max-width: 1024px) {
+  /* Icon-only applies to grouped actions; a lone icon button keeps its short
+     label next to the icon so it does not look like a stray square. */
+  .action-icon-only { gap: 5px; }
+  .action-icon-only > .action-icon-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  :root:root:root :is(button, .btn):not(.modal-close):not(.monthly-illustration-action):has(> .action-icon-only):only-of-type { width: auto !important; max-width: none !important; padding: 0 12px !important; }
+  :root:root :is(button, .btn):not(.modal-close):not(.monthly-illustration-action):only-of-type > .action-icon-only { display: inline-flex; align-items: center; }
+  :root:root :is(button, .btn):not(.modal-close):not(.monthly-illustration-action):only-of-type > .action-icon-only > .action-icon-label { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+}
+@media (max-width: 480px) {
+  /* Accordions (Sửa tay editor, settings, resource panels): ~40px headers,
+     10–12px padding, 6px between sections. */
+  :root:root:root .operator-editor-collapsible { padding: 0; }
+  :root:root:root .operator-editor-collapsible > summary { display: flex; align-items: center; min-height: 40px !important; padding: 0 12px; font-size: 14px; }
+  :root:root:root .operator-editor-collapsible[open] > :not(summary) { margin-inline: 12px; }
+  :root:root:root .operator-editor-collapsible[open] { padding-bottom: 10px; }
+  :root:root :has(> .operator-editor-collapsible) { row-gap: 6px; gap: 6px; }
+  :root:root .operator-editor-collapsible + .operator-editor-collapsible { margin-top: 6px; }
+  :root:root .operator-lesson-editor :is(.field-hint, .hint, .field > small, label > small) { font-size: 12px; }
+  :root:root .operator-editor-sticky-header { padding-block: 8px; }
+  :root:root .operator-editor-sticky-header h3 { font-size: 15.5px !important; }
+}
+@media (max-width: 1024px) {
+  /* Tablets too: textareas grow with their text instead of clipping inside a
+     fixed 50–74px box (Chủ đề tháng, Sửa tay). */
+  :root:root textarea { height: auto !important; min-height: 56px; field-sizing: content; max-height: 50vh; overflow-y: auto; }
+  :root:root :has(> textarea) { grid-template-rows: none !important; grid-auto-rows: auto !important; height: auto !important; max-height: none !important; }
+}
+@media (max-width: 480px) {
+  :root:root:root .operator-lesson-editor .operator-editor-section { padding: 8px 10px; gap: 8px; }
+  :root:root .operator-lesson-editor .field { margin: 0; }
+}
+
+/* M. Round 6. */
+@media (max-width: 600px) {
+  /* Phân bổ: one day per row (the 2-column grid squeezed the day text to one
+     character per line); date and words on the left, "Xem phân bổ" on the right. */
+  :root:root:root .monthly-plan-days { grid-template-columns: minmax(0, 1fr) !important; gap: 6px; }
+  :root:root .monthly-plan-day-summary { min-height: 0; padding: 8px 10px; gap: 8px; }
+  :root:root .monthly-plan-day-summary > div { flex: 1 1 auto; min-width: 0; }
+  :root:root .monthly-plan-day-summary h3 { margin: 0; font-size: 14px !important; }
+  :root:root .monthly-plan-day-summary .monthly-plan-day-cores { margin: 2px 0 0; font-size: 12.5px; overflow-wrap: break-word; }
+  :root:root .monthly-plan-day-summary::after { flex: none; }
+}
+@media (max-width: 480px) {
+  /* Tables never squeeze: a table that is not already restyled as cards
+     scrolls sideways inside its own box. */
+  :root:root :is(main, [role="dialog"]) table:not(.operator-results-table):not(.manager-accounts-table__table):not(.operator-action-table) { display: block; max-width: 100%; overflow-x: auto; }
+  :root:root :is(main, [role="dialog"]) table:not(.operator-results-table):not(.manager-accounts-table__table):not(.operator-action-table) :is(th, td) { min-width: 64px; overflow-wrap: normal; word-break: normal; }
+
+  /* Fields: tighter boxes, read-only values as plain text, 8px between fields. */
+  :root:root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select, textarea) { line-height: 1.35; }
+  :root:root:root :is(input, textarea)[readonly] { height: auto !important; min-height: 0 !important; padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; field-sizing: content; resize: none; }
+  :root:root :is(.field, label.field) + :is(.field, label.field) { margin-top: 8px; }
+  :root:root :is(form, fieldset, .operator-editor-section) { row-gap: 8px; }
+
+  /* Icon buttons: identical squares everywhere (same size, border and radius,
+     16px icon), the same height as the text buttons in the row. */
+  :root:root:root :is(button, .btn, a.btn, a.btn-sm):has(> .action-icon-only) { box-sizing: border-box; border-width: 1px; border-style: solid; border-radius: 9px; }
+  :root:root:root :is(button, .btn):has(> .action-icon-only):not(.btn-danger):not(.btn-primary) { border-color: var(--line); box-shadow: none; }
+  :root:root:root :is(button, .btn).btn-danger:has(> .action-icon-only) { border-color: currentColor; box-shadow: none; }
+  .action-icon-only > svg { width: 16px; height: 16px; }
+}
+@media (max-width: 1024px) {
+  /* Modal headers stay pinned while the body scrolls: solid background, thin
+     divider, one-line title. */
+  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .operator-editor-sticky-header, .monthly-final-review-header) {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+  :root:root .monthly-resource-panel > header { position: sticky; top: 0; z-index: 8; background: var(--surface); border-bottom: 1px solid var(--line); }
+}
+@media (max-width: 480px) {
+  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .operator-editor-sticky-header) {
+    margin: calc(-1 * var(--phone-card-pad)) calc(-1 * var(--phone-card-pad)) 8px;
+    padding: 8px var(--phone-card-pad);
+    gap: 8px;
+    align-items: center;
+  }
+  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .operator-editor-sticky-header) :is(h2, h3) { min-width: 0; margin: 0; overflow: hidden; font-size: 15px !important; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header) > div:first-child { min-width: 0; flex: 1 1 auto; }
+}
+@media (max-width: 1024px) {
+  /* Picture tile actions are one icon group (Sinh lại, Tải ảnh, Xóa ảnh): icons only. */
+  :root:root:root .monthly-illustration-actions > :is(button, .btn):has(> .action-icon-only) { width: var(--icon-btn, 36px) !important; max-width: var(--icon-btn, 36px) !important; padding: 0 !important; }
+  :root:root:root .monthly-illustration-actions .action-icon-only > .action-icon-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+}
+@media (max-width: 1024px) {
+  /* Popups never fill the screen: at most ~78% of the height and ~92% of the
+     width, centred, with the dimmed backdrop visible (tap it to close). */
+  :root:root:root .modal-backdrop { display: grid; place-items: center; padding: 11dvh 4vw; }
+  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) {
+    width: min(92vw, 720px) !important;
+    max-width: 92vw !important;
+    max-height: 78dvh !important;
+    margin: 0 !important;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  :root:root:root .modal-backdrop > .operator-level-form-dialog,
+  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]):has(> .operator-level-form-dialog-body) { display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) > .operator-level-form-dialog-body { min-height: 0; overflow: auto; }
+  /* Month resource panels become the same kind of popup. */
+  .monthly-resource-backdrop { position: fixed; inset: 0; z-index: 59; background: rgb(0 0 0 / .45); }
+  :root:root:root .monthly-resource-panel {
+    position: fixed !important;
+    z-index: 60;
+    inset: 50% auto auto 50% !important;
+    transform: translate(-50%, -50%);
+    width: min(92vw, 720px) !important;
+    max-height: 78dvh;
+    margin: 0 !important;
+    overflow: auto;
+    overscroll-behavior: contain;
+    box-shadow: 0 12px 40px rgb(0 0 0 / .25);
+  }
+}
+@media (max-width: 1024px) {
+  /* Lists that are paged (or short) no longer scroll inside their card. */
+  :root:root #root :is(.settings-operator-accounts__table, .operator-level-forms-embedded, .operator-assessment-form-list) { max-height: none !important; overflow-y: visible !important; }
+}
+@media (max-width: 1024px) {
+  /* Close button: the same 32px × square (40px on tablets) pinned to the
+     header's top-right corner in every popup; header actions sit to its left. */
+  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header),
+  :root:root:root .operator-editor-sticky-header,
+  :root:root:root .monthly-resource-panel > header { position: sticky; top: 0; padding-right: calc(var(--icon-btn, 36px) + 16px) !important; }
+  :root:root:root .modal-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: var(--icon-btn, 36px) !important;
+    min-width: var(--icon-btn, 36px) !important;
+    max-width: var(--icon-btn, 36px) !important;
+    height: var(--icon-btn, 36px) !important;
+    min-height: var(--icon-btn, 36px) !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  :root:root:root .modal-close .action-icon-label { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; }
+  :root:root:root :is(.dialog, [role="dialog"]) > .operator-level-form-dialog-header { padding-top: 8px; }
+  :root:root:root .operator-editor-sticky-header > .operator-editor-heading { position: static; }
+}
+
+@media (max-width: 1024px) {
+  /* Every popup: the same 12px frame, the header spans it edge to edge, so the
+     close button lands at the same top-right offset in all of them. */
+  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]),
+  :root:root:root .monthly-resource-panel { padding: 0 12px 12px !important; }
+  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header),
+  :root:root:root .modal-backdrop .operator-editor-sticky-header,
+  :root:root:root .monthly-resource-panel > header {
+    margin: 0 -12px 8px !important;
+    padding: 10px calc(var(--icon-btn, 36px) + 16px) 10px 12px !important;
+    min-height: calc(var(--icon-btn, 36px) + 16px);
+  }
+  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) > .operator-level-form-dialog-body { margin: 0 -12px -12px; padding: 0 12px 12px; }
+  :root:root:root .modal-close.modal-close.modal-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: var(--icon-btn, 36px) !important;
+    min-width: var(--icon-btn, 36px) !important;
+    max-width: var(--icon-btn, 36px) !important;
+    height: var(--icon-btn, 36px) !important;
+    min-height: var(--icon-btn, 36px) !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}
+@media (max-width: 1024px) {
+  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) { overflow-x: hidden; }
+  /* Đề lên mức group header (Mức đích · status · Soạn tay · Sinh đề bằng AI): wraps instead of overflowing. */
+  :root:root .operator-level-group--embedded > :first-child { flex-wrap: wrap; row-gap: 6px; min-width: 0; }
+  :root:root .operator-level-group--embedded > :first-child > * { min-width: 0; }
+}
+@media (max-width: 1024px) {
+  :root:root:root .operator-level-group--embedded > .operator-level-group-header { width: auto; max-width: 100%; margin-inline: 0; box-sizing: border-box; }
+  /* Phones and tablets draw overlay scrollbars; keep the popup frame exact. */
+  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) { scrollbar-width: none; }
+}
+@media (max-width: 1024px) {
+  /* Lesson review section switcher: ‹ [1/3 · Mục tiêu · Hướng dẫn · Từ vựng ▾] › */
+  :root:root .lesson-section-pager { display: flex; align-items: center; gap: 6px; margin: 8px 0; }
+  :root:root .lesson-section-pager > select { flex: 1 1 auto; min-width: 0; height: var(--phone-btn-h, 36px); padding-block: 0; font-size: 13.5px; }
+  :root:root .lesson-section-pager--bottom { justify-content: center; margin-top: 10px; }
+  :root:root .lesson-section-pager .list-pager-step { display: grid; place-items: center; width: 32px; min-width: 32px !important; height: 32px; min-height: 32px !important; padding: 0 !important; }
+}
+@media (max-width: 1024px) {
+  /* Paged popups: the pager is a sticky footer bar, always visible. */
+  :root:root:root :is(.modal-backdrop > .dialog, .modal-backdrop > [role="dialog"], .monthly-resource-panel) .list-pager {
+    position: sticky;
+    bottom: -12px;
+    z-index: 7;
+    margin: 8px -12px -12px;
+    padding: 6px 12px;
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+  }
+}
+@media (max-width: 600px) {
+  /* Ảnh minh họa: 2×2 compact tiles that fit the popup with the pager. */
+  :root:root:root .monthly-illustration-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 6px; }
+  :root:root .monthly-illustration-tile { display: grid; gap: 4px; padding: 6px; }
+
+
+  :root:root .monthly-illustration-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: 12.5px; line-height: 1.3; }
+  :root:root .monthly-illustration-meta > b { font-size: 13px; }
+  :root:root .monthly-illustration-meta > .badge { padding: 0 6px; font-size: 12px; }
+  :root:root .monthly-illustrations-summary { gap: 6px; }
+  :root:root .monthly-illustrations-summary > p { margin: 0; font-size: 12.5px; }
+}
+@media (max-width: 1024px) {
+  :root:root .lesson-section-pager > select { text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
+  :root:root .lesson-section-pager--bottom .list-pager-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+@media (max-width: 600px) {
+  /* Ảnh minh họa cards, one structure for all: square thumbnail (the pictures
+     are square, so nothing is cropped and there are no empty bands), then
+     word + meaning on one line, then status chip left / icon buttons right. */
+  :root:root:root .monthly-illustration-grid { gap: 8px; align-items: stretch; }
+  :root:root:root .monthly-illustration-tile { display: flex; flex-wrap: wrap; align-content: space-between; align-items: center; gap: 4px 6px; padding: 8px; }
+  :root:root:root .monthly-illustration-frame { flex: 0 0 100%; width: 100%; height: auto !important; max-height: none !important; aspect-ratio: 1; display: grid; place-items: center; overflow: hidden; border-radius: 8px; background: var(--surface-2); }
+  :root:root:root .monthly-illustration-frame img { width: 100% !important; height: 100% !important; max-height: none !important; aspect-ratio: 1 !important; object-fit: contain !important; }
+  :root:root .monthly-illustration-meta { display: contents; }
+  :root:root .monthly-illustration-meta > b { order: 1; flex: none; font-size: 13px; }
+  :root:root .monthly-illustration-meta > span.small { order: 2; flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+  :root:root .monthly-illustration-tile::after { content: ""; order: 3; flex-basis: 100%; height: 0; }
+  :root:root .monthly-illustration-meta > .badge { order: 4; flex: none; padding: 0 6px; font-size: 12px; }
+  :root:root:root .monthly-illustration-tile > .monthly-illustration-actions { order: 5; margin-left: auto; gap: 4px; }
+  :root:root .monthly-illustration-tile > .monthly-illustration-hint { order: 6; flex-basis: 100%; }
+  /* Missing picture: a small image icon and "Chưa có ảnh" inside the square,
+     no separate chip below. */
+  :root:root .monthly-illustration-tile.is-missing .monthly-illustration-meta > .badge { display: none; }
+  :root:root .monthly-illustration-tile.is-missing .monthly-illustration-frame > span { font-size: 0; display: grid; justify-items: center; gap: 4px; color: var(--muted); }
+  :root:root .monthly-illustration-tile.is-missing .monthly-illustration-frame > span > .monthly-illustration-missing-icon { display: block; width: 24px; height: 24px; opacity: .6; }
+  :root:root .monthly-illustration-tile.is-missing .monthly-illustration-frame > span::after { content: "Chưa có ảnh"; font-size: 12px; }
+}
+@media (max-width: 1024px) {
+  /* Same order in every action row: text actions first, then the icon group
+     (view, edit, …) with delete always last, the group at the right end. */
+  :root:root :is(.app-operator, .operator-modal-scope) :is(.row, .operator-level-form-actions, .operator-assessment-form-actions, .monthly-illustration-actions) > :is(button, .btn, label):has(> .action-icon-only) { order: 10; }
+  :root:root :is(.app-operator, .operator-modal-scope) :is(.row, .operator-level-form-actions, .operator-assessment-form-actions, .monthly-illustration-actions) > :is(button, .btn).btn-danger:has(> .action-icon-only),
+  :root:root :is(.app-operator, .operator-modal-scope) .monthly-illustration-actions > button[aria-label^="Xóa"] { order: 20; }
+}
+@media (max-width: 1024px) {
+  /* Bell (Thông báo) popup: the same frame, header, close button and pager
+     footer as every other popup. */
+  :root:root:root .inbox-backdrop { padding: 11dvh 4vw; }
+  :root:root:root .inbox-backdrop > .dialog.inbox-dialog { width: min(92vw, 560px) !important; max-height: 78dvh !important; padding: 0 12px 0 !important; overflow: hidden; }
+  :root:root:root .inbox-dialog > .inbox-heading {
+    position: relative;
+    margin: 0 -12px 8px !important;
+    padding: 10px calc(var(--icon-btn, 36px) + 16px) 10px 12px !important;
+    min-height: calc(var(--icon-btn, 36px) + 16px);
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+  }
+  :root:root:root .inbox-dialog > .inbox-heading h3 { font-size: 15px !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .inbox-dialog > .inbox-controls { margin: 0 0 8px; }
+  :root:root:root .inbox-dialog > .list-pager { flex: none; margin: 0 -12px; padding: 6px 12px; border-top: 1px solid var(--line); background: var(--surface); }
+  :root:root:root .inbox-dialog > .inbox-feed { padding-bottom: 10px; }
+  :root:root:root .inbox-feed ul { gap: 10px; }
+}
+@media (max-width: 1024px) {
+  /* One floating up/down button for every popup that scrolls (ModalScrollJump):
+     same look as the page button, bottom-right of the popup above any pager. */
+  /* Same round button as the page one (.app-scroll-jump); only its position differs. */
+  :root:root:root .app-scroll-jump.modal-scroll-jump { position: fixed; z-index: 130; inset-inline-end: auto; inset-block-end: auto; }
+  /* The per-exam docks are replaced by the shared button inside popups. */
+  :root:root :is(.modal-backdrop, .inbox-backdrop) .exam-scroll-jump-dock { display: none; }
+
+  /* Delete icon buttons: identical everywhere — same square, border and radius
+     as the other icon buttons, red icon, red-tinted border, tint on hover/focus. */
+  :root:root:root :is(button, .btn, label):has(> .action-icon-only > .lucide-trash-2),
+  :root:root:root :is(button, .btn, label):has(> .action-icon-only > .lucide-trash2) {
+    align-self: center;
+    margin: 0 !important;
+    border: 1px solid color-mix(in srgb, var(--danger) 45%, white) !important;
+    background: var(--surface) !important;
+    box-shadow: none !important;
+    color: var(--danger) !important;
+    vertical-align: middle;
+  }
+  :root:root:root :is(button, .btn, label):has(> .action-icon-only > :is(.lucide-trash-2, .lucide-trash2)):is(:hover, :focus-visible) { background: color-mix(in srgb, var(--danger) 8%, white) !important; }
+  :root:root:root :is(button, .btn, label):has(> .action-icon-only > :is(.lucide-trash-2, .lucide-trash2)):disabled { opacity: .45; }
+  :root:root:root :is(button, .btn, label):has(> .action-icon-only) { vertical-align: middle; align-self: center; }
+}
+@media (max-width: 1024px) {
+  /* ⓘ tips open as a box the width of their line, so they never run past the card. */
+  :root:root :is(p, h2, h3, .field):has(> .info-tip) { position: relative; }
+  :root:root .info-tip { position: static; display: inline; white-space: nowrap; }
+  :root:root .info-tip-popover { inset-inline: 0; width: auto; max-width: none; }
+}
+@media (max-width: 1024px) {
+  /* "Title ⓘ" on one row: the title ellipsises, the ⓘ never wraps; the tip opens below at full card width. */
+  :root:root :is(h1, h2, h3, h4).info-title { display: flex; align-items: center; gap: 2px; min-width: 0; position: relative; }
+  :root:root .info-title > .info-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root .info-title > .info-tip { flex: none; display: inline-flex; margin-inline-start: 0; }
+  :root:root:root:root .info-title > .info-tip > .info-tip-button { margin-top: 0; }
+  :root:root .info-title .info-tip-popover { inset-block-start: calc(100% + 4px); inset-inline: 0; width: auto; max-width: none; white-space: normal; }
+}

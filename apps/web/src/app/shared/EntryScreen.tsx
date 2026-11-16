@@ -209,7 +209,7 @@ export function EntryScreen({ client, onAuthenticated, staffEntryPath, separateS
   return <main className="app-entry-main">
     <section className="app-entry" aria-label="Tài khoản E4S">
       <header className="app-entry-header">
-        <h1 className="app-entry-brand"><span className="avatar"><SeasonMark className="app-brand-mark" /></span><span>Season English</span><span className="muted app-entry-organisation"><span aria-hidden="true">· </span>GFT</span></h1>
+        <h1 className="app-entry-brand"><SeasonMark className="app-brand-mark app-brand-logo" /><span>Season English</span><span className="muted app-entry-organisation"><span aria-hidden="true">· </span>GFT</span></h1>
         <AudioControls />
       </header>
       <div className="app-entry-content">

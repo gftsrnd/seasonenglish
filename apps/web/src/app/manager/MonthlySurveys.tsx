@@ -11,7 +11,9 @@ import { monthlySurveyApi } from "../../api/monthly-surveys.js";
 import { ApiError } from "../../api/runtime.js";
 import { MonthlySurveyAnswers, MonthlySurveyFields, SurveyDate, monthlyRatingChoices, surveyMonthLabel } from "../shared/MonthlySurveyFields.js";
 import { useModal } from "../shared/ModalProvider.js";
-import { Badge, PageTitle } from "./shared.js";
+import { Badge, ManagerTitle, PageDescription, PageTitle } from "./shared.js";
+import { Eye, EyeOff, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { ActionLabel, ActionShortLabel, InfoTip, useCompactUi } from "../shared/CompactUi.js";
 
 const newQuestion: MonthlySurveyQuestion = { kind: "text", prompt: "", required: false };
 const emptySurvey: MonthlySurveyDefinition = { title: "", questions: [newQuestion] };
@@ -19,6 +21,7 @@ const monthPattern = /^(?!0000)[0-9]{4}-(0[1-9]|1[0-2])$/;
 
 export function ManagerMonthlySurveys() {
   const modal = useModal();
+  const compactUi = useCompactUi();
   const [view, setView] = useState<ManagerMonthlySurveyView>();
   const [monthInput, setMonthInput] = useState("");
   const [query, setQuery] = useState<{ month?: string }>({});
@@ -164,13 +167,13 @@ export function ManagerMonthlySurveys() {
   };
 
   return <div className="manager-page monthly-surveys-page">
-    <PageTitle description={<p className="muted">Soạn khảo sát và xem phản hồi.</p>}><h1>Khảo sát hằng tháng</h1></PageTitle>
+    <PageTitle description={<PageDescription text="Soạn khảo sát và xem phản hồi." />}><h1>Khảo sát hằng tháng</h1></PageTitle>
     <form className="card monthly-survey-month-filter" onSubmit={onMonthSubmit}>
       <label className="monthly-survey-field"><span>Tháng khảo sát</span>
         <input type="month" value={monthInput} placeholder="YYYY-MM" required disabled={loading || busy} onChange={event => setMonthInput(event.target.value)} />
       </label>
       <button type="submit" className="btn" disabled={loading || busy || !monthPattern.test(monthInput) || monthInput === view?.month}>Xem tháng</button>
-      {view ? <button type="button" className="btn" disabled={loading || busy} onClick={() => void loadMonth(view.month)}>Tải lại dữ liệu tháng</button> : null}
+      {view ? <button type="button" className="btn" aria-label="Tải lại dữ liệu tháng" disabled={loading || busy} onClick={() => void loadMonth(view.month)}><ActionLabel icon={RefreshCw} label="Tải lại dữ liệu tháng" /></button> : null}
     </form>
     {notice ? <p className="card" role="status">{notice}</p> : null}
     {loadError ? <div className="card monthly-survey-stack" role="alert">
@@ -178,7 +181,7 @@ export function ManagerMonthlySurveys() {
       <div className="row"><button type="button" className="btn-sm" onClick={() => void loadMonth(query.month)}>Thử lại</button></div>
     </div> : loading || !view ? <p className="card" role="status">Đang tải khảo sát…</p> : <>
       <section className="card monthly-survey-stack" aria-labelledby="manager-monthly-survey-editor">
-        <div className="monthly-survey-heading"><h2 id="manager-monthly-survey-editor">Biểu mẫu · {surveyMonthLabel(view.month)}</h2></div>
+        <div className="monthly-survey-heading"><ManagerTitle as="h2" id="manager-monthly-survey-editor" title={`Biểu mẫu · ${surveyMonthLabel(view.month)}`} label="Biểu mẫu: giải thích" tip="Soạn bản nháp, xem trước biểu mẫu rồi công bố khảo sát của tháng. Lưu bản nháp để công bố nội dung đang xem." /></div>
         {published ? <p><Badge tone="ok">Đã công bố</Badge> <b>{published.title}</b> · Phiên bản {published.revision}</p> : <p className="muted">Tháng này chưa có khảo sát được công bố.</p>}
         {draft ? <p><Badge tone="warn">Bản nháp</Badge> Phiên bản {draft.revision}{draft.title ? ` · ${draft.title}` : ""}</p> : null}
         {editor ? <SurveyDraftEditor definition={editor} busy={busy} onChange={changeEditor} onSave={save} onClose={() => void closeEditor()} />
@@ -194,12 +197,12 @@ export function ManagerMonthlySurveys() {
           <button type="button" className="btn" aria-expanded={preview} aria-controls="manager-monthly-survey-preview" disabled={busy} onClick={() => {
             setPreview(value => !value);
             setPreviewAnswers({});
-          }}>{preview ? "Đóng xem trước" : "Xem trước biểu mẫu"}</button>
+          }}><ActionShortLabel icon={preview ? EyeOff : Eye} label={preview ? "Đóng xem trước" : "Xem trước biểu mẫu"} short={preview ? "Đóng xem" : "Xem trước"} /></button>
           {draft ? <button type="button" className="btn btn-primary" disabled={busy || dirty} onClick={() => void publishDraft()}>Công bố khảo sát</button> : null}
         </div> : null}
         {preview && previewForm ? <section id="manager-monthly-survey-preview" className="monthly-survey-question monthly-survey-stack">
-          <h3>Xem trước</h3>
-          <p className="small muted">Giao diện học viên · Câu trả lời thử không được lưu</p>
+          <ManagerTitle title="Xem trước" tip="Giao diện học viên · Câu trả lời thử không được lưu" />
+          {compactUi ? null : <p className="small muted">Giao diện học viên · Câu trả lời thử không được lưu</p>}
           <p><strong>{previewForm.title || "Khảo sát chưa có tiêu đề"}</strong></p>
           <MonthlySurveyFields questions={previewForm.questions} answers={previewAnswers} onAnswer={(index, value) => setPreviewAnswers(current => ({ ...current, [index]: value }))} />
           {dirty ? <p className="small muted">Lưu bản nháp để công bố nội dung đang xem.</p> : null}
@@ -252,9 +255,9 @@ function SurveyDraftEditor({ definition, busy, onChange, onSave, onClose }: {
                 ...question, options: question.options.map((item, i) => i === optionIndex ? event.target.value : item)
               })} />
             </label>
-            <button className="btn-sm" type="button" aria-label={`Xoá lựa chọn ${optionIndex + 1} của câu hỏi ${index + 1}`} onClick={() => updateQuestion(index, {
+            <button className="btn-sm btn-danger" type="button" aria-label={`Xoá lựa chọn ${optionIndex + 1} của câu hỏi ${index + 1}`} onClick={() => updateQuestion(index, {
               ...question, options: question.options.filter((_item, i) => i !== optionIndex)
-            })}>Xoá</button>
+            })}><ActionLabel icon={Trash2} label="Xoá" /></button>
           </div>)}
           <div className="row"><button type="button" className="btn-sm" disabled={question.options.length >= limits.options} onClick={() => updateQuestion(index, {
             ...question, options: [...question.options, ""]
@@ -262,12 +265,12 @@ function SurveyDraftEditor({ definition, busy, onChange, onSave, onClose }: {
         </> : null}
         <div className="row between">
           <label className="row"><input type="checkbox" checked={question.required} onChange={event => updateQuestion(index, { ...question, required: event.target.checked })} />Bắt buộc</label>
-          <button type="button" className="btn-sm" aria-label={`Xoá câu hỏi ${index + 1}`} onClick={() => setQuestions(questions.filter((_question, i) => i !== index))}>Xoá câu hỏi</button>
+          <button type="button" className="btn-sm btn-danger" aria-label={`Xoá câu hỏi ${index + 1}`} onClick={() => setQuestions(questions.filter((_question, i) => i !== index))}><ActionLabel icon={Trash2} label="Xoá câu hỏi" /></button>
         </div>
       </fieldset>)}
       <div className="form-actions">
-        <button type="button" className="btn" disabled={questions.length >= limits.questions} onClick={() => setQuestions([...questions, newQuestion])}>Thêm câu hỏi</button>
-        <button type="button" className="btn" onClick={onClose}>Đóng soạn thảo</button>
+        <button type="button" className="btn" disabled={questions.length >= limits.questions} onClick={() => setQuestions([...questions, newQuestion])}><ActionShortLabel icon={Plus} label="Thêm câu hỏi" short="Câu hỏi" /></button>
+        <button type="button" className="btn" aria-label="Đóng soạn thảo" onClick={onClose}><ActionLabel icon={X} label="Đóng soạn thảo" /></button>
         <button type="submit" className="btn btn-primary">{busy ? "Đang lưu…" : "Lưu bản nháp"}</button>
       </div>
     </fieldset>
@@ -277,7 +280,7 @@ function SurveyDraftEditor({ definition, busy, onChange, onSave, onClose }: {
 function SurveyResults({ view }: { view: ManagerMonthlySurveyView }) {
   const formsByRevision = new Map(view.publishedForms.map(form => [form.revision, form]));
   return <section className="card monthly-survey-stack" aria-labelledby="manager-monthly-survey-results">
-    <h2 id="manager-monthly-survey-results">Kết quả · {surveyMonthLabel(view.month)}</h2>
+    <ManagerTitle as="h2" id="manager-monthly-survey-results" title={`Kết quả · ${surveyMonthLabel(view.month)}`} label="Kết quả: giải thích" tip="Số phản hồi và số lượt trả lời từng câu hỏi theo phiên bản đã công bố; mở từng phản hồi để xem câu trả lời." />
     <p><strong>{view.submissions.length}</strong> phản hồi</p>
     {view.publishedForms.map(form => {
       const responses = view.submissions.filter(submission => submission.revision === form.revision);

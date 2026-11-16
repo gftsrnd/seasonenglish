@@ -215,7 +215,7 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
   return <>
     <header className="topbar app-shell-topbar">
       <Link className="brand" style={{ color: "inherit", textDecoration: "none" }} to={role === "learner" ? "/home" : role === "operator" ? "/op" : "/mgr"}>
-        <span className="avatar" style={{ width: 34, height: 34, background: "var(--primary-soft)", display: "inline-grid", placeItems: "center", flexShrink: 0 }}><SeasonMark className="app-brand-mark" /></span>
+        <SeasonMark className="app-brand-mark app-brand-logo" />
         <span>Season English <span className="muted" style={{ fontWeight: 400, fontSize: ".85rem" }}>· {organisationName}</span></span>
       </Link>
       <nav aria-label={role === "learner" ? "Điều hướng người học" : role === "operator" ? "Điều hướng người vận hành" : "Điều hướng quản lý"}>{links()}</nav>

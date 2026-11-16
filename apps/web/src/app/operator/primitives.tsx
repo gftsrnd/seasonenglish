@@ -2,6 +2,8 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { useManagerSectionHeader } from "../manager/shared.js";
 import type { Cefr, RubricScore, Suggestion } from "./types.js";
 import { formatScoreOutOf } from "../shared/format-score.js";
+import { ActionLabel } from "../shared/CompactUi.js";
+import { Archive, CheckCheck, Download, Eye, Pencil, RefreshCw, Save, Send, Trash2, UserRound, X } from "lucide-react";
 
 export function OperatorPage({ children, title }: { children: ReactNode; title: string; hideRouteBack?: boolean }) {
   return <div className="app-operator" aria-label={title}>{children}</div>;
@@ -12,11 +14,35 @@ export function PageTitle({ children, actions }: { children: ReactNode; actions?
   return <div className="page-title"><div>{children}</div>{actions}</div>;
 }
 
+/** Actions shown as an icon on phones and tablets (desktop keeps the text). Ambiguous or high-stakes actions are not listed. */
+const COMPACT_ACTION_ICONS: Record<string, typeof Eye> = {
+  "Xem": Eye,
+  "Xem bài làm": Eye,
+  "Hồ sơ": UserRound,
+  "Xoá": Trash2,
+  "Xóa": Trash2,
+  "Xoá học viên": Trash2,
+  "Sửa": Pencil,
+  "Sửa đề": Pencil,
+  "Sửa tay": Pencil,
+  "Đóng": X,
+  "Lưu": Save,
+  "Tải xuống": Download,
+  "Xuất CSV": Download,
+  "Làm mới": RefreshCw,
+  "Lưu trữ": Archive,
+  "Gửi": Send,
+  "Đánh dấu đã kiểm": CheckCheck,
+  "Đã kiểm": CheckCheck
+};
+
 export function Button({ small, primary, danger, busy = false, className = "", children, disabled, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { small?: boolean; primary?: boolean; danger?: boolean; busy?: boolean }) {
   const classes = [small && "btn-sm", primary && "btn-primary", danger && "btn-danger", className].filter(Boolean).join(" ");
   const isDisabled = Boolean(disabled || busy);
   const { title, ...buttonProps } = props;
-  return <button {...buttonProps} {...(!isDisabled && title ? { title } : {})} className={classes} disabled={isDisabled} aria-busy={busy ? "true" : undefined}>{busy && <span className="spinner" aria-hidden="true" />}{children}</button>;
+  // Phones/tablets: well-known actions ("Xem", "Hồ sơ", "Xoá"…) become icon buttons; the label stays as name and tooltip.
+  const icon = typeof children === "string" ? COMPACT_ACTION_ICONS[children] : undefined;
+  return <button {...buttonProps} {...(!isDisabled && title ? { title } : {})} className={classes} disabled={isDisabled} aria-busy={busy ? "true" : undefined}>{busy && <span className="spinner" aria-hidden="true" />}{icon && typeof children === "string" ? <ActionLabel icon={icon} label={children} /> : children}</button>;
 }
 
 export function Badge({ children, tone = "", className = "" }: { children: ReactNode; tone?: "" | "ok" | "warn" | "danger" | "primary"; className?: string }) {

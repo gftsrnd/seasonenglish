@@ -381,14 +381,14 @@ describe("Operator monthly planner", () => {
     const card = within(screen.getByRole("region", { name: "Tiến độ công bố B1" }));
     expect(card.getByText(detail, { exact: true })).toBeInTheDocument();
     expect(card.queryByText(/Bài ngày|Bài ôn|Đề thi|Chờ công bố/)).not.toBeInTheDocument();
-    // "Còn N bài cần duyệt" is a static reminder: no link, button or chevron.
+    // "Còn N bài cần duyệt" is a static reminder: no link, button or chevron (the title's ⓘ guidance tip aside).
     if (!ready) {
       expect(card.queryByRole("link")).not.toBeInTheDocument();
       expect(card.getByText(detail, { exact: true }).tagName).toBe("P");
-      expect(screen.getByRole("region", { name: "Tiến độ công bố B1" }).querySelector("svg")).toBeNull();
+      expect([...screen.getByRole("region", { name: "Tiến độ công bố B1" }).querySelectorAll("svg")].filter((icon) => !icon.closest(".info-tip"))).toEqual([]);
     }
     if (ready && !readOnly && !publishedOn) expect(card.getByRole("button", { name: "Công bố tháng" })).toBeEnabled();
-    else expect(card.queryByRole("button")).not.toBeInTheDocument();
+    else expect(card.queryAllByRole("button").filter((button) => !button.closest(".info-tip"))).toEqual([]);
   });
 
   describe("calendar cell ids and manual-compose titles", () => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import "./manager.css";
+import "../responsive-manager.css";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import type { ManagerAccountView, ManagerAccountsView, ManagerDeleteRequestsView, ManagerLearnerProfileView, ManagerMaintenanceAction, ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerOperationsView, ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerPurgeConfirmationView, ManagerRemindersView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { managerApiClient as apiClient } from "../../api/manager.js";
@@ -14,13 +15,17 @@ import { ManagerReminders } from "./Reminders.js";
 import { ManagerMonthlySurveys } from "./MonthlySurveys.js";
 import { ManagerRewards } from "./Rewards.js";
 import { ManagerRewardCertificate } from "./RewardCertificate.js";
-import { downloadText, PageTitle } from "./shared.js";
+import { downloadText, ManagerTitle, PageTitle } from "./shared.js";
 import { useDialog, useModal } from "../shared/ModalProvider.js";
 import { autoSeasonTheme } from "../games/season-visual.js";
 import { useTheme } from "../shared/ThemeProvider.js";
 import { useToast } from "../shared/design-system.js";
 import { ArchiveRestore, ChevronDown, Eye, EyeOff } from "lucide-react";
 import { formatScoreOutOf } from "../shared/format-score.js";
+import { Pager, usePaged } from "../shared/Pager.js";
+import { useMediaQuery } from "../shared/useMediaQuery.js";
+import { Check, MoreHorizontal, Pencil, Trash2, X } from "lucide-react";
+import { ActionLabel, ModalCloseButton, useCompactUi } from "../shared/CompactUi.js";
 
 export type ManagerRouteControllerProps = { role: "manager" | "operator"; currentUserId: string; onSessionRevoked?: (() => void) | undefined };
 
@@ -44,7 +49,7 @@ export function ManagerRouteController({ role, currentUserId, onSessionRevoked }
     const timer = window.setTimeout(revealActiveLink, 0);
     return () => window.clearTimeout(timer);
   }, [location.pathname]);
-  return <Routes>
+  return <div className="manager-root" data-role={role}><Routes>
     <Route path="/mgr" element={role === "manager" ? <ProgressRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/ops" element={role === "manager" ? <OperationsRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/ops/*" element={<Navigate replace to={role === "manager" ? "/mgr/ops" : "/op"} />} />
@@ -60,7 +65,7 @@ export function ManagerRouteController({ role, currentUserId, onSessionRevoked }
     <Route path="/reward/preview" element={role === "manager" ? <ManagerRewardCertificate /> : <Navigate replace to="/op" />} />
     <Route path="/settings" element={<SettingsRoute role={role} currentUserId={currentUserId} onSessionRevoked={onSessionRevoked} />} />
     <Route path="/settings/prompts" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
-  </Routes>;
+  </Routes></div>;
 }
 
 function ProgressRoute() {
@@ -129,6 +134,7 @@ function LearnerProfileDialog({ view, onClose, onRename }: { view: ManagerLearne
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   useDialog(true, dialogRef, onClose, closeRef);
+  const compact = useCompactUi();
   const profile = view.profile;
   const level = view.learner.currentLevel;
   const rows: Array<[string, string]> = [
@@ -148,32 +154,51 @@ function LearnerProfileDialog({ view, onClose, onRename }: { view: ManagerLearne
     ["Đã học", profile.experience ?? ""],
     ["Lo ngại / mong muốn", profile.concerns ?? ""]
   ].filter((row): row is [string, string] => Boolean(row[1]));
+  const startRename = () => { setDisplayName(view.learner.displayName); setEditing(true); };
+  const scores = <>
+    <div><b>Điểm đầu vào</b><p>{view.assessmentScores?.placement == null ? "Chưa có điểm" : formatScoreOutOf(view.assessmentScores.placement, 100)}</p></div>
+    <div><b>Điểm đầu ra · Pass Course</b><p>{view.assessmentScores?.passCourse == null ? "Chưa có điểm" : formatScoreOutOf(view.assessmentScores.passCourse, 100)}</p></div>
+  </>;
   return <div className="modal-backdrop manager-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section ref={dialogRef} className="dialog manager-learner-profile-dialog" role="dialog" aria-modal="true" aria-label={`Hồ sơ ${view.learner.displayName}`} tabIndex={-1}>
       <div className="row between manager-dialog-heading">
         <h3 className="name">{view.learner.displayName}</h3>
-        <button ref={closeRef} className="btn-sm" type="button" onClick={onClose}>Đóng</button>
+        {compact && !editing ? <button className="btn-sm manager-rename-button" type="button" aria-label="Đổi tên hiển thị" onClick={startRename}><ActionLabel icon={Pencil} label="Đổi tên hiển thị" /></button> : null}
+        {compact ? <ModalCloseButton ref={closeRef} onClick={onClose} /> : <button ref={closeRef} className="btn-sm" type="button" onClick={onClose}>Đóng</button>}
       </div>
       {editing ? <form className="manager-rename-form" onSubmit={(event) => { event.preventDefault(); void saveName(); }}>
         <label htmlFor="manager-learner-display-name">Tên hiển thị</label>
         <input id="manager-learner-display-name" value={displayName} maxLength={120} onChange={(event) => setDisplayName(event.target.value)} disabled={saving} />
         <div className="row">
-          <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? "Đang lưu…" : "Lưu tên"}</button>
-          <button className="btn" type="button" disabled={saving} onClick={() => { setEditing(false); setNameError(""); }}>Huỷ</button>
+          <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? "Đang lưu…" : <ActionLabel icon={Check} label="Lưu tên" />}</button>
+          <button className="btn" type="button" disabled={saving} onClick={() => { setEditing(false); setNameError(""); }}><ActionLabel icon={X} label="Huỷ" /></button>
         </div>
         {nameError ? <p role="alert">{nameError}</p> : null}
-      </form> : <button className="btn btn-sm manager-rename-button" type="button" onClick={() => { setDisplayName(view.learner.displayName); setEditing(true); }}>Đổi tên hiển thị</button>}
-      <section className="card soft manager-profile-card" aria-label="Kết quả đánh giá">
-        <div className="grid cols-2 manager-profile-assessments">
-          <div><b>Điểm đầu vào</b><p>{view.assessmentScores?.placement == null ? "Chưa có điểm" : formatScoreOutOf(view.assessmentScores.placement, 100)}</p></div>
-          <div><b>Điểm đầu ra · Pass Course</b><p>{view.assessmentScores?.passCourse == null ? "Chưa có điểm" : formatScoreOutOf(view.assessmentScores.passCourse, 100)}</p></div>
+      </form> : compact ? null : <button className="btn btn-sm manager-rename-button" type="button" onClick={startRename}>Đổi tên hiển thị</button>}
+      {compact ? <ProfileCompactBody scores={view.assessmentScores} rows={rows} /> : <>
+        <section className="card soft manager-profile-card" aria-label="Kết quả đánh giá">
+          <div className="grid cols-2 manager-profile-assessments">{scores}</div>
+        </section>
+        <div className="card soft manager-profile-card">
+          {rows.length ? <><div className="manager-profile-title"><b>Hồ sơ cá nhân</b></div><div className="manager-profile-rows">{rows.map(([label, value]) => <div className="manager-profile-row" key={label}><span className="xs muted manager-profile-label">{label}</span><span className="small manager-profile-value">{value}</span></div>)}</div></> : <p className="small muted" style={{ margin: 0 }}>Chưa điền hồ sơ cá nhân.</p>}
         </div>
-      </section>
-      <div className="card soft manager-profile-card">
-        {rows.length ? <><div className="manager-profile-title"><b>Hồ sơ cá nhân</b></div><div className="manager-profile-rows">{rows.map(([label, value]) => <div className="manager-profile-row" key={label}><span className="xs muted manager-profile-label">{label}</span><span className="small manager-profile-value">{value}</span></div>)}</div></> : <p className="small muted" style={{ margin: 0 }}>Chưa điền hồ sơ cá nhân.</p>}
-      </div>
+      </>}
     </section>
   </div>;
+}
+
+/** Phones/tablets: scores on one line, profile rows paged (no scroll box inside the dialog). */
+function ProfileCompactBody({ scores, rows }: { scores: ManagerLearnerProfileView["assessmentScores"]; rows: Array<[string, string]> }) {
+  const paged = usePaged(rows, { phone: 5, tablet: 7 });
+  const score = (value: number | null | undefined) => value == null ? "—" : formatScoreOutOf(value, 100);
+  return <>
+    <dl className="manager-profile-scores" aria-label="Kết quả đánh giá">
+      <div><dt>Đầu vào</dt><dd>{score(scores?.placement)}</dd></div>
+      <div><dt>Đầu ra</dt><dd>{score(scores?.passCourse)}</dd></div>
+    </dl>
+    {rows.length ? <div className="manager-profile-rows" aria-label="Hồ sơ cá nhân">{paged.visible.map(([label, value]) => <div className="manager-profile-row" key={label}><span className="xs muted manager-profile-label">{label}</span><span className="small manager-profile-value">{value}</span></div>)}</div> : <p className="small muted" style={{ margin: 0 }}>Chưa điền hồ sơ cá nhân.</p>}
+    <Pager {...paged} label="hồ sơ" />
+  </>;
 }
 
 const managerProfileOptions: Record<string, Record<string, string>> = {
@@ -395,6 +420,11 @@ function SettingsRoute({ role, currentUserId, onSessionRevoked }: ManagerRouteCo
 }
 
 function AccountsPanel({ view, currentUserId, reload, notify, onSessionRevoked }: { onSessionRevoked?: (() => void) | undefined; view: ManagerAccountsView; currentUserId: string; reload: () => Promise<void>; notify: (message: string, tone?: "ok" | "danger") => void }) {
+  // Phones page the accounts 3 at a time; row actions sit in a "…" menu.
+  const accountsPaged = usePaged(view.accounts, { phone: 5, tablet: 5 });
+  const phoneAccounts = useMediaQuery("(max-width: 600px)");
+  const compactUi = useCompactUi();
+  const [openMenuId, setOpenMenuId] = useState<string>();
   const [busyId, setBusyId] = useState<string>(); const [creating, setCreating] = useState(false); const [showPassword, setShowPassword] = useState(false); const [newAccountRole, setNewAccountRole] = useState<ManagerAccountView["role"]>("learner");
   const [createError, setCreateError] = useState<{ field: "displayName" | "email" | "password"; message: string }>();
   const [issuedPins, setIssuedPins] = useState<Record<string, string>>({}); const [visiblePins, setVisiblePins] = useState<Record<string, boolean>>({});
@@ -509,12 +539,12 @@ function AccountsPanel({ view, currentUserId, reload, notify, onSessionRevoked }
   const createFieldFeedback = (field: NonNullable<typeof createError>["field"]) => createError?.field === field
     ? { "aria-invalid": true, "aria-describedby": "manager-account-create-error" }
     : {};
-  return <section className="card manager-accounts-card"><div className="row between manager-accounts-heading"><h3>Người dùng</h3><span className="badge">{view.accounts.length} tài khoản</span></div><div className="table-wrap settings-action-table manager-accounts-table" data-manager-action-table><table className="manager-accounts-table__table" role="table" aria-label="Người dùng"><thead><tr><th>Tên</th><th>Email</th><th>Vai trò</th><th>Trạng thái</th><th>PIN / Mật khẩu</th><th>Thao tác</th></tr></thead><tbody>{view.accounts.map((account) => { const self = account.id === currentUserId; const busy = busyId === account.id; const issuedPin = issuedPins[account.id]; const pinVisible = Boolean(visiblePins[account.id]); const credentialLabel = account.role === "learner" ? "PIN" : "mật khẩu"; return <tr key={account.id} role="row"><td role="cell"><b>{account.displayName}</b>{self ? <span className="xs muted"> (bạn)</span> : null}</td><td role="cell">{account.email ?? "—"}</td><td role="cell"><select className="manager-account-role" aria-label={`Vai trò ${account.displayName}`} title={self ? "Không thể đổi vai trò tài khoản đang đăng nhập" : undefined} aria-busy={busy || undefined} disabled={busy || self} value={account.role} onChange={(event) => void changeRole(account, event.target.value as ManagerAccountView["role"])}><option value="learner">Người học</option><option value="operator">Người vận hành</option><option value="manager">Quản lý</option></select></td><td role="cell"><AccountStatusBadge status={account.status} /></td><td role="cell"><div className="manager-account-pin">{issuedPin && pinVisible ? <input type="text" readOnly aria-label={`Giá trị ${credentialLabel} của ${account.displayName}`} value={issuedPin} onFocus={(event) => event.currentTarget.select()} /> : <code>••••••</code>}<button className="manager-password-toggle" type="button" aria-label={pinVisible ? `Ẩn ${credentialLabel} của ${account.displayName}` : `Hiện ${credentialLabel} của ${account.displayName}`} aria-pressed={pinVisible} aria-busy={busy || undefined} disabled={busy} title={`Xem ${credentialLabel} hiện tại`} onClick={() => issuedPin ? setVisiblePins((current) => ({ ...current, [account.id]: !pinVisible })) : void revealCredential(account)}>{pinVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}</button></div></td><td role="cell"><div className="manager-account-actions" role="group" aria-label={`Thao tác tài khoản ${account.displayName}`}><button className={account.status === "active" ? "btn-sm btn-danger" : "btn-sm"} type="button" aria-busy={busy || undefined} title={self ? "Không thể khoá tài khoản đang đăng nhập" : undefined} disabled={busy || self} onClick={() => void toggleStatus(account)}>{account.status === "active" ? "Khoá" : "Mở"}</button><button className="btn-sm btn-danger" type="button" aria-busy={busy || undefined} disabled={busy} aria-label={`Đặt lại ${credentialLabel}`} title={`Đặt lại ${credentialLabel}`} onClick={() => void resetPassword(account)}>{account.role === "learner" ? "Đặt lại PIN" : "Đặt lại"}</button><button className="btn-sm btn-danger" type="button" title={self ? "Không thể xoá tài khoản đang đăng nhập" : undefined} disabled={busy || self} onClick={() => void deleteAccount(account)}>Xoá</button></div></td></tr>; })}</tbody></table></div>
+  return <section className="card manager-accounts-card"><div className="row between manager-accounts-heading"><ManagerTitle title="Người dùng" tip="Đổi vai trò, khoá hoặc mở, đặt lại PIN / mật khẩu, xem PIN hiện tại hoặc xoá tài khoản. Tài khoản đang đăng nhập không đổi được vai trò và không khoá / xoá được." /><span className="badge">{view.accounts.length} tài khoản</span></div><div className="table-wrap settings-action-table manager-accounts-table" data-manager-action-table><table className="manager-accounts-table__table" role="table" aria-label="Người dùng"><thead><tr><th>Tên</th><th>Email</th><th>Vai trò</th><th>Trạng thái</th><th>PIN / Mật khẩu</th><th>Thao tác</th></tr></thead><tbody>{accountsPaged.visible.map((account) => { const self = account.id === currentUserId; const busy = busyId === account.id; const issuedPin = issuedPins[account.id]; const pinVisible = Boolean(visiblePins[account.id]); const credentialLabel = account.role === "learner" ? "PIN" : "mật khẩu"; return <tr key={account.id} role="row"><td role="cell"><b>{account.displayName}</b>{self ? <span className="xs muted"> (bạn)</span> : null}</td><td role="cell">{account.email ?? "—"}</td><td role="cell"><select className="manager-account-role" aria-label={`Vai trò ${account.displayName}`} title={self ? "Không thể đổi vai trò tài khoản đang đăng nhập" : undefined} aria-busy={busy || undefined} disabled={busy || self} value={account.role} onChange={(event) => void changeRole(account, event.target.value as ManagerAccountView["role"])}><option value="learner">Người học</option><option value="operator">Người vận hành</option><option value="manager">Quản lý</option></select></td><td role="cell"><AccountStatusBadge status={account.status} /></td><td role="cell" data-empty={phoneAccounts && !(issuedPin && pinVisible) || undefined}>{phoneAccounts && !(issuedPin && pinVisible) ? null : <div className="manager-account-pin">{issuedPin && pinVisible ? <input type="text" readOnly aria-label={`Giá trị ${credentialLabel} của ${account.displayName}`} value={issuedPin} onFocus={(event) => event.currentTarget.select()} /> : <code>••••••</code>}<button className="manager-password-toggle" type="button" aria-label={pinVisible ? `Ẩn ${credentialLabel} của ${account.displayName}` : `Hiện ${credentialLabel} của ${account.displayName}`} aria-pressed={pinVisible} aria-busy={busy || undefined} disabled={busy} title={`Xem ${credentialLabel} hiện tại`} onClick={() => issuedPin ? setVisiblePins((current) => ({ ...current, [account.id]: !pinVisible })) : void revealCredential(account)}>{pinVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}</button></div>}</td><td role="cell">{phoneAccounts ? <button className="btn-sm manager-account-more" type="button" aria-expanded={openMenuId === account.id} aria-controls={`manager-account-actions-${account.id}`} aria-label={`Thao tác tài khoản ${account.displayName}`} onClick={() => setOpenMenuId(openMenuId === account.id ? undefined : account.id)}><ActionLabel icon={MoreHorizontal} label="Thao tác" /></button> : <div className="manager-account-actions" role="group" aria-label={`Thao tác tài khoản ${account.displayName}`}><button className={account.status === "active" ? "btn-sm btn-danger" : "btn-sm"} type="button" aria-busy={busy || undefined} title={self ? "Không thể khoá tài khoản đang đăng nhập" : undefined} disabled={busy || self} onClick={() => void toggleStatus(account)}>{account.status === "active" ? "Khoá" : "Mở"}</button><button className="btn-sm btn-danger" type="button" aria-busy={busy || undefined} disabled={busy} aria-label={`Đặt lại ${credentialLabel}`} title={`Đặt lại ${credentialLabel}`} onClick={() => void resetPassword(account)}>{account.role === "learner" ? "Đặt lại PIN" : "Đặt lại"}</button><button className="btn-sm btn-danger" type="button" title={self ? "Không thể xoá tài khoản đang đăng nhập" : undefined} disabled={busy || self} onClick={() => void deleteAccount(account)}>Xoá</button></div>}</td>{phoneAccounts && openMenuId === account.id ? <td role="cell" className="manager-account-menu-row"><div className="manager-account-actions" id={`manager-account-actions-${account.id}`} role="group" aria-label={`Thao tác tài khoản ${account.displayName}`}><button className={account.status === "active" ? "btn-sm btn-danger" : "btn-sm"} type="button" aria-busy={busy || undefined} title={self ? "Không thể khoá tài khoản đang đăng nhập" : undefined} disabled={busy || self} onClick={() => void toggleStatus(account)}>{account.status === "active" ? "Khoá" : "Mở"}</button><button className="btn-sm btn-danger" type="button" aria-busy={busy || undefined} disabled={busy} aria-label={`Đặt lại ${credentialLabel}`} title={`Đặt lại ${credentialLabel}`} onClick={() => void resetPassword(account)}>{account.role === "learner" ? "Đặt lại PIN" : "Đặt lại"}</button><button className="btn-sm" type="button" aria-busy={busy || undefined} disabled={busy} aria-pressed={pinVisible} aria-label={pinVisible ? `Ẩn ${credentialLabel} của ${account.displayName}` : `Hiện ${credentialLabel} của ${account.displayName}`} onClick={() => issuedPin ? setVisiblePins((current) => ({ ...current, [account.id]: !pinVisible })) : void revealCredential(account)}><ActionLabel icon={pinVisible ? EyeOff : Eye} label={pinVisible ? `Ẩn ${credentialLabel}` : `Xem ${credentialLabel}`} /></button><button className="btn-sm btn-danger" type="button" aria-label={`Xoá tài khoản ${account.displayName}`} title={self ? "Không thể xoá tài khoản đang đăng nhập" : undefined} disabled={busy || self} onClick={() => void deleteAccount(account)}><ActionLabel icon={Trash2} label="Xoá" /></button></div></td> : null}</tr>; })}</tbody></table></div><Pager {...accountsPaged} label="tài khoản" />
     <form className="card soft section manager-account-create" onSubmit={create} noValidate onChange={(event) => {
       if (event.target instanceof HTMLInputElement && event.target.name === createError?.field) setCreateError(undefined);
     }}>
-      <h4 style={{ marginTop: 0 }}>Tạo tài khoản mới</h4>
-      <p className="small muted">Người học dùng PIN đúng 6 chữ số; người vận hành và quản lý dùng mật khẩu từ 8 ký tự.</p>
+      <ManagerTitle as="h4" className="manager-account-create-title" title="Tạo tài khoản mới" tip="Người học dùng PIN đúng 6 chữ số; người vận hành và quản lý dùng mật khẩu từ 8 ký tự." />
+      {compactUi ? null : <p className="small muted">Người học dùng PIN đúng 6 chữ số; người vận hành và quản lý dùng mật khẩu từ 8 ký tự.</p>}
       <div className="manager-account-create__grid">
         <label className="field"><span>Tên</span><input name="displayName" maxLength={120} required {...createFieldFeedback("displayName")} /></label>
         <label className="field"><span>Email</span><input name="email" type="email" maxLength={254} required {...createFieldFeedback("email")} /></label>
@@ -540,7 +570,7 @@ function AccountsPanel({ view, currentUserId, reload, notify, onSessionRevoked }
       {createError ? <p className="small manager-account-create__error" id="manager-account-create-error" role="alert">{createError.message}</p> : null}
       <button className="btn-primary manager-account-create__submit" type="submit" disabled={creating}>{creating ? "Đang tạo…" : "+ Thêm người dùng"}</button>
     </form>
-    <details className="settings-recovery" onToggle={(event) => { if (event.currentTarget.open && !trash && !recoveryLoading) void loadTrash(); }}><summary><span className="settings-recovery__title"><ArchiveRestore aria-hidden="true" />Khôi phục tài khoản</span><span className="settings-recovery__meta">{trash ? <span className="badge">{trash.accounts.length}</span> : <span className="small muted">Mở khi cần</span>}<ChevronDown className="settings-recovery__chevron" aria-hidden="true" /></span></summary><div className="settings-recovery__body">{recoveryError ? <div className="banner danger" role="alert"><div className="body small">{recoveryError}</div></div> : null}{trash ? <ManagerRecovery trashedAccounts={trash.accounts.map((item) => ({ id: item.id, name: item.displayName, deletedAt: item.deletedAt }))} onRestore={restore} onPurge={requestPurge} busy={recoveryBusy || purging} /> : recoveryLoading ? <ManagerRecovery trashedAccounts={[]} loading /> : <p className="small muted">Mở mục này để tải danh sách tài khoản đã xoá.</p>}</div></details>
+    <details className="settings-recovery" onToggle={(event) => { if (event.currentTarget.open && !trash && !recoveryLoading) void loadTrash(); }}><summary><span className="settings-recovery__title"><ArchiveRestore aria-hidden="true" />Khôi phục tài khoản</span><span className="settings-recovery__meta">{trash ? <span className="badge">{trash.accounts.length}</span> : <span className="small muted">{compactUi ? "Mở" : "Mở khi cần"}</span>}<ChevronDown className="settings-recovery__chevron" aria-hidden="true" /></span></summary><div className="settings-recovery__body">{recoveryError ? <div className="banner danger" role="alert"><div className="body small">{recoveryError}</div></div> : null}{trash ? <ManagerRecovery trashedAccounts={trash.accounts.map((item) => ({ id: item.id, name: item.displayName, deletedAt: item.deletedAt }))} onRestore={restore} onPurge={requestPurge} busy={recoveryBusy || purging} /> : recoveryLoading ? <ManagerRecovery trashedAccounts={[]} loading /> : <p className="small muted">Mở mục này để tải danh sách tài khoản đã xoá.</p>}</div></details>
     {purgeDialog ? <PurgeConfirmationDialog accountName={purgeDialog.accountName} confirmation={purgeDialog.confirmation} busy={purging} onCancel={() => setPurgeDialog(undefined)} onConfirm={confirmPurge} /> : null}
   </section>;
 }

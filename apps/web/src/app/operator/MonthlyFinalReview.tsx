@@ -7,6 +7,8 @@ import type {
 import { useModal } from "../shared/ModalProvider.js";
 import { OperatorLevelFormDetail, type LevelFormEditorDetail } from "./LevelForms.js";
 import { formatScore } from "../shared/format-score.js";
+import { useMediaQuery } from "../shared/useMediaQuery.js";
+import { InfoTip } from "../shared/CompactUi.js";
 
 const STATUS_COPY: Record<MonthlyFinalExamStatus, { label: string; tone: string; description: string }> = {
   INPUT_ERROR: { label: "Thiếu đầu vào", tone: "danger", description: "Khung tháng thiếu đầu vào bắt buộc." },
@@ -150,6 +152,7 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
   const published = draft.status === "published";
   const status = published ? PUBLISHED_COPY : exam ? STATUS_COPY[exam.status] : STATUS_COPY.DRAFT;
   const startedLearners = draft.startedLearners ?? 0;
+  const phone = useMediaQuery("(max-width: 480px)");
   const failedChecks = (exam?.checks ?? []).filter((check) => check.status === "fail");
   const manualChecks = (exam?.checks ?? []).filter((check) => check.mode === "manual" && check.status !== "fail");
   const todoCount = failedChecks.length + (savedAudioReady ? 0 : 1);
@@ -168,13 +171,13 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
     onDraftChange={setCurrent}
   >
     <section className="card flat monthly-final-review" aria-label="Kiểm duyệt đề thi tháng">
-      <header className="row between"><div><b>Trạng thái đề</b> <span className={`badge ${status.tone}`} data-testid="monthly-final-status" data-status={published ? "PUBLISHED" : exam?.status ?? "DRAFT"}>{status.label}</span> <span className={`badge ${exam?.audio.status === "REVIEWED" ? "ok" : "warn"}`}>{AUDIO_LABEL[exam?.audio.status ?? "SCRIPT_ONLY"] ?? exam?.audio.status}</span></div>
+      <header className="row between"><div><b>Trạng thái đề</b>{phone && published && status.description ? <InfoTip text={status.description} label="Trạng thái đề là gì?" /> : null} <span className={`badge ${status.tone}`} data-testid="monthly-final-status" data-status={published ? "PUBLISHED" : exam?.status ?? "DRAFT"}>{status.label}</span> <span className={`badge ${exam?.audio.status === "REVIEWED" ? "ok" : "warn"}`}>{AUDIO_LABEL[exam?.audio.status ?? "SCRIPT_ONLY"] ?? exam?.audio.status}</span></div>
         {onPublish && !published ? <button type="button" className="btn btn-primary" disabled={Boolean(publishBlocker) || publishing} title={publishBlocker ?? undefined} onClick={() => void publish()}>{publishing ? "Đang phát hành…" : "Duyệt & phát hành"}</button> : null}</header>
-      <p className="small muted">{status.description}{publishBlocker && !published ? ` ${publishBlocker}` : ""}</p>
+      {phone && published ? null : <p className="small muted">{status.description}{publishBlocker && !published ? ` ${publishBlocker}` : ""}</p>}
       {exam ? <p className="xs muted">{exam.framework.cefr} · tháng {exam.framework.month} · ngày thi {draft.examDate} · {exam.allocation.l} câu Nghe · {exam.allocation.r} câu Đọc · Viết · Nói · {exam.source === "ai" ? "AI sinh" : "Soạn tay"}</p> : null}
       {draft.stale && !published ? <div className="banner warn" role="alert"><div className="body small">Khung tháng đã được duyệt lại sau khi sinh đề này. Đề không còn khớp phạm vi đã duyệt; hãy sinh lại.</div></div> : null}
       {draft.stale && published && startedLearners > 0 ? <p className="small muted monthly-final-kept" role="note">Đề đã có {startedLearners} học viên làm, giữ nguyên đề này.</p> : null}
-      {draft.stale && published && startedLearners === 0 && draft.regenerable ? <div className="banner warn monthly-final-regenerate" role="note"><div className="body small">Phạm vi đã duyệt của tháng đã đổi sau khi phát hành đề này. Chưa học viên nào làm đề: có thể sinh lại. Đề hiện tại vẫn dùng cho học viên đến khi bản mới được duyệt và phát hành.</div>
+      {draft.stale && published && startedLearners === 0 && draft.regenerable ? <div className="banner warn monthly-final-regenerate" role="note"><div className="body small">{phone ? "Phạm vi tháng đã đổi; chưa ai làm đề nên có thể sinh lại. Đề cũ vẫn dùng đến khi bản mới được phát hành." : "Phạm vi đã duyệt của tháng đã đổi sau khi phát hành đề này. Chưa học viên nào làm đề: có thể sinh lại. Đề hiện tại vẫn dùng cho học viên đến khi bản mới được duyệt và phát hành."}</div>
         {onRegenerate && !readOnly ? <button type="button" className="btn" onClick={() => void onRegenerate()}>Sinh lại đề</button> : null}</div> : null}
       {!published && draft.livePublishedVersion ? <p className="small muted" role="note">Bản nháp này thay cho phiên bản {draft.livePublishedVersion} đang phát hành; học viên vẫn làm phiên bản đó cho đến khi bản này được duyệt và phát hành.</p> : null}
       {!draft.editable && draft.status === "draft" ? <div className="banner warn"><div className="body small">Đã quá 00:00 ngày thi ({draft.examDate}); không sửa hoặc sinh lại được.</div></div> : null}

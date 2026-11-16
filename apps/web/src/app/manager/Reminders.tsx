@@ -1,9 +1,11 @@
 import type { ManagerBaseNotificationInput, ManagerReminderChannel, ManagerRemindersView } from "@e4s/contracts";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Copy, Settings2, Trash2 } from "lucide-react";
+import { ActionLabel, ActionShortLabel, ModalCloseButton, useCompactUi } from "../shared/CompactUi.js";
+import { Pager, usePaged } from "../shared/Pager.js";
 import { useRef, useState } from "react";
 import { useDialog } from "../shared/ModalProvider.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
-import { Badge, PageTitle, copyText } from "./shared.js";
+import { Badge, ManagerTitle, PageDescription, PageTitle, copyText } from "./shared.js";
 import { BaseNotificationEditor } from "./BaseNotificationEditor.js";
 import "./reminder-channels.css";
 
@@ -25,6 +27,7 @@ type ManagerReminderHistoryItem = NonNullable<ManagerRemindersView["history"]>[n
 
 export function ManagerReminders({ view, sendingKey, notice, noticeTone = "info", onSend, onSendAll, onDismiss, onCopy, onSaveBase, onDeleteHistory }: ManagerRemindersProps) {
   const compact = useMediaQuery("(max-width: 800px)");
+  const compactUi = useCompactUi();
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [handlingLearnerId, setHandlingLearnerId] = useState<string | null>(null);
@@ -38,7 +41,10 @@ export function ManagerReminders({ view, sendingKey, notice, noticeTone = "info"
   useDialog(confirmation !== null, dialogRef, closeConfirmation);
   const sending = Boolean(sendingKey);
   const history = view.history ?? [];
-  const visibleHistory = showAllHistory ? history : history.slice(0, 6);
+  // Phones/tablets page the history and the queue instead of "Xem thêm" / inner scroll boxes.
+  const historyPaged = usePaged(history, { phone: 6, tablet: 8 });
+  const candidatesPaged = usePaged(view.candidates, { phone: 3, tablet: 4 });
+  const visibleHistory = compactUi ? historyPaged.visible : showAllHistory ? history : history.slice(0, 6);
   const runCopy = async (learnerId: string, message: string) => {
     if (handlingLearnerId) return;
     setHandlingLearnerId(learnerId); setLocalStatus("");
@@ -60,7 +66,7 @@ export function ManagerReminders({ view, sendingKey, notice, noticeTone = "info"
     catch { /* The route reports the failure through the shared toast. */ }
     finally { setDeletingHistoryId(null); }
   };
-  const deleteHistoryButton = (item: ManagerReminderHistoryItem) => onDeleteHistory ? <button className="btn-sm btn-danger manager-reminder-history-delete" type="button" disabled={Boolean(deletingHistoryId)} aria-busy={deletingHistoryId === item.reminderId || undefined} aria-label={`Xóa lượt nhắc ${item.learnerName} ngày ${formatReminderDate(item.createdAt)}`} onClick={() => void runDeleteHistory(item)}>{deletingHistoryId === item.reminderId ? "Đang xóa…" : "Xóa"}</button> : null;
+  const deleteHistoryButton = (item: ManagerReminderHistoryItem) => onDeleteHistory ? <button className="btn-sm btn-danger manager-reminder-history-delete" type="button" disabled={Boolean(deletingHistoryId)} aria-busy={deletingHistoryId === item.reminderId || undefined} aria-label={`Xóa lượt nhắc ${item.learnerName} ngày ${formatReminderDate(item.createdAt)}`} onClick={() => void runDeleteHistory(item)}>{deletingHistoryId === item.reminderId ? "…" : <ActionLabel icon={Trash2} label="Xóa" />}</button> : null;
   const runSendAll = async () => {
     if (sendingAll || sending) return;
     setSendingAll(true); setLocalStatus("");
@@ -79,13 +85,13 @@ export function ManagerReminders({ view, sendingKey, notice, noticeTone = "info"
     else await onSend(pending.learnerId, pending.channel);
   };
   return <div className="manager-page manager-reminders-page">
-    <PageTitle description={<p className="muted">Nhắc học viên vắng từ {view.inactiveDays} ngày.</p>}><h1>Nhắc học</h1></PageTitle>
+    <PageTitle description={<PageDescription text={`Nhắc học viên vắng từ ${view.inactiveDays} ngày.`} />}><h1>Nhắc học</h1></PageTitle>
     {view.emailConfigured === false ? <div className="banner info" role="note"><div className="body"><b>Chưa cấu hình email Resend.</b> Nút Gửi email sẽ bị khóa trên môi trường này.</div></div> : null}
     {notice ? <div className={`banner ${noticeTone}`} role={noticeTone === "danger" ? "alert" : "status"}>{notice}</div> : null}
     {localStatus ? <div className="manager-inline-status xs muted" role="status" aria-live="polite">{localStatus}</div> : null}
-    {view.candidates.length ? <div className="card row between manager-reminder-toolbar"><div><b>{view.candidates.length} người học cần được nhắc</b><span className="small muted">Email được gửi riêng cho từng học viên.</span></div><button className="btn-primary" type="button" disabled={view.emailConfigured === false || sending || sendingAll} aria-busy={sendingAll || undefined} onClick={() => setConfirmation({ kind: "all" })}>{sendingAll ? "Đang gửi tất cả…" : "Gửi tất cả qua email"}</button></div> : null}
-    {view.candidates.length ? <div className="manager-reminder-queue bounded-scroll-region" role="region" aria-label="Danh sách học viên cần nhắc" tabIndex={0}>
-      {view.candidates.map((candidate) => {
+    {view.candidates.length ? <div className="card row between manager-reminder-toolbar"><div>{compactUi ? <ManagerTitle as="h3" title={`${view.candidates.length} người cần nhắc`} label="Danh sách cần nhắc: giải thích" tip="Email được gửi riêng cho từng học viên. Mở thẻ để copy tin nhắn, gửi email, gửi Base.vn hoặc ghi nhận đã nhắc qua kênh khác." /> : <><b>{view.candidates.length} người học cần được nhắc</b><span className="small muted">Email được gửi riêng cho từng học viên.</span></>}</div><button className="btn-primary" type="button" disabled={view.emailConfigured === false || sending || sendingAll} aria-busy={sendingAll || undefined} onClick={() => setConfirmation({ kind: "all" })}>{sendingAll ? "Đang gửi tất cả…" : compactUi ? "Gửi tất cả" : "Gửi tất cả qua email"}</button></div> : null}
+    {view.candidates.length ? <div className={compactUi ? "manager-reminder-queue" : "manager-reminder-queue bounded-scroll-region"} role="region" aria-label="Danh sách học viên cần nhắc" tabIndex={0}>
+      {(compactUi ? candidatesPaged.visible : view.candidates).map((candidate) => {
         const days = candidate.missedDays ?? view.inactiveDays;
         const message = reminderMessage(candidate.learnerName, days);
         const busy = handlingLearnerId === candidate.learnerId;
@@ -104,24 +110,34 @@ export function ManagerReminders({ view, sendingKey, notice, noticeTone = "info"
             {identity}<span className="manager-reminder-toggle-label">{expanded ? "Thu gọn" : "Xem tin"}<ChevronDown size={16} aria-hidden="true" /></span>
           </button> : identity}
           <div id={detailId} hidden={compact && !expanded}>
+            {compactUi ? <div className="manager-reminder-recipient manager-reminder-recipient--compact small muted" title={`Email: ${candidate.learnerEmail ?? "chưa có"} · Base.vn: ${candidate.baseNotification?.configured ? candidate.baseNotification.destinationLabel : "chưa cấu hình"}`}>{candidate.learnerEmail ?? "Chưa có email"} · Base.vn: {candidate.baseNotification?.configured ? candidate.baseNotification.destinationLabel : "chưa có"} · Gần nhất {candidate.lastActivityAt ? formatReminderDate(candidate.lastActivityAt) : "—"}</div> : <>
             <div className="manager-reminder-recipient">Email nhận: <b>{candidate.learnerEmail ?? "Chưa có email"}</b></div>
             <div className="manager-reminder-recipient">Base.vn: <b>{candidate.baseNotification?.configured ? candidate.baseNotification.destinationLabel : "Chưa cấu hình cho người học"}</b></div>
-            <div className="manager-reminder-recipient">Hoạt động gần nhất: <b>{candidate.lastActivityAt ? formatReminderDate(candidate.lastActivityAt) : "Chưa có hoạt động"}</b></div>
+            <div className="manager-reminder-recipient">Hoạt động gần nhất: <b>{candidate.lastActivityAt ? formatReminderDate(candidate.lastActivityAt) : "Chưa có hoạt động"}</b></div></>}
             <div className="small manager-reminder-message">{message}</div>
             <div className="row manager-reminder-actions" role="group" aria-label={`Thao tác nhắc học cho ${candidate.learnerName}`}>
+            {compactUi ? <>
+            <button className="btn-sm btn-primary" type="button" disabled={view.emailConfigured === false || sending || Boolean(handlingLearnerId) || !candidate.learnerEmail} aria-busy={emailBusy || undefined} title={!candidate.learnerEmail ? "Người học chưa có email nhận" : view.emailConfigured === false ? "Email Resend chưa được cấu hình" : undefined} onClick={() => setConfirmation({ kind: "single", learnerId: candidate.learnerId, learnerName: candidate.learnerName, learnerEmail: candidate.learnerEmail ?? null, channel: "email" })}>{emailBusy ? "Đang gửi…" : "Gửi email"}</button>
+            <button className="btn-sm btn-primary" type="button" disabled={!candidate.baseNotification?.configured || sending || sendingAll || Boolean(handlingLearnerId)} aria-busy={baseBusy || undefined} title={!candidate.baseNotification?.configured ? "Cấu hình kênh nhận Base.vn riêng cho người học trước khi gửi" : undefined} onClick={() => setConfirmation({ kind: "single", learnerId: candidate.learnerId, learnerName: candidate.learnerName, learnerEmail: candidate.baseNotification?.destinationLabel ?? null, channel: "base" })}>{baseBusy ? "Đang gửi…" : compactUi ? "Gửi Base" : "Gửi Base.vn"}</button>
+            <button className="btn-sm btn-ghost" type="button" disabled={!onDismiss || busy || sending} aria-busy={busy || undefined} title={!onDismiss ? "Chưa có API ghi nhận lời nhắc qua kênh khác" : undefined} onClick={() => void runDismiss(candidate.learnerId)}>{busy ? "Đang ghi nhận…" : <ActionShortLabel icon={Check} label="Đã nhắc qua kênh khác" short="Đã nhắc" />}</button>
+            <button className="btn-sm" type="button" disabled={busy || sending} aria-busy={busy || undefined} onClick={() => void runCopy(candidate.learnerId, message)} aria-label="Copy tin nhắn">{busy ? "…" : <ActionLabel icon={Copy} label="Copy tin nhắn" />}</button>
+            <button className="btn-sm" type="button" disabled={!onSaveBase || busy || sending || sendingAll} onClick={() => setEditingBaseId(editingBaseId === candidate.learnerId ? null : candidate.learnerId)} aria-label="Cấu hình Base.vn"><ActionLabel icon={Settings2} label="Cấu hình Base.vn" /></button>
+            </> : <>
             <button className="btn-sm" type="button" disabled={busy || sending} aria-busy={busy || undefined} onClick={() => void runCopy(candidate.learnerId, message)}>{busy ? "Đang copy…" : "Copy tin nhắn"}</button>
             <button className="btn-sm btn-primary" type="button" disabled={view.emailConfigured === false || sending || Boolean(handlingLearnerId) || !candidate.learnerEmail} aria-busy={emailBusy || undefined} title={!candidate.learnerEmail ? "Người học chưa có email nhận" : view.emailConfigured === false ? "Email Resend chưa được cấu hình" : undefined} onClick={() => setConfirmation({ kind: "single", learnerId: candidate.learnerId, learnerName: candidate.learnerName, learnerEmail: candidate.learnerEmail ?? null, channel: "email" })}>{emailBusy ? "Đang gửi email…" : "Gửi email"}</button>
             <button className="btn-sm btn-primary" type="button" disabled={!candidate.baseNotification?.configured || sending || sendingAll || Boolean(handlingLearnerId)} aria-busy={baseBusy || undefined} title={!candidate.baseNotification?.configured ? "Cấu hình kênh nhận Base.vn riêng cho người học trước khi gửi" : undefined} onClick={() => setConfirmation({ kind: "single", learnerId: candidate.learnerId, learnerName: candidate.learnerName, learnerEmail: candidate.baseNotification?.destinationLabel ?? null, channel: "base" })}>{baseBusy ? "Đang gửi Base.vn…" : "Gửi Base.vn"}</button>
             <button className="btn-sm" type="button" disabled={!onSaveBase || busy || sending || sendingAll} onClick={() => setEditingBaseId(editingBaseId === candidate.learnerId ? null : candidate.learnerId)}>Cấu hình Base.vn</button>
             <button className="btn-sm btn-ghost" type="button" disabled={!onDismiss || busy || sending} aria-busy={busy || undefined} title={!onDismiss ? "Chưa có API ghi nhận lời nhắc qua kênh khác" : undefined} onClick={() => void runDismiss(candidate.learnerId)}>{busy ? "Đang ghi nhận…" : "Đã nhắc qua kênh khác"}</button>
+            </>}
           </div>
           {editingBaseId === candidate.learnerId && onSaveBase ? <BaseNotificationEditor learnerName={candidate.learnerName} value={candidate.baseNotification} onCancel={() => setEditingBaseId(null)} onSave={async (input) => { setHandlingLearnerId(candidate.learnerId); try { await onSaveBase(candidate.learnerId, input); setEditingBaseId(null); } finally { setHandlingLearnerId(null); } }} /> : null}
           </div>
         </section>;
       })}
-    </div> : <section className="card manager-reminder-empty-state"><h3>Không ai cần nhắc hôm nay</h3><p className="muted">Mọi người học đều có hoạt động trong {view.inactiveDays} ngày gần đây.</p></section>}
+    </div> : <section className="card manager-reminder-empty-state"><ManagerTitle title="Không ai cần nhắc hôm nay" tip={`Mọi người học đều có hoạt động trong ${view.inactiveDays} ngày gần đây.`} />{compactUi ? null : <p className="muted">{`Mọi người học đều có hoạt động trong ${view.inactiveDays} ngày gần đây.`}</p>}</section>}
+    {compactUi && view.candidates.length ? <Pager {...candidatesPaged} label="người cần nhắc" /> : null}
     {history.length ? <section className="card section manager-reminder-history">
-      <h3>Lịch sử nhắc</h3>
+      <ManagerTitle title="Lịch sử nhắc" tip="Các lượt nhắc đã gửi email, gửi Base.vn, copy tin nhắn hoặc ghi nhận qua kênh khác, mới nhất ở đầu. Xóa một dòng chỉ xóa lịch sử, người học không bị ảnh hưởng." />
       {compact ? <>
       <ul role="list" className="manager-reminder-history-list" aria-label="Lịch sử nhắc học">
         {visibleHistory.map((item) => {
@@ -130,20 +146,21 @@ export function ManagerReminders({ view, sendingKey, notice, noticeTone = "info"
             <div className="manager-reminder-history-heading">
               <b>{item.learnerName}</b>
               <Badge tone={statusTone(status)}>{statusLabel(status, item.provider)}</Badge>
+              {deleteHistoryButton(item)}
             </div>
-            <div className="small muted">
+            <div className="small muted manager-reminder-history-meta">
               <time dateTime={item.createdAt}>{formatReminderDate(item.createdAt)}</time> · {providerLabel(item.provider)}
               {item.missedDays !== null ? ` · Vắng ${item.missedDays} ngày` : null}
+              {item.recipient ? ` · ${item.recipient}` : null}
             </div>
-            {item.recipient ? <div className="small muted">Nơi nhận: {item.recipient}</div> : null}
-            {deleteHistoryButton(item)}
           </li>;
         })}
       </ul>
-      {!showAllHistory && history.length > visibleHistory.length ? <button className="btn-sm manager-reminder-history-more" type="button" onClick={() => setShowAllHistory(true)}>Xem thêm {history.length - visibleHistory.length} lượt</button> : null}
+      {compactUi ? <Pager {...historyPaged} label="lịch sử nhắc" /> : null}
+      {!compactUi && !showAllHistory && history.length > visibleHistory.length ? <button className="btn-sm manager-reminder-history-more" type="button" onClick={() => setShowAllHistory(true)}>Xem thêm {history.length - visibleHistory.length} lượt</button> : null}
       </> : <div className="table-wrap bounded-scroll-region sticky-table-head manager-reminder-history-scroll" role="region" aria-label="Danh sách lịch sử nhắc" tabIndex={0}><table aria-label="Lịch sử nhắc học"><thead><tr><th>Ngày</th><th>Người học</th><th>Nơi nhận</th><th>Kênh</th><th>Bỏ</th><th>Kết quả</th>{onDeleteHistory ? <th><span className="sr-only">Thao tác</span></th> : null}</tr></thead><tbody>{history.map((item) => <tr key={item.reminderId}><td>{formatReminderDate(item.createdAt)}</td><td>{item.learnerName}</td><td>{item.recipient ?? "—"}</td><td>{providerLabel(item.provider)}</td><td>{item.missedDays === null ? "—" : `${item.missedDays} ngày`}</td><td><Badge tone={statusTone(item.deliveryStatus ?? item.status)}>{statusLabel(item.deliveryStatus ?? item.status, item.provider)}</Badge></td>{onDeleteHistory ? <td className="manager-reminder-history-action">{deleteHistoryButton(item)}</td> : null}</tr>)}</tbody></table></div>}
     </section> : null}
-    {confirmation ? <div className="modal-backdrop manager-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setConfirmation(null); }}><section ref={dialogRef} className="dialog manager-reminder-confirm-dialog" role="dialog" aria-modal="true" tabIndex={-1} aria-label={`Xác nhận gửi ${confirmation.kind === "single" && confirmation.channel === "base" ? "Base.vn" : "email"}`}><h2>Xác nhận gửi {confirmation.kind === "single" && confirmation.channel === "base" ? "Base.vn" : "email"}</h2>{confirmation.kind === "all" ? <p>Bạn sắp gửi email nhắc học cho <b>{view.candidates.length} người học</b>. Hãy chắc rằng danh sách và nội dung đã đúng.</p> : <p>Gửi {confirmation.channel === "base" ? "Base.vn" : "email"} nhắc học cho <b>{confirmation.learnerName}</b> ({confirmation.learnerEmail ?? "chưa có nơi nhận"})?{confirmation.channel === "base" ? " Tin sẽ đến cuộc trò chuyện được gắn với incoming webhook đã lưu cho người học này." : ""}</p>}<div className="row manager-reminder-confirm-actions"><button className="btn-sm" type="button" onClick={() => setConfirmation(null)}>Huỷ</button><button className="btn-sm btn-primary" type="button" onClick={() => void confirmSend()}>Xác nhận gửi {confirmation.kind === "single" && confirmation.channel === "base" ? "Base.vn" : "email"}</button></div></section></div> : null}
+    {confirmation ? <div className="modal-backdrop manager-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setConfirmation(null); }}><section ref={dialogRef} className="dialog manager-reminder-confirm-dialog" role="dialog" aria-modal="true" tabIndex={-1} aria-label={`Xác nhận gửi ${confirmation.kind === "single" && confirmation.channel === "base" ? "Base.vn" : "email"}`}>{compactUi ? <div className="row between manager-dialog-heading"><h2>Xác nhận gửi {confirmation.kind === "single" && confirmation.channel === "base" ? "Base.vn" : "email"}</h2><ModalCloseButton label="Huỷ gửi" onClick={() => setConfirmation(null)} /></div> : <h2>Xác nhận gửi {confirmation.kind === "single" && confirmation.channel === "base" ? "Base.vn" : "email"}</h2>}{confirmation.kind === "all" ? <p>Bạn sắp gửi email nhắc học cho <b>{view.candidates.length} người học</b>. Hãy chắc rằng danh sách và nội dung đã đúng.</p> : <p>Gửi {confirmation.channel === "base" ? "Base.vn" : "email"} nhắc học cho <b>{confirmation.learnerName}</b> ({confirmation.learnerEmail ?? "chưa có nơi nhận"})?{confirmation.channel === "base" ? " Tin sẽ đến cuộc trò chuyện được gắn với incoming webhook đã lưu cho người học này." : ""}</p>}<div className="row manager-reminder-confirm-actions"><button className="btn-sm" type="button" onClick={() => setConfirmation(null)}>Huỷ</button><button className="btn-sm btn-primary" type="button" onClick={() => void confirmSend()}>Xác nhận gửi {confirmation.kind === "single" && confirmation.channel === "base" ? "Base.vn" : "email"}</button></div></section></div> : null}
   </div>;
 }
 

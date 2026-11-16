@@ -1,0 +1,552 @@
+/*
+ * Manager screens: phone (<= 600px) and tablet (<= 1024px) layout.
+ * Everything is scoped under .manager-root (ManagerRouteController) so the
+ * operator screens and desktop are untouched. Loaded after responsive-phone.css
+ * (the manager routes are a lazy chunk); the :root:root:root prefix keeps these
+ * rules ahead of the shared phone rules regardless of chunk order.
+ */
+.manager-root { display: contents; }
+
+/* Repeated row/header actions are identical icon squares (label hidden, kept as
+   accessible name + tooltip) — also when a row has a single icon button. */
+@media (max-width: 1024px) {
+  :root:root:root:root:root:root .manager-root :is(button, .btn, a.btn, a.btn-sm):has(> .action-icon-only):not(.modal-close) {
+    display: inline-grid !important; place-items: center; box-sizing: border-box;
+    width: var(--icon-btn, 36px) !important; min-width: var(--icon-btn, 36px) !important; max-width: var(--icon-btn, 36px) !important;
+    height: var(--icon-btn, 36px) !important; min-height: var(--icon-btn, 36px) !important; padding: 0 !important; flex: none !important;
+  }
+  :root:root:root:root:root:root .manager-root :is(button, .btn, a.btn, a.btn-sm) > .action-icon-only { display: inline-grid !important; place-items: center; }
+  :root:root:root:root:root:root .manager-root :is(button, .btn, a.btn, a.btn-sm) > .action-icon-only > .action-icon-label { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap; }
+}
+
+/* ───────────── Phones and tablets (<= 1024px) ───────────── */
+@media (max-width: 1024px) {
+  /* Section header: title + ⓘ on one line; the description paragraph moved into the tip. */
+  :root:root:root:has(.manager-root) .manager-section-title .manager-page-title__content { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; }
+  :root:root:root:has(.manager-root) .manager-section-title .manager-section-description { display: inline-flex; align-items: center; margin: 0; }
+  :root:root:root:has(.manager-root) .manager-section-title .manager-section-description:empty { display: none; }
+  :root:root:root .manager-root .manager-page-title h1 { display: inline-flex; align-items: center; gap: 4px; }
+
+  /* Rows: every row vertically centred; repeated action groups never wrap. */
+  :root:root:root .manager-root :is(.manager-row-actions, .request-actions, .manager-reminder-actions, .manager-base-editor-actions, .manager-account-actions) { flex-wrap: nowrap; align-items: center; }
+
+  /* Content images are never cropped: whole picture inside the box. */
+  :root:root:root .manager-root img { object-fit: contain; max-width: 100%; height: auto; }
+
+  /* KPI tiles: same height, top edge, padding and baselines in every tile. */
+  :root:root:root .manager-root .manager-kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 8px; }
+  :root:root:root .manager-root .manager-kpi-grid > .kpi { margin: 0 !important; display: grid; grid-template-rows: auto auto auto; align-content: start; gap: 2px; padding: 8px 10px; min-height: 0; height: auto; }
+  :root:root:root .manager-root .manager-kpi-grid > .kpi > * { margin: 0 !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .manager-kpi-grid > .kpi .val { font-size: 20px; line-height: 24px; }
+  :root:root:root .manager-root .manager-kpi-grid > .kpi b { font-size: 13px; line-height: 18px; }
+  :root:root:root .manager-root .manager-kpi-grid > .kpi .xs { font-size: 11.5px; line-height: 16px; }
+
+  /* ── Tiến độ nhóm ── */
+  :root:root:root .manager-root .manager-progress-card-header { flex-wrap: nowrap; align-items: center; gap: 8px; }
+  :root:root:root .manager-root .manager-progress-card-header > .row:first-child { min-width: 0; flex: 1 1 auto; }
+  :root:root:root .manager-root .manager-progress-card-header h3 { margin: 0; white-space: nowrap; }
+  :root:root:root .manager-root .manager-progress-card-actions { flex: none; flex-wrap: nowrap; gap: 6px; margin-left: auto; }
+  :root:root:root .manager-root .manager-progress-card-actions > a.btn-primary:not(:has(.action-icon-only)) { min-height: var(--icon-btn, 36px); height: var(--icon-btn, 36px); padding: 0 10px; gap: 4px; white-space: nowrap; }
+
+  /* Learner rows: one line on tablets, two lines on phones (see below). */
+  :root:root:root #root .manager-root .manager-progress-table { overflow: visible !important; max-height: none !important; }
+  :root:root:root .manager-root .manager-progress-table :is(table, tbody) { display: block; width: 100%; }
+  :root:root:root .manager-root .manager-progress-table thead { display: none; }
+  :root:root:root .manager-root .manager-progress-table tr.manager-progress-record {
+    display: flex !important; flex-wrap: wrap; align-items: center; gap: 4px 10px; width: 100%; box-sizing: border-box; padding: 6px 2px; border-bottom: 1px solid var(--line);
+  }
+  :root:root:root .manager-root .manager-progress-table tr.manager-progress-record:last-child { border-bottom: 0; }
+  :root:root:root .manager-root .manager-progress-record > td { display: block; padding: 0 !important; border: 0 !important; min-width: 0 !important; width: auto !important; background: transparent !important; }
+  :root:root:root .manager-root .manager-progress-record > td.manager-progress-desktop-detail { display: none !important; }
+  :root:root:root .manager-root .manager-progress-record > .manager-progress-level { order: 1; flex: none; }
+  :root:root:root .manager-root .manager-progress-record > .manager-progress-name { order: 2; flex: 1 1 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .manager-progress-record > .manager-progress-status { order: 3; flex: none; }
+  :root:root:root .manager-root .manager-progress-record > .manager-progress-rhythm { order: 4; flex: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+  :root:root:root .manager-root .manager-progress-record > .manager-progress-lessons { order: 5; flex: none; white-space: nowrap; }
+  /* The details cell dissolves so the "…" square (or the opened panel) is the flex item itself. */
+  :root:root:root .manager-root .manager-progress-record > td.manager-progress-compact-details { display: contents !important; }
+  :root:root:root .manager-root .manager-progress-compact-details > details { order: 6; flex: none; }
+  :root:root:root .manager-root .manager-progress-compact-details > details[open] { order: 9; flex: 1 1 100%; }
+  :root:root:root .manager-root .manager-progress-record > .manager-progress-profile { order: 7; flex: none; margin-left: 0; }
+  :root:root:root .manager-root .manager-progress-rhythm .manager-progress-compact-label { display: none; }
+  :root:root:root .manager-root .manager-progress-lessons .manager-progress-compact-label { color: var(--muted); font-size: 12px; }
+  :root:root:root .manager-root .manager-progress-record .manager-row-actions { margin: 0; width: auto !important; min-width: 0 !important; display: flex; justify-content: flex-end; }
+  /* "…" square for the extra metrics; the opened panel takes a full row. */
+  :root:root:root .manager-root .manager-progress-compact-details summary {
+    display: inline-grid; place-items: center; box-sizing: border-box; width: var(--icon-btn, 36px); height: var(--icon-btn, 36px); padding: 0; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); cursor: pointer; list-style: none; color: var(--text);
+  }
+  :root:root:root .manager-root .manager-progress-compact-details summary::-webkit-details-marker { display: none; }
+  :root:root:root .manager-root .manager-progress-compact-details summary::marker { content: ""; }
+  :root:root:root .manager-root .manager-progress-compact-details summary::before { content: none; }
+  :root:root:root .manager-root .manager-progress-compact-details summary::after { content: "…"; font-size: 15px; line-height: 1; }
+  :root:root:root .manager-root .manager-progress-details-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  :root:root:root .manager-root .manager-progress-record details[open] > summary { float: right; }
+  :root:root:root .manager-root .manager-progress-record details[open] > .manager-detail-metrics { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; font-size: 12.5px; }
+  :root:root:root .manager-root .manager-progress-record details[open] > .manager-detail-metrics > div { display: flex; justify-content: space-between; gap: 6px; min-width: 0; border-bottom: 1px dashed var(--line); padding: 2px 0; }
+  :root:root:root .manager-root .manager-progress-record details[open] > .manager-detail-metrics :is(dt, dd) { margin: 0; min-width: 0; }
+
+  /* Waiting lists: one card, three tabs, paged rows (name + chip + Hồ sơ). */
+  :root:root:root .manager-root .manager-progress-waiting > header { margin-bottom: 6px; }
+  :root:root:root .manager-root .manager-progress-waiting h3 { margin: 0; }
+  :root:root:root .manager-root .manager-progress-waiting-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 3px; margin-bottom: 4px; border-radius: 10px; background: var(--surface-2, #f3f1ec); }
+  :root:root:root .manager-root .manager-progress-waiting-tabs > button { min-height: 30px !important; height: 30px; padding: 0 6px !important; border: 0; border-radius: 8px; background: transparent; box-shadow: none; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); width: auto !important; }
+  :root:root:root .manager-root .manager-progress-waiting-tabs > button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+  :root:root:root .manager-root .manager-progress-waiting-tabs > button:disabled { opacity: .45; }
+  :root:root:root #root .manager-root .manager-progress-list { max-height: none !important; overflow: visible !important; }
+  :root:root:root .manager-root .manager-progress-list > .item { display: flex; align-items: center; gap: 8px; padding: 6px 2px; margin: 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; }
+  :root:root:root .manager-root .manager-progress-list > .item:last-child { border-bottom: 0; }
+  :root:root:root .manager-root .manager-progress-list > .item > .body { flex: 1 1 auto; min-width: 0; }
+  :root:root:root .manager-root .manager-progress-list > .item > .body > .row { flex-wrap: nowrap; gap: 6px; min-width: 0; }
+  :root:root:root .manager-root .manager-progress-list > .item > .body > .row > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .manager-progress-list > .item .badge { flex: none; white-space: nowrap; }
+
+  /* ── Learner profile modal ── */
+  :root:root:root .manager-root .manager-learner-profile-dialog { max-height: 75dvh !important; display: flex; flex-direction: column; overflow: auto; }
+  :root:root:root .manager-root .manager-learner-profile-dialog > .manager-dialog-heading { position: sticky; top: 0; z-index: 2; background: var(--surface); flex-wrap: nowrap; align-items: center; gap: 8px; }
+  :root:root:root .manager-root .manager-learner-profile-dialog > .manager-dialog-heading > h3 { flex: 1 1 auto; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+  :root:root:root .manager-root .manager-learner-profile-dialog > .manager-dialog-heading > .manager-rename-button { flex: none; margin: 0 !important; }
+  :root:root:root .manager-root .manager-profile-scores { display: flex; gap: 8px; margin: 0 0 6px; }
+  :root:root:root .manager-root .manager-profile-scores > div { flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 10px; border-radius: 9px; background: var(--surface-2, #f3f1ec); }
+  :root:root:root .manager-root .manager-profile-scores :is(dt, dd) { margin: 0; font-size: 13px; }
+  :root:root:root .manager-root .manager-profile-scores dt { color: var(--muted); }
+  :root:root:root .manager-root .manager-profile-scores dd { font-weight: 600; white-space: nowrap; }
+  :root:root:root #root .manager-root .manager-learner-profile-dialog .manager-profile-rows { max-height: none !important; overflow: visible !important; }
+  :root:root:root .manager-root .manager-learner-profile-dialog .manager-profile-row { padding: 5px 0; gap: 2px; }
+  :root:root:root .manager-root .manager-learner-profile-dialog .list-pager { position: sticky; bottom: -12px; margin: 4px -12px -12px; padding: 6px 12px; background: var(--surface); border-top: 1px solid var(--line); }
+  :root:root:root .manager-root .manager-rename-form { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 8px; }
+  :root:root:root .manager-root .manager-rename-form > label { flex-basis: 100%; font-size: 12.5px; color: var(--muted); }
+  :root:root:root .manager-root .manager-rename-form > input { flex: 1 1 0; min-width: 0; height: 34px; min-height: 0; font-size: 14px; }
+  :root:root:root .manager-root .manager-rename-form > .row { flex: none; flex-wrap: nowrap; gap: 6px; margin: 0; }
+  :root:root:root .manager-root .manager-rename-form > p { flex-basis: 100%; margin: 0; }
+
+  /* ── Yêu cầu: card per request ──
+     line 1: type chip + title · line 2: learner · note (2 lines) · footer: status · date … actions. */
+  :root:root:root #root .manager-root .request-workspace .request-table { max-height: none !important; overflow: visible !important; }
+  :root:root:root .manager-root .request-workspace .request-table :is(table, tbody) { display: block; width: 100%; }
+  :root:root:root .manager-root .request-workspace .request-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  :root:root:root .manager-root .request-workspace .request-table tr.request-record {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 10px 2px; border-bottom: 1px solid var(--line);
+  }
+  :root:root:root .manager-root .request-workspace .request-table tr.request-record:last-child { border-bottom: 0; }
+  :root:root:root .manager-root .request-workspace .request-table tr.request-record > td { display: block; padding: 0; border: 0; min-width: 0; width: auto; white-space: normal; background: transparent !important; }
+  :root:root:root .manager-root .request-workspace .request-kind { order: 0; flex: none; min-width: 64px !important; text-align: center; box-sizing: border-box; padding: 1px 6px !important; border-radius: 6px; background: var(--surface-2, #f3f1ec); color: var(--muted); font-size: 11.5px; line-height: 18px; white-space: nowrap; }
+  :root:root:root .manager-root .request-workspace .request-table tr.request-record > td.request-content { display: contents; }
+  :root:root:root .manager-root .request-workspace .request-content > * { order: 1; flex: 1 1 100%; min-width: 0; margin: 0 !important; }
+  :root:root:root .manager-root .request-workspace .request-content > .request-title { flex: 1 1 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+  :root:root:root .manager-root .request-workspace .request-content > :is(.request-learner, .request-note) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+  :root:root:root .manager-root .request-workspace .request-content > .request-reason { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 13.5px; line-height: 1.35; }
+  :root:root:root .manager-root .request-workspace .request-content > .manager-reopen-warning { white-space: normal; }
+  :root:root:root .manager-root .request-workspace .request-content > p.small:not(.request-reason):not(.request-learner):not(.request-note) { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .request-workspace .request-content > a.btn { flex: none; order: 2; }
+  :root:root:root .manager-root .request-workspace .request-state { order: 3; flex: 0 1 auto; max-width: 45%; }
+  :root:root:root .manager-root .request-workspace .request-state > .badge { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .request-workspace .request-date { order: 4; flex: none; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  :root:root:root .manager-root .request-workspace .request-commands { order: 5; flex: none; margin-left: auto; }
+  :root:root:root .manager-root .request-workspace .request-commands[data-empty] { display: none; }
+  :root:root:root .manager-root .request-workspace .request-actions { gap: 6px; }
+  :root:root:root .manager-root .request-workspace .request-actions > button:not(:has(.action-icon-only)) { min-height: var(--icon-btn, 36px) !important; height: var(--icon-btn, 36px); padding: 0 12px !important; width: auto !important; white-space: nowrap; }
+  :root:root:root .manager-root .request-workspace .manager-requests-filters { margin: 0 0 4px; }
+  :root:root:root .manager-root .request-workspace .request-evidence-thumb, :root:root:root .manager-root .request-workspace .request-content img { object-fit: contain; }
+
+  /* ── Nhắc học ── */
+  :root:root:root .manager-root .manager-reminder-empty-state { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; padding: 12px; }
+  :root:root:root .manager-root .manager-reminder-empty-state > * { margin: 0; }
+  :root:root:root .manager-root .manager-reminder-empty-state > h3 { font-size: 15px; }
+  :root:root:root .manager-root .manager-reminder-empty-state > p { font-size: 13px; }
+  :root:root:root #root .manager-root .manager-reminder-queue { max-height: none !important; overflow: visible !important; }
+  :root:root:root .manager-root .manager-reminder-recipient--compact { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 4px 0; }
+  :root:root:root .manager-root .manager-reminder-message { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  :root:root:root .manager-root .manager-reminder-actions { flex-wrap: wrap; gap: 6px; }
+  :root:root:root .manager-root .manager-reminder-actions > button:not(:has(.action-icon-only)) { width: auto !important; min-height: var(--icon-btn, 36px) !important; height: var(--icon-btn, 36px); padding: 0 10px !important; white-space: nowrap; }
+  :root:root:root .manager-root .manager-reminder-actions > button:has(.action-icon-only) { margin-left: 0; }
+  :root:root:root .manager-root .manager-reminder-actions > button:has(.action-icon-only):nth-last-child(2) { margin-left: auto; }
+  :root:root:root .manager-root .manager-reminder-toolbar { flex-wrap: nowrap; align-items: center; gap: 8px; padding: 10px 12px; }
+  :root:root:root .manager-root .manager-reminder-toolbar > button { width: auto !important; flex: none; white-space: nowrap; }
+  :root:root:root .manager-root .manager-reminder-history-list { margin: 0; padding: 0; list-style: none; }
+  :root:root:root .manager-root .manager-reminder-history-list > li { display: block; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  :root:root:root .manager-root .manager-reminder-history-list > li:last-child { border-bottom: 0; }
+  :root:root:root .manager-root .manager-reminder-history-heading { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; min-width: 0; margin: 0 0 2px; }
+  :root:root:root .manager-root .manager-reminder-history-heading > b { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .manager-reminder-history-heading > .badge { flex: none; white-space: nowrap; }
+  :root:root:root .manager-root .manager-reminder-history-heading > .manager-reminder-history-delete { margin-left: auto !important; flex: none; }
+  :root:root:root .manager-root .manager-reminder-history-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+  :root:root:root .manager-root .manager-base-editor { padding: 10px 0 0; border: 0; background: transparent; box-shadow: none; }
+  :root:root:root .manager-root .manager-base-editor > h3 { display: flex; align-items: center; font-size: 14px; margin: 0 0 6px; }
+  :root:root:root .manager-root .manager-base-editor label { display: grid; gap: 2px; font-size: 12.5px; margin-bottom: 6px; }
+  :root:root:root .manager-root .manager-base-editor :is(input, textarea) { font-size: 14px; }
+  :root:root:root .manager-root .manager-base-editor input { height: 34px; min-height: 0; }
+  :root:root:root .manager-root .manager-base-editor textarea { field-sizing: content; min-height: calc(2lh + 12px); max-height: none; resize: vertical; }
+  :root:root:root .manager-root .manager-base-editor-actions { justify-content: flex-end; gap: 6px; }
+  :root:root:root .manager-root .manager-base-editor-actions > button:not(:has(.action-icon-only)) { width: auto !important; margin-right: auto; }
+  :root:root:root .manager-root .manager-reminder-confirm-dialog { max-height: 75dvh; overflow: auto; }
+  :root:root:root .manager-root .manager-reminder-confirm-dialog > .manager-dialog-heading > h2 { margin: 0; font-size: 16px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .manager-reminder-confirm-actions { justify-content: flex-end; flex-wrap: nowrap; gap: 8px; }
+  :root:root:root .manager-root .manager-reminder-confirm-actions > button { width: auto !important; }
+
+  /* ── Báo cáo ── */
+  :root:root:root .manager-root .manager-monthly-report .report { padding: 12px; }
+  :root:root:root .manager-root .manager-monthly-report .rhead { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 8px; margin-bottom: 6px; padding-bottom: 0; border: 0; }
+  :root:root:root .manager-root .manager-monthly-report .rhead .eyebrow { display: none; }
+  :root:root:root .manager-root .manager-monthly-report-title { flex: 1 1 auto; min-width: 0; }
+  :root:root:root .manager-root .manager-monthly-report-title h2 { margin: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .manager-monthly-report-title .meta { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .manager-monthly-report-actions { flex: none; flex-wrap: nowrap; gap: 6px; width: auto; display: flex; margin: 0; }
+  :root:root:root .manager-root .manager-monthly-report-actions > .btn { width: auto !important; flex: none !important; }
+  :root:root:root .manager-root .manager-monthly-report-actions > .btn-primary { height: var(--icon-btn, 36px); min-height: var(--icon-btn, 36px) !important; padding: 0 10px !important; gap: 4px; }
+  :root:root:root .manager-root .manager-monthly-export-status:empty { display: none; }
+  :root:root:root .manager-root .manager-monthly-filters { display: flex; flex-wrap: nowrap; gap: 8px; margin: 0 0 8px; }
+  :root:root:root .manager-root .manager-monthly-filters > label { display: flex; flex-direction: row; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); min-width: 0; white-space: nowrap; flex: none; }
+  :root:root:root .manager-root .manager-monthly-filters > label:first-child { flex: 1 1 auto; }
+  :root:root:root .manager-root .manager-monthly-filters :is(input, select) { height: 34px; min-height: 0 !important; font-size: 14px; padding-block: 0; min-width: 0; }
+  :root:root:root .manager-root .manager-monthly-filters input { flex: 1 1 auto; width: 100%; }
+  :root:root:root .manager-root .manager-monthly-report .summary { padding: 8px 10px; margin-bottom: 8px; font-size: 13px; }
+  :root:root:root .manager-root .manager-monthly-report .summary .eyebrow { display: none; }
+  :root:root:root .manager-root .manager-monthly-report h3 { font-size: 15px; margin: 10px 0 6px; }
+  :root:root:root .manager-root .manager-monthly-metrics td:first-child { display: flex; align-items: center; gap: 2px; }
+  :root:root:root #root .manager-root .manager-monthly-learner-list { max-height: none !important; overflow: visible !important; margin: 0; }
+  :root:root:root .manager-root .manager-monthly-learner-list summary { padding-block: 6px; }
+  :root:root:root .manager-root .manager-monthly-learner-summary { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  :root:root:root .manager-root .manager-monthly-learner-summary > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .manager-monthly-learner-summary > .manager-monthly-learner-name { flex: 0 1 auto; display: inline-flex; align-items: center; gap: 4px; }
+  :root:root:root .manager-root .manager-monthly-learner-summary > .muted { flex: 1 1 0; font-size: 12.5px; }
+  :root:root:root .manager-root .manager-report-activity-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  :root:root:root .manager-root .manager-report-activity-heading > .btn-sm { width: auto !important; flex: none; }
+  :root:root:root .manager-root .manager-report-next-actions ul { padding-left: 18px; margin: 0; }
+
+  /* ── Khảo sát ── */
+  :root:root:root .manager-root .monthly-survey-month-filter { display: flex; flex-wrap: nowrap; align-items: end; gap: 8px; padding: 12px; }
+  :root:root:root .manager-root .monthly-survey-month-filter > .monthly-survey-field { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; margin: 0; }
+  :root:root:root .manager-root .monthly-survey-month-filter > .monthly-survey-field > span { font-size: 12.5px; color: var(--muted); }
+  :root:root:root .manager-root .monthly-survey-month-filter input { height: 34px; min-height: 0 !important; font-size: 14px; min-width: 0; width: 100%; }
+  :root:root:root .manager-root .monthly-survey-month-filter > button { flex: none; width: auto !important; height: var(--icon-btn, 36px); min-height: var(--icon-btn, 36px) !important; padding: 0 12px; margin: 0; }
+  :root:root:root .manager-root .monthly-surveys-page :is(.row, .form-actions, .monthly-survey-actions) > :is(button, .btn) { width: auto !important; flex: none; white-space: nowrap; }
+  :root:root:root .manager-root .monthly-surveys-page :is(.row, .form-actions, .monthly-survey-actions) { flex-wrap: wrap; gap: 6px; }
+  :root:root:root .manager-root .monthly-surveys-page .card { padding: 12px; }
+  :root:root:root .manager-root .monthly-surveys-page h2 { font-size: 16px; margin: 0 0 6px; }
+  :root:root:root .manager-root .monthly-surveys-page :is(input:not([type=checkbox]):not([type=radio]), select) { height: 34px; min-height: 0 !important; font-size: 14px; }
+  :root:root:root .manager-root .monthly-surveys-page textarea { font-size: 14px; field-sizing: content; min-height: calc(2lh + 12px); }
+  :root:root:root .manager-root .monthly-survey-question { padding: 8px 10px; }
+  :root:root:root .manager-root .monthly-survey-option { display: flex; align-items: end; gap: 6px; }
+  :root:root:root .manager-root .monthly-survey-option > .monthly-survey-field { flex: 1 1 auto; min-width: 0; }
+
+  /* ── Ngày nghỉ lễ ── */
+  :root:root:root .manager-root .manager-holiday-form { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; padding: 10px 12px; }
+  :root:root:root .manager-root .manager-holiday-form > label { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 0; font-size: 13px; white-space: nowrap; }
+  :root:root:root .manager-root .manager-holiday-form input { flex: 1 1 auto; min-width: 0; width: 100%; height: 34px; min-height: 0 !important; font-size: 14px; }
+  :root:root:root .manager-root .manager-holiday-form > button { width: auto !important; flex: none; height: var(--icon-btn, 36px); min-height: var(--icon-btn, 36px) !important; padding: 0 14px !important; margin: 0; }
+  :root:root:root .manager-root .manager-holiday-calendar { padding: 12px; }
+  :root:root:root .manager-root .manager-holiday-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  :root:root:root .manager-root .manager-holiday-header h2 { display: inline-flex; align-items: center; margin: 0; font-size: 16px; }
+  :root:root:root .manager-root .manager-holiday-header select { width: auto; height: 32px; min-height: 0 !important; font-size: 13px; }
+  :root:root:root #root .manager-root .manager-holiday-list { max-height: none !important; overflow: visible !important; margin: 0; }
+  :root:root:root .manager-root .manager-holiday-list > li { display: flex; align-items: center; gap: 8px; padding: 7px 0; }
+  :root:root:root .manager-root .manager-holiday-description { flex: 1 1 auto; min-width: 0; display: grid; gap: 1px; }
+  :root:root:root .manager-root .manager-holiday-description > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .manager-holiday-description > b { font-size: 14px; }
+  :root:root:root .manager-root .manager-holiday-description > small { font-size: 12px; }
+  :root:root:root .manager-root .manager-holiday-description a { padding: 0; min-height: 0; border: 0; }
+
+  /* ── Hiệu suất vận hành ── */
+  :root:root:root .manager-root .manager-operators-section { padding: 12px; }
+  :root:root:root .manager-root .manager-operators-section > .manager-section-heading { flex-wrap: nowrap; align-items: center; gap: 8px; }
+  :root:root:root .manager-root .manager-operators-section > .manager-section-heading h3 { margin: 0; font-size: 15px; white-space: nowrap; }
+  :root:root:root .manager-root .manager-operators-section > .manager-section-heading > div:first-child { flex: 1 1 auto; min-width: 0; }
+  :root:root:root .manager-root .manager-operations-month { display: flex; flex-direction: row; align-items: center; gap: 6px; flex: none; }
+  :root:root:root .manager-root .manager-operations-month > span { display: none; }
+  :root:root:root .manager-root .manager-operations-month select { height: 32px; min-height: 0 !important; font-size: 13px; width: auto; max-width: 13rem; white-space: nowrap; }
+  :root:root:root .manager-root .manager-operations-month-summary { margin: 6px 0; font-size: 12.5px; }
+  :root:root:root .manager-root .manager-operator-row { margin: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; padding: 0; }
+  :root:root:root .manager-root .manager-operator-summary { padding: 8px 0; }
+  :root:root:root .manager-root .manager-operator-detail { padding: 0 0 8px; }
+  :root:root:root .manager-root .manager-operator-key-metrics { margin: 0 0 6px; }
+  :root:root:root .manager-root .manager-operator-breakdown--paged { border: 0; padding: 0; margin: 0; background: transparent; }
+  :root:root:root .manager-root .manager-operator-breakdown--paged .manager-metric-group { padding: 0; border: 0; background: transparent; box-shadow: none; }
+  :root:root:root .manager-root .manager-operator-breakdown--paged .manager-metric-group > .row { padding: 5px 0 !important; font-size: 13px; }
+  :root:root:root .manager-root .manager-operator-pool-table { width: 100%; table-layout: fixed; display: table !important; font-size: 12.5px; }
+  :root:root:root .manager-root .manager-operator-pool-table :is(th, td) { padding: 4px 4px !important; min-width: 0 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  :root:root:root .manager-root .manager-operator-pool-table th { font-size: 11px; text-transform: none; letter-spacing: 0; }
+  :root:root:root .manager-root .manager-operator-pool-table :is(th, td):nth-child(1) { width: 13%; }
+  :root:root:root .manager-root .manager-operator-pool-table :is(th, td):nth-child(2) { width: 30%; }
+  :root:root:root .manager-root .manager-operator-pool-table :is(th, td):nth-child(n+3) { width: 19%; }
+
+  /* ── Giả lập phần thưởng ── */
+  :root:root:root .manager-root .manager-reward-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px; }
+  :root:root:root .manager-root .manager-reward-controls > .field { margin: 0; display: grid; gap: 2px; min-width: 0; }
+  :root:root:root .manager-root .manager-reward-controls > .field > span { font-size: 12.5px; }
+  :root:root:root .manager-root .manager-reward-controls select, :root:root:root .manager-root .manager-reward-custom input { height: 34px; min-height: 0 !important; font-size: 14px; min-width: 0; }
+  :root:root:root .manager-root .manager-reward-controls > :is(.manager-reward-custom-toggle, .manager-reward-custom) { grid-column: 1 / -1; }
+  :root:root:root .manager-root .manager-reward-custom-toggle { justify-self: start; width: auto !important; }
+  :root:root:root .manager-root .manager-reward-result-pane { padding: 12px; }
+  :root:root:root .manager-root .manager-reward-preview-heading { flex-wrap: nowrap; align-items: center; gap: 8px; }
+  :root:root:root .manager-root .manager-reward-preview-heading h2 { margin: 0; font-size: 16px; white-space: nowrap; }
+  :root:root:root .manager-root .manager-reward-preview-actions { display: flex; flex-wrap: nowrap; gap: 6px; }
+  :root:root:root .manager-root .manager-reward-preview-actions > button { width: auto !important; white-space: nowrap; }
+  :root:root:root .manager-root .manager-reward-result-pane > :not(header):not(.reward-screen-reader) { border: 0; box-shadow: none; padding: 0; background: transparent; }
+  :root:root:root .manager-root .reward-celebration { max-height: 75dvh; overflow: auto; }
+  :root:root:root .manager-root .reward-celebration-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; min-height: calc(var(--icon-btn, 36px) + 16px); margin: 0 -12px 8px; padding: 10px calc(var(--icon-btn, 36px) + 16px) 10px 12px; background: var(--surface); }
+
+  /* ── Cài đặt › Người dùng (manager accounts) ── */
+  :root:root:root .manager-root .manager-account-create { padding: 12px; }
+  :root:root:root .manager-root .manager-account-create > h4 { display: flex; align-items: center; margin: 0 0 6px; font-size: 15px; }
+  :root:root:root .manager-root .manager-account-create__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 8px; }
+  :root:root:root .manager-root .manager-account-create__grid > .field { margin: 0; display: grid; gap: 2px; min-width: 0; }
+  :root:root:root .manager-root .manager-account-create__grid > .field > span:first-child { font-size: 12.5px; }
+  :root:root:root .manager-root .manager-account-create__grid :is(input, select) { height: 34px; min-height: 0 !important; font-size: 14px; min-width: 0; width: 100%; }
+  :root:root:root .manager-root .manager-account-create__submit { width: auto !important; margin-top: 8px; height: var(--icon-btn, 36px); min-height: var(--icon-btn, 36px) !important; padding: 0 14px; }
+}
+
+/* ───────────── Phones (<= 600px) ───────────── */
+@media (max-width: 600px) {
+  :root:root:root .manager-root .manager-page .card.section { padding: 12px; }
+
+  /* Tiến độ nhóm: two lines per learner —
+     [level][name…][Hồ sơ] / [Bỏ N ngày][dots][Bài tháng][…] */
+  :root:root:root .manager-root .manager-progress-table tr.manager-progress-record::after { content: ""; order: 4; flex-basis: 100%; height: 0; }
+  :root:root:root .manager-root .manager-progress-record > .manager-progress-profile { order: 3; margin-left: auto; }
+  :root:root:root .manager-root .manager-progress-record > .manager-progress-status { order: 5; }
+  :root:root:root .manager-root .manager-progress-record > .manager-progress-rhythm { order: 6; }
+  :root:root:root .manager-root .manager-progress-record > .manager-progress-lessons { order: 7; margin-left: auto; font-size: 13px; }
+  :root:root:root .manager-root .manager-progress-compact-details > details:not([open]) { order: 8; }
+  :root:root:root .manager-root .manager-progress-record > .manager-progress-name { font-size: 14px; }
+  :root:root:root .manager-root .manager-progress-record .week-dots .dot { width: 7px; height: 7px; }
+
+  /* Người dùng: name + status + ⋯ / email + role; PIN only after "Xem PIN". */
+  :root:root:root .manager-root .manager-accounts-card { padding: 2px 12px 12px; border: 0; box-shadow: none; background: transparent; }
+  :root:root:root .manager-root .manager-accounts-heading { margin-bottom: 4px; }
+  :root:root:root .manager-root .manager-accounts-table { border: 0 !important; padding: 0 !important; background: transparent !important; box-shadow: none !important; }
+  :root:root:root .manager-root .manager-accounts-table__table, :root:root:root .manager-root .manager-accounts-table__table tbody { display: block; width: 100%; }
+  :root:root:root .manager-root .manager-accounts-table__table thead { display: none; }
+  :root:root:root .manager-root .manager-accounts-table__table tbody tr {
+    display: grid !important; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name status actions" "email role role" "pin pin pin";
+    align-items: center; gap: 4px 8px; padding: 8px 0 !important; margin: 0 !important; border: 0 !important; border-bottom: 1px solid var(--line) !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important;
+  }
+  :root:root:root .manager-root .manager-accounts-table__table tbody tr > td { display: block; padding: 0 !important; border: 0 !important; min-width: 0; max-width: none; width: auto; background: transparent !important; }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(1) { grid-area: name; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(2) { grid-area: email; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--muted); }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(3) { grid-area: role; justify-self: end; }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(3) select { width: 9.5rem; max-width: 100%; height: 30px !important; min-height: 0 !important; padding-block: 0; font-size: 13px; }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(4) { grid-area: status; }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(4) .badge { white-space: nowrap; }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(5) { grid-area: pin; }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(5)[data-empty] { display: none; }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(6) { display: contents !important; }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(6) > .manager-account-more { grid-area: actions; justify-self: end; }
+  :root:root:root .manager-root .manager-accounts-table__table .manager-account-pin { display: inline-flex; height: 30px; }
+  :root:root:root .manager-root .manager-accounts-table__table .manager-account-pin :is(input, button) { height: 30px !important; min-height: 0 !important; }
+  /* ⋯ opens an inline action row under the account (no floating menu): text actions, then the icon group, delete last. */
+  :root:root:root .manager-root .manager-accounts-table__table td.manager-account-menu-row { grid-column: 1 / -1; grid-row: 4; }
+  :root:root:root .manager-root .manager-account-menu-row > .manager-account-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 9px; background: var(--surface-2, #f3f1ec); }
+  :root:root:root .manager-root .manager-account-menu-row > .manager-account-actions > button:not(:has(.action-icon-only)) { width: auto !important; height: var(--icon-btn, 36px); min-height: var(--icon-btn, 36px) !important; padding: 0 10px !important; white-space: nowrap; }
+  :root:root:root .manager-root .manager-account-menu-row > .manager-account-actions > button:has(.action-icon-only):nth-last-child(2) { margin-left: auto; }
+  :root:root:root .manager-root .manager-account-more[aria-expanded="true"] { background: var(--primary-soft, #e6f0ea); }
+  :root:root:root .manager-root .settings-recovery { margin-top: 8px; }
+}
+
+/* Late fixes (phones/tablets): back link above the title; survey editor actions on one row. */
+@media (max-width: 1024px) {
+  :root:root:root .manager-root .manager-page-title__content > .manager-page-back { display: block; width: max-content; margin: 0 0 2px; }
+  :root:root:root .manager-root .monthly-surveys-page .form-actions { flex-wrap: nowrap; justify-content: flex-end; }
+  :root:root:root .manager-root .monthly-surveys-page .form-actions > :is(button, .btn) { height: var(--icon-btn, 36px); min-height: var(--icon-btn, 36px) !important; padding: 0 10px !important; font-size: 13px; }
+}
+
+/* Người dùng (phone): name | status | ⋯  /  email | role | ⋯ — status chip, role select and ⋯ in fixed right-hand columns. */
+@media (max-width: 600px) {
+  :root:root:root .manager-root .manager-accounts-card { padding: 4px 12px 12px !important; }
+  :root:root:root .manager-root .manager-accounts-heading { margin: 0 0 8px !important; gap: 8px; align-items: center; }
+  :root:root:root .manager-root .manager-accounts-table__table tbody tr {
+    grid-template-columns: minmax(0, 1fr) 120px var(--icon-btn, 32px) !important;
+    grid-template-areas: "name status actions" "email role actions" "pin pin pin" !important;
+  }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(4) { justify-self: stretch; min-width: 0; }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(4) .badge { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-align: center; box-sizing: border-box; }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(3) { justify-self: stretch; }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(3) select { width: 120px !important; max-width: 120px !important; text-overflow: ellipsis; padding-inline: 8px 22px; }
+  :root:root:root .manager-root .manager-accounts-table__table td:nth-child(6) > .manager-account-more { align-self: center; }
+  :root:root:root .manager-root .manager-password-control { display: flex; align-items: center; gap: 6px; }
+  :root:root:root .manager-root .manager-password-control > input { flex: 1 1 auto; min-width: 0; }
+  :root:root:root .manager-root .manager-password-control > .manager-password-toggle { position: static !important; flex: none; width: 34px; height: 34px; min-height: 0; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); transform: none !important; }
+  :root:root:root .manager-root .manager-password-control > .manager-password-toggle svg { width: 16px; height: 16px; }
+  :root:root:root .manager-root .manager-account-create__error { margin: 6px 0 0; }
+  :root:root:root .manager-root .manager-account-create__submit { display: block; margin: 8px 0 0 auto !important; }
+}
+
+/* Giả lập phần thưởng (phones/tablets): selects in one row, Kết quả / Tùy chỉnh tabs, compact result. */
+@media (max-width: 1024px) {
+  :root:root:root .manager-root .manager-reward-workspace { display: block; }
+  :root:root:root .manager-root .manager-reward-workspace > .card + .card { margin-top: 8px; }
+  :root:root:root .manager-root .manager-reward-tabs { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 3px; border-radius: 10px; background: var(--surface-2, #f3f1ec); }
+  :root:root:root .manager-root .manager-reward-tabs > button { width: auto !important; height: 30px; min-height: 0 !important; padding: 0 8px !important; border: 0; border-radius: 8px; background: transparent; box-shadow: none; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  :root:root:root .manager-root .manager-reward-tabs > button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+  :root:root:root .manager-root .manager-reward-custom { display: grid; gap: 8px; }
+  :root:root:root .manager-root .manager-reward-custom[hidden] { display: none; }
+  :root:root:root .manager-root .manager-reward-custom > .field { display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; }
+  :root:root:root .manager-root .manager-reward-custom > .field > input { width: 7rem; flex: none; }
+  :root:root:root .manager-root .manager-reward-badge-field > .small { display: block; margin-bottom: 4px; font-size: 12.5px; color: var(--muted); }
+  :root:root:root .manager-root .manager-reward-badge-group { display: flex !important; flex-wrap: wrap; gap: 6px; }
+  :root:root:root .manager-root .manager-reward-badge-group > button { display: inline-flex !important; align-items: center; gap: 4px; width: auto !important; max-width: none !important; flex: none !important; height: 30px; min-height: 0 !important; padding: 0 9px !important; border-radius: 999px; font-size: 12.5px; white-space: nowrap; }
+  :root:root:root .manager-root .manager-reward-badge-group > button[aria-pressed="true"] { background: var(--primary-soft, #e6f0ea); border-color: var(--primary, #2f6b4f); }
+  :root:root:root .manager-root .manager-reward-result-pane[hidden] { display: none; }
+  :root:root:root .manager-root .manager-reward-preview-heading h2 { display: inline-flex; align-items: center; }
+  :root:root:root .manager-root .manager-reward-preview-actions { align-items: center; }
+  :root:root:root .manager-root .manager-reward-preview-actions > button { height: var(--icon-btn, 36px); min-height: var(--icon-btn, 36px) !important; padding: 0 10px !important; }
+  /* The season card (shared learner component), flattened and compact. */
+  :root:root:root .manager-root .manager-rewards-page .profile-season-card { margin: 0; padding: 0; border: 0; box-shadow: none; background: transparent; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-heading { display: flex; align-items: center; gap: 10px; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-figure { width: 52px !important; height: 52px !important; flex: none; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-figure-emoji { font-size: 26px !important; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-heading .eyebrow { font-size: 11px; margin: 0; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-title { font-size: 17px; margin: 0; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-heading .small { font-size: 12px; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-tracks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0 4px; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-track { padding: 6px 10px; margin: 0; min-height: 0; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-track strong { font-size: 15px; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-missing { margin: 4px 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .manager-rewards-page .profile-badges-heading { margin-top: 8px !important; }
+  :root:root:root .manager-root .manager-rewards-page .profile-badges-heading h3 { font-size: 14px; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level { margin: 6px 0 0; padding: 0; border: 0; background: transparent; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level-heading { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level-heading > .xs { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level .badges { display: flex !important; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level .bdg { display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 4px; width: auto !important; min-height: 0 !important; height: 30px; padding: 0 10px 0 8px !important; border-radius: 999px; position: relative; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level .bdg > :is(.profile-badge-description, .profile-badge-earned-level) { display: none !important; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level .bdg > .profile-badge-state { position: static !important; order: 3; display: inline-grid; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level .bdg > .profile-badge-emoji { font-size: 15px !important; margin: 0 !important; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level .bdg > b { font-size: 12.5px; white-space: nowrap; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-actions > .btn { width: auto !important; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-card > details { display: none; }
+}
+@media (max-width: 1024px) {
+  :root:root:root .manager-root .manager-reward-controls > .field { grid-column: auto !important; grid-row: auto !important; }
+  :root:root:root .manager-root .manager-reward-controls > :is(.manager-reward-tabs, .manager-reward-custom, .manager-reward-custom-toggle) { grid-column: 1 / -1 !important; grid-row: auto !important; }
+}
+@media (max-width: 600px) {
+  :root:root:root:root .manager-root .manager-accounts-table__table td:nth-child(3) select { font-size: 12.5px !important; padding: 0 6px !important; overflow: hidden; display: inline-flex; align-items: center; line-height: 1; }
+}
+@media (max-width: 1024px) {
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level-heading > .badge { flex: none; white-space: nowrap; }
+}
+/* Season result card, calmer: big numbers, short labels (CSS only: the card is the shared learner component). */
+@media (max-width: 1024px) {
+  :root:root:root .manager-root .manager-rewards-page [data-testid="season-points-summary"] { display: none; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-heading .small.muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-heading > :last-child { min-width: 0; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-track strong { font-size: 18px; line-height: 1.2; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level-heading > .xs { display: none; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level-heading > .badge { max-width: 100%; overflow: hidden; display: inline-flex; align-items: center; gap: 4px; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level-heading > .badge > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .manager-root .manager-rewards-page .profile-badges-heading > .small { font-size: 12px; font-weight: 500 !important; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-actions { margin-top: 6px; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-actions > .btn { height: 30px; min-height: 0 !important; padding: 0 10px !important; font-size: 12.5px; border: 0; background: transparent; box-shadow: none; color: var(--primary, #2f6b4f); text-decoration: underline; text-underline-offset: 3px; }
+  :root:root:root .manager-root .manager-reward-preview-heading { flex-wrap: nowrap !important; }
+  :root:root:root .manager-root .manager-reward-preview-heading h2 { min-width: 0; }
+}
+
+/* ── Round 2 ── */
+@media (max-width: 1024px) {
+  /* Tiến độ: "…" opens a short label: value list under the row (values wrap, never truncated). */
+  :root:root:root .manager-root .manager-progress-compact-details > details[open] { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 0 8px; padding: 6px 8px; border-radius: 9px; background: var(--surface-2, #f3f1ec); }
+  :root:root:root .manager-root .manager-progress-record details[open] > summary { float: none; grid-column: 2; grid-row: 1; }
+  :root:root:root .manager-root .manager-progress-record details[open] > .manager-detail-metrics { grid-column: 1; grid-row: 1; display: grid !important; grid-template-columns: 1fr !important; gap: 2px !important; font-size: 13px; }
+  :root:root:root .manager-root .manager-progress-record details[open] > .manager-detail-metrics > div { display: flex !important; justify-content: flex-start !important; gap: 6px !important; border: 0 !important; padding: 0 !important; }
+  :root:root:root .manager-root .manager-progress-record details[open] > .manager-detail-metrics dt { flex: none; width: 6.5rem; color: var(--muted); }
+  :root:root:root .manager-root .manager-progress-record details[open] > .manager-detail-metrics dd { flex: 1 1 auto; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+  :root:root:root .manager-root .manager-progress-record details[open] > .manager-detail-metrics dd * { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
+
+  /* Báo cáo: a recognisable report header — label, full title (wraps), one meta line, actions row below. */
+  :root:root:root .manager-root .manager-monthly-report .rhead { display: grid !important; grid-template-columns: minmax(0, 1fr); gap: 6px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  :root:root:root .manager-root .manager-monthly-report .rhead .eyebrow { display: block; font-size: 11px; margin: 0; }
+  :root:root:root .manager-root .manager-monthly-report-title h2 { font-size: 18px; line-height: 1.25; white-space: normal; overflow: visible; text-overflow: clip; margin: 2px 0; }
+  :root:root:root .manager-root .manager-monthly-report-title .meta { font-size: 12.5px; white-space: normal; overflow: visible; }
+  :root:root:root .manager-root .manager-monthly-report-actions { justify-content: flex-start; }
+
+  /* Khảo sát: month, Xem tháng and reload on one centred row, same height. */
+  :root:root:root .manager-root .monthly-survey-month-filter { display: grid !important; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-rows: auto 34px; align-items: center; column-gap: 8px; row-gap: 2px; }
+  :root:root:root .manager-root .monthly-survey-month-filter > .monthly-survey-field { display: contents !important; }
+  :root:root:root .manager-root .monthly-survey-month-filter > .monthly-survey-field > span { grid-column: 1 / -1; grid-row: 1; }
+  :root:root:root .manager-root .monthly-survey-month-filter > .monthly-survey-field > input { grid-column: 1; grid-row: 2; height: 34px !important; margin: 0; }
+  :root:root:root .manager-root .monthly-survey-month-filter > button { grid-row: 2; align-self: center; height: 34px !important; min-height: 34px !important; margin: 0 !important; }
+  :root:root:root:root:root:root:root .manager-root .monthly-survey-month-filter > button:has(> .action-icon-only) { width: 34px !important; min-width: 34px !important; height: 34px !important; min-height: 34px !important; }
+  :root:root:root .manager-root .monthly-surveys-page .form-actions { flex-wrap: nowrap !important; gap: 6px; }
+  :root:root:root .manager-root .monthly-surveys-page .form-actions > button[type="submit"] { order: -1; margin-right: auto; }
+  :root:root:root .manager-root .monthly-surveys-page .monthly-survey-actions { flex-wrap: nowrap !important; }
+
+  /* Giả lập: keep the season card and badge tints, trim secondary lines. */
+  :root:root:root .manager-root .manager-reward-result-pane > .profile-season-card { padding: 10px !important; border-radius: 12px; border: 1px solid var(--line) !important; background: color-mix(in srgb, var(--primary, #1f6b44) 9%, white) !important; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-card { background: color-mix(in srgb, var(--primary, #1f6b44) 9%, white) !important; padding: 10px !important; border: 1px solid var(--line) !important; border-radius: 12px; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level .bdg { background: #fbf1d9 !important; border: 1px solid #e3c98a !important; color: #4a3b12 !important; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-level .bdg:not(.off) { background: var(--primary-soft, #e6f0ea) !important; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-heading .small.muted:not([data-testid]) { display: none; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-missing { display: none; }
+  :root:root:root .manager-root .manager-rewards-page .profile-badges-heading > .small { display: none; }
+  :root:root:root .manager-root .manager-rewards-page .profile-season-track { background: var(--surface) !important; }
+
+  /* Giả lập › Tùy chỉnh: label above the points input, chips below with room. */
+  :root:root:root .manager-root .manager-reward-custom:not([hidden]) { grid-template-columns: minmax(0, 1fr) !important; }
+  :root:root:root .manager-root .manager-reward-custom > .field { display: grid !important; grid-template-columns: minmax(0, 1fr); gap: 2px !important; }
+  :root:root:root .manager-root .manager-reward-custom > .field > span { white-space: nowrap; }
+  :root:root:root .manager-root .manager-reward-custom > .field > input { width: 10rem !important; max-width: 100%; }
+  :root:root:root .manager-root .manager-reward-custom .manager-reward-badge-group { grid-template-columns: none !important; }
+
+  /* Small notification / confirm dialogs: compact centred card, close × in the shared corner. */
+  :root:root:root .manager-root :is(.reward-celebration, .manager-reminder-confirm-dialog, .manager-purge-dialog) { width: min(380px, calc(100vw - 32px)) !important; max-width: 380px !important; margin-inline: auto; position: relative; }
+  :root:root:root .manager-root .reward-celebration-header { position: static !important; margin: 0 -12px 4px !important; }
+  :root:root:root .manager-root .reward-celebration .profile-season-figure { transform: scale(1.15); margin: 6px 0; }
+  :root:root:root .manager-root .reward-celebration-body h2 { font-size: 21px !important; }
+  :root:root:root .manager-root .reward-celebration-body p { font-size: 14px; }
+  :root:root:root .manager-root .reward-celebration-action { min-height: 36px !important; width: auto !important; padding: 0 20px !important; justify-self: center; margin-inline: auto; display: block; }
+  :root:root:root .manager-root .reward-celebration .modal-close:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+}
+@media (max-width: 600px) {
+  /* Phone: drop the low-value placement score from the "…" list. */
+  :root:root:root .manager-root .manager-progress-record .manager-detail-secondary { display: none !important; }
+}
+@media (max-width: 600px) {
+  :root:root:root:root:root .manager-root .manager-progress-record details[open] > .manager-detail-metrics > div.manager-detail-secondary { display: none !important; }
+  :root:root:root:root .manager-root .manager-progress-record details[open] > .manager-detail-metrics dd { background: transparent !important; padding: 0 !important; }
+}
+/* Round 2b: "…" stays in the row header next to Hồ sơ; the opened detail is a 2-column list under the row. */
+@media (max-width: 1024px) {
+  :root:root:root:root .manager-root .manager-progress-compact-details > details[open] { display: contents !important; }
+  :root:root:root:root .manager-root .manager-progress-compact-details > details[open]::details-content { display: contents; }
+  :root:root:root:root .manager-root .manager-progress-compact-details > details > summary { order: 6; flex: none; }
+  :root:root:root:root .manager-root .manager-progress-record details[open] > summary { grid-column: auto; grid-row: auto; background: var(--primary-soft, #e6f0ea); }
+  :root:root:root:root .manager-root .manager-progress-record details[open] > .manager-detail-metrics {
+    order: 9; flex: 1 1 100%; display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 6px 14px !important; margin: 2px 0 0 !important; padding: 0 !important; background: transparent !important; border: 0 !important; font-size: 13px;
+  }
+  :root:root:root:root .manager-root .manager-progress-record details[open] > .manager-detail-metrics > div { display: grid !important; gap: 0 !important; border: 0 !important; padding: 0 !important; background: transparent !important; }
+  :root:root:root:root .manager-root .manager-progress-record details[open] > .manager-detail-metrics dt { width: auto !important; font-size: 11.5px; color: var(--muted); }
+  :root:root:root:root .manager-root .manager-progress-record details[open] > .manager-detail-metrics dd { font-weight: 500; background: transparent !important; padding: 0 !important; }
+}
+@media (max-width: 600px) {
+  /* Phone row 1: level · name … · "…" · Hồ sơ. */
+  :root:root:root:root .manager-root .manager-progress-compact-details > details > summary { order: 3; }
+}
+/* Tablet: Tùy chỉnh side by side — points on the left, badge chips on the right. */
+@media (min-width: 601px) and (max-width: 1024px) {
+  :root:root:root:root .manager-root .manager-reward-custom:not([hidden]) { grid-template-columns: minmax(11rem, auto) minmax(0, 1fr) !important; align-items: start; gap: 8px 18px; }
+  :root:root:root:root .manager-root .manager-reward-custom > .field > input { width: 9rem !important; }
+}
+@media (max-width: 600px) {
+  :root:root:root:root .manager-root .manager-progress-compact-details > details:not([open]) { order: 3; }
+}
+/* ⓘ titles everywhere (ManagerTitle): KPI labels and small titles keep their compact size; tips open full width below. */
+@media (max-width: 1024px) {
+  :root:root:root .manager-root .manager-kpi-grid { position: relative; }
+  :root:root:root:root .manager-root .manager-kpi-grid > .kpi, :root:root:root:root .manager-root .manager-kpi-grid > .kpi > .kpi-label { position: static !important; overflow: visible !important; }
+  :root:root:root:root .manager-root .manager-kpi-grid > .kpi > .kpi-label { margin: 0 !important; font-size: 13px; line-height: 18px; font-weight: 500; }
+  :root:root:root:root .manager-root .manager-kpi-grid > .kpi > .kpi-label .info-tip-button { width: 18px; height: 18px; }
+  :root:root:root .manager-root .manager-reward-badge-title { margin: 0 0 4px; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+  :root:root:root .manager-root .manager-reminder-toolbar h3 { margin: 0; font-size: 15px; }
+  :root:root:root .manager-root .manager-reminder-empty-state { display: block; }
+  :root:root:root .manager-root :is(.manager-section-heading, .manager-holiday-header, .manager-accounts-heading, .monthly-survey-heading, .manager-report-activity-heading) > .info-title { flex: 1 1 auto; min-width: 0; margin: 0; }
+}
+@media (max-width: 1024px) {
+  /* KPI ⓘ: popover spans the whole KPI row; labels keep their full word next to the ⓘ. */
+  :root:root:root:root:root .manager-root .manager-kpi-grid > .kpi > .kpi-label .info-tip { position: static !important; }
+  :root:root:root:root:root .manager-root .manager-kpi-grid .info-tip-popover { inset-inline: 0 !important; inset-block-start: calc(100% + 4px) !important; width: auto !important; max-width: none !important; z-index: 30; }
+  :root:root:root:root .manager-root .manager-kpi-grid > .kpi { padding: 8px 8px !important; }
+  :root:root:root:root .manager-root .manager-kpi-grid > .kpi > .kpi-label { font-size: 12.5px; gap: 1px; }
+  :root:root:root:root .manager-root .manager-kpi-grid > .kpi > .kpi-label .info-tip-button { width: 16px !important; height: 16px !important; min-width: 16px !important; min-height: 16px !important; }
+  :root:root:root:root .manager-root .manager-kpi-grid > .kpi > .kpi-label .info-tip-button svg { width: 13px; height: 13px; }
+}

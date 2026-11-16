@@ -1,10 +1,12 @@
 import { useEffect, useId, useState } from "react";
-import { Printer } from "lucide-react";
+import { Copy, Download, Printer } from "lucide-react";
+import { ActionLabel, useCompactUi } from "../shared/CompactUi.js";
+import { Pager, usePaged } from "../shared/Pager.js";
 import type { CefrLevel, ManagerMonthlyFilter, ManagerMonthlyLearnerView, ManagerMonthlyOverviewView } from "@e4s/contracts";
 import { managerApiClient } from "../../api/manager.js";
 import { ReportAction } from "./Report.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
-import { Badge, copyText, downloadText, formatDate, PageTitle, percent } from "./shared.js";
+import { Badge, copyText, downloadText, formatDate, ManagerTitle, PageDescription, PageTitle, percent } from "./shared.js";
 import { formatScore, formatScoreForExport, formatScoreOutOf } from "../shared/format-score.js";
 
 const levels = ["A1", "A2", "B1", "B2", "C1"] as const;
@@ -62,6 +64,7 @@ export function useManagerMonthlyOverview() {
 
 export function ManagerMonthlyReport({ view, filter, selectFilter, loading, error }: ReturnType<typeof useManagerMonthlyOverview>) {
   const compact = useMediaQuery("(max-width: 960px)");
+  const compactUi = useCompactUi();
   const [exportStatus, setExportStatus] = useState("");
   const [showActivity, setShowActivity] = useState(false);
   const activityId = useId();
@@ -82,7 +85,7 @@ export function ManagerMonthlyReport({ view, filter, selectFilter, loading, erro
   };
 
   return <div className="manager-page manager-report-page manager-monthly-report">
-    <PageTitle description={<p className="muted">Kết quả học và thi theo tháng.</p>}><h1>Báo cáo tổng kết</h1></PageTitle>
+    <PageTitle description={<PageDescription text="Kết quả học và thi theo tháng." />}><h1>Báo cáo tổng kết</h1></PageTitle>
     {view ? <article className="report">
       <header className="rhead">
         <div className="manager-monthly-report-title">
@@ -94,10 +97,15 @@ export function ManagerMonthlyReport({ view, filter, selectFilter, loading, erro
           <button className="btn btn-primary" type="button" aria-label="In / Lưu PDF" disabled={!report} onClick={() => window.print()}>
             <Printer size={16} strokeWidth={2} aria-hidden="true" /> <span className="manager-report-action-full">In / Lưu PDF</span><span className="manager-report-action-compact" aria-hidden="true">PDF</span>
           </button>
+          {compactUi ? <>
+            <button className="btn" type="button" aria-label="Copy bản chữ" disabled={!report} onClick={() => void copyReport()}><ActionLabel icon={Copy} label="Copy bản chữ" /></button>
+            <button className="btn" type="button" aria-label="Tải .txt" disabled={!report} onClick={downloadReport}><ActionLabel icon={Download} label="Tải .txt" /></button>
+          </> : <>
           <button className="btn" type="button" aria-label="Copy bản chữ" disabled={!report} onClick={() => void copyReport()}>
             <span className="manager-report-action-full">Copy bản chữ</span><span className="manager-report-action-compact" aria-hidden="true">Sao chép</span>
           </button>
           <button className="btn" type="button" disabled={!report} onClick={downloadReport}>Tải .txt</button>
+          </>}
         </div>
       </header>
       <p className="manager-monthly-export-status no-print" role="status">{exportStatus}</p>
@@ -114,14 +122,14 @@ export function ManagerMonthlyReport({ view, filter, selectFilter, loading, erro
       </div>
       {report ? <>
         <div className="summary" style={{ background: report.summaryBackground }}>
-          <div className="eyebrow">Tóm tắt</div>{report.summary}
+          <div className="eyebrow">Tóm tắt</div>{compactUi ? report.shortSummary : report.summary}
         </div>
-        <h3>{sectionTitles[0]}</h3>
+        <ManagerTitle title={sectionTitles[0]} label="Cách tính ba chỉ số" tip={report.metrics.map((metric) => `${metric.label}: ${metric.description} (ngưỡng ${metric.threshold}).`).join(" ")} />
         <div className="table-wrap">
           <table className="manager-monthly-metrics" role="table" aria-label="Ba chỉ số của tháng">
             <thead role="rowgroup"><tr role="row"><th scope="col">Chỉ số</th><th scope="col">Kết quả</th><th scope="col">Mức đạt</th><th scope="col">Ngưỡng</th><th scope="col">Đánh giá</th></tr></thead>
             <tbody role="rowgroup">{report.metrics.map((metric) => <tr key={metric.label} role="row">
-              <td role="cell"><b>{metric.label}</b><div className="xs muted">{metric.description}</div></td>
+              <td role="cell"><b>{metric.label}</b>{compactUi ? null : <div className="xs muted">{metric.description}</div>}</td>
               <td role="cell"><span className="manager-monthly-cell-label" aria-hidden="true">Kết quả</span>
                 <b className="manager-monthly-metric-value">{metric.result}</b>{metric.value !== null ? <div className="xs muted">{metric.detail}</div> : null}
               </td>
@@ -138,7 +146,7 @@ export function ManagerMonthlyReport({ view, filter, selectFilter, loading, erro
           </table>
         </div>
         <div className="manager-report-activity-heading">
-          <h3>{sectionTitles[1]}</h3>
+          <ManagerTitle title={sectionTitles[1]} tip="Phân bố trình độ, điểm danh, bài học, bài ôn, lượt Season, điểm thi tháng và khiếu nại của học viên trong bộ lọc." />
           {compact && <button className="btn-sm no-print" type="button" aria-controls={activityId} aria-expanded={showActivity}
             onClick={() => setShowActivity((current) => !current)}>{showActivity ? "Thu gọn" : "Xem chi tiết"}</button>}
         </div>
@@ -157,23 +165,23 @@ export function ManagerMonthlyReport({ view, filter, selectFilter, loading, erro
             <tbody>{report.activity.map(({ label, value }) => <tr key={label}><td>{label}</td><td><b>{value}</b></td></tr>)}</tbody>
           </table>
         </div>
-        <h3>{sectionTitles[2]}</h3>
+        <ManagerTitle title={sectionTitles[2]} tip="Điểm danh, bài học, Season, bài thi tháng và khiếu nại / kháng nghị của từng học viên. Bấm tên để xem chi tiết." />
         {view.learners.length ? <>
           <div className="table-wrap manager-report-learner-table-wrap bounded-scroll-region sticky-table-head report-scroll-region" role="region" aria-label="Bảng từng học viên" tabIndex={0}><MonthlyLearnerTable learners={view.learners} /></div>
           {compact ? <MonthlyLearnerList key={`${view.month}:${view.cefr ?? ""}`} learners={view.learners} /> : null}
         </> : <p className="muted">Chưa có học viên trong bộ lọc này.</p>}
-        <h3>{sectionTitles[3]}</h3>
+        <ManagerTitle title={sectionTitles[3]} tip="Hài lòng: điểm khảo sát trung bình của các phiếu trong bộ lọc. Ngưỡng 4/5." />
         <div className="barrow">
           {view.survey.average !== null ? <Badge tone={view.survey.average >= 4 ? "ok" : "warn"}>{report.metrics[2].result}</Badge> : null}
           <span>{report.surveyDetail}</span>
         </div>
         <section className="manager-report-next-actions" aria-label="Phần việc cần làm tiếp">
-          <h3>{sectionTitles[4]}</h3>
+          <ManagerTitle title={sectionTitles[4]} tip="Số liệu tính tự động từ dữ liệu của tháng và mức đã chọn." />
           <ul className="manager-next-actions" aria-label="Việc cần làm tiếp">
             {report.actions.map((action) => <ReportAction key={action.title} {...action} />)}
           </ul>
         </section>
-        <footer className="foot">Số liệu tính tự động từ dữ liệu của tháng và mức đã chọn.</footer>
+        {compactUi ? null : <footer className="foot">Số liệu tính tự động từ dữ liệu của tháng và mức đã chọn.</footer>}
       </> : null}
     </article> : null}
     {error ? <div className="banner danger" role="alert">{error} <button className="btn-sm" type="button" onClick={() => selectFilter(filter)}>Thử lại</button></div> : null}
@@ -247,7 +255,8 @@ function buildMonthlyReport(view: ManagerMonthlyOverviewView) {
   else if (survey.average === null) actions.push({ title: "Theo dõi điểm hài lòng", detail: "Các phiếu đã nộp chưa có câu trả lời được chấm điểm." });
   if (!actions.length) actions.push({ title: "Không có việc tồn đọng", detail: "Số liệu trong bộ lọc hiện tại chưa ghi nhận việc cần theo dõi." });
 
-  return { metrics, summary, summaryBackground, placed, distribution, activity, surveyDetail: surveyDetail(survey), actions };
+  const shortSummary = `${measured ? `Đạt ${passed}/${measured} chỉ số` : "Chưa có dữ liệu"} · ${active.length}/${learners.length} đang học`;
+  return { metrics, summary, shortSummary, summaryBackground, placed, distribution, activity, surveyDetail: surveyDetail(survey), actions };
 }
 
 function surveyDetail({ submissions, ratingResponses, withoutRatingQuestion, unansweredRating }: ManagerMonthlyOverviewView["survey"]) {
@@ -271,10 +280,10 @@ function MonthlySkillScores({ scores }: { scores: ManagerMonthlyLearnerView["exa
 }
 
 function MonthlyLearnerList({ learners }: { learners: readonly ManagerMonthlyLearnerView[] }) {
-  const [showAll, setShowAll] = useState(false);
-  const visibleLearners = showAll ? learners : learners.slice(0, 3);
-  const remaining = learners.length - visibleLearners.length;
-  return <><ul className="manager-monthly-learner-list bounded-scroll-region report-scroll-region" aria-label="Kết quả học tập theo tháng" tabIndex={0}>
+  // Paged like every other list on phones/tablets (no "Xem thêm", no scroll box).
+  const paged = usePaged(learners, { phone: 5, tablet: 6 });
+  const visibleLearners = paged.visible;
+  return <><ul className="manager-monthly-learner-list report-scroll-region" aria-label="Kết quả học tập theo tháng" tabIndex={0}>
     {visibleLearners.map((learner) => <li key={learner.learnerId}>
       <details>
         <summary>
@@ -300,7 +309,7 @@ function MonthlyLearnerList({ learners }: { learners: readonly ManagerMonthlyLea
       </details>
     </li>)}
   </ul>
-  {remaining > 0 ? <button className="btn-sm manager-report-more-learners no-print" type="button" onClick={() => setShowAll(true)}>Xem thêm {remaining} học viên</button> : null}</>;
+  <Pager {...paged} label="học viên" /></>;
 }
 
 function MonthlyLearnerTable({ learners }: { learners: readonly ManagerMonthlyLearnerView[] }) {

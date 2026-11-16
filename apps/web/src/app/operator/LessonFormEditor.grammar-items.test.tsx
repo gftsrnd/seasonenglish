@@ -44,18 +44,20 @@ describe("daily grammar practice in the manual editor (4175 A1 day 13)", () => {
   });
 
   it("keeps the generated example marks on a save that leaves the examples alone, and drops them once an example is edited", async () => {
+    // This day has two grammar steps, so the view (and the editor) show one block per step with its own marks.
     const marked = (): ContentLessonDraftInput => {
       const lesson = initial();
       const grammar = lesson.parts.find((part) => part.code === "grammar")!;
       const examples = (grammar.content.examples as string[]);
-      grammar.content = { ...grammar.content, exampleMarks: examples.map(() => ({ row: 1, marks: ["is"] })) };
+      const steps = (grammar.content.steps as Array<Record<string, unknown>>).map((step) => ({ ...step, exampleMarks: (step.examples as string[]).map(() => ({ row: 1, marks: ["is"] })) }));
+      grammar.content = { ...grammar.content, steps, exampleMarks: examples.map(() => ({ row: 1, marks: ["is"] })) };
       return lesson;
     };
     const save = async (edit: boolean) => {
       const user = userEvent.setup();
       const onSave = vi.fn();
       render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A1" monthly initial={marked()} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
-      if (edit) { const first = screen.getByLabelText("Câu ví dụ ngữ pháp 1"); await user.clear(first); await user.type(first, "This is my new desk."); }
+      if (edit) { const first = screen.getByLabelText("Điểm 1 – câu ví dụ 1"); await user.clear(first); await user.type(first, "This is my new desk."); }
       const question = screen.getByRole("group", { name: "Câu luyện tập 4" });
       const option = within(question).getByLabelText("Câu 4 – Lựa chọn 1");
       await user.clear(option); await user.type(option, "his");
@@ -66,8 +68,16 @@ describe("daily grammar practice in the manual editor (4175 A1 day 13)", () => {
       cleanup();
       return saved.parts.find((part) => part.code === "grammar")!.content;
     };
-    expect(await save(false)).toHaveProperty("exampleMarks");
-    expect(await save(true)).not.toHaveProperty("exampleMarks");
+    const kept = await save(false);
+    expect(kept.steps).toEqual(marked().parts.find((part) => part.code === "grammar")!.content.steps);
+    expect(kept).toHaveProperty("exampleMarks");
+    const edited = await save(true);
+    const [first, second] = edited.steps as Array<Record<string, unknown>>;
+    // Only the edited point loses its marks (its highlight falls back to the formula); the other point and the top level keep theirs.
+    expect(first!.examples).toEqual(["This is my new desk.", "He is my team leader."]);
+    expect(first).not.toHaveProperty("exampleMarks");
+    expect(second).toHaveProperty("exampleMarks");
+    expect(edited).toHaveProperty("exampleMarks");
   });
 
   it("names the question in the findings strip once the gate reports it", () => {

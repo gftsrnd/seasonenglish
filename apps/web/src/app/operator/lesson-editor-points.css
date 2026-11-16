@@ -1,0 +1,41 @@
+/* "Sửa tay" grammar points and pronunciation sounds (lesson-editor-grammar / lesson-editor-pronunciation):
+   one bordered block per point/sound, as in the lesson view. Fields keep the editor's own sizes on desktop;
+   phones/tablets get compact 34px one-line fields and 2-row growing textareas. */
+.operator-modal-scope .operator-lesson-points { display: grid; gap: 12px; min-width: 0; }
+.operator-modal-scope .operator-lesson-point { display: grid; gap: 12px; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface, transparent); }
+.operator-modal-scope .operator-lesson-point-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
+.operator-modal-scope .operator-lesson-point-head b { font-size: 14px; }
+.operator-modal-scope .operator-lesson-point > .field,
+.operator-modal-scope .operator-lesson-point > label.field { margin: 0; min-width: 0; }
+.operator-modal-scope .operator-lesson-point-list { display: grid; gap: 6px; min-width: 0; }
+.operator-modal-scope .operator-lesson-point-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: start; min-width: 0; }
+.operator-modal-scope .operator-lesson-point-row--word { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+.operator-modal-scope .operator-lesson-point-row--translated > .operator-lesson-point-translation { grid-column: 1; }
+.operator-modal-scope .operator-lesson-point-row > textarea { width: 100%; min-width: 0; }
+/* Explanation and passage: start at 2–3 rows and grow with the text, never clip (all widths). */
+body .operator-modal-scope .operator-lesson-points textarea:not(.line-field) { field-sizing: content; height: auto; min-height: 58px; max-height: 50vh; overflow-y: auto; resize: vertical; }
+/* Icon buttons: identical squares, never wider than tall. */
+/* Desktop: as tall as the 40px one-line fields beside them. */
+body .operator-modal-scope .operator-lesson-icon-button { display: inline-grid; place-items: center; box-sizing: border-box; width: 40px; min-width: 40px; height: 40px; min-height: 40px; padding: 0; flex: 0 0 40px; line-height: 0; }
+.operator-modal-scope .operator-lesson-add-button { display: inline-flex; align-items: center; gap: 6px; justify-self: start; width: auto; white-space: nowrap; }
+.operator-modal-scope .operator-lesson-point .field > .operator-lesson-add-button { margin-top: 2px; }
+/* Read-only catalog rule (B1–C1): same order as the view — rule, how to remember, common mistake, formula band. */
+.operator-modal-scope .operator-lesson-rule { display: grid; gap: 4px; min-width: 0; padding: 10px 12px; border-radius: 10px; background: var(--soft, rgba(0, 0, 0, 0.04)); font-size: 13.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.operator-modal-scope .operator-lesson-rule p { margin: 0; }
+.operator-modal-scope .operator-lesson-rule-band { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface, transparent); }
+
+@media (max-width: 1024px) {
+  .operator-modal-scope .operator-lesson-points { gap: 8px; }
+  .operator-modal-scope .operator-lesson-point { gap: 8px; padding: 8px 10px; border-radius: 10px; }
+  .operator-modal-scope .operator-lesson-point-row { gap: 4px; }
+  /* One-line fields: ~34px, 14px text, grow with the text (LineField); never a fixed clipping height. */
+  :root:root:root:root .operator-lesson-point textarea.line-field { min-height: 34px !important; height: auto; padding: 6px 8px; font-size: 14px; line-height: 1.35; }
+  :root:root:root:root .operator-lesson-points textarea:not(.line-field) { min-height: 56px; font-size: 14px; }
+  :root:root:root:root .operator-lesson-icon-button { width: 34px !important; min-width: 34px !important; height: 34px !important; min-height: 34px !important; padding: 0 !important; }
+  :root:root:root .operator-lesson-add-button { min-height: 32px; padding-inline: 10px; font-size: 13px; }
+  .operator-modal-scope .operator-lesson-rule { padding: 8px 10px; font-size: 13px; }
+}
+@media (max-width: 420px) {
+  /* Word + IPA side by side still fit at 360px; the IPA box is the narrower one. */
+  .operator-modal-scope .operator-lesson-point-row--word { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; }
+}

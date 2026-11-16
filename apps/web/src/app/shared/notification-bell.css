@@ -51,8 +51,9 @@
   overscroll-behavior-y: contain;
   scrollbar-width: thin;
 }
-.inbox-feed ul { list-style: none; padding: 0; margin: 0; }
-.inbox-item { padding: 12px; margin-block: 4px; border-radius: 10px; border: 1px solid var(--line); }
+/* Cards are spaced by the list gap (12px desktop, 10px phone/tablet), not by margins. */
+.inbox-feed ul { list-style: none; display: flex; flex-direction: column; gap: 12px; padding: 0; margin: 0; }
+.inbox-item { padding: 12px; margin: 0; border-radius: 10px; border: 1px solid var(--line); }
 .inbox-item { --inbox-color: var(--primary-dark); --inbox-tint: var(--primary-soft); }
 .inbox-item[data-category="support"] { --inbox-color: #6a461c; --inbox-tint: #fcf0dd; }
 .inbox-item[data-category="reopen"] { --inbox-color: #6a461c; --inbox-tint: #f1e2cc; }

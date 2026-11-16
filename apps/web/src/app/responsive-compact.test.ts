@@ -46,7 +46,7 @@ describe("phone and tablet stylesheet", () => {
   });
 
   it("gives touch screens 40px targets and phones/tablets 12px minimum labels", () => {
-    expect(css).toMatch(/@media \(pointer: coarse\) \{\s*:root:root :is\(\.btn-sm, a\.btn-sm, \.btn\.btn-sm\) \{ min-height: 40px !important; \}/);
+    expect(css).toMatch(/@media \(pointer: coarse\) \{\s*:root:root :is\(\.btn-sm, a\.btn-sm, \.btn\.btn-sm\) \{ min-height: var\(--touch-min, 40px\) !important; \}/);
     expect(css).toMatch(/@media \(max-width: 1023px\) \{\s*\.bottomnav a:not\(z\) \{ font-size: 12px; \}/);
     expect(css).toMatch(/\.eyebrow:not\(z\) \{ font-size: 12px; \}/);
     expect(css).toMatch(/\.badge:not\(z\) \{ font-size: 12px; \}/);

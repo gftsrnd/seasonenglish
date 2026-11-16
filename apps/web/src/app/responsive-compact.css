@@ -63,13 +63,12 @@
    inputs or the last row's actions. */
 @media (max-width: 1024px), (pointer: coarse) {
   :root:root body:has(.modal-backdrop, dialog[open], [role="dialog"], [role="alertdialog"], [aria-modal="true"]) > #root > .app-scroll-jump { display: none; }
-  :root:root :is([role="dialog"], .modal-backdrop, dialog) .exam-scroll-jump-dock { display: none; }
 }
 
 /* 5. Touch targets: at least 40×40 on touch screens (desktop mouse unchanged).
    `!important` makes 40px a floor over the many per-screen compact rules. */
 @media (pointer: coarse) {
-  :root:root :is(.btn-sm, a.btn-sm, .btn.btn-sm) { min-height: 40px !important; }
+  :root:root :is(.btn-sm, a.btn-sm, .btn.btn-sm) { min-height: var(--touch-min, 40px) !important; }
   :root:root :is(
     .btn-sm.btn-ghost.on,
     .coach-compose-icon,
@@ -82,10 +81,10 @@
     .lesson-page .vocabulary-card-sound,
     .coach-limit-details > summary,
     .ds-toast__dismiss
-  ) { min-width: 40px !important; min-height: 40px !important; }
-  :root:root :is(.monthly-day-action, .coach-feedback-toggle, .app-entry-link, .operator-monthly-findings-head, .operator-editor-finding-link) { min-height: 40px !important; }
-  :root:root a.link-button.small { display: inline-flex; align-items: center; min-height: 40px !important; }
-  :root:root summary { min-height: 40px !important; align-content: center; }
+  ) { min-width: var(--touch-min, 40px) !important; min-height: var(--touch-min, 40px) !important; }
+  :root:root :is(.monthly-day-action, .coach-feedback-toggle, .app-entry-link, .operator-monthly-findings-head, .operator-editor-finding-link) { min-height: var(--touch-min, 40px) !important; }
+  :root:root a.link-button.small { display: inline-flex; align-items: center; min-height: var(--touch-min, 40px) !important; }
+  :root:root summary { min-height: var(--touch-min, 40px) !important; align-content: center; }
 }
 
 /* 6. Readable text: nothing under 12px on phones and tablets.

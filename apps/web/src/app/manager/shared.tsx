@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useLocation } from "react-router";
 import { ManagerSectionNavigation } from "./ManagerSectionNavigation.js";
 import { managerNavigationPath, managerSectionForPath, operatorReadOnlyTabs } from "./navigation.js";
+import { Description, InfoTip, useCompactUi } from "../shared/CompactUi.js";
 
 const ManagerSectionDescription = createContext<HTMLDivElement | null | undefined>(undefined);
 
@@ -15,13 +16,14 @@ export function ManagerSectionLayout({ children }: { children: ReactNode }) {
   const section = managerSectionForPath(pathname);
   const item = section?.items.find(entry => entry.to === pathname);
   const [description, setDescription] = useState<HTMLDivElement | null>(null);
+  const compact = useCompactUi();
   if (!item) return <>{children}</>;
   const hasOwnDescription = "description" in item;
   return <ManagerSectionDescription.Provider value={hasOwnDescription ? null : description}>
     <header className="page-title manager-page-title manager-section-title no-print" data-section={section?.id}>
       <div className="manager-page-title__content">
         <h1>{"title" in item ? item.title : item.label}</h1>
-        {hasOwnDescription ? <div className="manager-section-description"><p className="muted">{item.description}</p></div>
+        {hasOwnDescription ? <div className="manager-section-description">{compact ? <InfoTip text={item.description} /> : <p className="muted">{item.description}</p>}</div>
           : <div ref={setDescription} className="manager-section-description" />}
       </div>
       <ManagerSectionNavigation readOnly={operatorReadOnlyTabs.some((tab) => tab.to === pathname)} />
@@ -55,8 +57,8 @@ export function OperationalCards(props: ManagerOperationalProps) {
     {props.error ? <div className="banner danger" role="alert"><div className="body small">{props.error}</div></div> : null}
     {props.loading ? <div className="card" role="status"><span className="spinner" aria-hidden="true" /> Đang tải tác vụ vận hành</div> : null}
     {!props.loading && showCards ? <>
-      {deleteRequests.length ? <section className="card manager-section-card manager-operational-card manager-operational-card--delete" aria-busy={props.busy || undefined}><h3>Yêu cầu xoá tài khoản <Badge tone="warn">{deleteRequests.length} chờ duyệt</Badge></h3><p className="xs muted" style={{ margin: "2px 0 8px" }}>Người vận hành tạo yêu cầu; tài khoản chỉ bị xoá sau khi Quản lý duyệt. Mở yêu cầu để xác nhận trước khi đổi dữ liệu.</p><div className="list">{deleteRequests.map((item) => <OperationalRow key={item.id} item={item} action="Duyệt xoá" tone="danger" busy={props.busy} disabled={props.readOnly || props.busy || !props.onOpenOperationalItem} disabledTitle={actionTitle(actionState, props.onOpenOperationalItem)} onClick={props.onOpenOperationalItem ? () => props.onOpenOperationalItem?.("delete", item.id) : undefined} />)}</div></section> : null}
-      {trashedAccounts.length ? <section className="card manager-section-card manager-operational-card" aria-busy={props.busy || undefined}><div className="row between"><h3>Tài khoản đã duyệt xoá <Badge>{trashedAccounts.length}</Badge></h3></div><p className="xs muted" style={{ margin: "2px 0 8px" }}>Tài khoản đã xoá và dữ liệu học không đăng nhập được. Khôi phục từng tài khoản, hoặc xoá vĩnh viễn khi chắc chắn không cần đối soát.</p><div className="list">{trashedAccounts.map((item) => {
+      {deleteRequests.length ? <section className="card manager-section-card manager-operational-card manager-operational-card--delete" aria-busy={props.busy || undefined}><ManagerTitle title={<>Yêu cầu xoá tài khoản <Badge tone="warn">{deleteRequests.length} chờ duyệt</Badge></>} label="Yêu cầu xoá tài khoản: giải thích" tip="Người vận hành tạo yêu cầu; tài khoản chỉ bị xoá sau khi Quản lý duyệt. Mở yêu cầu để xác nhận trước khi đổi dữ liệu." /><Description className="xs muted manager-operational-help" text="Người vận hành tạo yêu cầu; tài khoản chỉ bị xoá sau khi Quản lý duyệt. Mở yêu cầu để xác nhận trước khi đổi dữ liệu." /><div className="list">{deleteRequests.map((item) => <OperationalRow key={item.id} item={item} action="Duyệt xoá" tone="danger" busy={props.busy} disabled={props.readOnly || props.busy || !props.onOpenOperationalItem} disabledTitle={actionTitle(actionState, props.onOpenOperationalItem)} onClick={props.onOpenOperationalItem ? () => props.onOpenOperationalItem?.("delete", item.id) : undefined} />)}</div></section> : null}
+      {trashedAccounts.length ? <section className="card manager-section-card manager-operational-card" aria-busy={props.busy || undefined}><div className="row between"><ManagerTitle title={<>Tài khoản đã duyệt xoá <Badge>{trashedAccounts.length}</Badge></>} label="Tài khoản đã duyệt xoá: giải thích" tip="Tài khoản đã xoá và dữ liệu học không đăng nhập được. Khôi phục từng tài khoản, hoặc xoá vĩnh viễn khi chắc chắn không cần đối soát." /></div><Description className="xs muted manager-operational-help" text="Tài khoản đã xoá và dữ liệu học không đăng nhập được. Khôi phục từng tài khoản, hoặc xoá vĩnh viễn khi chắc chắn không cần đối soát." /><div className="list">{trashedAccounts.map((item) => {
         const purge = props.onPurgeOperationalItem;
         return <OperationalRow key={item.id} item={{ id: item.id, title: item.name, detail: `Xoá ${formatDateTime(item.deletedAt)}` }} action="Khôi phục" tone="primary" busy={props.busy} disabled={props.readOnly || props.busy || !props.onOpenOperationalItem} disabledTitle={actionTitle(actionState, props.onOpenOperationalItem)} onClick={props.onOpenOperationalItem ? () => props.onOpenOperationalItem?.("trash", item.id) : undefined} {...(purge && !props.readOnly ? { secondaryAction: { label: "Xoá vĩnh viễn", onClick: () => purge(item.id), disabled: Boolean(props.busy), disabledTitle: props.busy ? "Đang xử lý…" : undefined, opensDialog: true } } : {})} />;
       })}</div></section> : null}
@@ -96,6 +98,27 @@ export function PageTitle({ children, description, actions }: { children: ReactN
     <ManagerSectionNavigation />
     {actionRow}
   </header>;
+}
+
+/**
+ * Page description: the paragraph on desktop; on phones/tablets the text moves
+ * into an ⓘ tip next to the title (or disappears when it only repeats the UI).
+ */
+export function PageDescription({ text, tip = true }: { text: ReactNode; tip?: boolean }) {
+  const compact = useCompactUi();
+  if (!compact) return <p className="muted">{text}</p>;
+  return tip ? <InfoTip text={text} /> : null;
+}
+
+/**
+ * Section/card title with its ⓘ: on phones/tablets the explanation sits in an
+ * InfoTip right after the title (same markup as CompactUi's InfoTitle, plus an
+ * optional id); desktop renders the plain heading.
+ */
+export function ManagerTitle({ as: Tag = "h3", id, title, tip, className, label }: { as?: "h1" | "h2" | "h3" | "h4"; id?: string; title: ReactNode; tip: ReactNode; className?: string; label?: string }) {
+  const compact = useCompactUi();
+  if (!compact) return <Tag {...(id ? { id } : {})} {...(className ? { className } : {})}>{title}</Tag>;
+  return <Tag {...(id ? { id } : {})} className={["info-title", className].filter(Boolean).join(" ")}><span className="info-title-text">{title}</span><InfoTip text={tip} label={label ?? (typeof title === "string" ? `${title}: giải thích` : "Giải thích")} /></Tag>;
 }
 
 export function Badge({ children, tone = "" }: { children: ReactNode; tone?: "" | "ok" | "warn" | "danger" | "primary" }) {

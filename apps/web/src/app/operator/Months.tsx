@@ -24,6 +24,17 @@ import type { MonthlyIllustrationsView } from "../../api/operator.js";
 import "./months.css";
 import { operatorRegisterKindLabel, operatorRegisterNote, type OperatorRegisterTerm } from "./register-terms.js";
 import { LineField } from "../shared/LineField.js";
+import { Pencil as PencilIcon_, X as XIcon_ } from "lucide-react";
+import { ActionLabel, SectionTip, useCompactUi } from "../shared/CompactUi.js";
+import { OPERATOR_TIPS } from "./section-tips.js";
+
+import { Description } from "../shared/CompactUi.js";
+import { Paged } from "../shared/Pager.js";
+import { ModalCloseButton } from "../shared/CompactUi.js";
+import { monthlyDayGrammarSteps } from "./monthly-day-grammar-steps.js";
+
+/** ⓘ under a resource panel title: the panel intro that phones/tablets hide. */
+const RESOURCE_PANEL_TIPS: Partial<Record<string, string>> = { core: OPERATOR_TIPS.core, sounds: OPERATOR_TIPS.sounds, plan: OPERATOR_TIPS.plan, images: OPERATOR_TIPS.images };
 
 type MonthlyBriefInput = { title: string; brief: string; context: string; communicationGoal: string };
 type MonthlyDayInput = { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> };
@@ -135,6 +146,9 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
   const calendarCells = useMemo(() => calendarGrid(month, calendar), [month, calendar]);
   const compact = useMediaQuery("(max-width: 960px)");
   const narrowViewport = useMediaQuery("(max-width: 820px)");
+  const phoneViewport = useMediaQuery("(max-width: 600px)");
+  // Phones/tablets: resource panels open as a centred popup over a dimmed backdrop (tap outside to close).
+  const compactUiPanel = useCompactUi();
   const calendarRef = useRef<HTMLElement>(null);
   const [narrowCalendar, setNarrowCalendar] = useState(false);
   const agenda = narrowViewport || narrowCalendar;
@@ -187,7 +201,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
     { key: "expanded" as const, label: "Từ mở rộng", count: (framework?.resources?.supportTerms.length ?? 0) + (framework?.resources?.coreTerms ?? []).reduce((total, core) => total + (core.registerTerms?.length ?? 0), 0), description: "3–9 từ mỗi từ cốt lõi" },
     { key: "grammar" as const, label: "Ngữ pháp", count: framework?.resources?.grammarTopics.length ?? 0, description: "Điểm ngữ pháp cần dùng" },
     { key: "sounds" as const, label: "Phát âm", count: framework?.resources?.sounds.length ?? 0, description: "Âm và ví dụ thực hành" },
-    ...(illustrations ? [{ key: "images" as const, label: "Ảnh minh họa", count: illustrationCounts(illustrations).ready, description: illustrationCardDescription(illustrations) }] : [])
+    ...(illustrations ? [{ key: "images" as const, label: "Ảnh minh họa", shortLabel: "Ảnh", count: illustrationCounts(illustrations).ready, description: illustrationCardDescription(illustrations) }] : [])
   ];
   const frameworkIdForExam = framework?.status === "approved" ? framework.id : undefined;
   useEffect(() => {
@@ -476,7 +490,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
   };
   const resourceColumn = <div className="monthly-resource-column">
         <section className="monthly-resources card">
-        <div className="monthly-section-title"><div><span className="eyebrow">{cefr}</span><h2>Tài nguyên tháng</h2></div><span className={`monthly-status ${framework?.status ?? "missing"}`}>{frameworkStatus(framework?.status)}</span></div>
+        <div className="monthly-section-title"><div><span className="eyebrow">{cefr}</span><h2>Tài nguyên tháng<SectionTip text={OPERATOR_TIPS.resources} label="Tài nguyên tháng là gì?" /></h2></div><span className={`monthly-status ${framework?.status ?? "missing"}`}>{frameworkStatus(framework?.status)}</span></div>
         <p className="small muted">AI chuẩn bị một bộ tài nguyên thống nhất cho cả tháng.</p>
         {!framework?.resources ? <div className="monthly-resource-proposal" aria-label="Số lượng đề xuất theo lịch học">
           <span className="eyebrow">Số lượng đề xuất theo lịch học</span>
@@ -487,7 +501,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
             <div><dt>Mục tiêu phát âm</dt><dd>{resourceCounts.sounds}</dd></div>
           </dl>
           <small>Mỗi từ cốt lõi có 3–9 từ mở rộng, bắt buộc có từ bao trùm, đồng nghĩa và cùng họ từ.</small>
-        </div> : <div className="monthly-resource-cards">{resources.map((item) => <button key={item.key} type="button" onClick={() => setResourcePanel(item.key)}><b>{item.count}</b><strong>{item.label}</strong><span>{item.description}</span></button>)}</div>}
+        </div> : <div className="monthly-resource-cards">{resources.map((item) => <button key={item.key} type="button" aria-label={`${item.count} ${item.label}`} onClick={() => setResourcePanel(item.key)}><b>{item.count}</b><strong>{phoneViewport && "shortLabel" in item ? item.shortLabel : item.label}</strong><span>{item.description}</span></button>)}</div>}
         {(resourceGenerationAttempted || resourceRunning || resourceCheckpoint?.progress?.status === "failed") && <MonthlyResourceProgress running={resourceRunning} failed={resourceGenerationFailed && resourceCheckpoint?.progress?.status !== "running" && !(resourceCheckpoint?.progress?.status === "completed" && observedResourceRunId.current === resourceCheckpoint.progress.runId)} progress={resourceGenerating && resourceCheckpoint?.progress?.status === "completed" ? null : resourceCheckpoint?.progress} />}
         <div className="monthly-actions monthly-resource-actions">
           {resourceCheckpoint?.state === "draft_checkpoint" && !framework?.resources && <div className="monthly-resource-checkpoint" role="status" aria-label="Tiến độ tài nguyên nháp">
@@ -518,7 +532,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
         {framework?.status === "draft" && resourcesReopen?.status === "approved" && <p className="monthly-reopen-status approved small" role="note">Quản lý đã mở lại tài nguyên{resourcesReopen.decisionReason ? `: ${resourcesReopen.decisionReason}` : "."} Hãy rà soát rồi duyệt lại để phân bổ bài học.</p>}
         </section>
         <section className="card monthly-publication" aria-label={`Tiến độ công bố ${cefr}`}>
-          <h2>Công bố tháng · {cefr}</h2>
+          <h2>Công bố tháng · {cefr}<SectionTip desktop text={OPERATOR_TIPS.publication} label="Công bố tháng là gì?" /></h2>
           {publication?.publishedOn ? <>
               <p className="small muted">Đã công bố {publication.publishedOn}</p>
               {publishedAfterSystemDate ? <div className="banner warn monthly-republish-notice" role="note"><div className="body small">Ngày hệ thống ({dayMonth(overview.systemDate)}) sớm hơn ngày công bố ({dayMonth(publication.publishedOn)}). Học viên chưa vào học được. Bấm Công bố lại để mở theo ngày hiện tại.</div></div> : null}
@@ -535,7 +549,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
         </section>
       </div>;
   const calendarSection = <section className="monthly-calendar-section card" id="monthly-teaching-calendar" ref={calendarRef}>
-        <div className="monthly-section-title"><div><span className="eyebrow">{cefr}</span><h2>Lịch học {monthLabel(month)}</h2></div><div className="monthly-calendar-legend"><span className="lesson">Học mới</span><span className="review">Ôn tập</span><span className="weekend">Nghỉ</span><span className="holiday">Ngày lễ</span><span className="final">Bài thi tháng</span></div></div>
+        <div className="monthly-section-title"><div><span className="eyebrow">{cefr}</span><h2>Lịch học {monthLabel(month)}<SectionTip desktop text={OPERATOR_TIPS.calendar} label="Lịch học là gì?" /></h2></div><div className="monthly-calendar-legend"><span className="lesson">Học mới</span><span className="review">Ôn tập</span><span className="weekend">Nghỉ</span><span className="holiday">Ngày lễ</span><span className="final">Bài thi tháng</span></div></div>
         {agenda ? <div className="monthly-agenda-picker" role="group" aria-label="Tuần trong tháng">
           <button type="button" className="btn-sm" aria-label="Tuần trước" disabled={agendaWeek === 0} onClick={() => setAgendaSelection({ month, week: agendaWeek - 1 })}><ChevronLeft size={18} aria-hidden="true" /></button>
           <b aria-live="polite">{agendaDates[0]?.dateLabel}–{agendaDates.at(-1)?.dateLabel}/{month.slice(5)}</b>
@@ -574,10 +588,10 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       </section>;
 
   return <main className="operator-months-page">
-    {!hasSectionHeader ? <header className="operator-months-header"><h1>{readOnly ? "Nội dung tháng" : "Bài học"}</h1><p>Thiết kế chủ đề, tài nguyên và lịch học theo tháng.</p></header> : null}
+    {!hasSectionHeader ? <header className="operator-months-header"><h1>{readOnly ? "Nội dung tháng" : "Bài học"}<SectionTip text={OPERATOR_TIPS.monthsPage} label="Trang Bài học là gì?" /></h1><p>Thiết kế chủ đề, tài nguyên và lịch học theo tháng.</p></header> : null}
     {error && <div className="monthly-error" role="alert">{error}</div>}
     <section className="monthly-month-card card">
-      <h2 id="monthly-cycle-title" className="monthly-cycle-title">Chu kỳ tháng</h2>
+      <h2 id="monthly-cycle-title" className="monthly-cycle-title">Chu kỳ tháng<SectionTip desktop text={OPERATOR_TIPS.cycle} label="Chu kỳ tháng là gì?" /></h2>
       <div className="monthly-month-tabs" role="tablist" aria-labelledby="monthly-cycle-title">
         {monthChoices.map((choice) => <button key={choice} type="button" role="tab" disabled={busy} aria-selected={choice === month} className={choice === month ? "selected" : ""} aria-label={choice === monthChoices[0] ? `${monthLabel(choice)}, chỉ xem` : monthLabel(choice)} onClick={() => actions.onSelectMonth(choice)}>
           <span className="monthly-month-full">{monthLabel(choice)}</span><span className="monthly-month-short" aria-hidden="true">{choice.slice(5)}/{choice.slice(0, 4)}</span>{choice === monthChoices[0] && <small>Chỉ xem</small>}
@@ -585,7 +599,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       </div>
     </section>
     <section className="monthly-topic-card card">
-      <div className="monthly-section-title"><div><span className="eyebrow">Nội dung chung</span><h2>Chủ đề tháng</h2></div><span className="monthly-version">{briefLocked ? "Đã chốt" : overview.brief ? "Đang soạn" : "Chưa có"}</span></div>
+      <div className="monthly-section-title"><div><span className="eyebrow">Nội dung chung</span><h2>Chủ đề tháng<SectionTip desktop text={OPERATOR_TIPS.topic} label="Chủ đề tháng là gì?" /></h2></div><span className="monthly-version">{briefLocked ? "Đã chốt" : overview.brief ? "Đang soạn" : "Chưa có"}</span></div>
       {compact && briefLocked ? <div className="monthly-brief-summary">
         <b>{overview.brief?.title || brief.title}</b>
         <button type="button" className="btn-sm" aria-expanded={briefEditorMonth === month} aria-controls="monthly-brief-fields" onClick={() => setBriefEditorMonth(briefEditorMonth === month ? undefined : month)}>{briefEditorMonth === month ? "Thu gọn" : canEdit ? "Xem hoặc sửa chủ đề" : "Xem chủ đề"}</button>
@@ -607,14 +621,15 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
     </section>
     <div className="monthly-workspace">
       {compact && resourcesApproved ? <>{calendarSection}{resourceColumn}</> : <>{resourceColumn}{calendarSection}</>}
+      {framework?.resources && resourcePanel && compactUiPanel ? <div className="monthly-resource-backdrop" role="presentation" onClick={() => setResourcePanel(null)} /> : null}
       {framework?.resources && resourcePanel && <section className="monthly-resource-panel card" role="dialog" aria-modal="false" aria-label={resourcePanel === "plan" ? "Phân bổ tài nguyên và bài tập" : "Tài nguyên tháng"}>
-        <header><div><span className="eyebrow">Tài nguyên tháng</span><h2>{resourcePanel === "plan" ? "Phân bổ tài nguyên & bài tập" : resources.find((item) => item.key === resourcePanel)?.label}</h2></div><button type="button" className="btn-sm" aria-label="Đóng tài nguyên" onClick={() => setResourcePanel(null)}>Đóng</button></header>
+        <header><div><span className="eyebrow">Tài nguyên tháng</span><h2>{resourcePanel === "plan" ? "Phân bổ tài nguyên & bài tập" : resources.find((item) => item.key === resourcePanel)?.label}{RESOURCE_PANEL_TIPS[resourcePanel] ? <SectionTip text={RESOURCE_PANEL_TIPS[resourcePanel]} label="Giải thích tài nguyên" /> : null}</h2></div><ModalCloseButton label="Đóng tài nguyên" onClick={() => setResourcePanel(null)} /></header>
         {resourcePanel === "core" && <VocabularyPanel items={framework.resources.coreTerms} variant="core" />}
         {resourcePanel === "expanded" && <VocabularyPanel items={framework.resources.supportTerms} variant="expanded" registerCores={framework.resources.coreTerms} />}
         {resourcePanel === "grammar" && <GrammarResourcePanel topics={framework.resources.grammarTopics} {...(framework.resources.roadmap ? { roadmap: framework.resources.roadmap } : {})} />}
         {resourcePanel === "images" && illustrations && <MonthlyIllustrationPanel view={illustrations} busy={busy || !canEdit} onGenerate={generateIllustrations} onUpload={uploadIllustration} {...(actions.onRemoveIllustration ? { onRemove: removeIllustration } : {})} />}
         {resourcePanel === "sounds" && <PronunciationResourcePanel sounds={framework.resources.sounds} {...(framework.resources.roadmap ? { roadmap: framework.resources.roadmap } : {})} />}
-        {resourcePanel === "plan" && framework.resources.roadmap?.allocated && <div className="monthly-plan-inspector" aria-label="Phân bổ tài nguyên và bài tập"><p className="small muted">Kế hoạch đã chốt. Đây là sơ đồ phân bổ; nội dung bài học chưa được sinh.</p><div className="monthly-plan-days">{framework.resources.roadmap.days.map((day) => {
+        {resourcePanel === "plan" && framework.resources.roadmap?.allocated && <div className="monthly-plan-inspector" aria-label="Phân bổ tài nguyên và bài tập"><Description text={OPERATOR_TIPS.plan} /><Paged items={framework.resources.roadmap.days} phone={5} tablet={10} label="ngày">{(planPage) => <div className="monthly-plan-days">{planPage.map((day) => {
           const coreTerms = framework.resources!.coreTerms.filter((term) => day.kind === "new" ? day.coreTermIds.includes(term.id) : day.reviewTermIds.includes(term.id));
           const expandedTerms = framework.resources!.supportTerms.filter((term) => day.kind === "new" ? day.expandedTermIds.includes(term.id) : day.reviewExpandedTermIds.includes(term.id));
           const grammarIds = day.kind === "review" ? day.reviewGrammarStepIds ?? [] : day.grammarStepIds;
@@ -632,7 +647,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
               return <div key={core.id} className="monthly-plan-resource-group"><strong>{core.word}{core.type ? <em className="monthly-plan-core-type"> · {core.type}</em> : null}</strong>{groups.length ? <dl className="monthly-plan-relations">{groups.map(([label, words]) => <div key={label}><dt>{label}</dt><dd>{words.join(", ")}</dd></div>)}</dl> : <span>Chưa có từ mở rộng</span>}</div>;
             })}</div><small>Ngữ pháp: {grammarLabels.join(", ") || "Chưa gán"} · Phát âm: {soundLabels.join(", ") || "Chưa gán"}</small></div>
           </details>;
-        })}</div></div>}
+        })}</div>}</Paged></div>}
       </section>}
     </div>
     {editingResources && framework?.status === "draft" && framework.resources && actions.onSaveResources && <MonthlyResourceEditor
@@ -682,7 +697,7 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
   const daySupportIds = new Set(day ? (day.kind === "review" ? day.reviewExpandedTermIds : day.expandedTermIds) : []);
   // Older drafts were saved before expanded terms were attached at generation time.
   const dayGrammarIds = day ? (day.kind === "review" ? day.reviewGrammarStepIds ?? [] : day.grammarStepIds) : [];
-  const dayGrammarSteps = resources ? resources.grammarTopics.flatMap((topic) => topic.steps).filter((step) => dayGrammarIds.includes(step.id)) : [];
+  const dayGrammarSteps = resources ? monthlyDayGrammarSteps(resources.grammarTopics, dayGrammarIds) : [];
   // Grammar point name from the day plan, the same one the learner lesson API attaches.
   const dayGrammarName = resources ? monthlyGrammarDayTopicName(cefr, day, resources.grammarTopics) : undefined;
   // The read-aloud targets the learner passage bolds, from the same plan positions as the learner lesson API.
@@ -709,11 +724,11 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
     {!onApprove && onApproveAnyway && <Button className="btn-danger operator-lesson-approve-anyway-button" disabled={busy} aria-describedby={`monthly-approve-blocked-${lesson.lessonNumber}`} onClick={() => void onApproveAnyway()}>Vẫn duyệt (còn {draftSevere} lỗi nặng)</Button>}
     {!onApprove && onApproveAnyway && <span id={`monthly-approve-blocked-${lesson.lessonNumber}`} className="sr-only">Còn {draftSevere} lỗi nặng nên chưa duyệt bình thường được.</span>}
     {onRegenerate && <Button danger disabled={busy} onClick={() => void onRegenerate()}><Sparkles className="operator-button-icon" size={16} aria-hidden="true" />{busy ? "Đang sinh…" : "Sinh lại bằng AI"}</Button>}
-    {onEdit && <Button className="operator-lesson-edit-button" disabled={busy} onClick={() => onEdit()}><Pencil className="operator-button-icon" size={16} aria-hidden="true" />Sửa tay</Button>}
+    {onEdit && <Button className="operator-lesson-edit-button" disabled={busy} onClick={() => onEdit()}><ActionLabel icon={PencilIcon_} label="Sửa tay"><Pencil className="operator-button-icon" size={16} aria-hidden="true" />Sửa tay</ActionLabel></Button>}
     {onRequestReopen && <Button className="operator-lesson-reopen-button" disabled={busy} onClick={() => setRequestingReopen(true)}>Yêu cầu mở lại</Button>}
   </div>}>
     <a className="link-button small" href="/op/months" onClick={(event) => { event.preventDefault(); onClose(); }}>← Về lịch tháng</a>
-    <h1 className="operator-lesson-set-title">{dateLabel} · {teachingLabel} · Mức {cefr} <Badge tone={isDraft ? "warn" : "ok"}>{isDraft ? "Bản nháp" : "Đã duyệt"}</Badge></h1>
+    <h1 className="operator-lesson-set-title">{dateLabel} · {teachingLabel} · Mức {cefr} <Badge tone={isDraft ? "warn" : "ok"}>{isDraft ? "Bản nháp" : "Đã duyệt"}</Badge><SectionTip desktop text={OPERATOR_TIPS.lesson} label="Hướng dẫn xem bài" /></h1>
     <div className="operator-lesson-set-meta"><strong>{title}</strong><span>{cefr === "A1" || cefr === "A2" ? "tiếng Việt" : "tiếng Anh"}</span></div>
   </PageTitle>
     {/* The findings stay at the top of the view while the lesson below is scrolled, so the Operator always sees what to fix and where. */}
@@ -778,8 +793,15 @@ function GrammarResourcePanel({ topics, roadmap }: {
   roadmap?: NonNullable<NonNullable<MonthlyOperatorOverviewView["frameworks"][number]["resources"]>["roadmap"]>;
 }) {
   const daysFor = (stepId: string) => roadmap?.grammarSteps.find((item) => item.stepId === stepId)?.lessonNumbers ?? [];
+  const renderStep = (step: (typeof topics)[number]["steps"][number], index: number) => <section key={step.id} className="monthly-grammar-step"><span className="monthly-grammar-step-number">Bước {index + 1}</span><h4>{step.focus}</h4>{step.usage && <details className="monthly-grammar-detail"><summary>Ghi chú cách dùng</summary><p>{step.usage}</p></details>}{step.formula && <div className="monthly-grammar-formula"><span>Công thức</span><code>{step.formula}</code></div>}{roadmap?.days.filter(day => day.kind === "new" && day.newLessonNumber && day.newLessonNumber <= 12 && day.grammarStepIds.includes(step.id)).map(day => <p className="small" key={day.lessonNumber}><b>Bài {day.newLessonNumber}</b> {withoutGrammarStepLabel(monthlyReadablePlanObjective(day.grammarPlan?.objective ?? ""))}</p>)}{!roadmap?.allocated && step.dailyObjectives?.map((goal,i) => <p className="small" key={i}><b>Mục tiêu {i + 1}</b> {goal}</p>)}{step.examples.length > 0 && <div className="monthly-grammar-examples"><span>Ví dụ</span><div className="monthly-resource-chips">{step.examples.map((example) => <span key={example}>{example}</span>)}</div></div>}{roadmap?.allocated && <p className="monthly-roadmap-days">Áp dụng: {formatLessonBlocks(daysFor(step.id))}</p>}</section>;
+  // Phones/tablets: one grammar step per page (two on tablets) instead of every topic stacked.
+  const compactUi = useCompactUi();
+  if (compactUi) {
+    const steps = topics.flatMap((topic, topicIndex) => topic.steps.map((step, index) => ({ topic, topicIndex, step, index })));
+    return <><div className="monthly-roadmap-intro"><b>{topics.length} chủ điểm · {steps.length} bước</b></div><Paged items={steps} phone={1} tablet={2} label="bước ngữ pháp">{(page) => <div className="monthly-resource-roadmap monthly-grammar-roadmap" aria-label="Lộ trình ngữ pháp">{page.map(({ topic, topicIndex, step, index }) => <article key={step.id} className="monthly-roadmap-card monthly-grammar-card"><header><span className="monthly-roadmap-code">Chủ điểm {topicIndex + 1}</span><div><h3>{topic.title}</h3></div></header><div className="monthly-roadmap-steps monthly-grammar-steps">{renderStep(step, index)}</div></article>)}</div>}</Paged></>;
+  }
   return <><div className="monthly-roadmap-intro"><b>2 chủ điểm · 3 bước mỗi chủ điểm</b><span>Mỗi chủ điểm tiến dần từ cách dùng cơ bản đến ứng dụng trong công việc.</span></div><div className="monthly-resource-roadmap monthly-grammar-roadmap" aria-label="Lộ trình ngữ pháp">
-    {topics.map((topic, topicIndex) => <article key={topic.id} className="monthly-roadmap-card monthly-grammar-card"><header><span className="monthly-roadmap-code">Chủ điểm {topicIndex + 1}</span><div><h3>{topic.title}</h3></div></header><div className="monthly-roadmap-steps monthly-grammar-steps">{topic.steps.map((step, index) => <section key={step.id} className="monthly-grammar-step"><span className="monthly-grammar-step-number">Bước {index + 1}</span><h4>{step.focus}</h4>{step.usage && <details className="monthly-grammar-detail"><summary>Ghi chú cách dùng</summary><p>{step.usage}</p></details>}{step.formula && <div className="monthly-grammar-formula"><span>Công thức</span><code>{step.formula}</code></div>}{roadmap?.days.filter(day => day.kind === "new" && day.newLessonNumber && day.newLessonNumber <= 12 && day.grammarStepIds.includes(step.id)).map(day => <p className="small" key={day.lessonNumber}><b>Bài {day.newLessonNumber}</b> {withoutGrammarStepLabel(monthlyReadablePlanObjective(day.grammarPlan?.objective ?? ""))}</p>)}{!roadmap?.allocated && step.dailyObjectives?.map((goal,i) => <p className="small" key={i}><b>Mục tiêu {i + 1}</b> {goal}</p>)}{step.examples.length > 0 && <div className="monthly-grammar-examples"><span>Ví dụ</span><div className="monthly-resource-chips">{step.examples.map((example) => <span key={example}>{example}</span>)}</div></div>}{roadmap?.allocated && <p className="monthly-roadmap-days">Áp dụng: {formatLessonBlocks(daysFor(step.id))}</p>}</section>)}</div></article>)}
+    {topics.map((topic, topicIndex) => <article key={topic.id} className="monthly-roadmap-card monthly-grammar-card"><header><span className="monthly-roadmap-code">Chủ điểm {topicIndex + 1}</span><div><h3>{topic.title}</h3></div></header><div className="monthly-roadmap-steps monthly-grammar-steps">{topic.steps.map(renderStep)}</div></article>)}
   </div></>;
 }
 
@@ -788,9 +810,9 @@ function PronunciationResourcePanel({ sounds, roadmap }: {
   roadmap?: NonNullable<NonNullable<MonthlyOperatorOverviewView["frameworks"][number]["resources"]>["roadmap"]>;
 }) {
   const assignment = (soundId: string) => roadmap?.sounds.find((item) => item.soundId === soundId);
-  return <><div className="monthly-roadmap-intro"><b>4 mục tiêu phát âm</b><span>Mỗi thẻ có âm trọng tâm và các từ ví dụ ngắn để luyện tập.</span></div><div className="monthly-resource-pronunciation-grid" aria-label="Lộ trình phát âm">
-    {sounds.map((sound, index) => { const allocated = assignment(sound.id); return <article key={sound.id} className="monthly-roadmap-card monthly-pronunciation-card"><header><span className="monthly-roadmap-code">Âm {index + 1}</span><div><h3>{sound.label}</h3><span className="monthly-pronunciation-ipa">{sound.ipa}</span></div></header><div className="monthly-pronunciation-plan"><p className="monthly-pronunciation-purpose">Luyện nhận diện và phát âm {sound.ipa}</p>{roadmap?.allocated && <p className="monthly-roadmap-days">Áp dụng: {formatLessonBlocks(allocated?.lessonNumbers ?? [])}</p>}<div className="monthly-pronunciation-examples"><span>Từ luyện tập</span><div className="monthly-resource-chips" aria-label={`Ví dụ âm ${sound.label}`}>{[0, 1, 2].map(set => <div key={set} className="monthly-pronunciation-example-set"><b>Bộ {set + 1} · {["Nhận diện", "Phân biệt trong từ", "Vận dụng trong câu"][set]}</b><div className="monthly-resource-chips">{sound.examples.slice(set * 3, set * 3 + 3).map(example => <span key={example.id}>{example.word} <em>{example.ipa}</em></span>)}</div></div>)}</div></div></div></article>; })}
-  </div></>;
+  return <><div className="monthly-roadmap-intro"><b>4 mục tiêu phát âm</b><span className="monthly-intro-detail">Mỗi thẻ có âm trọng tâm và các từ ví dụ ngắn để luyện tập.</span></div><Paged items={sounds} phone={1} tablet={2} label="âm">{(page, offset) => <div className="monthly-resource-pronunciation-grid" aria-label="Lộ trình phát âm">
+    {page.map((sound, pageIndex) => { const index = offset + pageIndex; const allocated = assignment(sound.id); return <article key={sound.id} className="monthly-roadmap-card monthly-pronunciation-card"><header><span className="monthly-roadmap-code">Âm {index + 1}</span><div><h3>{sound.label}</h3><span className="monthly-pronunciation-ipa">{sound.ipa}</span></div></header><div className="monthly-pronunciation-plan"><p className="monthly-pronunciation-purpose">Luyện nhận diện và phát âm {sound.ipa}</p>{roadmap?.allocated && <p className="monthly-roadmap-days">Áp dụng: {formatLessonBlocks(allocated?.lessonNumbers ?? [])}</p>}<div className="monthly-pronunciation-examples"><span>Từ luyện tập</span><div className="monthly-resource-chips" aria-label={`Ví dụ âm ${sound.label}`}>{[0, 1, 2].map(set => <div key={set} className="monthly-pronunciation-example-set"><b>Bộ {set + 1} · {["Nhận diện", "Phân biệt trong từ", "Vận dụng trong câu"][set]}</b><div className="monthly-resource-chips">{sound.examples.slice(set * 3, set * 3 + 3).map(example => <span key={example.id}>{example.word} <em>{example.ipa}</em></span>)}</div></div>)}</div></div></div></article>; })}
+  </div>}</Paged></>;
 }
 
 function formatLessonBlocks(lessonNumbers: number[]): string {
@@ -814,13 +836,16 @@ function VocabularyPanel({ items, variant, registerCores = [] }: { items: Array<
   return <>
     <section className="monthly-vocabulary-guidance" aria-label={variant === "core" ? "Quy tắc từ cốt lõi" : "Quy tắc từ mở rộng"}>
       {variant === "core"
-        ? <><b>Headword đơn</b><span>Mỗi mục là một từ độc lập; dùng làm từ trọng tâm của tháng.</span></>
+        ? <><b>Headword đơn</b><span className="monthly-intro-detail">Mỗi mục là một từ độc lập; dùng làm từ trọng tâm của tháng.</span></>
         : <><b>{grouped.standalone.length} từ đơn ưu tiên</b><span>{phraseCount ? `${phraseCount} cụm bổ trợ tự nhiên được đặt sau từ đơn.` : "Không có cụm từ trong bộ này."}</span></>}
     </section>
-    <ol className={`monthly-resource-collection ${variant}`}>{visible.map((item, index) => {
+    <Paged items={[...visible.map((item) => ({ kind: "word" as const, item })), ...registerTerms.map((term) => ({ kind: "register" as const, term }))]} phone={8} tablet={16} label="từ">{(page, offset) => <ol className={`monthly-resource-collection ${variant}`} start={offset + 1}>{page.map((entry, pageIndex) => {
+      const index = offset + pageIndex;
+      if (entry.kind === "register") { const term = entry.term; return (<li key={`${term.coreId}-${term.kind}-${term.word}`} className="register"><i>{index + 1}</i><b>{term.word}</b><small>{operatorRegisterKindLabel(term)} · {term.coreWord}</small><span>{term.definition}{operatorRegisterNote(term) ? <> — <span className="monthly-register-note">{operatorRegisterNote(term)}</span></> : null}</span>{term.ipa && <em>{term.ipa}</em>}</li>); }
+      const item = entry.item;
       const standalone = isStandaloneWord(item.word);
       return <li key={item.id} className={standalone ? "standalone" : "phrase"}><i>{index + 1}</i><b>{item.word}</b><small>{variant === "core" ? "Headword" : standalone ? "Từ đơn" : "Cụm bổ trợ"}</small><span>{item.meaning}</span>{item.ipa && <em>{item.ipa}</em>}</li>;
-    })}{registerTerms.map((term, index) => <li key={`${term.coreId}-${term.kind}-${term.word}`} className="register"><i>{visible.length + index + 1}</i><b>{term.word}</b><small>{operatorRegisterKindLabel(term)} · {term.coreWord}</small><span>{term.definition}{operatorRegisterNote(term) ? <> — <span className="monthly-register-note">{operatorRegisterNote(term)}</span></> : null}</span>{term.ipa && <em>{term.ipa}</em>}</li>)}</ol>
+    })}</ol>}</Paged>
   </>;
 }
 

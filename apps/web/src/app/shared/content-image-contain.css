@@ -1,0 +1,9 @@
+/*
+ * Operator review screens must show the WHOLE illustration so it can be judged:
+ * every content picture in operator views is letterboxed (object-fit: contain)
+ * on a neutral background, never cropped (all widths). Imported by CompactUi.tsx.
+ */
+:is(.app-operator, .operator-modal-scope, .monthly-resource-panel) :is(.monthly-illustration-frame img, .operator-vocabulary-image, .operator-media-preview, .content-image img, .vocabulary-card img) {
+  object-fit: contain !important;
+  background: var(--surface-2, #f3f1ed);
+}

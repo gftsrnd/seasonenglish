@@ -51,6 +51,13 @@ import { formatScore, formatScoreOutOf } from "../shared/format-score.js";
 import { adaptAssessmentOverview, adaptLevelForms, adaptLessonMatrix, adaptLessonSet, adaptPrompts, adaptReview, adaptWeeks } from "./adapters.js";
 import type { Cefr, LessonSetActionKey, LevelFormTarget, OperatorReviewActions, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
 import { describeBatchLevelResults, generateLessonWeeksBatchSettled, lessonGenerationJobsSnapshot, startLessonGenerationJob, subscribeLessonGenerationJobs } from "./lesson-generation.js";
+import { Eye as EyeIcon_, Pencil as PencilIcon_, X as XIcon_ } from "lucide-react";
+import { ActionLabel } from "../shared/CompactUi.js";
+import { Description } from "../shared/CompactUi.js";
+import { ModalCloseButton } from "../shared/CompactUi.js";
+import { OPERATOR_TIPS } from "./section-tips.js";
+import { SectionTip } from "../shared/CompactUi.js";
+import { monthlyDayGrammarSteps } from "./monthly-day-grammar-steps.js";
 
 export type OperatorApiClient = typeof apiClient;
 
@@ -223,7 +230,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
   const [resourceGenerationActive,setResourceGenerationActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> }; kind?: "new" | "review"; date?: string; vocabularyCount?: number; defaultTitle?: string; cefr?: CefrLevel; findings?: { title: string; lines: MonthlyFindingLine[] }; grammarStepLabels?: Record<string, string>; focusFinding?: string; severeCount?: number; approveBlocked?: string }>();
+  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> }; kind?: "new" | "review"; date?: string; vocabularyCount?: number; defaultTitle?: string; cefr?: CefrLevel; findings?: { title: string; lines: MonthlyFindingLine[] }; grammarStepLabels?: Record<string, string>; grammarSteps?: readonly import("@e4s/domain/monthly").MonthlyGrammarStepSource[]; focusFinding?: string; severeCount?: number; approveBlocked?: string }>();
   const systemMonthInitialized = useRef(false);
   useEffect(() => { if (linkedMonth) setMonth(linkedMonth); }, [linkedMonth]);
   const pendingScrollRestore = useRef<number | null>(null);
@@ -380,13 +387,16 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     // Daily practice questions name their grammar step by its short title, never by its id.
     const carryoverTopics = framework?.resources?.carryoverReviews?.find((item) => item.lessonNumber === dayNumber)?.grammarTopics ?? [];
     const grammarStepLabels = Object.fromEntries([...(framework?.resources?.grammarTopics ?? []), ...carryoverTopics].flatMap((topic) => topic.steps).map((step) => [step.id, step.focus || step.formula]));
-    const editorMeta = { ...meta, grammarStepLabels, ...(findingSource && findingLines.length ? { findings: { title: findingSource.title, lines: findingLines } } : {}), ...(focusFinding ? { focusFinding } : {}), ...(saved?.parts?.length && !integrityIssues?.length && canApproveDayAnyway(savedLesson) ? { severeCount: savedLesson!.quality.severe.length } : {}), ...(integrityIssues?.length ? { approveBlocked: monthlyIntegrityBlockedMessage(integrityIssues) } : {}) };
+    const planDay = framework?.resources?.roadmap?.days.find((item) => item.lessonNumber === dayNumber);
+    // The day's grammar steps in plan order, so the editor pairs stored step N with plan step N.
+    const grammarSteps = planDay ? monthlyDayGrammarSteps([...(framework?.resources?.grammarTopics ?? []), ...carryoverTopics], planDay.kind === "review" ? planDay.reviewGrammarStepIds ?? [] : planDay.grammarStepIds) : [];
+    const editorMeta = { ...meta, grammarStepLabels, grammarSteps, ...(findingSource && findingLines.length ? { findings: { title: findingSource.title, lines: findingLines } } : {}), ...(focusFinding ? { focusFinding } : {}), ...(saved?.parts?.length && !integrityIssues?.length && canApproveDayAnyway(savedLesson) ? { severeCount: savedLesson!.quality.severe.length } : {}), ...(integrityIssues?.length ? { approveBlocked: monthlyIntegrityBlockedMessage(integrityIssues) } : {}) };
     setEditor(saved?.parts?.length ? { frameworkId, dayNumber, initial: { ...saved, ...(savedTitle ? { title: savedTitle } : {}) }, ...editorMeta }
       : candidate?.parts?.length ? { frameworkId, dayNumber, initial: { ...(candidateTitle ? { title: candidateTitle } : {}), parts: candidate.parts.map((part) => ({ ...part, title: part.title || MONTHLY_PART_TITLES[part.code ?? ""] || part.code || "Nội dung" })) }, ...editorMeta }
       : seed ? { frameworkId, dayNumber, initial: { title: seed.title, parts: seed.parts }, ...editorMeta } : { frameworkId, dayNumber, ...editorMeta });
   };
   const editorCefr = editor?.cefr ?? cefr;
-  const dayEditor = !readOnly && editor ? <LessonFormEditor weekNumber={0} cefr={editorCefr} initial={editor.initial?.parts?.length ? { dayNumber: editor.dayNumber - 1, title: editor.initial.title || editor.defaultTitle || `Bài ${editor.dayNumber}`, durationMinutes: 10, parts: editor.initial.parts.map((part) => ({ code: (part.code || "instruction") as import("@e4s/contracts").LessonPartCode, title: part.title || part.code || "Nội dung", content: part.content || {} })) } : { ...emptyLesson(editor.dayNumber - 1), ...(editor.defaultTitle ? { title: editor.defaultTitle } : {}) }} vocabularyCount={editor.vocabularyCount ?? 3} kind={editor.kind === "review" ? "review" : "lesson"} monthly grammarStepLabels={editor.grammarStepLabels} findings={editor.findings} focusFinding={editor.focusFinding} approveBlocked={editor.approveBlocked} approveAnyway={editor.severeCount ? { severeCount: editor.severeCount, onApprove: async () => {
+  const dayEditor = !readOnly && editor ? <LessonFormEditor weekNumber={0} cefr={editorCefr} initial={editor.initial?.parts?.length ? { dayNumber: editor.dayNumber - 1, title: editor.initial.title || editor.defaultTitle || `Bài ${editor.dayNumber}`, durationMinutes: 10, parts: editor.initial.parts.map((part) => ({ code: (part.code || "instruction") as import("@e4s/contracts").LessonPartCode, title: part.title || part.code || "Nội dung", content: part.content || {} })) } : { ...emptyLesson(editor.dayNumber - 1), ...(editor.defaultTitle ? { title: editor.defaultTitle } : {}) }} vocabularyCount={editor.vocabularyCount ?? 3} kind={editor.kind === "review" ? "review" : "lesson"} monthly grammarStepLabels={editor.grammarStepLabels} grammarSteps={editor.grammarSteps} findings={editor.findings} focusFinding={editor.focusFinding} approveBlocked={editor.approveBlocked} approveAnyway={editor.severeCount ? { severeCount: editor.severeCount, onApprove: async () => {
     const target = editor;
     if (!await approveDayAnyway(target.frameworkId, target.dayNumber)) return;
     setEditor(undefined);
@@ -861,8 +871,8 @@ function OperatorDashboardDialog({ dialog, onClose }: { dialog: OperatorDashboar
 
   const modalClassName = dialog.kind === "profile" ? "modal-backdrop operator-modal-scope operator-profile-modal" : "modal-backdrop operator-modal-scope";
   const dialogClassName = `dialog${dialog.kind === "challenge" ? " wide" : ""}${dialog.kind === "profile" ? " operator-profile-dialog" : ""}`;
-  return <div className={modalClassName} role="presentation"><section ref={dialogRef} className={dialogClassName} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
-    <div className="row between"><h3>{heading}</h3><button ref={closeButtonRef} className="btn-sm" type="button" onClick={onClose}>Đóng</button></div>
+  return <div className={modalClassName} role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} className={dialogClassName} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
+    <div className="row between"><h3>{heading}</h3><ModalCloseButton ref={closeButtonRef} onClick={onClose} /></div>
     {dialog.kind === "profile" ? <OperatorProfileEvidence detail={dialog.detail} /> : <OperatorChallengeEvidence detail={dialog.detail} />}
   </section></div>;
 }
@@ -996,11 +1006,12 @@ function AssessmentPreviewControl({
   }
   return <>
     <section className="card operator-assessment-form-list" aria-label="Phiên bản đề thi đã lưu">
-      <div className="row between"><div><p className="xs muted">PHIÊN BẢN ĐỀ ĐÃ LƯU</p><h2>{kind === "placement" ? "Đề đầu vào" : kind === "final" ? "Bài thi tháng" : kind === "level_up" ? "Đề lên mức" : "Đề đầu ra"}</h2></div><span className="badge">{forms.length} phiên bản</span></div>
+      <div className="row between"><div><p className="xs muted">PHIÊN BẢN ĐỀ ĐÃ LƯU</p><h2>{kind === "placement" ? "Đề đầu vào" : kind === "final" ? "Bài thi tháng" : kind === "level_up" ? "Đề lên mức" : "Đề đầu ra"}<SectionTip desktop text={OPERATOR_TIPS.savedForms} label="Phiên bản đề đã lưu là gì?" /></h2></div><span className="badge">{forms.length} phiên bản</span></div>
       {notice ? <p role="status" className="small">{notice}</p> : null}
       {editorError && !selected ? <p role="alert" className="small form-error">{editorError}</p> : null}
       <div className="stack">{forms.map(form => <article className="item operator-assessment-form-row" key={form.versionId}>
         <div className="operator-assessment-form-info">
+          {kind === "final" && finalExamMonthLabel(form.title) ? <div className="operator-assessment-form-month" style={{ gridColumn: "1 / -1", margin: "0 0 4px" }}><span className="badge primary">{finalExamMonthLabel(form.title)}</span></div> : null}
           <b>{form.title}</b>
           <p className="small muted">
             <span>Phiên bản {form.version} · {form.status === "published" ? "Đã phát hành" : form.status === "draft" ? "Bản nháp" : "Đã lưu lịch sử"}</span>
@@ -1009,7 +1020,7 @@ function AssessmentPreviewControl({
           </p>
           <p className="xs muted">Âm thanh: {form.audioConfigured ? "đã cấu hình nguồn audio" : "chưa đủ nguồn audio"}</p>
         </div>
-        <div className="row"><button className="btn-sm" type="button" aria-label={`Xem ${form.title}`} disabled={Boolean(openingVersionId)} onClick={() => { setEditorError(undefined); setSelected(form); }}>Xem</button>{canEditMonthly(form) ? <button className="btn-sm btn-primary" type="button" disabled={Boolean(openingVersionId)} onClick={() => void editMonthly(form)}>{openingVersionId === form.versionId ? "Đang mở…" : "Sửa đề"}</button> : null}</div>
+        <div className="row operator-assessment-form-actions" style={{ flex: "none", flexWrap: "nowrap", alignSelf: "flex-start", gap: 6 }}><button className="btn-sm" type="button" aria-label={`Xem ${form.title}`} disabled={Boolean(openingVersionId)} onClick={() => { setEditorError(undefined); setSelected(form); }}><ActionLabel icon={EyeIcon_} label="Xem" /></button>{canEditMonthly(form) ? <button className="btn-sm btn-primary" type="button" disabled={Boolean(openingVersionId)} onClick={() => void editMonthly(form)}><ActionLabel icon={PencilIcon_} label={openingVersionId === form.versionId ? "Đang mở…" : "Sửa đề"} /></button> : null}</div>
       </article>)}</div>
     </section>
     {selected ? <AssessmentPreviewDialog
@@ -1062,7 +1073,7 @@ function AssessmentPreviewDialog({
   const scroll = useScrollJump(true);
   useDialog(true, dialogRef, onClose, closeRef);
   return <div className="modal-backdrop operator-modal-scope operator-detail-modal" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} className="dialog wide operator-detail-dialog operator-assessment-preview-dialog operator-level-view-dialog" role="dialog" aria-modal="true" aria-label={`Xem đề ${form.title}`} tabIndex={-1}>
-    <div className="operator-level-form-dialog-header"><div className="operator-level-form-dialog-title"><span className="operator-level-kicker">Xem đề thi</span><h3>{form.title}</h3><p className="small muted">Phiên bản {form.version} · {form.status === "published" ? "Đã phát hành" : form.status === "draft" ? "Bản nháp" : "Đã lưu lịch sử"}</p></div><div className="row operator-level-form-dialog-actions">{!readOnly && form.editable && onEdit ? <button className="btn-sm btn-primary" type="button" disabled={busy} onClick={onEdit}>{busy ? "Đang mở…" : "Sửa đề"}</button> : null}<button ref={closeRef} className="btn-sm" type="button" disabled={busy} onClick={onClose}>Đóng</button></div></div>
+    <div className="operator-level-form-dialog-header"><div className="operator-level-form-dialog-title"><span className="operator-level-kicker">Xem đề thi</span><h3>{form.title}</h3><p className="small muted">Phiên bản {form.version} · {form.status === "published" ? "Đã phát hành" : form.status === "draft" ? "Bản nháp" : "Đã lưu lịch sử"}</p></div><div className="row operator-level-form-dialog-actions">{!readOnly && form.editable && onEdit ? <button className="btn-sm btn-primary" type="button" disabled={busy} onClick={onEdit}>{busy ? "Đang mở…" : "Sửa đề"}</button> : null}<ModalCloseButton ref={closeRef} disabled={busy} onClick={onClose} /></div></div>
     <div className="operator-level-form-dialog-body">
       <div ref={scroll.start} className="app-scroll-edge" aria-hidden="true" />
       {children}
@@ -1083,7 +1094,7 @@ function TestsRoute({ client, readOnly, initialTab }: { client: OperatorApiClien
     placement: ["placement"], monthly: ["final"], promotion: ["level_up"], exit: ["pass_course"]
   };
   return <OperatorPage title="Kết quả bài thi">
-    <PageTitle><h1>Kết quả bài thi</h1><p className="muted">Xem đề và kết quả đầu vào, bài thi tháng, đề lên mức và đề đầu ra.</p></PageTitle>
+    <PageTitle><h1>Kết quả bài thi<SectionTip text={OPERATOR_TIPS.testsPage} label="Kết quả bài thi là gì?" /></h1><Description className="muted" text="Xem đề và kết quả đầu vào, bài thi tháng, đề lên mức và đề đầu ra." /></PageTitle>
     <div className="tabs operator-review-tabs" role="tablist" aria-label="Loại bài kiểm tra">
       <button type="button" role="tab" aria-selected={activeTab === "placement"} className={activeTab === "placement" ? "active" : ""} onClick={() => setActiveTab("placement")}>Đề đầu vào</button>
       <button type="button" role="tab" aria-selected={activeTab === "monthly"} className={activeTab === "monthly" ? "active" : ""} onClick={() => setActiveTab("monthly")}>Bài thi tháng</button>
@@ -1494,7 +1505,7 @@ function OperatorReviewWorkspace({ client }: { client: OperatorApiClient }) {
   const requested = new URLSearchParams(location.search).get("tab") ?? (location.state as { reviewTab?: ReviewTab } | null)?.reviewTab;
   const current = reviewSections.find(section => section.key === requested) ?? reviewSections[0];
   return <OperatorPage title="Phản hồi & yêu cầu">
-    <PageTitle><h1>{current.title}</h1><p className="muted section-tab-description">{current.description}</p></PageTitle>
+    <PageTitle><h1>{current.title}<SectionTip text={OPERATOR_TIPS[current.key]} label={`${current.title} là gì?`} /></h1><p className="muted section-tab-description">{current.description}</p></PageTitle>
     <div className="operator-review-navigation">
       <nav className="request-tabs" aria-label="Phản hồi & yêu cầu">
         {reviewSections.map(section => <Link to={`?tab=${section.key}`} aria-label={section.label} data-compact-label={section.compactLabel} aria-current={section.key === current.key ? "page" : undefined} key={section.key}><span>{section.label}</span></Link>)}
@@ -1777,3 +1788,12 @@ function message(reason: unknown) {
   return label;
 }
 
+const ENGLISH_MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+/** "Tháng 11/2026" from a monthly final's title ("… November 2026 …" or "… (2026-12) …"), so two exams of different months are told apart. */
+export function finalExamMonthLabel(title: string): string | null {
+  const iso = /\b(20\d{2})-(0[1-9]|1[0-2])\b/.exec(title);
+  if (iso) return `Tháng ${Number(iso[2])}/${iso[1]}`;
+  const named = /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(20\d{2})\b/i.exec(title);
+  if (named) return `Tháng ${ENGLISH_MONTHS.indexOf(named[1]!.toLowerCase()) + 1}/${named[2]}`;
+  return null;
+}

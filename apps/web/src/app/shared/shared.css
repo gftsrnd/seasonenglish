@@ -1306,6 +1306,7 @@ body:has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump {
   }
 
   .app-entry-brand .avatar { grid-row: span 2; width: 28px; height: 28px; }
+  .app-entry-brand .app-brand-logo { grid-row: span 2; width: 30px; height: 30px; }
   .app-entry-organisation { grid-column: 2; font-size: .78rem; }
   .app-entry-organisation > span { display: none; }
 }
@@ -1401,3 +1402,8 @@ body:has(#root > main :is(textarea, select, input:not([type="checkbox"], [type="
 /* Season progress card (learner profile and the manager's reward preview): the "Cách tính điểm và lên cấp"
    disclosure was a 21px tap target. */
 .profile-season-card details > summary { display: flex; align-items: center; min-height: 44px; }
+
+/* Brand pinwheel: transparent, never a coloured disc. */
+svg.season-mark--logo { background: none; border-radius: 0; }
+/* Brand icon spots (top bar, login): bigger pinwheel, no disc behind it. */
+.brand .season-mark.app-brand-logo, .app-entry-brand .app-brand-logo { width: 34px; height: 34px; flex: none; }

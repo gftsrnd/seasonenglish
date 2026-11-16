@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { ImageUp, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { Image as ImageIcon, ImageUp, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import type { MonthlyIllustrationsView, MonthlyIllustrationView } from "../../api/operator.js";
 import { LineField } from "../shared/LineField.js";
+import { ActionLabel, useCompactUi } from "../shared/CompactUi.js";
+import { Paged } from "../shared/Pager.js";
 
 /**
  * Core-word illustrations of the month: one square 256px picture per core word.
@@ -20,13 +22,15 @@ export function MonthlyIllustrationPanel({ view, busy, onGenerate, onUpload, onR
   const counts = illustrationCounts(view);
   const working = view.running || counts.inProgress > 0;
   const canEdit = illustrationsEditable(view, busy);
+  // Phones/tablets: the counts only; the locking rules read "· đã khóa".
+  const compactUi = useCompactUi();
   return <div className="monthly-illustrations">
     <div className="monthly-illustrations-summary">
       <p className="small">
         <b>{counts.ready}/{view.images.length}</b> từ có ảnh
         {counts.fillable ? ` · ${counts.fillable} có thể sinh tiếp` : null}
         {working ? <> · <span className="spinner" aria-hidden="true" /> đang sinh{counts.inProgress ? ` ${counts.inProgress} ảnh` : " ảnh"}…</> : null}
-        {locked
+        {compactUi ? (locked ? " · đã khóa" : null) : locked
           ? counts.fillable || counts.inProgress
             ? " · Ảnh đã có được khóa cùng tài nguyên; từ chưa có ảnh vẫn sinh hoặc tải lên được."
             : " · Ảnh đã khóa cùng tài nguyên, không đổi được."
@@ -35,7 +39,7 @@ export function MonthlyIllustrationPanel({ view, busy, onGenerate, onUpload, onR
       {!locked || counts.fillable ? <button type="button" className="btn btn-primary" disabled={!canEdit || !view.available || !counts.fillable} title={!view.available ? "Chưa cấu hình OPENAI_API_KEY và OPENAI_IMAGE_MODEL" : undefined} onClick={() => void onGenerate({})}><Sparkles size={16} aria-hidden="true" /> Sinh ảnh còn thiếu ({counts.fillable})</button> : null}
     </div>
     {!view.available && (!locked || counts.fillable) ? <p className="small monthly-error" role="note">Chưa cấu hình API ảnh (OPENAI_API_KEY, OPENAI_IMAGE_MODEL). Vẫn có thể tải ảnh lên tay.</p> : null}
-    <ul className="monthly-illustration-grid">{view.images.map((image) => <IllustrationTile key={image.coreTermId} image={image} canEdit={canEdit} canGenerate={view.available} onGenerate={onGenerate} onUpload={onUpload} {...(onRemove && !locked ? { onRemove } : {})} />)}</ul>
+    <Paged items={view.images} phone={4} tablet={8} label="ảnh">{(page) => <ul className="monthly-illustration-grid">{page.map((image) => <IllustrationTile key={image.coreTermId} image={image} canEdit={canEdit} canGenerate={view.available} onGenerate={onGenerate} onUpload={onUpload} {...(onRemove && !locked ? { onRemove } : {})} />)}</ul>}</Paged>
   </div>;
 }
 
@@ -68,12 +72,12 @@ export function IllustrationTile({ image, canEdit, canGenerate, onGenerate, onUp
   const editable = canEdit && !image.locked;
   const statusLabel = { missing: "Chưa có ảnh", pending: "Đang chờ", generating: "Đang sinh…", ready: image.source === "upload" ? "Ảnh tải lên" : "Ảnh AI", failed: "Lỗi" }[image.status];
   return <Tag className={`monthly-illustration-tile is-${image.status}`} {...(Tag === "div" ? { role: "group", "aria-label": `Ảnh minh họa của ${image.word}` } : {})}>
-    <div className="monthly-illustration-frame">{image.url ? <img src={image.url} alt={`Minh họa: ${image.word}`} width={128} height={128} loading="lazy" /> : <span className="small muted">{image.status === "generating" || image.status === "pending" ? "Đang sinh…" : "—"}</span>}</div>
+    <div className="monthly-illustration-frame">{image.url ? <img src={image.url} alt={`Minh họa: ${image.word}`} width={128} height={128} loading="lazy" /> : <span className="small muted">{image.status === "generating" || image.status === "pending" ? "Đang sinh…" : <><ImageIcon className="monthly-illustration-missing-icon" aria-hidden="true" />—</>}</span>}</div>
     <div className="monthly-illustration-meta"><b>{image.word}</b><span className="small muted">{image.meaning}</span><span className={`badge${image.status === "failed" ? " danger" : image.status === "ready" ? " ok" : ""}`} title={image.error}>{statusLabel}</span></div>
     {editable ? <div className="monthly-illustration-actions">
-      {canGenerate ? <button type="button" className="monthly-illustration-action" onClick={() => setHintOpen((value) => !value)} aria-expanded={hintOpen}><RefreshCw size={14} aria-hidden="true" /> Sinh lại</button> : null}
-      <label className="monthly-illustration-action"><ImageUp size={14} aria-hidden="true" /> Tải ảnh<input hidden type="file" accept="image/png,image/jpeg,image/webp" aria-label={`Tải ảnh cho ${image.word}`} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void onUpload(image.word, file); }} /></label>
-      {onRemove && image.url ? <button type="button" className="monthly-illustration-action" aria-label={`Xóa ảnh của ${image.word}`} title="Xóa ảnh (từ này sẽ chỉ hiện chữ)" onClick={() => void onRemove(image.word)}><Trash2 size={14} aria-hidden="true" /> Xóa ảnh</button> : null}
+      {canGenerate ? <button type="button" className="monthly-illustration-action" onClick={() => setHintOpen((value) => !value)} aria-expanded={hintOpen}><ActionLabel icon={RefreshCw} label="Sinh lại"><RefreshCw size={14} aria-hidden="true" /> Sinh lại</ActionLabel></button> : null}
+      <label className="monthly-illustration-action"><ActionLabel icon={ImageUp} label="Tải ảnh"><ImageUp size={14} aria-hidden="true" /> Tải ảnh</ActionLabel><input hidden type="file" accept="image/png,image/jpeg,image/webp" aria-label={`Tải ảnh cho ${image.word}`} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void onUpload(image.word, file); }} /></label>
+      {onRemove && image.url ? <button type="button" className="monthly-illustration-action" aria-label={`Xóa ảnh của ${image.word}`} title="Xóa ảnh (từ này sẽ chỉ hiện chữ)" onClick={() => void onRemove(image.word)}><ActionLabel icon={Trash2} label="Xóa ảnh"><Trash2 size={14} aria-hidden="true" /> Xóa ảnh</ActionLabel></button> : null}
     </div> : null}
     {hintOpen && editable ? <form className="monthly-illustration-hint" onSubmit={(event) => { event.preventDefault(); setHintOpen(false); void onGenerate({ words: [image.word], ...(hint.trim() ? { hint: hint.trim() } : {}) }); }}>
       <LineField value={hint} maxLength={300} placeholder="Gợi ý thêm (không bắt buộc), vd: vẽ cảnh họp" aria-label={`Gợi ý vẽ lại ${image.word}`} onChange={(event) => setHint(event.target.value)} />

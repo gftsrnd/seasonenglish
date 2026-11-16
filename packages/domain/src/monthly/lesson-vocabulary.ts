@@ -313,11 +313,36 @@ export function withMonthlyExpandedTerms<T extends { code?: string; content?: Re
 
 export interface MonthlyGrammarStepSource { formula: string; usage?: string; focus?: string; examples?: readonly string[] }
 
-/** The model's top-level grammar examples that use a readable row of a step formula (in order), with their indexes. */
+/**
+ * The model's top-level grammar examples that use a readable row of a step formula (in order), with their indexes.
+ * Used when the examples carry no complete generated marks (see {@link topLevelExamplesByMarks}).
+ */
 function topLevelExamplesForStep(formula: string, examples: readonly string[]): Array<{ example: string; index: number }> {
   if (!examples.length) return [];
   const used = new Set(checkMonthlyGrammarStep(formula, examples).rows.flatMap((row) => row.exampleIndexes));
   return examples.flatMap((example, index) => used.has(index) ? [{ example, index }] : []);
+}
+
+/**
+ * The top-level examples of each step, decided by their generated marks (13/11: `{ row, marks }` per example, row =
+ * row of the top-level formula): an example belongs to the step whose formula has that row, in the original order.
+ * This is the model's own assignment; it also covers rows the formula matcher cannot read ("Subject + present simple
+ * for facts and state verbs", "have/has (got) + noun"), which otherwise left those examples out of every step (B1
+ * 2026-12 day 30/12). Undefined, so the formula matcher decides, unless every example has a mark whose row belongs to
+ * exactly one step.
+ */
+function topLevelExamplesByMarks(steps: readonly MonthlyGrammarStepSource[], examples: readonly string[], topFormula: unknown, marks: unknown, rawIndexes: readonly number[]): Array<Array<{ example: string; index: number }>> | undefined {
+  if (!examples.length || typeof topFormula !== "string" || !Array.isArray(marks)) return undefined;
+  const topRows = monthlyGrammarFormulaRows(topFormula);
+  const stepRows = steps.map((step) => monthlyGrammarFormulaRows(step.formula));
+  const owners = examples.map((_, index) => {
+    const entry = marks[rawIndexes[index]!] as { row?: unknown } | null | undefined;
+    const row = entry && typeof entry === "object" && typeof entry.row === "number" && Number.isInteger(entry.row) ? topRows[entry.row - 1] : undefined;
+    const found = row === undefined ? [] : stepRows.flatMap((rows, stepIndex) => rows.includes(row) ? [stepIndex] : []);
+    return found.length === 1 ? found[0]! : -1;
+  });
+  if (owners.includes(-1)) return undefined;
+  return steps.map((_, stepIndex) => examples.flatMap((example, index) => owners[index] === stepIndex ? [{ example, index }] : []));
 }
 
 /**
@@ -366,10 +391,11 @@ export function withMonthlyGrammarSteps<T extends { code?: string; content?: Rec
     // Marks are index-aligned with the raw top-level list, blanks included.
     const rawTopLevel = Array.isArray(part.content.examples) ? part.content.examples : [];
     const rawIndex = rawTopLevel.flatMap((item, index) => typeof item === "string" && item.trim() ? [index] : []);
+    const byMarks = topLevelExamplesByMarks(steps, topLevel, part.content.formula, part.content.exampleMarks, rawIndex);
     return { ...part, content: { ...part.content, steps: steps.map((step, index) => {
       const own = fromModel ? existing[index]! : {};
       const ownExamples = list(own.examples);
-      const fromTopLevel = ownExamples.length ? [] : topLevelExamplesForStep(step.formula, topLevel);
+      const fromTopLevel = ownExamples.length ? [] : byMarks ? byMarks[index]! : topLevelExamplesForStep(step.formula, topLevel);
       // The model's row/word marks (13/11) travel with its examples; plan reference examples carry none.
       const marks = ownExamples.length ? (Array.isArray(own.exampleMarks) && Array.isArray(own.examples) ? own.examples.flatMap((item, at) => typeof item === "string" && item.trim() ? [(own.exampleMarks as unknown[])[at] ?? null] : []) : undefined)
         : fromTopLevel.length ? stepMarksFromTopLevel(part.content!.formula, step.formula, part.content!.exampleMarks, fromTopLevel.map((item) => rawIndex[item.index]!)) : undefined;

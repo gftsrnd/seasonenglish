@@ -175,7 +175,8 @@ it("shows compact history and opens one learner's reminder on small screens", as
     expect(onSend).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: /Học viên Hai.*Xem tin/ }));
     expect(screen.getAllByRole("button", { name: "Gửi email" })).toHaveLength(1);
-    expect(screen.getByText("other@example.com")).toBeVisible();
+    // Phones show the recipient on one compact line (email · Base.vn · last activity).
+    expect(screen.getByText(/other@example\.com/)).toBeVisible();
   } finally {
     cleanup();
     vi.unstubAllGlobals();

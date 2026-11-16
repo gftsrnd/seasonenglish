@@ -21,8 +21,10 @@ describe("Manager long-table scroll and print contract", () => {
 
   it("marks the reminder cards, reminder history and report learner tables as bounded regions", () => {
     for (const source of [monthlyReport, pilotReport]) expect(source).toMatch(/manager-report-learner-table-wrap bounded-scroll-region sticky-table-head report-scroll-region" role="region" aria-label="Bảng từng học viên" tabIndex=\{0\}/);
-    expect(monthlyReport).toMatch(/manager-monthly-learner-list bounded-scroll-region report-scroll-region/);
-    expect(reminders).toMatch(/manager-reminder-queue bounded-scroll-region" role="region" aria-label="Danh sách học viên cần nhắc" tabIndex=\{0\}/);
+    // Phones/tablets page these lists (shared Pager) instead of an inner scroll box.
+    expect(monthlyReport).toMatch(/manager-monthly-learner-list report-scroll-region/);
+    expect(monthlyReport).toMatch(/usePaged\(learners/);
+    expect(reminders).toMatch(/"manager-reminder-queue bounded-scroll-region"\} role="region" aria-label="Danh sách học viên cần nhắc" tabIndex=\{0\}/);
     expect(reminders).toMatch(/table-wrap bounded-scroll-region sticky-table-head manager-reminder-history-scroll" role="region" aria-label="Danh sách lịch sử nhắc" tabIndex=\{0\}/);
   });
 

@@ -58,10 +58,26 @@
   color: var(--text);
   scroll-margin-block-start: 12px;
 }
-.settings-panel-toggle:hover,
-.settings-panel-toggle[aria-expanded="true"] { background: var(--surface-3); }
-.settings-panel-toggle svg { flex: none; color: var(--primary); }
-.settings-panel-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+/* Title row: [title (ellipsis)] [ⓘ] ……… [⌄]; the row is the click target, the button carries focus and aria-expanded. */
+.settings-panel-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  padding-inline-end: 14px;
+  border-radius: inherit;
+  cursor: pointer;
+}
+:root:root .settings-panel-head > .settings-panel-toggle { flex: 0 1 auto; width: auto; min-width: 0; padding-inline-end: 2px; border: 0; background: transparent !important; box-shadow: none !important; }
+.settings-panel-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-panel-head > .info-tip { flex: none; display: inline-flex; margin: 0; }
+.settings-panel-head > .info-tip > .info-tip-button { margin-top: 0 !important; }
+:root:root:root .settings-panel-head > .info-tip .info-tip-popover { inset-block-start: calc(100% - 2px); inset-inline: 8px; width: auto; max-width: none; white-space: normal; cursor: auto; }
+.settings-panel-head:hover,
+.settings-panel-head:has(> .settings-panel-toggle[aria-expanded="true"]) { background: var(--surface-3); }
+.settings-panel-chevron { flex: none; margin-inline-start: auto; color: var(--primary); }
+.settings-panel-head:has(> .settings-panel-toggle[aria-expanded="true"]) > .settings-panel-chevron { transform: rotate(180deg); }
 .settings-page[data-compact] .settings-panel-content > .card {
   border: 0;
   border-radius: 0;

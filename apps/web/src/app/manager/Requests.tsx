@@ -6,10 +6,17 @@ import { RequestEvidenceDetails } from "../shared/RequestEvidence.js";
 import type { ManagerComplaintView, ReopenRequestView } from "@e4s/contracts";
 import { managerApiClient } from "../../api/manager.js";
 import { useModal } from "../shared/ModalProvider.js";
-import { PageTitle } from "./shared.js";
+import { ManagerTitle, PageTitle } from "./shared.js";
+import { Archive, ArchiveRestore, Trash2 } from "lucide-react";
+import { ActionLabel, Description, useCompactUi } from "../shared/CompactUi.js";
+import { Pager } from "../shared/Pager.js";
+import { useMediaQuery } from "../shared/useMediaQuery.js";
 
 type RequestRow = { kind: "reopen"; item: ReopenRequestView } | { kind: "complaint"; item: ManagerComplaintView };
-const pageSize = 20;
+const desktopPageSize = 20;
+/** Requests per page: one screen of cards on phones and tablets. */
+const PHONE_REQUESTS = 4;
+const TABLET_REQUESTS = 6;
 const statusLabels = { pending: "Chờ xử lý", approved: "Đã duyệt", rejected: "Đã từ chối", auto_approved: "Tự duyệt quá hạn" };
 const complaintLabels: Record<ManagerComplaintView["kind"], string> = {
   exam_eligibility: "Không đủ điều kiện thi",
@@ -57,6 +64,9 @@ export function ManagerRequests() {
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
+  const compact = useCompactUi();
+  const phone = useMediaQuery("(max-width: 600px)");
+  const pageSize = phone ? PHONE_REQUESTS : compact ? TABLET_REQUESTS : desktopPageSize;
 
   const load = async () => {
     const [reopens, complaints] = await Promise.allSettled([managerApiClient.getManagerReopenRequests(), managerApiClient.getManagerComplaints()]);
@@ -157,8 +167,8 @@ export function ManagerRequests() {
 
   return <div className="manager-page request-workspace">
     <PageTitle>
-      <h1>{tableLabel}</h1>
-      <p className="muted">{complaintTab ? "Xem và phản hồi khiếu nại của học viên." : "Duyệt yêu cầu mở khóa tài khoản và nội dung học."} Mục chờ xử lý nằm đầu danh sách.</p>
+      <ManagerTitle as="h1" title={tableLabel} tip={`${complaintTab ? "Xem và phản hồi khiếu nại của học viên." : "Duyệt yêu cầu mở khóa tài khoản và nội dung học."} Mục chờ xử lý nằm đầu danh sách.`} />
+      <Description className="muted" text={<>{complaintTab ? "Xem và phản hồi khiếu nại của học viên." : "Duyệt yêu cầu mở khóa tài khoản và nội dung học."} Mục chờ xử lý nằm đầu danh sách.</>} />
     </PageTitle>
     <nav className="request-tabs" aria-label="Loại yêu cầu">
       <Link to={{ search: archivedOnly ? "?archived=1" : "" }} aria-current={!complaintTab ? "page" : undefined}>Yêu cầu mở khóa</Link>
@@ -187,14 +197,15 @@ export function ManagerRequests() {
             id: `${row.kind}-${item.id}`,
             kind: row.kind === "reopen" ? "Mở khóa" : "Khiếu nại",
             content: <>
-              <b>{row.kind === "reopen" ? reopenTitle(row.item) : complaintLabels[row.item.kind]}</b>
-              {row.kind === "complaint" ? <p className="small muted">{row.item.learnerName}{row.item.dueAt && isPending ? ` · Hạn phản hồi ${new Date(row.item.dueAt).toLocaleString("vi-VN")}` : ""}</p> : null}
-              {resources ? <p className="xs muted">Phiên bản tài nguyên v{resources.frameworkVersion}</p> : null}
-              <p className="small">{item.reason}</p>
+              <b className="request-title">{row.kind === "reopen" ? reopenTitle(row.item) : complaintLabels[row.item.kind]}</b>
+              {row.kind === "complaint" ? <p className="small muted request-learner">{row.item.learnerName}{row.item.dueAt && isPending ? ` · Hạn phản hồi ${new Date(row.item.dueAt).toLocaleString("vi-VN")}` : ""}</p> : null}
+              {resources ? <p className="xs muted request-learner">Phiên bản tài nguyên v{resources.frameworkVersion}</p> : null}
+              <p className="small request-reason" title={compact ? item.reason : undefined}>{item.reason}</p>
               {row.kind === "complaint" ? <RequestEvidenceDetails kind="complaint" item={row.item} /> : null}
               {isPending && resources && resources.lessonsWithContent > 0 ? <p className="xs manager-reopen-warning" role="alert">Cảnh báo: {resources.lessonsWithContent} bài đã có nội dung sẽ bị xoá khỏi lịch khi duyệt mở lại.</p> : null}
+              {compact ? (item.status === "approved" && resources?.removedLessonCount != null) || response ? <p className="small muted request-note" title={response || undefined}>{[item.status === "approved" && resources?.removedLessonCount != null ? `Đã xoá ${resources.removedLessonCount} bài` : "", response ? `Phản hồi: ${response}` : ""].filter(Boolean).join(" · ")}</p> : null : <>
               {item.status === "approved" && resources?.removedLessonCount != null ? <p className="xs muted">Đã xoá {resources.removedLessonCount} bài khỏi lịch.</p> : null}
-              {response ? <p className="small muted">Phản hồi: {response}</p> : null}
+              {response ? <p className="small muted">Phản hồi: {response}</p> : null}</>}
             </>,
             status: <span className={`badge ${isPending ? "warn" : item.status === "rejected" ? "danger" : "ok"}`}>{statusLabels[item.status]}</span>,
             date,
@@ -202,13 +213,13 @@ export function ManagerRequests() {
                 <button type="button" className="btn-sm btn-primary" aria-label={row.kind === "reopen" ? "Duyệt mở khóa" : undefined} disabled={busy} onClick={() => void decide(row, "approved")}>Duyệt</button>
                 <button type="button" className="btn-sm" disabled={busy} onClick={() => void decide(row, "rejected")}>Từ chối</button>
               </> : <>
-                {item.archivedAt !== undefined ? <button type="button" className="btn-sm" disabled={busy} onClick={() => void archive(row)}>{item.archivedAt ? "Khôi phục" : "Lưu trữ"}</button> : null}
-                <button type="button" className="btn-sm btn-danger" disabled={busy} onClick={() => void remove(row)}>Xóa</button>
+                {item.archivedAt !== undefined ? <button type="button" className="btn-sm" disabled={busy} onClick={() => void archive(row)}>{item.archivedAt ? <ActionLabel icon={ArchiveRestore} label="Khôi phục" /> : <ActionLabel icon={Archive} label="Lưu trữ" />}</button> : null}
+                <button type="button" className="btn-sm btn-danger" disabled={busy} onClick={() => void remove(row)}><ActionLabel icon={Trash2} label="Xóa" /></button>
               </>
           };
         })}
         empty={!rows ? <span role="status">Đang tải {tableLabel.toLocaleLowerCase("vi-VN")}…</span> : archivedOnly ? "Chưa có mục đã lưu trữ." : loadError ? "Danh sách hiện chưa đầy đủ." : complaintTab ? "Chưa có khiếu nại." : "Chưa có yêu cầu."} />
-      {lastPage > 0 ? <div className="row manager-requests-pagination">
+      {compact ? <Pager page={currentPage + 1} pages={lastPage + 1} setPage={(next) => setPage(next - 1)} label={tableLabel.toLocaleLowerCase("vi-VN")} /> : lastPage > 0 ? <div className="row manager-requests-pagination">
         <button className="btn-sm" type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Trước</button>
         <span className="small muted">Trang {currentPage + 1}/{lastPage + 1}</span>
         <button className="btn-sm" type="button" disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}>Sau</button>

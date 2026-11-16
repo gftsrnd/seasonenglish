@@ -16,8 +16,10 @@ import { ThemeProvider, useTheme } from "./shared/ThemeProvider.js";
 import { preloadRoleRoute, RoleRoutes } from "./RoleRoutes.js";
 import { AvatarDialog } from "./learner/ProfileReward.js";
 import { LockedLearnerSupport } from "./shared/LockedLearnerSupport.js";
+import { ModalScrollJump } from "./shared/ModalScrollJump.js";
 import "./app-layout.css";
 import "./responsive-compact.css";
+import "./responsive-phone.css";
 import { cancelAllExclusiveAudio } from "../features/experience/audio-precedence.js";
 
 const authChangeStorageKey = "e4s:auth:changed";
@@ -230,7 +232,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
   const avatar = session.role === "learner" ? profileRecord?.profile.avatar : session.user.avatar;
   const avatarReady = session.role !== "learner" || Boolean(profileRecord);
   const learnerProfileComplete = session.role !== "learner" || profileRecord?.completed === true;
-  return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><BrowserRouter><RouteAudioStopper /><ModalProvider><AppShell session={session} avatar={avatar} onboardingComplete={learnerProfileComplete} learnerHomeOnly={session.role === "learner" && learnerCefr === undefined} {...(learnerCefr ? { learnerCefr } : {})} onAvatarClick={avatarReady ? () => setAvatarOpen(true) : undefined} onLogout={logout}>{sandboxMode ? <div role="status" data-sandbox-mode="true" className="banner info">Chế độ thử (sandbox): dữ liệu hồ sơ chỉ lưu trong trình duyệt này.</div> : null}{children ? children(session) : <RoleRoutes session={session} onSessionRevoked={clearSession} />}</AppShell>{avatarOpen && avatarReady ? <AvatarDialog initial={avatar} name={session.user.displayName} onClose={() => setAvatarOpen(false)} onSave={(nextAvatar) => void saveAvatar(nextAvatar)} /> : null}</ModalProvider></BrowserRouter></ExperienceProvider>;
+  return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><BrowserRouter><RouteAudioStopper /><ModalScrollJump /><ModalProvider><AppShell session={session} avatar={avatar} onboardingComplete={learnerProfileComplete} learnerHomeOnly={session.role === "learner" && learnerCefr === undefined} {...(learnerCefr ? { learnerCefr } : {})} onAvatarClick={avatarReady ? () => setAvatarOpen(true) : undefined} onLogout={logout}>{sandboxMode ? <div role="status" data-sandbox-mode="true" className="banner info">Chế độ thử (sandbox): dữ liệu hồ sơ chỉ lưu trong trình duyệt này.</div> : null}{children ? children(session) : <RoleRoutes session={session} onSessionRevoked={clearSession} />}</AppShell>{avatarOpen && avatarReady ? <AvatarDialog initial={avatar} name={session.user.displayName} onClose={() => setAvatarOpen(false)} onSave={(nextAvatar) => void saveAvatar(nextAvatar)} /> : null}</ModalProvider></BrowserRouter></ExperienceProvider>;
 }
 
 export function RouteAudioStopper() {

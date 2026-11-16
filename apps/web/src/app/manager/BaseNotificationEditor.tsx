@@ -1,6 +1,9 @@
 import { useState } from "react";
 import type { ManagerBaseNotificationInput, ManagerBaseNotificationView } from "@e4s/contracts";
 import { useModal } from "../shared/ModalProvider.js";
+import { Save, X } from "lucide-react";
+import { ActionLabel, useCompactUi } from "../shared/CompactUi.js";
+import { ManagerTitle } from "./shared.js";
 
 export function BaseNotificationEditor({ learnerName, value, onSave, onCancel }: {
   learnerName: string;
@@ -9,6 +12,7 @@ export function BaseNotificationEditor({ learnerName, value, onSave, onCancel }:
   onCancel: () => void;
 }) {
   const modal = useModal();
+  const compact = useCompactUi();
   const [webhookUrl, setWebhookUrl] = useState("");
   const [destinationLabel, setDestinationLabel] = useState(value?.destinationLabel || learnerName);
   const [webhookTemplate, setWebhookTemplate] = useState(value?.webhookTemplate || '{"base_content":"{message}"}');
@@ -44,14 +48,15 @@ export function BaseNotificationEditor({ learnerName, value, onSave, onCancel }:
     finally { setSaving(false); }
   };
   return <form className="card soft manager-base-editor" aria-label={`Kênh Base.vn của ${learnerName}`} onSubmit={(event) => { event.preventDefault(); void save(); }}>
-    <h3>Kênh nhận Base.vn của {learnerName}</h3>
-    <p className="small muted">Dán incoming webhook của cuộc trò chuyện Base Message dành cho người học này. Webhook quyết định nơi nhận; hệ thống không tự tìm tài khoản Base theo email. Lưu cấu hình không gửi tin.</p>
+    <ManagerTitle title={compact ? "Kênh nhận Base.vn" : `Kênh nhận Base.vn của ${learnerName}`} tip={<>Dán incoming webhook của cuộc trò chuyện Base Message dành cho người học này. Webhook quyết định nơi nhận; hệ thống không tự tìm tài khoản Base theo email. Lưu cấu hình không gửi tin.{value?.configured ? " URL đã lưu được ẩn. Để trống để giữ nguyên; dùng Gỡ kênh để ngừng cấu hình cho các lần gửi mới." : ""} Mẫu payload dùng base_content với {"{message}"}; có thể thêm {"{name}"}. Chỉ dùng webhook mà người học được phép nhận.</>} />
+    {compact ? null : <p className="small muted">Dán incoming webhook của cuộc trò chuyện Base Message dành cho người học này. Webhook quyết định nơi nhận; hệ thống không tự tìm tài khoản Base theo email. Lưu cấu hình không gửi tin.</p>}
     <label>Tên nơi nhận Base.vn<input value={destinationLabel} maxLength={120} disabled={saving} onChange={(event) => setDestinationLabel(event.target.value)} /></label>
     <label>Webhook Base.vn của {learnerName}<input type="password" autoComplete="new-password" value={webhookUrl} disabled={saving} placeholder={value?.configured ? "Đã lưu bí mật — để trống để giữ nguyên" : "https://…"} onChange={(event) => setWebhookUrl(event.target.value)} /></label>
-    {value?.configured ? <p className="small muted">URL đã lưu được ẩn. Để trống để giữ nguyên; dùng Gỡ kênh để ngừng cấu hình cho các lần gửi mới.</p> : null}
-    <label>Mẫu payload Base.vn (JSON)<textarea rows={3} value={webhookTemplate} disabled={saving} onChange={(event) => setWebhookTemplate(event.target.value)} /></label>
-    <p className="small muted">Dùng <code>base_content</code> với <code>{"{message}"}</code>; có thể thêm <code>{"{name}"}</code>. Chỉ dùng webhook mà người học được phép nhận.</p>
+    {value?.configured && !compact ? <p className="small muted">URL đã lưu được ẩn. Để trống để giữ nguyên; dùng Gỡ kênh để ngừng cấu hình cho các lần gửi mới.</p> : null}
+    <label>Mẫu payload Base.vn (JSON)<textarea rows={compact ? 2 : 3} value={webhookTemplate} disabled={saving} onChange={(event) => setWebhookTemplate(event.target.value)} /></label>
+    {compact ? null : <p className="small muted">Dùng <code>base_content</code> với <code>{"{message}"}</code>; có thể thêm <code>{"{name}"}</code>. Chỉ dùng webhook mà người học được phép nhận.</p>}
     {error ? <p className="small danger" role="alert">{error}</p> : null}
-    <div className="row"><button className={replacing ? "btn-sm btn-danger" : "btn-sm btn-primary"} type="submit" disabled={saving}>{saving ? "Đang lưu…" : "Lưu kênh Base.vn"}</button><button className="btn-sm" type="button" disabled={saving} onClick={onCancel}>Đóng cấu hình</button>{value?.configured ? <button className="btn-sm btn-danger" type="button" disabled={saving} onClick={() => void save(true)}>Gỡ kênh Base.vn</button> : null}</div>
+    {compact ? <div className="row manager-base-editor-actions">{value?.configured ? <button className="btn-sm btn-danger" type="button" disabled={saving} onClick={() => void save(true)}>Gỡ kênh</button> : null}<button className={replacing ? "btn-sm btn-danger" : "btn-sm btn-primary"} type="submit" aria-label="Lưu kênh Base.vn" disabled={saving}>{saving ? "…" : <ActionLabel icon={Save} label="Lưu kênh Base.vn" />}</button><button className="btn-sm" type="button" aria-label="Đóng cấu hình" disabled={saving} onClick={onCancel}><ActionLabel icon={X} label="Đóng cấu hình" /></button></div>
+    : <div className="row"><button className={replacing ? "btn-sm btn-danger" : "btn-sm btn-primary"} type="submit" disabled={saving}>{saving ? "Đang lưu…" : "Lưu kênh Base.vn"}</button><button className="btn-sm" type="button" disabled={saving} onClick={onCancel}>Đóng cấu hình</button>{value?.configured ? <button className="btn-sm btn-danger" type="button" disabled={saving} onClick={() => void save(true)}>Gỡ kênh Base.vn</button> : null}</div>}
   </form>;
 }

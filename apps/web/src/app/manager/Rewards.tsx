@@ -1,10 +1,11 @@
 import { useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
-import { ChevronRight, X } from "lucide-react";
-import { PageTitle } from "./shared.js";
+import { Award, ChevronRight, X } from "lucide-react";
+import { ManagerTitle, PageTitle } from "./shared.js";
+import { ActionLabel, Description, ModalCloseButton, useCompactUi } from "../shared/CompactUi.js";
 import type { BadgeRoadmapItem, CefrLevel, SeasonLevelView } from "@e4s/contracts";
 import { REWARD_SEASONS, rewardBadgeThreshold, rewardSeasonLabel, type RewardBadgeKey } from "@e4s/domain/engagement";
-import { SeasonFigure, SeasonProgressCard } from "../shared/SeasonProgressCard.js";
+import { REWARD_POINT_RULES, REWARD_SEASON_RULES, SeasonFigure, SeasonProgressCard } from "../shared/SeasonProgressCard.js";
 import { rewardBadgeIcon } from "../shared/reward-badge-icons.js";
 import { useDialog } from "../shared/ModalProvider.js";
 import { rewardBadgeCatalogAt } from "./reward-catalog.js";
@@ -30,8 +31,11 @@ export function ManagerRewards() {
   const [cefr, setCefr] = useState<CefrLevel>("A1");
   const [earned, setEarned] = useState<readonly string[]>([]);
   const [revealedBadgeLevel, setRevealedBadgeLevel] = useState<number>();
+  const compactUi = useCompactUi();
   const [preview, setPreview] = useState<number | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
+  // Phones/tablets: "Kết quả" and "Tùy chỉnh" are two tabs instead of one long page.
+  const [pane, setPane] = useState<"result" | "custom">("result");
   const customId = useId();
   const previewCloseRef = useRef<HTMLButtonElement>(null);
   const previewTriggerRef = useRef<HTMLButtonElement>(null);
@@ -66,7 +70,7 @@ export function ManagerRewards() {
   };
   useDialog(preview !== null, previewDialogRef, closePreview, previewCloseRef);
   return <div className="manager-page manager-rewards-page">
-    <PageTitle><Link to="/mgr" className="manager-page-back small">← Tiến độ nhóm</Link><h1>Giả lập phần thưởng</h1><p className="muted">Xem phần thưởng theo tình huống mẫu. Mỗi trình độ có 4 Season, tính bằng điểm kiếm được trong trình độ; huy hiệu được giữ mãi.</p></PageTitle>
+    <PageTitle><Link to="/mgr" className="manager-page-back small">← Tiến độ nhóm</Link><ManagerTitle as="h1" title="Giả lập phần thưởng" tip="Xem phần thưởng theo tình huống mẫu. Mỗi trình độ có 4 Season, tính bằng điểm kiếm được trong trình độ; huy hiệu được giữ mãi." /><Description className="muted" text="Xem phần thưởng theo tình huống mẫu. Mỗi trình độ có 4 Season, tính bằng điểm kiếm được trong trình độ; huy hiệu được giữ mãi." /></PageTitle>
     <div className="manager-reward-workspace">
       <section className="card manager-reward-controls" aria-label="Thiết lập giả lập">
         <label className="field">
@@ -89,11 +93,14 @@ export function ManagerRewards() {
             {cases.map(([label], index) => <option key={label} value={index}>{label}</option>)}
           </select>
         </label>
-        <button className="btn btn-sm manager-reward-custom-toggle" type="button" aria-expanded={customOpen} aria-controls={customId}
+        {compactUi ? <div className="manager-reward-tabs" role="tablist" aria-label="Giả lập">
+          <button type="button" role="tab" aria-selected={pane === "result"} aria-controls="manager-reward-result" onClick={() => setPane("result")}>Kết quả</button>
+          <button type="button" role="tab" aria-selected={pane === "custom"} aria-controls={customId} onClick={() => setPane("custom")}>Tùy chỉnh · {earned.length} huy hiệu</button>
+        </div> : <button className="btn btn-sm manager-reward-custom-toggle" type="button" aria-expanded={customOpen} aria-controls={customId}
           onClick={() => setCustomOpen((open) => !open)}>
           <ChevronRight size={16} aria-hidden="true" />Tùy chỉnh điểm và huy hiệu
-        </button>
-        <div className="manager-reward-custom" id={customId} hidden={!customOpen}>
+        </button>}
+        <div className="manager-reward-custom" id={customId} hidden={compactUi ? pane !== "custom" : !customOpen}>
           <label className="field">
             <span>Điểm trong trình độ (0–6.000)</span>
             <input type="text" inputMode="numeric" placeholder="0" value={pointsInput}
@@ -103,7 +110,7 @@ export function ManagerRewards() {
               }} />
           </label>
           <div className="manager-reward-badge-field">
-            <span className="small" id={`${customId}-badges`}>Huy hiệu đã có (giữ mãi khi đổi trình độ)</span>
+            {compactUi ? <ManagerTitle as="h4" id={`${customId}-badges`} className="manager-reward-badge-title" title="Huy hiệu đã có" tip="Huy hiệu đã có được giữ mãi khi đổi trình độ. Bấm để bật/tắt từng huy hiệu." /> : <span className="small" id={`${customId}-badges`}>Huy hiệu đã có (giữ mãi khi đổi trình độ)</span>}
             <div className="manager-reward-badge-group" role="group" aria-labelledby={`${customId}-badges`}>
               {badges.map(([id, name, description]) => <button className="btn-sm"
                 type="button" key={id} title={description} aria-pressed={earned.includes(id)}
@@ -117,19 +124,20 @@ export function ManagerRewards() {
           </div>
         </div>
       </section>
-      <section className="card section manager-reward-result-pane" aria-label="Xem trước hồ sơ học viên">
+      <section className="card section manager-reward-result-pane" id="manager-reward-result" aria-label="Xem trước hồ sơ học viên" hidden={compactUi && pane !== "result"}>
         <header className="row between manager-section-heading manager-reward-preview-heading">
-          <h2>Học viên sẽ thấy</h2>
+          <ManagerTitle as="h2" title={compactUi ? "Học viên thấy" : "Học viên sẽ thấy"} label="Cách tính điểm và lên Season" tip={<>{REWARD_POINT_RULES.map(([label, value]) => `${label}: ${value}`).join(" · ")}. {REWARD_SEASON_RULES.join(" ")}</>} />
           <div className="manager-reward-preview-actions" role="group" aria-label="Xem thông báo lên cấp">
             {[2, 3].map((tier) => <button className="btn-sm" type="button" key={tier} onClick={(event) => {
               previewTriggerRef.current = event.currentTarget;
               setPreview(tier - 1);
-            }}>Xem lên cấp {tier}</button>)}
+            }} aria-label={`Xem lên cấp ${tier}`}>{compactUi ? `Cấp ${tier}` : `Xem lên cấp ${tier}`}</button>)}
+            {compactUi ? <Link className="btn btn-sm" to={certificatePath} aria-label="Xem trước chứng nhận" title="Xem trước chứng nhận"><ActionLabel icon={Award} label="Xem trước chứng nhận" /></Link> : null}
           </div>
         </header>
         <div className="reward-screen-reader" role="status">Cấp {level.level}/4 · {level.name} · {cefr}</div>
         <SeasonProgressCard view={{ points, badgeCount: earned.length, season, badgeRoadmap }} revealedBadgeLevel={revealedBadgeLevel} certificateAction={
-          <Link className="btn btn-sm" to={certificatePath}>Xem trước chứng nhận</Link>
+          compactUi ? undefined : <Link className="btn btn-sm" to={certificatePath}>Xem trước chứng nhận</Link>
         } />
       </section>
     </div>
@@ -139,7 +147,7 @@ export function ManagerRewards() {
       <section ref={previewDialogRef} className="dialog reward-celebration" role="dialog" aria-modal="true" aria-label="Màn chúc mừng lên cấp" tabIndex={-1}>
         <div className="reward-celebration-header">
           <span className="badge">Giả lập</span>
-          <button ref={previewCloseRef} className="btn btn-ghost" type="button" aria-label="Đóng màn chúc mừng" onClick={closePreview}><X size={18} aria-hidden="true" /></button>
+          {compactUi ? <ModalCloseButton ref={previewCloseRef} label="Đóng màn chúc mừng" onClick={closePreview} /> : <button ref={previewCloseRef} className="btn btn-ghost" type="button" aria-label="Đóng màn chúc mừng" onClick={closePreview}><X size={18} aria-hidden="true" /></button>}
         </div>
         <div className="reward-celebration-body">
           <SeasonFigure level={previewLevel.level} />

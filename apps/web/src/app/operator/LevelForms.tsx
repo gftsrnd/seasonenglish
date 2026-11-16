@@ -9,6 +9,12 @@ import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { formatScore } from "../shared/format-score.js";
 import { AudioSynthesisNotice, AutoFixedNote } from "./AudioSynthesisNotice.js";
 import { LineField } from "../shared/LineField.js";
+import { X as XIcon_ } from "lucide-react";
+import { ActionLabel } from "../shared/CompactUi.js";
+import { Description } from "../shared/CompactUi.js";
+import { ModalCloseButton } from "../shared/CompactUi.js";
+import { OPERATOR_TIPS } from "./section-tips.js";
+import { SectionTip } from "../shared/CompactUi.js";
 
 type LevelFormsUiView = OperatorLevelFormsView & {
   loading?: boolean;
@@ -58,14 +64,14 @@ export function OperatorLevelForms({ view, actions, readOnly = false, unavailabl
               <Button small danger busy={deleteBusy} disabled={Boolean(deleteReason) || actionBusy} title={deleteReason} onClick={() => actions.onDelete(form.id)}>{deleteBusy ? "Đang xoá…" : "Xoá"}</Button>
             </div>
           </div>;
-        })}</div> : <p className="small muted operator-level-empty">Chưa có bản nháp. Soạn tay hoặc sinh bằng AI để tạo đề theo cấu trúc 4 kỹ năng, 75 phút, 100 điểm; chỉ bản nháp hoàn chỉnh mới phát hành được.</p>}
+        })}</div> : <Description className="small muted operator-level-empty" text="Chưa có bản nháp. Soạn tay hoặc sinh bằng AI để tạo đề theo cấu trúc 4 kỹ năng, 75 phút, 100 điểm; chỉ bản nháp hoàn chỉnh mới phát hành được." short="Chưa có bản nháp." />}
       </div>;
     })}
   </>;
   const formCount = view.targets.reduce((total, group) => total + group.forms.length, 0);
   // Embedded in "Kết quả bài thi": same saved-versions card as the other exam tabs.
   return embedded
-    ? <section className="card operator-assessment-form-list operator-level-forms-embedded" aria-label="Phiên bản đề lên mức"><div className="row between"><div><p className="xs muted">PHIÊN BẢN ĐỀ ĐÃ LƯU</p><h2>Đề lên mức</h2></div><span className="badge">{formCount} phiên bản</span></div><div className="stack">{content}</div></section>
+    ? <section className="card operator-assessment-form-list operator-level-forms-embedded" aria-label="Phiên bản đề lên mức"><div className="row between"><div><p className="xs muted">PHIÊN BẢN ĐỀ ĐÃ LƯU</p><h2>Đề lên mức<SectionTip desktop text={OPERATOR_TIPS.levelForms} label="Đề lên mức là gì?" /></h2></div><span className="badge">{formCount} phiên bản</span></div><div className="stack">{content}</div></section>
     : <OperatorPage title="Đề thi lên mức">{content}</OperatorPage>;
 }
 
@@ -307,7 +313,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
       <div className="operator-level-form-dialog-title"><span className="operator-level-kicker">{kicker ?? (detail.targetLevel === "placement-retake" ? "Đề thi lại bài đầu vào" : `Đề lên mức ${detail.targetLevel ?? ""}`)}</span><h3>{detail.title}</h3><p className="small muted">{detail.status === "published" ? "Đã phát hành" : detail.status === "retired" ? "Đã lưu lịch sử" : "Bản nháp"}</p></div>
       <div className="row operator-level-form-dialog-actions">
         {editing && !readOnly ? <button className="btn-sm btn-primary" type="button" disabled={saving || publishing || Boolean(audioJob)} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</button> : null}
-        <button className="btn-sm" type="button" disabled={saving || publishing || Boolean(audioJob)} onClick={() => void close()}>Đóng</button>
+        <ModalCloseButton disabled={saving || publishing || Boolean(audioJob)} onClick={() => void close()} />
       </div>
     </div>
     <div className="operator-level-form-dialog-body">

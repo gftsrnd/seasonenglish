@@ -4,6 +4,7 @@ import { TriangleAlert } from "lucide-react";
 import { Banner, Button } from "./primitives.js";
 import { OPERATOR_LESSON_PART_ORDER, OPERATOR_REQUIRED_LESSON_PARTS, type LessonJsonEditorProps, type LessonJsonValidationResult } from "./types.js";
 import { errorMessage } from "../shared/error-message.js";
+import { ModalCloseButton } from "../shared/CompactUi.js";
 
 const partCodes = new Set<LessonPartCode>(OPERATOR_LESSON_PART_ORDER);
 const partOrder = new Map<LessonPartCode, number>(OPERATOR_LESSON_PART_ORDER.map((code, index) => [code, index]));
@@ -159,7 +160,7 @@ export function LessonJsonEditor({
   };
   const visibleErrors = errors.length ? errors : externalError ? [externalError] : error ? [error] : [];
   const content = <>
-    {!embedded && <div className="row between"><h3 id="lesson-json-title">JSON bài học</h3><Button type="button" small disabled={isBusy} onClick={onCancel}>Đóng</Button></div>}
+    {!embedded && <div className="row between"><h3 id="lesson-json-title">JSON bài học</h3><ModalCloseButton disabled={isBusy} onClick={onCancel} /></div>}
     <textarea value={value} onChange={event => { setValue(event.target.value); setErrors([]); }} readOnly={readOnly || isBusy} rows={18} style={{ width: "100%", minHeight: "50vh", fontFamily: "ui-monospace, monospace", fontSize: ".8rem", boxSizing: "border-box" }} aria-label="Nội dung JSON bài học" aria-describedby={visibleErrors.length ? "lesson-json-error" : undefined} />
     {visibleErrors.length > 0 && <div id="lesson-json-error"><Banner tone="danger" icon={<TriangleAlert className="operator-banner-svg" size={17} strokeWidth={2.25} />}><div className="small"><b>JSON lỗi</b><ul>{visibleErrors.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div></Banner></div>}
     {isBusy && <span className="small muted" role="status" aria-live="polite">Đang lưu…</span>}
