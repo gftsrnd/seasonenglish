@@ -20,7 +20,7 @@ const overview = (levelUpOverride: AssessmentLevelUpOverrideSummary | null, curr
 }) satisfies AssessmentReviewOverviewView;
 
 const actions = (onToggleLevelUpOverride = vi.fn()): OperatorDashboardActions => ({
-  onResolveTopicReport: vi.fn(), onApprovePlacement: vi.fn(), onViewTest: vi.fn(), onRescore: vi.fn(),
+  onApprovePlacement: vi.fn(), onViewTest: vi.fn(), onRescore: vi.fn(),
   onDeleteLearner: vi.fn(), onApproveLevelRequest: vi.fn(), onRejectLevelRequest: vi.fn(), onViewChallenge: vi.fn(),
   onDemote: vi.fn(), onChangeLevel: vi.fn(), onEditGoal: vi.fn(), onViewProfile: vi.fn(), onSetLevelDirect: vi.fn(),
   onOpenAppeals: vi.fn(), onOpenSettings: vi.fn(), onOpenWeeks: vi.fn(), onOpenLevelForms: vi.fn(),

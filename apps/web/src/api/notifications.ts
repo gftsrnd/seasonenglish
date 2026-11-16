@@ -13,3 +13,11 @@ export function markInboxRead(input: InboxReadInput) {
     body: JSON.stringify(input)
   });
 }
+
+/** Operator: marks a Mini game topic report handled straight from its bell item. */
+export function resolveTopicReport(reportId: string) {
+  return request<{ saved: boolean }>(`/api/v1/assessment-reviews/topic-reports/${encodeURIComponent(reportId)}/resolution`, {
+    method: "POST",
+    body: "{}"
+  });
+}

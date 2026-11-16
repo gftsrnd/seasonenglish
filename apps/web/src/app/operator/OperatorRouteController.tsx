@@ -762,7 +762,6 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
       .finally(() => setRescoreBusy(undefined));
   };
   return <><OperatorDashboard view={{ ...view, pendingProfiles, expandedPendingProfiles }} readOnly={readOnly} unavailable={missing} actions={{
-    onResolveTopicReport: id => { if (!readOnly) refresh(client.resolveTopicReport(id)); },
     onApprovePlacement: (id, cefr) => {
       if (readOnly || typeof client.decideAssessment !== "function") return;
       const pendingAssessment = data.pendingAssessments.find(item => item.attemptId === id);

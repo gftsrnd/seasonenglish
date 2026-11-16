@@ -29,7 +29,7 @@ describe("Operator assessment rescore action", () => {
     const view = adaptAssessmentOverview(overview, { aiConnected: true, openAppeals: 0 });
     expect(view.pending[0]?.canRescore).toBe(true);
     render(<OperatorDashboard view={view} actions={{
-      onResolveTopicReport: vi.fn(), onApprovePlacement: vi.fn(), onViewTest: vi.fn(), onRescore,
+      onApprovePlacement: vi.fn(), onViewTest: vi.fn(), onRescore,
       onDeleteLearner: vi.fn(), onApproveLevelRequest: vi.fn(), onRejectLevelRequest: vi.fn(), onViewChallenge: vi.fn(),
       onDemote: vi.fn(), onChangeLevel: vi.fn(), onEditGoal: vi.fn(), onViewProfile: vi.fn(), onSetLevelDirect: vi.fn(),
       onOpenAppeals: vi.fn(), onOpenSettings: vi.fn(), onOpenWeeks: vi.fn(), onOpenLevelForms: vi.fn()
@@ -42,7 +42,7 @@ describe("Operator assessment rescore action", () => {
     const view = adaptAssessmentOverview(overview, { aiConnected: true, openAppeals: 0 });
     Object.assign(view.pending[0]!, { aiScoringStatus: "failed", aiScoringErrorCode: "AI_OUTPUT_INVALID" });
     render(<OperatorDashboard view={view} actions={{
-      onResolveTopicReport: vi.fn(), onApprovePlacement: vi.fn(), onViewTest: vi.fn(), onRescore: vi.fn(),
+      onApprovePlacement: vi.fn(), onViewTest: vi.fn(), onRescore: vi.fn(),
       onDeleteLearner: vi.fn(), onApproveLevelRequest: vi.fn(), onRejectLevelRequest: vi.fn(), onViewChallenge: vi.fn(),
       onDemote: vi.fn(), onChangeLevel: vi.fn(), onEditGoal: vi.fn(), onViewProfile: vi.fn(), onSetLevelDirect: vi.fn(),
       onOpenAppeals: vi.fn(), onOpenSettings: vi.fn(), onOpenWeeks: vi.fn(), onOpenLevelForms: vi.fn()

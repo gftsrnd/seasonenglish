@@ -36,12 +36,12 @@ describe("Operator app rebuild", () => {
   it("collapses pending learners by name until their review is opened", async () => {
     const user = userEvent.setup();
     render(<OperatorDashboard view={{
-      week: {}, aiConnected: true, openAppeals: 0, topicReports: [], levelRequests: [], ready: [], weak: [], inFlow: [], approved: [], inProgress: [], retry: [], unassessed: [],
+      week: {}, aiConnected: true, openAppeals: 0, levelRequests: [], ready: [], weak: [], inFlow: [], approved: [], inProgress: [], retry: [], unassessed: [],
       pending: [
         { id: "u1", name: "Lan", submittedAt: "14/10/2026", total: 72, rawLevel: "A2", aiScored: true, humanScored: false, sectionScores: [{ label: "Nghe", percent: 75 }], suggestedLevel: "A2", levels: ["A1", "A2"] },
         { id: "u2", name: "Minh", submittedAt: "14/10/2026", total: null, rawLevel: null, aiScored: false, humanScored: false, sectionScores: [], suggestedLevel: null, levels: ["A1", "A2"] }
       ]
-    } as any} actions={{ onApprovePlacement: vi.fn(), onViewTest: vi.fn(), onRescore: vi.fn(), onDeleteLearner: vi.fn(), onApproveLevelRequest: vi.fn(), onRejectLevelRequest: vi.fn(), onViewChallenge: vi.fn(), onDemote: vi.fn(), onChangeLevel: vi.fn(), onEditGoal: vi.fn(), onViewProfile: vi.fn(), onSetLevelDirect: vi.fn(), onResolveTopicReport: vi.fn(), onOpenAppeals: vi.fn(), onOpenSettings: vi.fn(), onOpenWeeks: vi.fn(), onOpenLevelForms: vi.fn() }} />);
+    } as any} actions={{ onApprovePlacement: vi.fn(), onViewTest: vi.fn(), onRescore: vi.fn(), onDeleteLearner: vi.fn(), onApproveLevelRequest: vi.fn(), onRejectLevelRequest: vi.fn(), onViewChallenge: vi.fn(), onDemote: vi.fn(), onChangeLevel: vi.fn(), onEditGoal: vi.fn(), onViewProfile: vi.fn(), onSetLevelDirect: vi.fn(), onOpenAppeals: vi.fn(), onOpenSettings: vi.fn(), onOpenWeeks: vi.fn(), onOpenLevelForms: vi.fn() }} />);
 
     const lan = screen.getByRole("group", { name: /Lan/ });
     const minh = screen.getByRole("group", { name: /Minh/ });
@@ -57,7 +57,6 @@ describe("Operator app rebuild", () => {
 
   it("preserves every dashboard block and routes visible actions to callbacks", async () => {
     const user = userEvent.setup();
-    const onResolveTopicReport = vi.fn();
     const onApprovePlacement = vi.fn();
     const onChangeLevel = vi.fn();
     const onAssignWeeklyPractice = vi.fn();
@@ -75,7 +74,6 @@ describe("Operator app rebuild", () => {
       inProgress: [{ id: "u7", name: "Mai", profileSummary: "Đã điền hồ sơ" }],
       unassessed: [{ id: "u6", name: "Long", profileSummary: "Chưa điền hồ sơ" }]
     } as any} actions={{
-      onResolveTopicReport,
       onApprovePlacement,
       onViewTest: vi.fn(),
       onRescore: vi.fn(),
@@ -100,7 +98,9 @@ describe("Operator app rebuild", () => {
     expect(screen.getByText("Đã chấm tay")).toBeInTheDocument();
     expect(screen.queryByText(/kháng nghị chấm điểm đang chờ duyệt tay/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mở tab Kháng nghị" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Báo cáo nhập chủ đề mini game/ })).toBeInTheDocument();
+    // Mini game topic reports live in the notification bell only.
+    expect(screen.queryByRole("heading", { name: /Báo cáo nhập chủ đề mini game/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Đã xử lý" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Chờ duyệt/ })).toBeInTheDocument();
     const noAiNote = screen.getByText("Không có nhận xét AI. Xem bài làm để quyết định.");
     const profileSummary = screen.getByRole("button", { name: /Hồ sơ: Tester · QA/ });
@@ -121,8 +121,6 @@ describe("Operator app rebuild", () => {
     // The retired "Ngưỡng xét lên / hạ mức" Settings card is gone, so the header no longer links to it.
     expect(screen.queryByRole("link", { name: "ngưỡng" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "đề thi lên mức" })).toHaveAttribute("href", "/op/levelforms");
-    await user.click(screen.getByRole("button", { name: "Đã xử lý" }));
-    expect(onResolveTopicReport).toHaveBeenCalledWith("r1");
     await user.selectOptions(screen.getByLabelText("Mức duyệt cho Lan"), "A2");
     await user.click(screen.getByRole("button", { name: "Duyệt mức" }));
     expect(onApprovePlacement).toHaveBeenCalledWith("u1", "A2");

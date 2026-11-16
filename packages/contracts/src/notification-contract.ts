@@ -39,7 +39,7 @@ export type InboxNotificationKind =
   | "course_ready" | "certificate_issued" | "challenge_received" | "challenge_passed" | "challenge_retry"
   | "monthly_exam_ready" | "level_exam_ready" | "monthly_survey_open"
   | "lesson_window_unapproved" | "lesson_window_unapproved_manager" | "test_date_active"
-  | "absence_warning" | "monthly_uncounted" | "lesson_reopened" | "badge_earned" | "season_reached";
+  | "absence_warning" | "monthly_uncounted" | "lesson_reopened" | "badge_earned" | "season_reached" | "monthly_lessons_locked";
 
 export interface InboxNotificationView {
   readonly id: string;
@@ -48,6 +48,14 @@ export interface InboxNotificationView {
   readonly relatedId?: string | null;
   /** PIN/password activity behind a `security_report` notification; context holds the repeat count. */
   readonly securityReport?: { readonly subjectName: string; readonly note: string } | null;
+  /** Mini game topic report behind a `topic_report_received` notification; Operators resolve it from the bell. */
+  readonly topicReport?: {
+    readonly learnerName: string;
+    readonly topic: string;
+    readonly reason: string;
+    readonly strikeCount: number;
+    readonly status: "open" | "resolved";
+  } | null;
   readonly createdAt: string;
   readonly readAt: string | null;
 }

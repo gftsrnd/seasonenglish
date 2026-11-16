@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import { Bell, X } from "lucide-react";
 import type { InboxNotificationView, NotificationInboxView } from "@e4s/contracts";
-import { getNotificationInbox, markInboxRead } from "../../api/notifications.js";
+import { getNotificationInbox, markInboxRead, resolveTopicReport } from "../../api/notifications.js";
 import { hasAssessmentLogoutGuard } from "./assessment-logout-guard.js";
 import { useDialog } from "./ModalProvider.js";
 import { rewardBadgeIconForLabel } from "./reward-badge-icons.js";
@@ -71,7 +71,35 @@ function securityReportContent(item: InboxNotificationView): { title: string; de
   return { title, description, ...target };
 }
 
-function notificationContent(item: InboxNotificationView): { title: string; description: string; path: string; action: string } {
+/**
+ * The bell is the only place Operators see Mini game topic reports (the dashboard card is gone),
+ * so the item carries the learner, the topic and the reason, and resolves the report in place.
+ */
+function topicReportContent(item: InboxNotificationView): NotificationContent {
+  const report = item.topicReport;
+  if (!report || !item.relatedId) return { title: "Có báo cáo chủ đề Mini game", description: "Báo cáo này không còn trong hệ thống.", path: "", action: item.readAt ? "" : "Đánh dấu đã đọc" };
+  const open = report.status === "open";
+  return {
+    title: `Báo cáo chủ đề Mini game · ${report.learnerName}`,
+    description: `Nhập “${report.topic}” – ${report.reason.replace(/[.\s]+$/, "")}. ${report.strikeCount} lần vi phạm liên tiếp. ${open ? "Nhắc nhở học viên rồi bấm Đã xử lý." : "Báo cáo đã được xử lý."}`,
+    path: "",
+    action: open ? "Đã xử lý" : item.readAt ? "" : "Đánh dấu đã đọc",
+    ...(open ? { resolveTopicReport: item.relatedId } : {})
+  };
+}
+
+type NotificationContent = {
+  title: string;
+  description: string;
+  /** Where the item opens; "" keeps the user in the bell. */
+  path: string;
+  /** Button label; "" renders no button. */
+  action: string;
+  /** Open topic report id: the action resolves it instead of navigating. */
+  resolveTopicReport?: string;
+};
+
+function notificationContent(item: InboxNotificationView): NotificationContent {
   const exam = assessmentNames[item.context] ?? "bài thi";
   const examTab = assessmentTabs[item.context] ?? "placement";
   const examAttempt = item.relatedId ? `&attemptId=${encodeURIComponent(item.relatedId)}` : "";
@@ -153,7 +181,9 @@ function notificationContent(item: InboxNotificationView): { title: string; desc
     case "level_exam_ready":
       return { title: `Bạn đủ điều kiện thi lên mức ${item.context}`, description: "Mở hồ sơ để xem hướng dẫn trước khi thi.", path: "/profile", action: "Mở Đường lên mức" };
     case "topic_report_received":
-      return { title: "Có báo cáo chủ đề Mini game", description: "Vận hành có thể kiểm tra báo cáo trong hàng chờ.", path: "/op", action: "Xem hàng chờ" };
+      return topicReportContent(item);
+    case "monthly_lessons_locked":
+      return { title: "Bài học tháng này đang bị khóa", description: "Bạn đã bỏ lỡ bài thi tháng trước. Gửi đơn để Quản lý xem xét mở lại bài học.", path: "/support?type=complaints&kind=lesson_unlock", action: "Gửi đơn xin mở" };
     case "topic_report_resolved":
       return { title: "Báo cáo chủ đề Mini game đã được xử lý", description: "Bạn có thể mở lại Mini game để tiếp tục.", path: "/games", action: "Mở Mini game" };
     case "duel_invited":
@@ -194,6 +224,12 @@ function notificationContent(item: InboxNotificationView): { title: string; desc
   }
 }
 
+/** A new-notification card: one item, or several collapsed into "N thông báo mới". */
+type Arrival = { count: number; item?: InboxNotificationView };
+const ARRIVAL_MS = 6_000;
+const ARRIVAL_WIDTH = 320;
+const ARRIVAL_GUTTER = 8;
+
 export function NotificationBell() {
   const navigate = useNavigate();
   const dialog = useRef<HTMLElement>(null);
@@ -209,9 +245,69 @@ export function NotificationBell() {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [reload, setReload] = useState(0);
+  const trigger = useRef<HTMLButtonElement>(null);
+  /** Unread count of the last poll; null until the first one, so old unread items never pop up on load. */
+  const knownCount = useRef<number | null>(null);
+  const openRef = useRef(open);
+  openRef.current = open;
+  const [arrival, setArrival] = useState<Arrival | null>(null);
+  const arrivalRef = useRef<Arrival | null>(null);
+  const [arrivalHeld, setArrivalHeld] = useState(false);
+  const [arrivalPosition, setArrivalPosition] = useState<{ top: number; left: number; width: number }>();
   const close = () => setOpen(false);
   useDialog(open, dialog, close);
   useLayoutEffect(() => { if (feed.current) feed.current.scrollTop = 0; }, [open, filter]);
+
+  const announce = (next: Arrival | null) => {
+    arrivalRef.current = next;
+    setArrival(next);
+    if (!next) setArrivalHeld(false);
+  };
+
+  /** One card per increase of the unread count; arrivals while a card is up join it, so only one card ever shows. */
+  const observeCount = async (unread: number, signal: AbortSignal) => {
+    const previous = knownCount.current;
+    knownCount.current = unread;
+    if (previous === null || unread <= previous || openRef.current || hasAssessmentLogoutGuard()) return;
+    const count = unread - previous + (arrivalRef.current?.count ?? 0);
+    if (count > 1) {
+      announce({ count });
+      return;
+    }
+    try {
+      const latest = await getNotificationInbox(1, true, undefined, signal);
+      if (signal.aborted || openRef.current) return;
+      const item = latest.items[0];
+      announce(item ? { count: 1, item } : { count: 1 });
+    } catch {
+      if (!signal.aborted && !openRef.current) announce({ count: 1 });
+    }
+  };
+
+  useEffect(() => {
+    if (!arrival || arrivalHeld) return;
+    const timer = window.setTimeout(() => announce(null), ARRIVAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [arrival, arrivalHeld]);
+
+  // The card sits right under the bell, clamped inside the viewport (phones included).
+  useLayoutEffect(() => {
+    if (!arrival) return;
+    const place = () => {
+      const rect = trigger.current?.getBoundingClientRect();
+      const viewport = document.documentElement.clientWidth || window.innerWidth;
+      const width = Math.min(ARRIVAL_WIDTH, Math.max(0, viewport - 2 * ARRIVAL_GUTTER));
+      const left = Math.min((rect?.right ?? viewport) - width, viewport - ARRIVAL_GUTTER - width);
+      setArrivalPosition({ top: (rect?.bottom ?? 0) + 8, left: Math.max(ARRIVAL_GUTTER, left), width });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [arrival]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -223,6 +319,7 @@ export function NotificationBell() {
         const result = await getNotificationInbox(list ? 20 : 0, unreadOnly, undefined, controller.signal);
         if (controller.signal.aborted) return;
         setCount(result.unreadCount);
+        void observeCount(result.unreadCount, controller.signal);
         if (list) {
           setPages((current) => ({ ...current, [filter]: result }));
           setLoadingHeight(undefined);
@@ -257,6 +354,7 @@ export function NotificationBell() {
       const result = await getNotificationInbox(20, unreadOnly, page.nextCursor);
       setPages((current) => ({ ...current, [filter]: { ...result, items: [...page.items, ...result.items] } }));
       setCount(result.unreadCount);
+      knownCount.current = result.unreadCount;
       setError("");
     } catch {
       setError("Không tải được thông báo cũ hơn. Hãy thử lại.");
@@ -267,32 +365,38 @@ export function NotificationBell() {
 
   const read = async (item?: InboxNotificationView) => {
     if (pending) return;
-    if (item && hasAssessmentLogoutGuard()) {
+    const content = item ? notificationContent(item) : undefined;
+    if (content?.path && hasAssessmentLogoutGuard()) {
       setError("Hãy hoàn thành bài thi hiện tại trước khi mở màn khác.");
       return;
     }
     setPending(true);
     try {
+      if (content?.resolveTopicReport) await resolveTopicReport(content.resolveTopicReport);
       if (!item?.readAt) {
         const result = await markInboxRead(item ? { ids: [item.id] } : { all: true });
         setCount(result.unreadCount);
+        knownCount.current = result.unreadCount;
+      }
+      if (!item?.readAt || content?.resolveTopicReport) {
         setLoadingHeight(dialog.current?.offsetHeight);
         setPages({ all: undefined, unread: undefined });
       }
       setError("");
       setReload((version) => version + 1);
-      if (item) {
+      if (content?.path) {
         close();
-        navigate(notificationContent(item).path);
+        navigate(content.path);
       }
     } catch {
-      setError("Chưa đánh dấu được thông báo. Hãy thử lại.");
+      setError(content?.resolveTopicReport ? "Chưa xử lý được báo cáo. Hãy thử lại." : "Chưa đánh dấu được thông báo. Hãy thử lại.");
     } finally {
       setPending(false);
     }
   };
 
   const show = () => {
+    announce(null);
     setError("");
     setLoadingHeight(undefined);
     setUnreadOnly(false);
@@ -307,8 +411,21 @@ export function NotificationBell() {
     setUnreadOnly(next);
   };
 
+  const openArrival = () => {
+    const item = arrival?.item;
+    if (!item || arrival.count > 1) {
+      show();
+      return;
+    }
+    announce(null);
+    // A topic report needs the Operator's decision, so it opens the bell instead of resolving on a tap.
+    if (notificationContent(item).path) void read(item);
+    else show();
+  };
+  const arrivalContent = arrival?.item && arrival.count === 1 ? notificationContent(arrival.item) : undefined;
+
   return <>
-    <button className="btn-sm btn-ghost inbox-trigger" type="button" aria-label={count ? `Thông báo · ${count} chưa đọc` : "Thông báo"} title="Thông báo" aria-haspopup="dialog" aria-expanded={open} onClick={show}>
+    <button ref={trigger} className="btn-sm btn-ghost inbox-trigger" type="button" aria-label={count ? `Thông báo · ${count} chưa đọc` : "Thông báo"} title="Thông báo" aria-haspopup="dialog" aria-expanded={open} onClick={show}>
       <Bell size={18} strokeWidth={1.7} aria-hidden="true" />
       {count > 0 ? <span className="inbox-count" aria-hidden="true">{count > 99 ? "99+" : count}</span> : null}
     </button>
@@ -335,13 +452,26 @@ export function NotificationBell() {
                 <div className="inbox-item-heading"><span className="inbox-category">{categoryLabels[category]}</span><time dateTime={item.createdAt}>{notificationTime.format(new Date(item.createdAt))}</time></div>
                 <strong className="inbox-item-title">{content.title}</strong>
                 <p>{content.description}</p>
-                <button type="button" className="btn-sm inbox-item-action" disabled={pending} onClick={() => void read(item)}>{content.action}</button>
+                {content.action ? <button type="button" className="btn-sm inbox-item-action" disabled={pending} onClick={() => void read(item)}>{content.action}</button> : null}
               </li>;
             })}
           </ul> : null}
           {page?.nextCursor ? <button type="button" className="btn-sm" disabled={pending} onClick={() => void loadMore()}>Xem thông báo cũ hơn</button> : null}
         </div>
       </section>
+    </div>, document.body) : null}
+    {arrival && !open ? createPortal(<div className="inbox-arrival" role="status" aria-live="polite" data-testid="inbox-arrival"
+      style={arrivalPosition}
+      onPointerEnter={() => setArrivalHeld(true)} onPointerLeave={() => setArrivalHeld(false)}
+      onFocus={() => setArrivalHeld(true)} onBlur={() => setArrivalHeld(false)}>
+      <button type="button" className="inbox-arrival-open" onClick={openArrival}>
+        <Bell size={16} strokeWidth={1.8} aria-hidden="true" />
+        <span className="inbox-arrival-text">
+          <strong>{arrivalContent ? arrivalContent.title : arrival.count > 1 ? `${arrival.count} thông báo mới` : "Có thông báo mới"}</strong>
+          <span>{arrivalContent ? arrivalContent.description : "Mở chuông thông báo để xem."}</span>
+        </span>
+      </button>
+      <button type="button" className="inbox-arrival-close" aria-label="Ẩn thông báo mới" onClick={() => announce(null)}><X size={16} aria-hidden="true" /></button>
     </div>, document.body) : null}
   </>;
 }

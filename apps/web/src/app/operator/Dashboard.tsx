@@ -37,8 +37,7 @@ export function OperatorDashboard({ view, actions, readOnly = false, unavailable
   const approvedActions = (item: OperatorDashboardView["approved"][number]) => <><Button small disabled={readOnly || Boolean(blocked("changeLevel"))} onClick={() => actions.onChangeLevel(item.id)}>Đổi level</Button>{levelUpToggle(item)}<Button small disabled={readOnly || Boolean(blocked("editGoal"))} onClick={() => actions.onEditGoal(item.id)}>Mục tiêu</Button>{item.testId && <Button small disabled={Boolean(blocked("viewTest"))} onClick={() => actions.onViewTest(item.testId!)}>Bài test</Button>}</>;
 
   return <OperatorPage title="Duyệt trình độ">
-    {view.deletionRequests}{view.trash}
-    {view.topicReports.length > 0 && <div className="card"><h3>Báo cáo nhập chủ đề mini game ({view.topicReports.length})</h3><p className="small muted" style={{ margin: "2px 0 8px" }}>Học viên nhập chủ đề sai hoặc vi phạm 3 lần liên tiếp. Nhắc nhở rồi bấm Đã xử lý.</p><div className="list">{view.topicReports.map(report => <div className="item" key={report.id}><div className="body"><div className="title">{report.learnerName} <span className="xs muted">{report.at}</span></div><div className="xs">{report.inputs.map((entry, index) => <div key={index}><code>{entry.input}</code> – {entry.reason}</div>)}</div></div><Button small primary disabled={readOnly} onClick={() => actions.onResolveTopicReport(report.id)}>Đã xử lý</Button></div>)}</div></div>}
+    {/* Mini game topic reports and deletion requests reach staff through the notification bell. */}
       <PageTitle>
       <h1>Duyệt trình độ</h1><p className="muted">{view.approved.length} người học đang hoạt động.</p>
     </PageTitle>

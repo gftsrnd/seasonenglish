@@ -285,7 +285,6 @@ export function adaptAssessmentOverview(source: AssessmentReviewOverviewView, co
     ...(context.aiProvider === undefined ? {} : { aiProvider: context.aiProvider }),
     openAppeals: context.openAppeals,
     windowDays: source.levelSignals.windowDays,
-    topicReports: (source.topicReports ?? []).filter(report => report.status === "open").map(report => ({ id: report.id, learnerName: report.learnerName, at: operatorDateTime(report.createdAt), inputs: [{ input: report.topic, reason: report.reason }] })),
     pending: source.pendingAssessments.map(item => {
       const detail = context.placementDetails?.[item.attemptId];
       const labels: Record<string, string> = { listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" };

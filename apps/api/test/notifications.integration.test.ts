@@ -1,6 +1,6 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createRepositories, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
+import { createRepositories, migrateDatabase, resetPublicSchema, seedDemo, syncMissedExamNotice } from "@e4s/database";
 import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
@@ -242,6 +242,41 @@ describe("learner notifications API", () => {
       expect.objectContaining({ context: "2099-09" })
     ]);
     expect(items.some((item: { kind: string }) => item.kind === "monthly_exam_ready")).toBe(false);
+  });
+
+  it("brings a Mini game topic report to the Operator bell with its details and resolves it there", async () => {
+    const login = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "thu.ha.tran@e4s.local", password: "operator-pass" } });
+    expect(login.statusCode, login.body).toBe(200);
+    const operator = String(login.headers["set-cookie"]).split(";")[0]!;
+    const { rows: [report] } = await pool.query<{ id: string }>(
+      `insert into topic_reports (id, learner_id, topic, reason, strike_count)
+       values (gen_random_uuid(), $1, 'casino', 'Chủ đề không phù hợp.', 3) returning id`,
+      [DEMO_IDS.learner]
+    );
+    const { rows: [learner] } = await pool.query<{ display_name: string }>("select display_name from users where id = $1", [DEMO_IDS.learner]);
+    const topicItem = async () => {
+      const response = await app.inject({ url: "/api/v1/me/notifications?limit=50", headers: { cookie: operator } });
+      expect(response.statusCode, response.body).toBe(200);
+      return (response.json().items as { id: string; kind: string; relatedId: string | null; topicReport: unknown }[])
+        .find((item) => item.kind === "topic_report_received" && item.relatedId === report!.id);
+    };
+    expect(await topicItem()).toEqual(expect.objectContaining({
+      relatedId: report!.id,
+      topicReport: { learnerName: learner!.display_name, topic: "casino", reason: "Chủ đề không phù hợp.", strikeCount: 3, status: "open" }
+    }));
+    const resolved = await app.inject({ method: "POST", url: `/api/v1/assessment-reviews/topic-reports/${report!.id}/resolution`, headers: { cookie: operator }, payload: {} });
+    expect(resolved.statusCode, resolved.body).toBe(200);
+    expect(await topicItem()).toEqual(expect.objectContaining({ topicReport: expect.objectContaining({ status: "resolved" }) }));
+  });
+
+  it("puts locked monthly lessons after a missed exam into the learner bell once", async () => {
+    await syncMissedExamNotice(pool, DEMO_IDS.learner, { state: "missed_exam", month: "2026-11" });
+    await syncMissedExamNotice(pool, DEMO_IDS.learner, { state: "missed_exam", month: "2026-11" });
+    const { rows } = await pool.query<{ kind: string; context: string }>(
+      "select kind, context from inbox_notifications where recipient_id = $1 and event_key = 'lessons-locked:2026-11'",
+      [DEMO_IDS.learner]
+    );
+    expect(rows).toEqual([{ kind: "monthly_lessons_locked", context: "2026-11" }]);
   });
 
   it("turns PIN activity into grouped, read-tracked Manager notifications", async () => {

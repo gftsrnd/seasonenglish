@@ -103,13 +103,6 @@ export interface UnassessedLearner {
   hasProfile?: boolean;
 }
 
-export interface TopicReport {
-  id: string;
-  learnerName: string;
-  at: string;
-  inputs: Array<{ input: string; reason: string }>;
-}
-
 export interface OperatorDashboardView {
   week: { current?: number; total?: number; topic?: string | null | undefined };
   aiConnected: boolean;
@@ -117,7 +110,6 @@ export interface OperatorDashboardView {
   aiProvider?: string | null;
   openAppeals: number;
   windowDays?: number;
-  topicReports: TopicReport[];
   pending: PendingPlacement[];
   pendingProfiles?: Record<string, AssessmentReviewLearnerView | null>;
   expandedPendingProfiles?: Record<string, true>;
@@ -129,12 +121,9 @@ export interface OperatorDashboardView {
   unassessed: UnassessedLearner[];
   inProgress: UnassessedLearner[];
   retry: UnassessedLearner[];
-  deletionRequests?: ReactNode;
-  trash?: ReactNode;
 }
 
 export interface OperatorDashboardActions {
-  onResolveTopicReport(id: string): void;
   onApprovePlacement(id: string, cefr?: Cefr): void;
   onViewTest(id: string): void;
   onRescore(id: string): void;
@@ -156,7 +145,7 @@ export interface OperatorDashboardActions {
   onOpenLevelForms(): void;
 }
 
-export type DashboardActionKey = "resolveTopicReport" | "approvePlacement" | "viewTest" | "rescore" | "deleteLearner" | "decideLevelRequest" | "viewChallenge" | "demote" | "changeLevel" | "editGoal" | "viewProfile" | "assignWeeklyPractice" | "setLevelDirect" | "levelUpOverride";
+export type DashboardActionKey = "approvePlacement" | "viewTest" | "rescore" | "deleteLearner" | "decideLevelRequest" | "viewChallenge" | "demote" | "changeLevel" | "editGoal" | "viewProfile" | "assignWeeklyPractice" | "setLevelDirect" | "levelUpOverride";
 
 export interface LevelFormSummary {
   id: string;
