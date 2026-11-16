@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type Keyboard
 import { Award, BriefcaseBusiness, Clock3, Eye, EyeOff, MessageSquare } from "lucide-react";
 import type { SessionView } from "@e4s/contracts";
 import type { AuthClient } from "../../features/auth/index.js";
-import { AudioControls, SeasonDecoration, SeasonMark } from "./AppShell.js";
+import { AudioControls, SeasonDecoration } from "./AppShell.js";
+import { BRAND_NAME, BrandMark } from "./BrandMark.js";
 
 type Mode = "login" | "register" | "forgotEmail" | "forgotOtp" | "forgotPin" | "forgotStaff";
 type FieldErrors = Partial<Record<"displayName" | "email" | "credential" | "confirmation" | "code", string>>;
@@ -209,7 +210,7 @@ export function EntryScreen({ client, onAuthenticated, staffEntryPath, separateS
   return <main className="app-entry-main">
     <section className="app-entry" aria-label="Tài khoản E4S">
       <header className="app-entry-header">
-        <h1 className="app-entry-brand"><span className="avatar"><SeasonMark className="app-brand-mark" /></span><span>Season English</span><span className="muted app-entry-organisation"><span aria-hidden="true">· </span>GFT</span></h1>
+        <h1 className="app-entry-brand"><BrandMark variant="wordmark" label={BRAND_NAME} /></h1>
         <AudioControls />
       </header>
       <div className="app-entry-content">

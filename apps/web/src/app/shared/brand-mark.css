@@ -1,0 +1,24 @@
+/* E4S logo. Fixed colours: the artwork never follows the seasonal theme. */
+.brand-mark {
+  display: block;
+  flex: none;
+  max-width: none;
+  user-select: none;
+}
+
+.brand-mark--icon { width: 32px; height: 32px; }
+/* The wordmark artwork is 103 x 52. */
+.brand-mark--wordmark { width: auto; height: 34px; aspect-ratio: 103 / 52; }
+
+/* Top bar: wordmark from tablet up, icon only on phone widths. */
+.brand-mark--phone-only { display: none; }
+@media (max-width: 639px) {
+  .brand-mark--phone-only { display: block; }
+  .brand-mark--tablet-up { display: none; }
+}
+
+@media (min-width: 961px) {
+  .topbar .brand .brand-mark--wordmark { height: 40px; }
+}
+
+.app-entry-brand .brand-mark--wordmark { height: 40px; }
