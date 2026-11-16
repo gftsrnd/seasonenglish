@@ -1218,8 +1218,16 @@ export function SharedVocabularyModal({
     lexical: copy.modal.lexical,
     register: copy.modal.register
   } as const;
+  // Escape and a tap on the dimmed backdrop close the modal, like every other dialog.
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") closeRef.current(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
   if (typeof document === "undefined") return null;
-  return createPortal(<div className="modal-backdrop vocabulary-relation-modal" role="presentation">
+  return createPortal(<div className="modal-backdrop vocabulary-relation-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
     <section className="dialog wide" role="dialog" aria-modal="true" aria-label={labels[state.kind]} data-testid={`modal.vocab-${state.kind === "synonyms" ? "all-synonyms" : state.kind === "lexical" ? "lexical-detail" : state.kind}`} data-modal={`vocab-${state.kind === "synonyms" ? "all-synonyms" : state.kind === "lexical" ? "lexical-detail" : state.kind}`}>
       <div className="row between vocabulary-relation-modal-header"><div><div className="eyebrow">{language === "en" ? "Vocabulary" : "Từ vựng"} · {item.word}</div><h2>{labels[state.kind]}</h2></div><button type="button" aria-label={copy.modal.close} onClick={close}>{copy.modal.close}</button></div>
       {state.kind === "family" ? <FamilyModal item={item} speak={speak} language={language} /> : null}

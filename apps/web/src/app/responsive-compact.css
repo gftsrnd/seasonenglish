@@ -1,0 +1,179 @@
+/*
+ * Phone (360–430px) and tablet (768–1024px) fixes, plus touch-screen targets.
+ *
+ * Every rule sits inside a width, `pointer: coarse` or `hover: none` media
+ * query, so a desktop with a mouse (1280px and up) renders exactly as before.
+ *
+ * This file is imported by App.tsx, before the lazily loaded role stylesheets
+ * (learner.css, operator/styles.css, manager.css…), so each selector starts with
+ * `:root:root` to outrank the same selector there regardless of load order.
+ */
+
+/* 1. Lesson content (learner lesson + operator day view share .lesson-page).
+   `.btn-sm` is nowrap in the operator app, so a long example sentence made its
+   card – and the whole lesson grid – wider than the phone; main.app-content
+   hides horizontal overflow, so the text was silently cut. Let every lesson
+   control wrap and let the grids shrink to the screen. */
+@media (max-width: 1024px) {
+  :root:root .lesson-page :is(.lesson-surface, .lesson-parts) { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+  :root:root .lesson-page :is(.lesson-surface, .lesson-parts) > * { min-width: 0; max-width: 100%; }
+  :root:root .lesson-page :is(.lesson-example-card, .vocabulary-card-sound, .lesson-example-wrap, .btn-sm) {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: start;
+  }
+  /* Speaker icon and sentence stay on one row; the sentence wraps beside the icon. */
+  :root:root .lesson-page .lesson-example-card { height: auto; flex-direction: row; align-items: flex-start; justify-content: flex-start; }
+  :root:root .lesson-page .lesson-example-card > svg { flex: none; margin-top: 3px; }
+  :root:root .lesson-page :is(.lesson-example-text, .vocabulary-card-chip-label, .lesson-grammar-formula-line, .lesson-study-focus) {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  :root:root .lesson-page .lesson-grammar-formula-row { flex-wrap: wrap; min-width: 0; }
+  :root:root .lesson-page .lesson-grammar-formula-row > * { min-width: 0; max-width: 100%; }
+  :root:root .lesson-page .ltabs { min-width: 0; max-width: 100%; }
+  :root:root .lesson-page .ltabs button { min-width: 0; flex: 1 1 0; white-space: normal; }
+}
+
+/* 2. Cài đặt › Người dùng: in the stacked (card) layout the table kept its
+   desktop `width: max-content`, so each account card was wider than the
+   settings card and the status badge and PIN/password field were cut off.
+   Fit the cards to the box and give the role and the PIN field their own row. */
+@media (max-width: 1024px) {
+  @container manager-accounts (max-width: 975px) {
+    :root:root .settings-action-table .manager-accounts-table__table { width: 100%; min-width: 0; max-width: 100%; }
+    :root:root .manager-accounts-table__table tbody tr > td { max-width: 100%; }
+    :root:root .manager-accounts-table__table td:nth-child(2) { white-space: normal; overflow-wrap: anywhere; }
+  }
+  @container manager-accounts (max-width: 559px) {
+    :root:root .manager-accounts-table__table td:first-child { max-width: none; }
+    :root:root .manager-accounts-table__table :is(td:nth-child(3), td:nth-child(5)) { grid-column: 1 / -1; }
+    :root:root .manager-accounts-table__table td:nth-child(3) select { width: 100%; max-width: none; }
+    :root:root .manager-accounts-table__table td:nth-child(5) > * { max-width: 100%; }
+    :root:root .manager-accounts-table__table .manager-account-actions { flex-wrap: wrap; }
+  }
+}
+
+/* 3. Floating scroll-to-top/bottom button: never over an open modal or dialog
+   (it covered row actions and the final-review text). Near the end of the page
+   ScrollJump.tsx hides it on these screens so it cannot cover composers,
+   inputs or the last row's actions. */
+@media (max-width: 1024px), (pointer: coarse) {
+  :root:root body:has(.modal-backdrop, dialog[open], [role="dialog"], [role="alertdialog"], [aria-modal="true"]) > #root > .app-scroll-jump { display: none; }
+  :root:root :is([role="dialog"], .modal-backdrop, dialog) .exam-scroll-jump-dock { display: none; }
+}
+
+/* 5. Touch targets: at least 40×40 on touch screens (desktop mouse unchanged).
+   `!important` makes 40px a floor over the many per-screen compact rules. */
+@media (pointer: coarse) {
+  :root:root :is(.btn-sm, a.btn-sm, .btn.btn-sm) { min-height: 40px !important; }
+  :root:root :is(
+    .btn-sm.btn-ghost.on,
+    .coach-compose-icon,
+    .password-toggle,
+    .manager-password-toggle,
+    .monthly-reopen-request-button,
+    .monthly-day-action.icon-only,
+    .monthly-day-action.monthly-manual-action,
+    .operator-editor-findings-toggle,
+    .lesson-page .vocabulary-card-sound,
+    .coach-limit-details > summary,
+    .ds-toast__dismiss
+  ) { min-width: 40px !important; min-height: 40px !important; }
+  :root:root :is(.monthly-day-action, .coach-feedback-toggle, .app-entry-link, .operator-monthly-findings-head, .operator-editor-finding-link) { min-height: 40px !important; }
+  :root:root a.link-button.small { display: inline-flex; align-items: center; min-height: 40px !important; }
+  :root:root summary { min-height: 40px !important; align-content: center; }
+}
+
+/* 6. Readable text: nothing under 12px on phones and tablets.
+   Only selectors that render under 12px are listed. Each is the stylesheet's own
+   selector plus `:not(z)` (one type selector more), so it outranks the small base
+   rule wherever that is loaded, but not the more specific per-screen rules that
+   already make the same text larger (a blanket rule would shrink those). */
+@media (max-width: 1024px) {
+  .eyebrow:not(z) { font-size: 12px; }
+  .inbox-category:not(z) { font-size: 12px; }
+  .inbox-count:not(z) { font-size: 12px; }
+  .vocabulary-card-type:not(z),
+  .app-operator .operator-lesson-preview .vocabulary-card-type:not(z) { font-size: 12px; }
+  .vocabulary-card-label:not(z),
+  .app-operator .operator-lesson-preview .vocabulary-card-label:not(z) { font-size: 12px; }
+  .vocabulary-card-relations .chip .vocabulary-card-chip-tag:not(z) { font-size: 12px; }
+  .word-chip-list .word-chip:not(z) { font-size: 12px !important; } /* games sets it inline */
+  .app-operator .operator-lesson-preview .operator-listening-transcript strong:not(z) { font-size: 12px; }
+  .badge:not(z) { font-size: 12px; }
+  .monthly-month-tabs button small:not(z) { font-size: 12px; }
+  .monthly-calendar-legend:not(z) { font-size: 12px; }
+  .monthly-resource-cards span:not(z),
+  .monthly-resource-cards button span:not(z) { font-size: 12px; }
+  .monthly-agenda .monthly-day-cell b > span:not(z) { font-size: 12px; }
+  .operator-level-kicker:not(z) { font-size: 12px; }
+  .operator-level-question-number span:not(z) { font-size: 12px; }
+  th:not(z) { font-size: 12px; }
+  .monthly-resource-actions .btn:not(z) { font-size: 12px; }
+  .monthly-resource-actions .monthly-reopen-status:not(z) { font-size: 12px; }
+  .monthly-day-cell strong:not(z) { font-size: 12px; }
+  .monthly-day-cell .btn-sm:not(z) { font-size: 12px; }
+  .monthly-day-cell .monthly-view-day:not(z) { font-size: 12px; }
+  .monthly-plan-primary:not(z) { font-size: 12px; }
+  .monthly-plan-day-open:not(z) { font-size: 12px; }
+  .monthly-plan-day-body:not(z) { font-size: 12px; }
+  .monthly-plan-day-body small:not(z) { font-size: 12px; }
+  .monthly-plan-day-body .monthly-plan-resource-group:not(z) { font-size: 12px; }
+  .monthly-plan-open-button:not(z) { font-size: 12px; }
+  .monthly-plan-core-type:not(z) { font-size: 12px; }
+  .monthly-resource-chips em:not(z) { font-size: 12px; }
+  .monthly-resource-collection li small:not(z) { font-size: 12px; }
+  .monthly-resource-collection.expanded li:not(z) { font-size: 12px; }
+  .monthly-resource-collection.expanded li i:not(z) { font-size: 12px; }
+  .monthly-resource-collection.expanded li em:not(z) { font-size: 12px; }
+  .monthly-pronunciation-examples > span:not(z) { font-size: 12px; }
+  .monthly-grammar-formula > span:not(z) { font-size: 12px; }
+  .monthly-grammar-examples > span:not(z) { font-size: 12px; }
+  .monthly-resource-editor-type:not(z) { font-size: 12px; }
+  .monthly-illustration-action:not(z) { font-size: 12px; }
+  .monthly-resource-progress li em:not(z) { font-size: 12px; }
+}
+
+/* The phone/tablet bottom nav labels (10–11px); at 1024px it is already 14.5px. */
+@media (max-width: 1023px) {
+  .bottomnav a:not(z) { font-size: 12px; }
+}
+@media (max-width: 420px) {
+  .bottomnav[data-role="learner"] a:not(z) { font-size: 12px; }
+}
+@media (max-width: 480px) {
+  .app-learner-page.home-page > .page-title .badge:not(z) { font-size: 12px; }
+}
+/* Manager KPI captions are shrunk to .72rem only on phones. */
+@media (max-width: 600px) {
+  .manager-progress-page .manager-kpi-grid .kpi .xs:not(z) { font-size: 12px; }
+}
+
+/* 7. Manager dashboard on phones: "Đang học", "Đã nộp…" no longer scroll in
+   their own fixed-height box inside the scrolling page; they flow in the page. */
+@media (max-width: 767px) {
+  :root:root #root .manager-page :is(.manager-progress-table, .manager-progress-list) {
+    max-height: none !important;
+    overflow-y: visible !important;
+  }
+  :root:root #root .manager-page .manager-progress-table thead th { position: static; }
+}
+
+/* 8a. Final review "Sinh lại đề" banner on phones: text on top, full-width button below. */
+@media (max-width: 560px) {
+  :root:root .banner.monthly-final-regenerate { flex-direction: column; align-items: stretch; }
+  :root:root .banner.monthly-final-regenerate > .body { flex: none; min-width: 0; }
+  :root:root .banner.monthly-final-regenerate > .btn { width: 100%; }
+}
+
+/* 8b. Touch screens keep :hover on the last tapped element, so the selected
+   lesson tab ("2. Bài tập") took the light hover background under its white
+   label. The selected tab keeps its colours while "hovered" on touch. */
+@media (hover: none) {
+  :root:root .ltabs button.active:hover,
+  :root:root .ltabs button[aria-selected="true"]:hover { background: var(--primary); color: var(--primary-ink); }
+}

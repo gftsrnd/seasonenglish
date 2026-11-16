@@ -17,6 +17,7 @@ import { preloadRoleRoute, RoleRoutes } from "./RoleRoutes.js";
 import { AvatarDialog } from "./learner/ProfileReward.js";
 import { LockedLearnerSupport } from "./shared/LockedLearnerSupport.js";
 import "./app-layout.css";
+import "./responsive-compact.css";
 import { cancelAllExclusiveAudio } from "../features/experience/audio-precedence.js";
 
 const authChangeStorageKey = "e4s:auth:changed";

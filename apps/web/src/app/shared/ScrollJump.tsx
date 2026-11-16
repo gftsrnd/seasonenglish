@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowDown } from "lucide-react";
 
+/** Phone and tablet widths, or any touch-first screen. */
+export const COMPACT_SCROLL_JUMP_QUERY = "(max-width: 1024px), (pointer: coarse)";
+
 export function useScrollJump(contained = false) {
   const start = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
@@ -32,7 +35,11 @@ export function useScrollJump(contained = false) {
     });
   };
 
-  return { start, end, jump, atTop: edges.top, visible: !edges.top || !edges.bottom };
+  // On phones and tablets the floating button sits over the page's last row (actions, composers,
+  // inputs), so it steps aside once the end of the page is in view; desktop keeps the up arrow there.
+  const compact = typeof window !== "undefined" && typeof window.matchMedia === "function"
+    && window.matchMedia(COMPACT_SCROLL_JUMP_QUERY).matches;
+  return { start, end, jump, atTop: edges.top, visible: compact ? !edges.bottom : !edges.top || !edges.bottom };
 }
 
 export function ScrollJumpButton({ atTop, onClick, inExam = false, style }: {
