@@ -19,6 +19,8 @@ import { useToast } from "../shared/design-system.js";
 // Learner-only visual layer in the same chunk so its lesson/profile spacing
 // rules are present when the first Learner screen mounts.
 import "./learner.css";
+// Phone/tablet layer for every learner screen, scoped under .learner-root (see LearnerRouteController).
+import "../responsive-learner.css";
 import type { LearnerAudioEvidence, LearnerAudioUpload, LearnerCallbacks } from "./contracts.js";
 import { normalizeAudioEvidence } from "../shared/media/audio-evidence.js";
 import type { LearnerContractBundle, LearnerUiState } from "./Router.js";
@@ -133,6 +135,11 @@ export function printLearnerReward() {
  * it reads React Router location, fetches server contracts, and owns mutation refreshes.
  */
 export function LearnerRouteController({ courseCompleted = false }: { courseCompleted?: boolean } = {}) {
+  // `.learner-root` (display: contents) scopes the phone/tablet rules in responsive-learner.css.
+  return <div className="learner-root"><LearnerRoutes courseCompleted={courseCompleted} /></div>;
+}
+
+function LearnerRoutes({ courseCompleted }: { courseCompleted: boolean }) {
   const { pathname, hash } = useLocation();
   const path = normalizeLearnerPath(pathname);
   if (path === "/profile" && hash === "#my-requests") return <Navigate replace to="/support?from=profile" />;

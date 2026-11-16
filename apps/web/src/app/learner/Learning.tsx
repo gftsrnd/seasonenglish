@@ -1,7 +1,8 @@
 import { RequestEvidenceFields, requestEvidenceArgs, type RequestEvidenceDraft } from "../shared/RequestEvidence.js";
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, ChevronLeft, LockKeyhole, Mic, RotateCcw, Square, Upload, Volume2 } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, LockKeyhole, Mic, RotateCcw, Square, Upload, Volume2 } from "lucide-react";
+import { useCompactUi } from "../shared/CompactUi.js";
 import type {
   LessonPart,
   LessonPartAttemptEvidenceInput,
@@ -143,6 +144,10 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
   const [appealReasons, setAppealReasons] = useState<Partial<Record<LessonPartCode, string>>>({});
   /** Translations handed over with a finished attempt (the lesson view only carries them once finished). */
   const [revealedTranslations, setRevealedTranslations] = useState<Partial<Record<LessonPartCode, { question: string; answer: string }>>>({});
+  // Phones/tablets: the Study tab is a guided flow, one section per step (presentation only — completion is unchanged).
+  const compactUi = useCompactUi();
+  const [studyStep, setStudyStep] = useState(0);
+  const lessonTopRef = useRef<HTMLDivElement>(null);
   const selectTab = (next: LessonTab) => {
     setTab(next);
     persistLessonTab(lesson.id, next);
@@ -160,6 +165,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
     ));
     setAnswers((current) => isNewLesson ? serverAnswers : { ...serverAnswers, ...current });
     if (isNewLesson) {
+      setStudyStep(0);
       setTab(readLessonTab(lesson));
       setError("");
       setCompletedLocally(false);
@@ -322,6 +328,17 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
     }
   };
   const visible = lessonPartsForTab(lesson.content.parts, tab);
+  const studySteps = compactUi && tab === "study" ? lessonStudySteps(visible.map((part) => part.code)) : [];
+  const stepIndex = Math.min(studyStep, Math.max(0, studySteps.length - 1));
+  const stepParts = studySteps.length > 1 ? new Set(studySteps[stepIndex]) : null;
+  const lastStudyStep = !stepParts || stepIndex === studySteps.length - 1;
+  const goToStep = (next: number) => {
+    setStudyStep(next);
+    window.requestAnimationFrame(() => lessonTopRef.current?.scrollIntoView?.({ block: "start" }));
+  };
+  const stepLabel = (codes: readonly LessonPartCode[]) => codes.length > 1 && codes.includes("objective")
+    ? (language === "en" ? "Objective & instructions" : "Mục tiêu & hướng dẫn")
+    : partLabel(codes[0]!, language);
   const evidence = localProgress.evidence;
   const pronunciationReviewTargets = readPronunciationTargets(lesson.content.parts.find((part) => part.code === "pronunciation")?.content);
   const requiredPronunciationWords = pronunciationReviewTargets.length > 0
@@ -355,7 +372,12 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
         <button className={tab === "practice" ? "active" : ""} role="tab" aria-selected={tab === "practice"} type="button" disabled={!studyComplete} title={studyComplete ? undefined : copy.practiceLockedTitle} onClick={() => selectTab("practice")}>2. {copy.practiceTab} {studyComplete ? `${completedPracticeCount}/${requiredPracticeCodes.length}` : <><LockKeyhole className="status-icon" aria-hidden="true" /><span className="sr-only">{copy.practiceTab}</span></>}</button>
       </div>
       <ErrorText message={error} />
+      {stepParts ? <div ref={lessonTopRef} className="lesson-study-steps" role="group" aria-label={language === "en" ? "Study steps" : "Các bước học"}>
+        <span className="lesson-study-steps-label">{language === "en" ? `Step ${stepIndex + 1}/${studySteps.length}` : `Bước ${stepIndex + 1}/${studySteps.length}`} · <b>{stepLabel(studySteps[stepIndex]!)}</b></span>
+        <span className="lesson-study-steps-bar" role="progressbar" aria-label={language === "en" ? "Study progress" : "Tiến độ phần Học"} aria-valuemin={1} aria-valuemax={studySteps.length} aria-valuenow={stepIndex + 1}><i style={{ width: `${(stepIndex + 1) / studySteps.length * 100}%` }} /></span>
+      </div> : null}
       <ol className="stack lesson-parts" aria-label={language === "en" ? "Lesson content" : "Nội dung bài học"} style={{ gap: 16, listStyle: "none", margin: 0, padding: 0 }}>{visible.map((part, index) => {
+        if (stepParts && !stepParts.has(part.code)) return null;
         const partEvidence = evidence[part.code];
         const done = partIsDone(partEvidence, localProgress.completedPartCodes.includes(part.code));
         const translations = revealedTranslations[part.code] ?? lessonTranslations(part.content);
@@ -390,11 +412,26 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
           </div> : null}
         </li>;
       })}</ol>
-      {tab === "study" ? <section className="card lesson-study-cta"><div><strong>{studyComplete ? (language === "en" ? "You have completed this step" : "Bạn đã học xong phần này") : (language === "en" ? "Have you completed the three Study sections?" : "Học xong 3 mục trên chưa?")}</strong>{requiredPracticeCodes.length ? <p className="small">{language === "en" ? `Practice has ${requiredPracticeCodes.length} sections: ${requiredPracticeCodes.map((code) => partLabel(code, language)).join(" → ")}.` : `Bước 2 có ${requiredPracticeCodes.length} phần bài tập: ${requiredPracticeCodes.map((code) => partLabel(code, language)).join(" → ")}.`}</p> : null}</div><button className="btn-primary btn-lg" type="button" disabled={Boolean(busyAction)} onClick={() => studyComplete ? selectTab("practice") : void finishStudy()}>{busyAction === "study" ? copy.buttons.checking : studyComplete ? copy.buttons.moveToPractice : <><CheckCircle2 size={18} aria-hidden="true" /> {copy.buttons.studyDone}</>}</button></section> : null}
+      {stepParts ? <div className="lesson-study-step-nav">
+        <button type="button" className="btn" disabled={stepIndex === 0} onClick={() => goToStep(stepIndex - 1)}><ChevronLeft size={16} aria-hidden="true" />{language === "en" ? "Back" : "Quay lại"}</button>
+        {!lastStudyStep ? <button type="button" className="btn btn-primary" onClick={() => goToStep(stepIndex + 1)}>{language === "en" ? "Next" : "Tiếp"}: {stepLabel(studySteps[stepIndex + 1]!)}<ChevronRight size={16} aria-hidden="true" /></button>
+          : <button className="btn btn-primary" type="button" disabled={Boolean(busyAction)} onClick={() => studyComplete ? selectTab("practice") : void finishStudy()}>{busyAction === "study" ? copy.buttons.checking : studyComplete ? copy.buttons.moveToPractice : <><CheckCircle2 size={16} aria-hidden="true" /> {copy.buttons.studyDone}</>}</button>}
+      </div> : null}
+      {tab === "study" && !stepParts ? <section className="card lesson-study-cta"><div><strong>{studyComplete ? (language === "en" ? "You have completed this step" : "Bạn đã học xong phần này") : (language === "en" ? "Have you completed the three Study sections?" : "Học xong 3 mục trên chưa?")}</strong>{requiredPracticeCodes.length ? <p className="small">{language === "en" ? `Practice has ${requiredPracticeCodes.length} sections: ${requiredPracticeCodes.map((code) => partLabel(code, language)).join(" → ")}.` : `Bước 2 có ${requiredPracticeCodes.length} phần bài tập: ${requiredPracticeCodes.map((code) => partLabel(code, language)).join(" → ")}.`}</p> : null}</div><button className="btn-primary btn-lg" type="button" disabled={Boolean(busyAction)} onClick={() => studyComplete ? selectTab("practice") : void finishStudy()}>{busyAction === "study" ? copy.buttons.checking : studyComplete ? copy.buttons.moveToPractice : <><CheckCircle2 size={18} aria-hidden="true" /> {copy.buttons.studyDone}</>}</button></section> : null}
     </section>
-    <section className="card lesson-completion" aria-label={language === "en" ? "Complete lesson" : "Hoàn thành bài học"}><div><strong>{completed ? (language === "en" ? "You have completed this lesson. Review it whenever you like." : "Bạn đã học bài này rồi, ôn lại thoải mái!") : allPracticeComplete ? (language === "en" ? "All sections are complete. Select Complete lesson to unlock the next lesson." : "Đủ các phần rồi! Bấm Hoàn thành để mở bài tiếp theo.") : (language === "en" ? `Completed ${completedPracticeCount}/${requiredPracticeCodes.length} sections. Finish the remaining sections, then complete the lesson.` : `Đã xong ${completedPracticeCount}/${requiredPracticeCodes.length} phần. Làm nốt rồi bấm Hoàn thành nhé.`)}</strong></div><div className="row"><button className="btn-primary btn-lg" type="button" disabled={Boolean(busyAction) || (!completed && !allPracticeComplete)} title={!completed && !allPracticeComplete ? (language === "en" ? `Complete ${requiredPracticeCodes.length} practice sections first` : `Làm xong ${requiredPracticeCodes.length} phần bài tập trước`) : undefined} onClick={() => void completeLesson()}>{busyAction === "complete" ? copy.buttons.checking : completed ? copy.buttons.saveReview : copy.buttons.finishLesson}</button><AppLink className="btn btn-ghost" href="/coach" navigate={actions.navigate}>{language === "en" ? "Practise with Season" : "Luyện với Season"}</AppLink></div></section>
+    {stepParts ? null : <section className="card lesson-completion" aria-label={language === "en" ? "Complete lesson" : "Hoàn thành bài học"}><div><strong>{completed ? (language === "en" ? "You have completed this lesson. Review it whenever you like." : "Bạn đã học bài này rồi, ôn lại thoải mái!") : allPracticeComplete ? (language === "en" ? "All sections are complete. Select Complete lesson to unlock the next lesson." : "Đủ các phần rồi! Bấm Hoàn thành để mở bài tiếp theo.") : (language === "en" ? `Completed ${completedPracticeCount}/${requiredPracticeCodes.length} sections. Finish the remaining sections, then complete the lesson.` : `Đã xong ${completedPracticeCount}/${requiredPracticeCodes.length} phần. Làm nốt rồi bấm Hoàn thành nhé.`)}</strong></div><div className="row"><button className="btn-primary btn-lg" type="button" disabled={Boolean(busyAction) || (!completed && !allPracticeComplete)} title={!completed && !allPracticeComplete ? (language === "en" ? `Complete ${requiredPracticeCodes.length} practice sections first` : `Làm xong ${requiredPracticeCodes.length} phần bài tập trước`) : undefined} onClick={() => void completeLesson()}>{busyAction === "complete" ? copy.buttons.checking : completed ? copy.buttons.saveReview : copy.buttons.finishLesson}</button><AppLink className="btn btn-ghost" href="/coach" navigate={actions.navigate}>{language === "en" ? "Practise with Season" : "Luyện với Season"}</AppLink></div></section>}
     {vocabularyModal ? <SharedVocabularyModal state={vocabularyModal} speak={actions.speak} language={language} close={() => setVocabularyModal(null)} /> : null}
   </div>;
+}
+
+/**
+ * Study steps for the phone/tablet flow: objective + instructions together, then one step per other study part,
+ * in lesson order. Only decides which parts are shown; completion still comes from the server progress.
+ */
+export function lessonStudySteps(codes: readonly LessonPartCode[]): LessonPartCode[][] {
+  const intro = codes.filter((code) => code === "objective" || code === "instruction");
+  const rest = codes.filter((code) => code !== "objective" && code !== "instruction").map((code) => [code]);
+  return intro.length ? [intro, ...rest] : rest;
 }
 
 function lessonStudyIsComplete(lesson: LessonView["lesson"]): boolean {

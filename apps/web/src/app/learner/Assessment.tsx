@@ -9,6 +9,7 @@ import { useExperience } from "../../features/experience/Experience.js";
 import { cancelExclusiveAudio } from "../../features/experience/audio-precedence.js";
 import { ApiError } from "../../api/runtime.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
+import { InfoTitle } from "../shared/CompactUi.js";
 import { formatScore, formatScoreOutOf } from "../shared/format-score.js";
 
 const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing", "speaking"];
@@ -125,6 +126,18 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
   if (view.screenState === "preparation" || !view.attempt) {
     const timed = view.timed !== false;
     const examNote = definition.kind === "pass-course" ? <Notice><b>Form A cố định · C1.</b> Bài thi 90 phút, 100 điểm và bốn kỹ năng. Người vận hành xét cấp chứng chỉ khi tổng điểm đạt từ <b>85/100</b>. Kết quả thấp hơn sẽ đặt lại trạng thái sẵn sàng C1. Bạn có <b>72 giờ</b> để kháng nghị sau khi có kết quả.</Notice> : definition.kind === "level-up" && targetLevel ? <Notice>Đề ngắn ở mức <b>{targetLevel}</b>. Đạt khi tổng ≥70/100 và mỗi kỹ năng ≥50%; sau đó hoàn thành <b>6 lượt thử thách với Season</b> để gửi yêu cầu duyệt. Nếu chưa đạt, bạn có thể thử lại sau <b>14 ngày</b>.</Notice> : targetLevel ? <Notice>Đề ngắn ở mức <b>{targetLevel}</b>. Đạt khi tổng ≥70/100 và mỗi kỹ năng ≥50%.</Notice> : null;
+    const readingNote = definition.sections.some(section => section.code === "reading" && /ngữ pháp|từ vựng/i.test(section.title));
+    // Phones/tablets: the three rule boxes become three must-know lines; every rule stays in the ⓘ of "Quy định làm bài".
+    const ruleGroups: ReadonlyArray<readonly [string, string[]]> = [
+      ["Bắt buộc", ["Làm một mạch theo thứ tự Nghe → Đọc → Viết → Nói.", "Chuẩn bị tai nghe/loa và micro; ở lại trang đến khi nộp.", "Phần Nói: ghi âm trực tiếp hoặc tải file."]],
+      ["Không được phép", ["Không mở tab/cửa sổ khác, không dịch/AI, không quay lại phần đã nộp.", "Mỗi đoạn nghe chỉ được phát tối đa 2 lần."]],
+      ["Lưu ý", [`Câu trả lời được tự động lưu; đồng hồ ${timed ? "chạy liên tục, kể cả khi bạn thoát ra và không thể tạm dừng" : "không giới hạn"}.`, timed ? "Hết giờ tự chuyển phần; rời màn hình sẽ hiện cảnh báo để bạn quay lại." : "Không tính giờ, nhưng nộp phần nào là khoá phần đó.", "Vượt quá 3 cảnh báo sẽ tự động nộp bài."]]
+    ];
+    const shortRules = [
+      timed ? "Làm liền 4 phần, đồng hồ không dừng." : "Làm lần lượt 4 phần, nộp phần nào khoá phần đó.",
+      "Không đổi tab, dịch hay dùng AI.",
+      "Mỗi đoạn nghe phát tối đa 2 lần."
+    ];
     const rules = <div className="grid cols-3 assessment-rules">
       <Rule title="Bắt buộc" icon={<CheckCircle2 size={17} aria-hidden="true" />} tone="required" lines={compact
         ? ["Làm lần lượt. Ở lại trang đến khi nộp.", "Phần Nói: ghi âm hoặc tải tệp âm thanh."]
@@ -143,40 +156,40 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
       ? <p className="small form-error" role="alert">{microphoneMessage ?? "Chưa truy cập được micro. Hãy cấp quyền rồi thử lại."}</p>
       : null;
 
-    const backLink = <AppLink className="btn" href={definition.kind === "placement" ? "/onboard" : "/home"} navigate={actions.navigate}>← {definition.kind === "placement" ? "Quay lại hồ sơ" : "Quay lại"}</AppLink>;
+    const backLink = <AppLink className={compact ? "assessment-back-link" : "btn"} href={definition.kind === "placement" ? "/onboard" : "/home"} navigate={actions.navigate}>← {definition.kind === "placement" ? "Quay lại hồ sơ" : "Quay lại"}</AppLink>;
     const startButton = <button className="btn-primary assessment-start-button assessment-start-primary" type="button" aria-label={view.attempt ? "Tiếp tục bài đang làm" : "Bắt đầu phần Nghe"} aria-describedby={localError ? "assessment-start-error" : undefined} aria-busy={starting || undefined} disabled={starting || checkingMicrophone} onClick={() => setStartConfirmOpen(true)}>{starting ? <><span className="spinner" aria-hidden="true" /> Đang bắt đầu…</> : view.attempt ? "Tiếp tục bài đang làm" : "Bắt đầu phần Nghe"}</button>;
 
+    // Phones/tablets: structure and score bands stay visible; only explanations live in the title's ⓘ.
+    const prepTip = <span className="assessment-prep-tip">
+      {definition.kind === "placement" ? <span><b>Vì sao cần bước này?</b> Bài đầu vào giúp chọn mức phù hợp. Bạn không cần ôn trước.</span> : null}
+      {readingNote ? <span>Phần Đọc gồm ngữ pháp và từ vựng.</span> : null}
+      <span>Thời gian vẫn chạy nếu bạn rời trang; câu trả lời được tự động lưu.</span>
+    </span>;
     return <div className="app-learner-page test-page">
-      <PageTitle title={assessmentHeading(view)} aside={compact ? undefined : <AppLink className="btn btn-sm" href="/home" navigate={actions.navigate}>Về trang chủ</AppLink>} />
+      <PageTitle title={assessmentHeading(view)} {...(compact ? { tip: prepTip } : {})} aside={compact ? undefined : <AppLink className="btn btn-sm" href="/home" navigate={actions.navigate}>Về trang chủ</AppLink>} />
       <section className={compact ? "card assessment-prep-compact" : "card"}>
         {definition.kind === "placement" && view.placementRetake?.status === "granted" ? <PlacementRetakeNotice reason={view.placementRetake.reason} /> : null}
         {compact ? <>
           {definition.kind !== "placement" ? <h2>{definition.title}</h2> : null}
           <p className="assessment-prep-overview">{definition.sections.length} kỹ năng · {timed ? `${definition.totalMinutes} phút` : "Không tính giờ"} · {formatScore(definition.totalScore)} điểm</p>
-          <div className="assessment-device-checks">
-            <h3>Thử tai nghe/loa và micro</h3>
+          <div className="assessment-device-checks" aria-label="Thử tai nghe/loa và micro">
             {equipmentChecks}
             {deviceError}
           </div>
-          {why}
-          <section className="assessment-prep-details" aria-label="Cấu trúc và quy định">
-            <h3>Cấu trúc bài thi</h3>
-            <table className="assessment-prep-sections" aria-label="Cấu trúc bài test">
-              <thead><tr><th scope="col">Phần</th><th scope="col">Câu</th>{timed ? <th scope="col">Phút</th> : null}<th scope="col">Điểm</th></tr></thead>
-              <tbody>{definition.sections.map(section => <tr key={section.code}>
-                <th scope="row">{sectionTableTitle(section.code)}</th>
-                <td>{section.groups.reduce((count, group) => count + group.tasks.length, 0)}</td>
-                {timed ? <td>{section.durationMinutes}</td> : null}
-                <td>{formatScore(section.maxScore)}</td>
-              </tr>)}</tbody>
-            </table>
-            {definition.sections.some(section => section.code === "reading" && /ngữ pháp|từ vựng/i.test(section.title))
-              ? <p className="assessment-prep-reading small muted">Phần Đọc gồm ngữ pháp và từ vựng.</p>
-              : null}
-            {examNote}
-            <h3>Quy định làm bài</h3>
-            {rules}
-            {definition.kind === "placement" ? <ScoreScale compact /> : null}
+          <table className="assessment-prep-table" aria-label="Cấu trúc bài test">
+            <thead><tr><th scope="col">Phần</th><th scope="col">Câu</th>{timed ? <th scope="col">Phút</th> : null}<th scope="col">Điểm</th></tr></thead>
+            <tbody>{definition.sections.map(section => <tr key={section.code}>
+              <th scope="row">{sectionTableTitle(section.code)}</th>
+              <td>{section.groups.reduce((count, group) => count + group.tasks.length, 0)}</td>
+              {timed ? <td>{section.durationMinutes}</td> : null}
+              <td>{formatScore(section.maxScore)}</td>
+            </tr>)}</tbody>
+          </table>
+          {definition.kind === "placement" ? <ScoreScale compact /> : null}
+          {examNote}
+          <section className="assessment-prep-details" aria-label="Quy định làm bài">
+            <InfoTitle as="h3" title="Quy định làm bài" tip={<span className="assessment-rules-tip">{ruleGroups.map(([title, lines]) => <span key={title}><b>{title}</b><span>{lines.join(" ")}</span></span>)}</span>} label="Quy định làm bài: đầy đủ" />
+            <ul className="assessment-rules-short">{shortRules.map((line) => <li key={line}>{line}</li>)}</ul>
           </section>
         </> : <>
           <h2>{definition.title}</h2>
@@ -197,7 +210,7 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
           onClose={() => setStartConfirmOpen(false)}
           actions={<><Button onClick={() => setStartConfirmOpen(false)}>Hủy</Button><Button variant="primary" onClick={() => void start()}>Tôi đã sẵn sàng, bắt đầu</Button></>}
         >
-          <p className="assessment-start-copy"><b className="assessment-start-keyword">Câu trả lời được tự động lưu</b>, nhưng bài thi <b className="assessment-start-keyword">không thể tạm dừng</b>. <b className="assessment-start-keyword">Đồng hồ chạy liên tục</b>, tối đa <b className="assessment-start-keyword">{definition.totalMinutes} phút</b>. Hãy chắc là bạn có đủ thời gian và đã thử tai nghe, micro trước khi bắt đầu.</p>
+          {compact ? <p className="assessment-start-copy">Bài thi <b className="assessment-start-keyword">không thể tạm dừng</b>; đồng hồ chạy liên tục, tối đa <b className="assessment-start-keyword">{definition.totalMinutes} phút</b>. Câu trả lời được tự động lưu.</p> : <p className="assessment-start-copy"><b className="assessment-start-keyword">Câu trả lời được tự động lưu</b>, nhưng bài thi <b className="assessment-start-keyword">không thể tạm dừng</b>. <b className="assessment-start-keyword">Đồng hồ chạy liên tục</b>, tối đa <b className="assessment-start-keyword">{definition.totalMinutes} phút</b>. Hãy chắc là bạn có đủ thời gian và đã thử tai nghe, micro trước khi bắt đầu.</p>}
         </Modal> : null}
       </section>
     </div>;
@@ -469,6 +482,11 @@ function sectionSummary(code: AssessmentSectionCode) {
   } as const)[code];
 }
 
+/** Short answer options (all ≤ 14 characters) sit in two columns on phones/tablets (CSS), halving a task's height. */
+export function assessmentShortChoices(options: ReadonlyArray<{ label: string }> | undefined): boolean {
+  return Boolean(options?.length) && options!.length <= 6 && options!.every((option) => option.label.trim().length <= 14);
+}
+
 function sectionTableTitle(code: AssessmentSectionCode) {
   return ({ listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" } as const)[code];
 }
@@ -558,7 +576,7 @@ function Task({ task, number, questionNumber, value, response, view, actions, se
       <span className="small muted">Tối đa {task.interaction.maxLearnerTurns} lượt hoặc {Math.floor(task.interaction.durationSeconds / 60)} phút; kết thúc sớm khi khách hàng chấp nhận giải pháp. Nếu hệ thống không thể tạo lượt phản hồi, bản ghi một chiều vẫn được lưu và chuyển duyệt tay.</span>
     </div> : null}
     {task.hint ? <p className="small muted assessment-task-hint">{task.hint}</p> : null}
-    {task.responseType === "single_choice" ? <fieldset aria-labelledby={promptId} style={{ border: 0, margin: 0, padding: 0 }}><legend className="sr-only">Chọn một đáp án</legend>{task.options?.map((option) => <label className={`opt assessment-choice ${value === option.value ? "sel" : ""}`} key={option.value}><input className="assessment-choice-input" type="radio" name={task.key} checked={value === option.value} aria-describedby={answerHint ? hintId : undefined} onChange={() => onSave({ value: option.value, evidenceType: "choice" })} /><span>{option.label}</span></label>)}</fieldset> : task.responseType === "speaking_evidence" ? null : <>
+    {task.responseType === "single_choice" ? <fieldset className={assessmentShortChoices(task.options) ? "assessment-choices assessment-choices--short" : "assessment-choices"} aria-labelledby={promptId} style={{ border: 0, margin: 0, padding: 0 }}><legend className="sr-only">Chọn một đáp án</legend>{task.options?.map((option) => <label className={`opt assessment-choice ${value === option.value ? "sel" : ""}`} key={option.value}><input className="assessment-choice-input" type="radio" name={task.key} checked={value === option.value} aria-describedby={answerHint ? hintId : undefined} onChange={() => onSave({ value: option.value, evidenceType: "choice" })} /><span>{option.label}</span></label>)}</fieldset> : task.responseType === "speaking_evidence" ? null : <>
       <label><span className="sr-only">Câu trả lời {task.key}</span><textarea aria-label={`Câu trả lời ${task.key}`} aria-labelledby={promptId} aria-describedby={answerHint ? hintId : undefined} value={value} minLength={task.minWords} onChange={(event) => onSave({ value: limitWords(event.target.value, task.maxWords), evidenceType: "text" })} placeholder="Nhập câu trả lời" /></label>
       {wordTarget ? <div className="assessment-word-count" aria-live="polite">{wordCount(value)} / {wordTarget} từ</div> : null}
     </>}

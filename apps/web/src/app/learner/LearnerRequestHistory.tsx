@@ -148,7 +148,7 @@ export function LearnerRequestHistory() {
   const listLabel = "Lịch sử hỗ trợ";
 
   return <div className="app-learner-page learner-support-page request-workspace">
-    <PageTitle title="Hỗ trợ học tập" detail={data?.levelApproved === false ? "Theo dõi khiếu nại của bạn." : "Theo dõi khiếu nại, kháng nghị và góp ý của bạn."}
+    <PageTitle title="Hỗ trợ học tập" detail={data?.levelApproved === false ? "Theo dõi khiếu nại của bạn." : "Theo dõi khiếu nại, kháng nghị và góp ý của bạn."} tip={data?.levelApproved === false ? "Theo dõi khiếu nại của bạn." : "Theo dõi khiếu nại, kháng nghị và góp ý của bạn."} compactDetail={false}
       aside={<Link className="btn" to={fromProfile ? "/profile" : "/home"}>{fromProfile ? "Về Tiến độ & hồ sơ" : "Về Trang chủ"}</Link>} />
     <nav className="request-tabs" aria-label="Các mục hỗ trợ học tập">
       {filters.map(item => {

@@ -5,6 +5,7 @@ import { letters, prepareGameAttempt, type FinishGame, type GameWord } from "./t
 import { useExperience } from "../../features/experience/Experience.js";
 import { GameFeedback } from "./GameFeedback.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
+import { Pager, usePaged } from "../shared/Pager.js";
 
 type Entry = { value: string; word: GameWord };
 type Direction = "across" | "down";
@@ -35,6 +36,9 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   // Phones keep the selected clue beside the board and fold the full lists away.
   const compactClues = useMediaQuery("(max-width: 720px)");
+  // Folded clue list on phones: one page of 5 clues (across first, then down) instead of a long scroll.
+  const orderedClues = useMemo(() => crosswordClueOrder(crossword.placed), [crossword]);
+  const cluePage = usePaged(orderedClues, { phone: 5, tablet: 5 });
   if (crossword.placed.length < 3) return <p className="muted">Không đan được lưới từ bộ này — cần ít nhất 3 từ có chữ cái chung.</p>;
   const cellKey = (row: number, column: number) => `${row},${column}`;
   const focusCell = (key: string | undefined) => {
@@ -243,16 +247,16 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
           })}
         </div>)}
       </div>
-      <div className="crossword-actions"><button className="btn-primary" type="button" onClick={() => void check()} disabled={busy}>Kiểm tra</button><button className="btn-sm" type="button" onClick={hint} disabled={busy || !activeEntry}>Gợi ý 1 chữ</button><span>{activeEntry ? `Gợi ý cho từ ${activeEntry.number} · trừ 1 điểm.` : "Chọn một từ trước khi dùng gợi ý."}</span></div>
+      <div className="crossword-actions"><button className="btn-primary" type="button" onClick={() => void check()} disabled={busy}>Kiểm tra</button><button className="btn-sm" type="button" onClick={hint} disabled={busy || !activeEntry} title={activeEntry ? `Gợi ý cho từ ${activeEntry.number} · trừ 1 điểm.` : "Chọn một từ trước khi dùng gợi ý."}>Gợi ý 1 chữ</button><span className="crossword-actions-note">{activeEntry ? `Gợi ý cho từ ${activeEntry.number} · trừ 1 điểm.` : "Chọn một từ trước khi dùng gợi ý."}</span></div>
       {(() => { const clueLists = <div className="crossword-clues">
         {([
           { direction: "across", label: "Ngang", Icon: ArrowRight },
           { direction: "down", label: "Dọc", Icon: ArrowDown },
         ] as const).map(({ direction, label, Icon }) => (
-          <section key={direction} className={activeEntry?.direction === direction ? "is-active" : ""} role="region" aria-label={`Gợi ý ${label.toLowerCase()}`}>
+          (compactClues ? cluePage.visible.some((entry) => entry.direction === direction) : true) ? <section key={direction} className={activeEntry?.direction === direction ? "is-active" : ""} role="region" aria-label={`Gợi ý ${label.toLowerCase()}`}>
             <h3>{label} <Icon className="game-control-icon" size={12} strokeWidth={2} aria-hidden="true" /></h3>
             <ol>
-              {clue(direction).map((entry) => {
+              {(compactClues ? cluePage.visible.filter((entry) => entry.direction === direction) : clue(direction)).map((entry) => {
                 const definition = distinctDefinition(entry.word);
                 return (
                   <li id={`crossword-clue-${direction}-${entry.number}`} key={entry.word.id}>
@@ -265,14 +269,21 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
                 );
               })}
             </ol>
-          </section>
+          </section> : null
         ))}
+        {compactClues ? <Pager {...cluePage} label="gợi ý" /> : null}
       </div>;
         return compactClues ? <details className="crossword-clues-toggle"><summary>Xem tất cả gợi ý <small>({crossword.placed.length})</small><ChevronDown className="crossword-clues-chevron" size={18} strokeWidth={2} aria-hidden="true" /></summary>{clueLists}</details> : clueLists; })()}
       {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
       <GameFeedback message={notice} tone={noticeTone} />
     </div>
   </div>;
+}
+
+/** Clue order for the paged list: across clues by number, then down clues by number. */
+export function crosswordClueOrder<T extends { direction: Direction; number?: number }>(placed: readonly T[]): T[] {
+  const byNumber = (left: T, right: T) => (left.number ?? 0) - (right.number ?? 0);
+  return [...placed.filter((entry) => entry.direction === "across").sort(byNumber), ...placed.filter((entry) => entry.direction === "down").sort(byNumber)];
 }
 
 function buildCrossword(entries: Entry[]): Crossword {

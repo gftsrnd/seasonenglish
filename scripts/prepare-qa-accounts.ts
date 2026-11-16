@@ -2,7 +2,8 @@
  * Recreates the fixed E4S QA learner cohort (`qa-*@learner-qa.e4s.local`).
  *
  * Source of truth: "Tai khoan Learner QA E4S - 2026-11-09.md" (17 learners,
- * PIN, level, status and test case per account).
+ * PIN, level, status and test case per account). Since 2026-11-16 all learner
+ * accounts share QA_SHARED_PIN (see Tai-khoan-kiem-thu-E4S.docx, qa-seed-2026-11-16).
  *
  * Safety contract:
  * - one transaction; only rows owned by the fixed QA user ids/emails are
@@ -47,6 +48,8 @@ export type QaAccount = {
 };
 
 export const QA_EMAIL_DOMAIN = "learner-qa.e4s.local";
+/** One PIN for every learner QA account (2026-11-16), so testers only need one. */
+export const QA_SHARED_PIN = "190972";
 
 const qa = (key: string, id: string, pin: string, cefr: QaCefr | null, scenario: QaCase, extra: Partial<QaAccount> = {}): QaAccount => ({
   key,
@@ -62,31 +65,31 @@ const qa = (key: string, id: string, pin: string, cefr: QaCefr | null, scenario:
 
 /** Ids are the ones the role-audit stack used, so both stacks stay comparable. */
 export const QA_ACCOUNTS: readonly QaAccount[] = [
-  qa("level-a1", "4f009c49-b13d-4ed8-b7d3-d2e51d2a534a", "190972", "A1", "level"),
-  qa("level-a2", "4ed78bcc-4723-4261-853e-1e95f76d344c", "622215", "A2", "level"),
-  qa("level-b1", "1214b570-09f4-4466-ad3d-8cac36c689ca", "304972", "B1", "level"),
-  qa("level-b2", "dfeb8709-5a62-4574-88bc-1ca6b4cb13c8", "307028", "B2", "level"),
-  qa("level-c1", "0470426a-4e93-408d-a0d2-4c66735cf3fd", "379202", "C1", "level"),
-  qa("onboarding", "437fc6ba-b6f8-4c52-9ca3-c2096f80f26c", "505484", null, "onboarding"),
-  qa("placement", "25bdb600-232d-41a6-b3aa-d52cec7bc3e9", "396648", null, "placement"),
-  qa("locked", "e14e3649-7934-49b9-abbd-44e5ea9ebd2b", "322483", "A2", "locked", { status: "disabled" }),
-  qa("lesson-resume", "3b386d4a-9158-40be-9c90-089b94a27547", "115196", "A1", "lesson-resume"),
-  qa("learned-game", "bc6cef31-3d86-4bc7-9019-33b4b8603985", "662721", "A1", "learned-game"),
-  qa("monthly-appeal", "f3757b38-beef-4014-b8ce-97feb98cb64d", "154738", "A1", "monthly-appeal"),
-  qa("monthly-ready", "3a69a086-972c-49ef-9075-a7fe103d8d6e", "326235", "A1", "monthly-ready"),
-  qa("level-ready", "21d8f5fc-d37c-49b7-8d8f-dd261546617d", "587853", "A1", "level-ready"),
-  qa("pass-ready", "2506cbb3-be34-4478-a253-4df730dd1a81", "381901", "C1", "pass-ready"),
+  qa("level-a1", "4f009c49-b13d-4ed8-b7d3-d2e51d2a534a", QA_SHARED_PIN, "A1", "level"),
+  qa("level-a2", "4ed78bcc-4723-4261-853e-1e95f76d344c", QA_SHARED_PIN, "A2", "level"),
+  qa("level-b1", "1214b570-09f4-4466-ad3d-8cac36c689ca", QA_SHARED_PIN, "B1", "level"),
+  qa("level-b2", "dfeb8709-5a62-4574-88bc-1ca6b4cb13c8", QA_SHARED_PIN, "B2", "level"),
+  qa("level-c1", "0470426a-4e93-408d-a0d2-4c66735cf3fd", QA_SHARED_PIN, "C1", "level"),
+  qa("onboarding", "437fc6ba-b6f8-4c52-9ca3-c2096f80f26c", QA_SHARED_PIN, null, "onboarding"),
+  qa("placement", "25bdb600-232d-41a6-b3aa-d52cec7bc3e9", QA_SHARED_PIN, null, "placement"),
+  qa("locked", "e14e3649-7934-49b9-abbd-44e5ea9ebd2b", QA_SHARED_PIN, "A2", "locked", { status: "disabled" }),
+  qa("lesson-resume", "3b386d4a-9158-40be-9c90-089b94a27547", QA_SHARED_PIN, "A1", "lesson-resume"),
+  qa("learned-game", "bc6cef31-3d86-4bc7-9019-33b4b8603985", QA_SHARED_PIN, "A1", "learned-game"),
+  qa("monthly-appeal", "f3757b38-beef-4014-b8ce-97feb98cb64d", QA_SHARED_PIN, "A1", "monthly-appeal"),
+  qa("monthly-ready", "3a69a086-972c-49ef-9075-a7fe103d8d6e", QA_SHARED_PIN, "A1", "monthly-ready"),
+  qa("level-ready", "21d8f5fc-d37c-49b7-8d8f-dd261546617d", QA_SHARED_PIN, "A1", "level-ready"),
+  qa("pass-ready", "2506cbb3-be34-4478-a253-4df730dd1a81", QA_SHARED_PIN, "C1", "pass-ready"),
   // The spec lists this account as "Khóa" (course finished). A disabled user
   // would see the lock screen instead of the completion screen, so the
   // account stays active and the certificate is what closes the course.
-  qa("pass-completed", "2027c48d-b255-46fe-af7a-64cc35b43706", "105068", "C1", "pass-completed"),
-  qa("lowered-a1", "051c7bfc-5a2b-4ffe-a738-1c8ca2f04fff", "767961", "A1", "lowered"),
-  qa("learning-appeal", "7a579d3e-8033-4a1a-a1db-716bed3b4931", "214541", "A1", "learning-appeal", { displayName: "Học viên Kháng Nghị" }),
+  qa("pass-completed", "2027c48d-b255-46fe-af7a-64cc35b43706", QA_SHARED_PIN, "C1", "pass-completed"),
+  qa("lowered-a1", "051c7bfc-5a2b-4ffe-a738-1c8ca2f04fff", QA_SHARED_PIN, "A1", "lowered"),
+  qa("learning-appeal", "7a579d3e-8033-4a1a-a1db-716bed3b4931", QA_SHARED_PIN, "A1", "learning-appeal", { displayName: "Học viên Kháng Nghị" }),
   // Added 2026-11-12: attendance and monthly-exam eligibility cases.
-  qa("absent-1", "4e6cbbb0-f893-4822-9fb4-d81531d45f10", "829505", "A2", "absent-within-limit"),
-  qa("absent-2", "897592a7-35c5-48fc-b91a-190e6b2f08b3", "751480", "B1", "absent-over-limit"),
-  qa("monthly-ineligible-1", "50a9437f-0495-450c-a1c7-9ec98010d274", "720698", "A1", "monthly-ineligible-attendance"),
-  qa("monthly-ineligible-2", "bf865874-e8c2-4aab-b94e-e58cb81eb29a", "320988", "B2", "monthly-ineligible-cohort")
+  qa("absent-1", "4e6cbbb0-f893-4822-9fb4-d81531d45f10", QA_SHARED_PIN, "A2", "absent-within-limit"),
+  qa("absent-2", "897592a7-35c5-48fc-b91a-190e6b2f08b3", QA_SHARED_PIN, "B1", "absent-over-limit"),
+  qa("monthly-ineligible-1", "50a9437f-0495-450c-a1c7-9ec98010d274", QA_SHARED_PIN, "A1", "monthly-ineligible-attendance"),
+  qa("monthly-ineligible-2", "bf865874-e8c2-4aab-b94e-e58cb81eb29a", QA_SHARED_PIN, "B2", "monthly-ineligible-cohort")
 ] as const;
 
 /**

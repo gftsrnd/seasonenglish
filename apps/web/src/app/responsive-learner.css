@@ -1,0 +1,457 @@
+/*
+ * Learner screens: phone (<= 480/600px) and tablet (<= 1024px) layout.
+ * Everything is scoped under .learner-root (LearnerRouteController) — or, for
+ * popups portalled to <body>, under :root:has(.learner-root) — so operator,
+ * manager, settings and desktop are untouched. The :root:root:root prefix keeps
+ * these rules ahead of responsive-phone.css / responsive-compact.css and the
+ * learner.css base rules regardless of chunk order.
+ */
+.learner-root { display: contents; }
+
+/* ───────────── Phones and tablets (<= 1024px) ───────────── */
+@media (max-width: 1024px) {
+  /* Icon-only actions are identical squares (label kept as accessible name + tooltip). */
+  :root:root:root .learner-root :is(button, .btn, a.btn, a.btn-sm):has(> .action-icon-only):not(.modal-close) {
+    display: inline-grid !important; place-items: center; box-sizing: border-box;
+    width: var(--lrn-icon-btn, 32px) !important; min-width: var(--lrn-icon-btn, 32px) !important; max-width: var(--lrn-icon-btn, 32px) !important;
+    height: var(--lrn-icon-btn, 32px) !important; min-height: var(--lrn-icon-btn, 32px) !important; padding: 0 !important; flex: none !important;
+  }
+  :root:root:root .learner-root :is(button, .btn, a.btn) > .action-icon-only { display: inline-grid !important; place-items: center; }
+  :root:root:root .learner-root :is(button, .btn, a.btn) > .action-icon-only > .action-icon-label { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap; }
+
+  /* Title + ⓘ on one line. */
+  :root:root:root .learner-root .page-title h1.info-title { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  :root:root:root .learner-root .info-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .learner-root :is(h2, h3).info-title { display: flex; align-items: center; gap: 4px; min-width: 0; }
+
+  /* Content images: whole picture, never cropped. */
+  :root:root:root .learner-root :is(.lesson-page, .game-page) img { object-fit: contain; max-width: 100%; }
+
+  /* Small confirm dialogs (clear chat, word-set change, level-up …): compact centred card. */
+  :root:root:root:has(.learner-root) .modal-backdrop > .dialog:not(.wide):not(.vocabulary-modal) { width: min(380px, calc(100vw - 32px)); max-width: 380px; max-height: 78vh; overflow-y: auto; }
+  :root:root:root:has(.learner-root) .modal-backdrop > .dialog.wide { max-height: 78vh; overflow-y: auto; }
+
+  /* ── Home ── */
+  :root:root:root .learner-root .home-page > .bao-row { display: none; }
+  :root:root:root .learner-root .home-page > .page-title { margin-bottom: 8px; }
+  :root:root:root .learner-root .home-page > :is(section, .card, .hero) { margin-top: 10px !important; margin-bottom: 0 !important; }
+  :root:root:root .learner-root .home-page > :first-child + * { margin-top: 0 !important; }
+  :root:root:root .learner-root .home-primary-lesson { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 10px; padding: 12px !important; }
+  :root:root:root .learner-root .home-primary-lesson > div:first-child { grid-column: 1 / -1; }
+  :root:root:root .learner-root .home-primary-lesson h2 { margin: 2px 0 0; }
+  :root:root:root .learner-root .home-primary-lesson > .row { gap: 10px !important; font-size: 13px !important; flex-wrap: nowrap; min-width: 0; }
+  :root:root:root .learner-root .home-primary-lesson > .row > * { white-space: nowrap; }
+  :root:root:root .learner-root .home-primary-lesson > .btn { width: auto !important; min-width: 0; height: 34px; min-height: 34px !important; padding: 0 16px !important; margin: 0 !important; font-size: 14px; white-space: nowrap; }
+  :root:root:root .learner-root .home-page [data-home-block="metrics"] { padding: 12px !important; border-radius: 14px !important; }
+  :root:root:root .learner-root .home-page [data-home-block="metrics"] h2 { font-size: 16px !important; }
+  :root:root:root .learner-root .home-page .monthly-home-metrics { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 6px !important; margin-top: 8px !important; }
+  :root:root:root .learner-root .home-page .monthly-home-metrics > .stat { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; min-height: 0; padding: 6px 4px !important; text-align: center; }
+  :root:root:root .learner-root .home-page .monthly-home-metrics .lbl { display: block; max-width: 100%; font-size: 12px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .learner-root .home-page .home-absence-chip { margin: 8px 0 0; }
+  :root:root:root .learner-root .learner-month-calendar-card { padding: 12px !important; }
+  :root:root:root .learner-root .monthly-learner-calendar-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  :root:root:root .learner-root .monthly-learner-calendar-header h3 { margin: 0; white-space: nowrap; }
+  :root:root:root .learner-root .monthly-learner-calendar-header > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .learner-root .monthly-learner-calendar-week { gap: 8px; margin-bottom: 6px; }
+  :root:root:root .learner-root .monthly-learner-calendar-week { display: grid !important; grid-template-columns: 32px auto 32px !important; justify-content: center; align-items: center; }
+  :root:root:root .learner-root .monthly-learner-calendar-week strong { white-space: nowrap; min-width: 0; }
+  :root:root:root .learner-root .monthly-learner-calendar--agenda .monthly-learner-calendar-link { min-height: 0 !important; padding-block: 0 !important; }
+  :root:root:root .learner-root .monthly-learner-calendar-week .btn { width: 32px; min-width: 32px !important; height: 30px; min-height: 30px !important; padding: 0 !important; }
+  :root:root:root .learner-root .monthly-learner-calendar--agenda { gap: 4px !important; }
+  :root:root:root .learner-root .monthly-learner-calendar--agenda .monthly-learner-calendar-day { min-height: 32px !important; padding: 4px 10px !important; align-items: center; }
+  :root:root:root .learner-root .home-page [data-home-block="activities"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; grid-auto-rows: auto !important; gap: 8px !important; }
+  :root:root:root .learner-root .home-page [data-home-block="activities"] .tile { display: grid !important; grid-template-columns: 24px minmax(0, 1fr); align-items: center; column-gap: 8px; row-gap: 0; min-height: 0 !important; padding: 10px !important; text-align: left; }
+  :root:root:root .learner-root .home-page [data-home-block="activities"] .tile > svg { grid-row: 1 / span 2; width: 22px; height: 22px; margin: 0 !important; }
+  :root:root:root .learner-root .home-page [data-home-block="activities"] .tile > :is(.t, .s) { grid-column: 2; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+  :root:root:root .learner-root .home-page [data-home-block="activities"] .tile > .s { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; }
+  :root:root:root .learner-root .home-page [data-home-block="activities"] .tile > .home-tile-desc { display: none; }
+  :root:root:root .learner-root .home-page .level-readiness-card { margin: 10px 0 0 !important; padding: 12px !important; }
+  :root:root:root .learner-root .home-page .level-readiness-card .readiness-metric { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline; column-gap: 8px; margin-top: 6px !important; }
+  :root:root:root .learner-root .home-page .level-readiness-card .readiness-heading { display: contents; }
+  :root:root:root .learner-root .home-page .level-readiness-card .readiness-label { order: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .learner-root .home-page .level-readiness-card .readiness-actual { order: 2; margin: 0; white-space: nowrap; }
+  :root:root:root .learner-root .home-page .level-readiness-card .readiness-current { order: 3; }
+  :root:root:root .learner-root .home-page .level-readiness-card .readiness-track { order: 4; grid-column: 1 / -1; margin-top: 2px; }
+  :root:root:root .learner-root .home-page .learner-summary-card { padding: 12px !important; margin: 10px 0 0 !important; }
+  :root:root:root .learner-root .home-page .learner-summary-card > .row { flex-wrap: wrap !important; align-items: center !important; gap: 6px 8px !important; }
+  :root:root:root .learner-root .home-page .learner-summary-card > .row > div:first-child { flex: 1 1 210px; min-width: 0; }
+  :root:root:root .learner-root .home-page .learner-summary-actions { margin-left: auto; }
+  :root:root:root .learner-root .home-page .learner-summary-card h3 { margin: 0 !important; }
+  :root:root:root .learner-root .home-page .learner-summary-actions { flex: none; flex-wrap: nowrap !important; }
+  :root:root:root .learner-root .home-page .learner-summary-actions .btn { height: 32px; min-height: 32px !important; padding: 0 10px !important; font-size: 13px; white-space: nowrap; }
+
+  /* ── Mini game hub ── */
+  :root:root:root .learner-root .games-page .word-chip-list { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px !important; }
+  :root:root:root .learner-root .games-page .word-chip { display: flex !important; align-items: center; gap: 4px; min-width: 0 !important; width: 100%; height: 32px; min-height: 32px !important; padding: 0 8px !important; font-size: 13px !important; white-space: nowrap !important; overflow: hidden; }
+  :root:root:root .learner-root .games-page .word-chip > * { flex: none; }
+  :root:root:root .learner-root .games-page .word-chip > span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+  :root:root:root .learner-root .games-page .topic-create { flex-wrap: nowrap !important; gap: 6px !important; }
+  :root:root:root .learner-root .games-page .topic-create input { flex: 1 1 auto !important; height: 34px; min-height: 34px !important; font-size: 14px; }
+  :root:root:root .learner-root .games-page .topic-create button { flex: none; height: 34px; min-height: 34px !important; padding: 0 10px !important; white-space: nowrap; }
+  :root:root:root .learner-root .games-page .topic-source { flex-wrap: nowrap; align-items: center; gap: 8px; margin-top: 8px; }
+  :root:root:root .learner-root .games-page .topic-source > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .learner-root .games-page .games-section-card { padding: 12px !important; }
+  :root:root:root .learner-root .games-page .games-section-card h2 { margin: 0 0 8px; }
+  :root:root:root .learner-root .games-page .game-grid { gap: 8px !important; }
+  :root:root:root .learner-root .games-page .game-tile { display: grid !important; grid-template-columns: 30px minmax(0, 1fr); grid-template-rows: auto auto; align-items: center; column-gap: 8px !important; row-gap: 0 !important; min-height: 0 !important; padding: 8px 10px !important; text-align: left; }
+  :root:root:root .learner-root .games-page .game-tile .game-icon { grid-row: 1 / span 2; margin: 0 !important; }
+  :root:root:root .learner-root .games-page .game-tile > :is(h3, b, small) { grid-column: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .learner-root .games-page .game-tile .game-icon { width: 30px; height: 30px; }
+  :root:root:root .learner-root .games-page .game-tile .game-icon svg { width: 18px; height: 18px; }
+  :root:root:root .learner-root .games-page .game-tile h3 { margin: 0 !important; font-size: 15px !important; }
+  :root:root:root .learner-root .games-page .game-tile > p { display: none; }
+  :root:root:root .learner-root .games-page .game-tile > :is(b, small) { font-size: 12px; }
+
+  /* ── Game screens: one compact header row (icon + name, topic, record, red Thoát) ── */
+  :root:root:root .learner-root .game-page .page-title { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; margin-bottom: 8px !important; }
+  :root:root:root .learner-root .game-page .page-title > div { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; flex: 1 1 auto; }
+  :root:root:root .learner-root .game-page .page-title .game-title { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 20px !important; }
+  :root:root:root .learner-root .game-page .page-title .game-title-icon svg { width: 22px; height: 22px; }
+  :root:root:root .learner-root .game-page .page-title p.muted { margin: 0; font-size: 12.5px; }
+  :root:root:root .learner-root .game-page .page-title #gm-best { margin: 0 !important; }
+  :root:root:root .learner-root .game-exit-link { flex: none; display: inline-flex !important; align-items: center; gap: 4px; height: 30px; min-height: 30px !important; padding: 0 10px !important; font-size: 13px; white-space: nowrap; }
+  :root:root:root .learner-root .game-page .game-running-header { flex-wrap: nowrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+  :root:root:root .learner-root .game-page .game-running-header > div:first-child { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 1 1 auto; }
+  :root:root:root .learner-root .game-page .game-running-header .game-running-title { display: inline-flex; align-items: center; gap: 4px; flex: none; margin: 0; }
+  :root:root:root .learner-root .game-page .game-running-header .game-running-title svg { width: 16px; height: 16px; }
+  :root:root:root .learner-root .game-page .game-running-header h1 { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px !important; }
+  :root:root:root .learner-root .game-page .game-running-header #gm-best { flex: none; white-space: nowrap; }
+  :root:root:root .learner-root .game-page .game-running-header > div:first-child { flex-direction: column; align-items: flex-start; gap: 0; }
+  /* Tutorial card: no big hero tile, compact steps. */
+  :root:root:root .learner-root .game-page .game-tutorial-hero-icon { display: none; }
+  :root:root:root .learner-root .game-page .game-tutorial-content { display: block !important; }
+  :root:root:root .learner-root .game-page .game-tutorial-steps { gap: 6px !important; margin: 8px 0 !important; }
+  :root:root:root .learner-root .game-page .game-tutorial-steps li { padding: 6px 8px !important; gap: 8px !important; min-height: 0 !important; }
+  :root:root:root .learner-root .game-page .game-tutorial-step-icon { width: 28px !important; height: 28px !important; min-width: 28px; }
+  :root:root:root .learner-root .game-page .game-tutorial-step-icon svg { width: 16px; height: 16px; }
+  :root:root:root .learner-root .game-page .game-tutorial-meta { gap: 6px !important; }
+  :root:root:root .learner-root .game-page .game-tutorial-actions { flex-wrap: nowrap; gap: 8px; }
+  :root:root:root .learner-root .game-page .game-tutorial-actions :is(button, .btn) { height: 34px; min-height: 34px !important; padding: 0 12px !important; font-size: 14px; white-space: nowrap; }
+  /* HUD: title + stat chips on one row. */
+  :root:root:root .learner-root .game-page .game-hud { display: flex !important; flex-wrap: wrap !important; align-items: center; gap: 4px 6px !important; margin-bottom: 8px; padding-bottom: 8px; }
+  :root:root:root .learner-root .game-page .game-hud h2 { flex: 1 1 auto; min-width: 0; margin: 0 !important; font-size: 16px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  :root:root:root .learner-root .game-page .game-hud h2.info-title { overflow: visible; }
+  :root:root:root .learner-root .game-page .game-hud > span { flex: none; min-height: 26px; padding: 2px 8px !important; font-size: 12px !important; white-space: nowrap; gap: 3px; }
+  :root:root:root .learner-root .game-page .game-hud > span svg { width: 14px; height: 14px; }
+  /* Crossword: actions on one row, clue rows compact (text ellipsised, length at the end). */
+  :root:root:root .learner-root .game-page .crossword-actions { display: flex; flex-wrap: nowrap; align-items: center; justify-content: center; gap: 8px; }
+  :root:root:root .learner-root .game-page .crossword-actions button { height: 32px; min-height: 32px !important; padding: 0 12px !important; white-space: nowrap; }
+  :root:root:root .learner-root .game-page .crossword-actions .crossword-actions-note { display: none; }
+  :root:root:root .learner-root .game-runner .crossword-clues ol { margin: 0; padding: 0; }
+  :root:root:root .learner-root .game-runner .crossword-clues li > button { display: grid !important; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; width: 100%; min-height: 34px !important; padding: 2px 6px !important; text-align: left; }
+  :root:root:root .learner-root .game-runner .crossword-clues li > button > span { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; white-space: normal; overflow-wrap: anywhere; }
+  :root:root:root .learner-root .game-runner .crossword-clues h3 { margin: 6px 0 2px; font-size: 14px !important; }
+  :root:root:root .learner-root .game-runner .crossword-clues-toggle > summary { min-height: 36px !important; }
+
+  /* ── Season AI coach ── */
+  :root:root:root .learner-root .coach-page--compact { display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px !important; }
+  :root:root:root .learner-root .coach-page--compact > .page-title { margin: 0; }
+  :root:root:root .learner-root .coach-page--compact > .page-title > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; min-width: 0; }
+  :root:root:root .learner-root .coach-page--compact > .page-title .eyebrow { display: none; }
+  :root:root:root .learner-root .coach-page--compact > .page-title p.muted { margin: 0; font-size: 12.5px; white-space: nowrap; }
+  :root:root:root .learner-root .coach-page--compact .coach-surface { display: flex; flex-direction: column; padding: 0 !important; margin: 0; }
+  :root:root:root .learner-root .coach-page--compact .coach-header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; }
+  :root:root:root .learner-root .coach-page--compact .coach-brand-icon { width: 26px; height: 26px; flex: none; }
+  :root:root:root .learner-root .coach-page--compact .coach-brand-icon svg { width: 26px; height: 26px; }
+  :root:root:root .learner-root .coach-page--compact .coach-actions { flex: 1 1 auto; width: auto; display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+  :root:root:root .learner-root .coach-page--compact .coach-persona-toggle { height: 30px; min-height: 30px !important; min-width: 136px; }
+  :root:root:root .learner-root .coach-page--compact .coach-limit-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; padding: 6px; }
+  :root:root:root .learner-root .coach-page--compact .coach-counters { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; overflow: visible; min-width: 0; flex: 1 1 auto; }
+  :root:root:root .learner-root .coach-page--compact .coach-counters .badge { flex: none; padding: 2px 5px; font-size: 12px; letter-spacing: -.01em; line-height: 20px; white-space: nowrap; }
+  :root:root:root .learner-root .coach-page--compact .coach-feedback-toggles { display: inline-flex; flex-wrap: nowrap; gap: 3px; margin-left: auto; flex: none; }
+  :root:root:root .learner-root .coach-page--compact .coach-feedback-toggles-title { display: none; }
+  :root:root:root .learner-root .coach-page--compact .coach-feedback-toggle { min-height: 26px !important; height: 26px; padding: 0 5px; gap: 4px; font-size: 12px; white-space: nowrap; }
+  /* Toggle state shown by the chip itself (filled = on); the switch track is dropped to keep one row. */
+  :root:root:root .learner-root .coach-page--compact .coach-feedback-switch-track { display: none; }
+  :root:root:root .learner-root .coach-page--compact .coach-feedback-toggle { border: 1px solid var(--line, #ddd8d0); border-radius: 999px; background: #fff; color: var(--muted); font-weight: 600; }
+  :root:root:root .learner-root .coach-page--compact .coach-feedback-toggle[aria-checked="true"] { border-color: var(--primary-line, #9cc3a6); background: var(--primary-soft, #e6f1e8); color: var(--primary-dark, #1f5a33); }
+  /* The chat fills the screen: no inner box inside the card, no fixed max height. */
+  :root:root:root .learner-root .coach-page--compact .coach-surface > .chat {
+    margin: 0 !important; border: 0 !important; border-top: 1px solid #e8e3dc !important; border-radius: 0 !important; box-shadow: none !important; background: var(--surface-2, #f7f6f2) !important;
+    height: max(280px, calc(100dvh - var(--lrn-coach-chrome, 400px))); max-height: none !important; min-height: 0 !important; padding: 8px !important;
+  }
+  :root:root:root .learner-root .coach-page--compact .chat-compose { margin: 0 !important; padding: 8px 10px !important; gap: 6px !important; border-top: 1px solid #e8e3dc !important; }
+  :root:root:root .learner-root .coach-page--compact .chat-compose textarea { height: 36px; min-height: 36px !important; padding: 7px 12px !important; font-size: 14px; }
+  :root:root:root .learner-root .coach-page--compact .chat-compose :is(button, .btn) { width: 34px; min-width: 34px !important; height: 34px; min-height: 34px !important; padding: 0 !important; }
+  :root:root:root .learner-root .coach-page--compact .coach-vocabulary { margin: 0 !important; padding: 4px 12px !important; border: 0 !important; border-top: 1px solid #e8e3dc !important; border-radius: 0 !important; box-shadow: none !important; background: transparent !important; }
+  :root:root:root .learner-root .coach-page--compact .coach-vocabulary summary { min-height: 34px !important; }
+  :root:root:root .learner-root .coach-page--compact .coach-vocabulary summary h2 { font-size: 15px !important; margin: 0; }
+  :root:root:root .learner-root .coach-page--compact .coach-surface .coach-word-chip { min-height: 30px; }
+}
+
+/* ───────────── Phones (<= 480px) ───────────── */
+@media (max-width: 480px) {
+  :root:root:root .learner-root .coach-page--compact { --lrn-coach-chrome: 362px; }
+}
+@media (max-width: 1024px) {
+  /* A tile whose only sub-line is a hidden description: icon and title centred on one row. */
+  :root:root:root .learner-root .home-page [data-home-block="activities"] .tile:has(> .home-tile-desc) > svg { grid-row: 1; }
+  :root:root:root .learner-root .home-page [data-home-block="activities"] .tile:has(> .home-tile-desc) { align-content: center; }
+}
+@media (max-width: 1024px) {
+  /* ── Bài tháng: eligibility as the same compact rows on phones and tablets (label · detail · value). ── */
+  :root:root:root .learner-root .monthly-assessment-page .monthly-assessment-landing { padding: 12px !important; gap: 8px !important; }
+  :root:root:root .learner-root .monthly-assessment-page .monthly-assessment-header { align-items: center; gap: 8px; }
+  :root:root:root .learner-root .monthly-assessment-page .monthly-assessment-header h2 { margin: 0; }
+  :root:root:root .learner-root .monthly-assessment-page .monthly-assessment-form-state { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px !important; }
+  :root:root:root .learner-root .monthly-assessment-page .monthly-assessment-form-state p { margin: 0; }
+  :root:root:root .learner-root .monthly-assessment-page .monthly-assessment-form-state .btn { flex: none; height: 32px; min-height: 32px !important; padding: 0 12px !important; white-space: nowrap; }
+  :root:root:root .learner-root .monthly-eligibility-summary { gap: 4px !important; padding-top: 8px !important; }
+  :root:root:root .learner-root .monthly-eligibility-metrics { grid-template-columns: minmax(0, 1fr) !important; gap: 0 !important; }
+  :root:root:root .learner-root .monthly-eligibility-metrics .stat { display: grid !important; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; justify-items: start; column-gap: 10px; min-height: 36px !important; padding: 4px 0 !important; border-bottom: 1px solid var(--line); border-radius: 0 !important; background: transparent !important; box-shadow: none !important; text-align: start; }
+  :root:root:root .learner-root .monthly-eligibility-metrics .stat:last-child { border-bottom: 0; }
+  :root:root:root .learner-root .monthly-eligibility-metrics .stat .lbl { grid-column: 1; grid-row: 1; font-size: 14px; font-weight: 600; color: var(--text); }
+  :root:root:root .learner-root .monthly-eligibility-metrics .metric-secondary { grid-column: 2 !important; grid-row: 1; display: inline !important; font-size: 12.5px !important; white-space: nowrap; }
+  :root:root:root .learner-root .monthly-eligibility-metrics :is(.stat .ring, .metric-pending) { grid-column: 3; grid-row: 1; justify-self: end; width: auto !important; height: auto !important; min-height: 0 !important; border-radius: 0; background: none !important; font-size: 14px; text-align: end; }
+  :root:root:root .learner-root .monthly-eligibility-metrics .stat .ring > b { width: auto; height: auto; background: none; font-size: 14px; }
+  :root:root:root .learner-root .monthly-eligibility-metrics .stat .ring::before, :root:root:root .learner-root .monthly-eligibility-metrics .stat .ring::after { display: none; }
+}
+@media (max-width: 1024px) {
+  /* ── Certificate / reward ── */
+  :root:root:root .learner-root .reward-page .reward-preview-note { margin: 0 0 8px; font-size: 13px; }
+  :root:root:root .learner-root .reward-page .reward-actions { justify-content: flex-end; flex-wrap: nowrap; align-items: center; gap: 8px; margin: 10px 0 0; }
+  :root:root:root .learner-root .reward-page .reward-actions :is(button, a) { width: auto !important; flex: none; height: 32px; min-height: 32px !important; padding: 0 14px !important; font-size: 14px; white-space: nowrap; }
+  :root:root:root .learner-root .reward-page .reward-actions > span { min-width: 0; flex: 1 1 auto; }
+  :root:root:root .learner-root .cert-summary-title { display: flex; align-items: center; gap: 4px; }
+}
+@media (max-width: 720px) {
+  :root:root:root .learner-root .reward-page .reward-print-note { display: none; }
+  :root:root:root .learner-root .cert-summary { padding: 12px !important; gap: 8px !important; }
+  :root:root:root .learner-root .cert-summary-facts > div { padding: 6px 10px !important; }
+}
+@media (min-width: 721px) and (max-width: 1024px) {
+  /* Tablet: the whole certificate fits one screen together with its actions. */
+  :root:root:root .learner-root .reward-page .cert-stage { padding: 10px !important; }
+  :root:root:root .learner-root .reward-page .cert-doc { padding: 22px 28px 16px !important; min-height: 0 !important; }
+  :root:root:root .learner-root .reward-page .cert-head { padding-bottom: 10px !important; margin-bottom: 10px !important; }
+  :root:root:root .learner-root .reward-page .cert-title { font-size: 26px !important; margin: 4px 0 !important; }
+  :root:root:root .learner-root .reward-page .cert-name { font-size: 26px !important; margin: 4px auto !important; }
+  :root:root:root .learner-root .reward-page .cert-line { margin: 4px 0 !important; }
+  :root:root:root .learner-root .reward-page .cert-facts { margin: 10px 0 !important; gap: 8px !important; }
+  :root:root:root .learner-root .reward-page .cert-facts > div { padding: 6px !important; }
+  :root:root:root .learner-root .reward-page .cert-badges { gap: 0 16px !important; margin: 0 !important; }
+  :root:root:root .learner-root .reward-page .cert-badge { padding: 5px 0 !important; }
+  :root:root:root .learner-root .reward-page .cert-sign { margin-top: 14px !important; }
+  :root:root:root .learner-root .reward-page .cert-foot { margin-top: 8px !important; }
+}
+@media (max-width: 1024px) {
+  :root:root:root .learner-root h2.cert-summary-title { margin: 0; font-size: 12px !important; line-height: 1.4 !important; }
+}
+@media (max-width: 1024px) {
+  /* ── Hồ sơ ── */
+  :root:root:root .learner-root .profile-page > .page-title { margin-bottom: 8px; }
+  :root:root:root .learner-root .profile-page > :is(section, a.card) { margin-top: 10px !important; padding: 12px !important; }
+  :root:root:root .learner-root .profile-identity-header { display: grid !important; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 10px !important; }
+  :root:root:root .learner-root .profile-identity-title h2 { margin: 0; }
+  :root:root:root .learner-root .profile-identity-actions { grid-column: 1 / -1; display: flex !important; justify-content: flex-end; flex-wrap: nowrap; gap: 8px !important; }
+  :root:root:root .learner-root .profile-identity-actions :is(button, .btn) { width: auto !important; flex: none !important; height: 32px; min-height: 32px !important; padding: 0 12px !important; font-size: 14px; white-space: nowrap; }
+  :root:root:root .learner-root .learner-support-entry { align-items: center; gap: 8px; }
+  :root:root:root .learner-root .learner-support-entry h2 { margin: 0; }
+  :root:root:root .learner-root .learner-support-entry p { display: none; }
+  :root:root:root .learner-root .profile-season-card { gap: 8px !important; }
+  :root:root:root .learner-root .profile-season-card .profile-season-actions { display: flex; flex-wrap: nowrap; justify-content: flex-end; gap: 8px; }
+  :root:root:root .learner-root .profile-season-card .profile-season-actions .btn { height: 32px; min-height: 32px !important; padding: 0 10px !important; font-size: 13px; white-space: nowrap; }
+  :root:root:root .learner-root .profile-season-card details > summary { min-height: 34px !important; }
+  :root:root:root .learner-root .profile-form-back { width: auto !important; align-self: flex-start; height: 32px; min-height: 32px !important; padding: 0 12px !important; }
+}
+@media (max-width: 1024px) {
+  /* ── Daily lesson: continuous reading flow kept, just denser. ── */
+  :root:root:root .learner-root .lesson-page .word-card.vocabulary-card { padding-block: 12px !important; gap: 8px !important; }
+  :root:root:root .learner-root .lesson-page .vocabulary-card-heading { min-height: 0; gap: 6px; }
+  :root:root:root .learner-root .lesson-page .vocabulary-card-heading .vocabulary-card-sound--icon { width: 30px; min-width: 30px !important; height: 30px; min-height: 30px !important; }
+  :root:root:root .learner-root .lesson-page .vocabulary-card-phrases { display: grid !important; gap: 6px !important; margin: 0 !important; }
+  :root:root:root .learner-root .lesson-page .vocabulary-card-phrases > .vocabulary-card-label { margin: 0 !important; font-size: 12.5px; }
+  :root:root:root .learner-root .lesson-page :is(.vocabulary-card-phrase-list, .vocabulary-card-relations) { display: flex !important; flex-wrap: wrap; gap: 6px !important; margin: 0 !important; }
+  :root:root:root .learner-root .lesson-page :is(.vocabulary-card-phrase-list .vocabulary-card-sound, .vocabulary-card-relations .chip) { height: 30px; min-height: 30px !important; padding: 0 10px !important; gap: 5px; font-size: 13px !important; line-height: 1 !important; border-radius: 999px; }
+  :root:root:root .learner-root .lesson-page :is(.vocabulary-card-phrase-list .vocabulary-card-sound, .vocabulary-card-relations .chip) svg { width: 14px; height: 14px; }
+  :root:root:root .learner-root .lesson-page .vocabulary-card-chip-tag { font-size: 12px; padding: 0 4px; }
+  :root:root:root .learner-root .lesson-page .lesson-part { padding: 12px !important; }
+  :root:root:root .learner-root .lesson-page .lesson-part + .lesson-part { margin-top: 0; }
+  :root:root:root .learner-root .lesson-page .lesson-study-cta :is(button, .btn) { width: auto !important; align-self: flex-end; height: 34px; min-height: 34px !important; padding: 0 14px !important; }
+  :root:root:root .learner-root .lesson-page .lesson-completion .row { flex-wrap: nowrap !important; gap: 8px !important; justify-content: flex-end; }
+  :root:root:root .learner-root .lesson-page .lesson-completion .row > * { width: auto !important; flex: none; height: 32px; min-height: 32px !important; padding: 0 12px !important; white-space: nowrap; }
+}
+@media (max-width: 1024px) {
+  /* ── Hỗ trợ học tập ── */
+  :root:root:root .learner-root .learner-support-page > .page-title { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  :root:root:root .learner-root .learner-support-page > .page-title > div { min-width: 0; }
+  :root:root:root .learner-root .learner-support-page > .page-title > .btn { flex: none; height: 32px; min-height: 32px !important; padding: 0 10px !important; font-size: 13px; white-space: nowrap; }
+  :root:root:root .learner-root .learner-support-page .request-tabs a { min-height: 32px !important; }
+  :root:root:root .learner-root .learner-support-page .card { padding: 12px !important; }
+  :root:root:root .learner-root .learner-support-history-header { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 8px; }
+  :root:root:root .learner-root .learner-support-history-header h2 { margin: 0; min-width: 0; }
+  :root:root:root .learner-root .learner-support-history-header .btn-primary { flex: none; height: 32px; min-height: 32px !important; padding: 0 12px !important; white-space: nowrap; }
+  :root:root:root .learner-root .learner-support-form-actions { display: flex; flex-wrap: nowrap; justify-content: flex-end; gap: 8px; }
+  :root:root:root .learner-root .learner-support-form-actions > * { width: auto !important; flex: none; height: 32px; min-height: 32px !important; padding: 0 12px !important; white-space: nowrap; }
+  :root:root:root .learner-root .learner-support-form textarea { min-height: 0 !important; field-sizing: content; }
+  /* ── Test đầu vào / bài thi: denser prep card ── */
+  :root:root:root .learner-root .test-page .assessment-rules { gap: 6px !important; }
+  :root:root:root .learner-root .test-page .assessment-rules > * { padding: 8px 10px !important; margin: 0 !important; }
+  :root:root:root .learner-root .test-page .assessment-prep-compact > * + * { margin-top: 10px; }
+}
+@media (max-width: 1024px) {
+  /* ── Season chat round 2: each coach turn is a compact summary; the full review opens on tap. ── */
+  :root:root:root .learner-root .coach-page--compact .chat { gap: 8px !important; }
+  :root:root:root .learner-root .coach-page--compact .chat .msg { padding: 8px 10px !important; gap: 4px; }
+  :root:root:root .learner-root .coach-page--compact .chat .msg .eyebrow { font-size: 12px; }
+  :root:root:root .learner-root .coach-page--compact .coach-message-heading { min-height: 0; }
+  :root:root:root .learner-root .coach-page--compact .coach-turn-audio { height: 28px; min-height: 28px !important; padding: 0 8px !important; }
+  :root:root:root .learner-root .coach-feedback--compact { display: grid; gap: 6px; }
+  :root:root:root .learner-root .coach-feedback--compact .coach-feedback-section { margin: 0 !important; padding: 0 !important; border: 0 !important; }
+  :root:root:root .learner-root .coach-feedback--compact .coach-season-spoken { margin: 0; font-size: 14px; line-height: 1.4; }
+  :root:root:root .learner-root .coach-feedback--compact .coach-next-question { margin: 4px 0 0 !important; padding: 6px 8px !important; }
+  :root:root:root .learner-root .coach-feedback--compact .coach-next-question p { margin: 0; font-size: 14px; }
+  :root:root:root .learner-root .coach-feedback-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; }
+  :root:root:root .learner-root .coach-feedback-line .badge { flex: none; white-space: nowrap; }
+  :root:root:root .learner-root .coach-feedback-inline-scores { font-size: 13px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  :root:root:root .learner-root .coach-correction-line { margin: 0; font-size: 13.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .learner-root .coach-feedback-more > summary { min-height: 28px !important; font-size: 13px; font-weight: 700; color: var(--primary-dark, #1f5a33); cursor: pointer; }
+  :root:root:root .learner-root .coach-feedback-more-body { display: grid; gap: 6px; padding-top: 4px; }
+  :root:root:root .learner-root .coach-feedback-more-body .coach-feedback-scores { margin: 0 !important; gap: 0 !important; }
+  :root:root:root .learner-root .coach-feedback-more-body .coach-feedback-score { min-height: 28px !important; padding: 2px 0 !important; }
+  :root:root:root .learner-root .coach-feedback-more-body .coach-correction h4 { margin: 0 0 2px; font-size: 13px !important; }
+  :root:root:root .learner-root .coach-feedback-more-body .coach-correction-card { padding: 6px 8px !important; margin: 0 !important; }
+  :root:root:root .learner-root .coach-feedback-more-body .coach-correction-card p { margin: 0; }
+  :root:root:root .learner-root .coach-feedback-more-body .coach-feedback-disclosure > summary { min-height: 28px !important; font-size: 13px; }
+}
+@media (max-width: 1024px) {
+  /* ── Hồ sơ › Season progress (round 2): one flat card, badge chips, rules behind ⓘ. ── */
+  :root:root:root .learner-root .profile-season-card--compact { padding: 12px !important; }
+  :root:root:root .learner-root .profile-season-card--compact .profile-season-heading { gap: 10px; }
+  :root:root:root .learner-root .profile-season-card--compact .profile-season-figure { width: 48px !important; height: 48px !important; }
+  :root:root:root .learner-root .profile-season-card--compact .profile-season-figure-emoji { font-size: 26px !important; }
+  :root:root:root .learner-root .profile-season-card--compact .profile-season-title { margin: 0; }
+  :root:root:root .learner-root .profile-season-card--compact .profile-season-tracks { gap: 12px; margin-top: 8px; }
+  :root:root:root .learner-root .profile-season-card--compact .profile-season-track { padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 6px; }
+  :root:root:root .learner-root .profile-season-card--compact .profile-season-track > strong { font-size: 14px; }
+  :root:root:root .learner-root .profile-season-card--compact .profile-season-track > .progress { grid-column: 1 / -1; }
+  :root:root:root .learner-root .profile-season-card--compact .profile-season-missing { margin: 6px 0 0; }
+  :root:root:root .learner-root .profile-season-card--compact .profile-badges-heading { margin-top: 10px !important; gap: 8px; flex-wrap: nowrap; }
+  :root:root:root .learner-root .profile-season-card--compact .profile-badges-heading > span { white-space: nowrap; font-size: 12.5px; }
+  :root:root:root .learner-root .profile-season-card--compact .profile-season-levels { margin-top: 6px; gap: 6px; }
+  :root:root:root .learner-root .profile-season-card--compact .profile-season-level { padding: 6px 0 !important; border: 0 !important; background: transparent !important; }
+  :root:root:root .learner-root .profile-season-card--compact .profile-season-level-heading { margin: 0 0 6px; }
+  :root:root:root .learner-root .badge-chips { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px !important; }
+  :root:root:root .learner-root .bdg-chip { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; width: 100%; min-width: 0; height: 32px; min-height: 32px !important; padding: 0 8px !important; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 13px; text-align: left; box-shadow: none; }
+  :root:root:root .learner-root .bdg-chip.is-earned { border-color: var(--primary-line); background: var(--primary-soft); color: var(--text); }
+  :root:root:root .learner-root .bdg-chip[aria-expanded="true"] { outline: 2px solid var(--primary-line); outline-offset: 1px; }
+  :root:root:root .learner-root .bdg-chip > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  :root:root:root .learner-root .bdg-chip .profile-badge-emoji { font-size: 16px; line-height: 1; }
+  :root:root:root .learner-root .bdg-chip .profile-badge-state { position: static !important; display: inline-grid; place-items: center; width: auto; height: auto; background: none; color: inherit; }
+  :root:root:root .learner-root .profile-badge-tip { margin: 6px 0 0; padding: 6px 10px; border-radius: 10px; background: var(--surface-2); }
+  :root:root:root .learner-root .profile-season-card--compact .profile-season-actions { margin-top: 8px; }
+}
+@media (max-width: 1024px) {
+  :root:has(.learner-root) .profile-season-rules-tip ul { margin: 2px 0 6px; padding-left: 18px; }
+  :root:has(.learner-root) .profile-season-rules-tip li + li { margin-top: 2px; }
+}
+@media (max-width: 1024px) {
+  /* ── Test đầu vào / bài thi › chuẩn bị (round 2): one short screen. ── */
+  :root:root:root .learner-root .test-page .assessment-prep-compact { padding: 12px !important; }
+  :root:root:root .learner-root .test-page .assessment-prep-compact > * + * { margin-top: 8px !important; }
+  :root:root:root .learner-root .test-page .assessment-prep-overview { margin: 0; font-size: 13px; color: var(--muted); }
+  :root:root:root .learner-root .test-page .assessment-device-checks { margin-top: 8px !important; }
+  :root:root:root .learner-root .test-page .assessment-device-checks h3 { font-size: 15px !important; margin: 0 0 4px !important; }
+  :root:root:root .learner-root .test-page .prep-compact { margin-top: 4px !important; gap: 2px 8px !important; }
+  :root:root:root .learner-root .test-page .prep-compact .prep-device { height: 34px; min-height: 34px !important; }
+  :root:root:root .learner-root .test-page .assessment-prep-details { display: grid; gap: 6px; }
+  :root:root:root .learner-root .test-page .assessment-prep-details h3 { margin: 4px 0 0 !important; font-size: 15px !important; }
+  :root:root:root .learner-root .test-page .assessment-rules-short { display: grid; gap: 2px; margin: 0; padding-left: 18px; font-size: 13.5px; line-height: 1.4; }
+  :root:root:root .learner-root .test-page .assessment-start-actions { margin-top: 10px !important; gap: 8px; align-items: center; }
+}
+@media (max-width: 1024px) {
+  :root:has(.learner-root) .assessment-rules-tip { display: grid; gap: 6px; }
+  :root:has(.learner-root) .assessment-rules-tip > span { display: grid; gap: 1px; }
+}
+@media (max-width: 1024px) {
+  /* ── Daily lesson round 2: readable sizes; Study is a guided step flow (one section per step). ── */
+  :root:root:root .learner-root .lesson-page { font-size: 15px; }
+  :root:root:root .learner-root .lesson-page .lesson-part :is(p, li) { font-size: 15px; line-height: 1.5; }
+  :root:root:root .learner-root .lesson-study-steps { display: flex; align-items: center; justify-content: space-between; gap: 8px; scroll-margin-top: 64px; }
+  :root:root:root .learner-root .lesson-study-steps-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; color: var(--muted); }
+  :root:root:root .learner-root .lesson-study-steps-label b { color: var(--text); }
+  :root:root:root .learner-root .lesson-study-step-nav { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 8px; }
+  :root:root:root .learner-root .lesson-study-step-nav .btn { display: inline-flex; align-items: center; gap: 4px; width: auto !important; min-width: 0; height: 36px; min-height: 36px !important; padding: 0 14px !important; font-size: 14px; white-space: nowrap; }
+  :root:root:root .learner-root .lesson-study-step-nav .btn-primary { margin-left: auto; max-width: 70%; overflow: hidden; text-overflow: ellipsis; }
+}
+@media (max-width: 1024px) {
+  /* ── Forms (round 2): fields sized to their content, labels small and close, textareas short and auto-growing. ── */
+  :root:root:root .learner-root :is(.learner-support-form, .lesson-appeal-form, .monthly-complaint-form, .profile-form) label:not(.opt):not(.request-evidence-picker) { display: grid; gap: 3px; font-size: 13px; font-weight: 600; color: var(--text); }
+  :root:root:root .learner-root :is(.learner-support-form, .lesson-appeal-form, .monthly-complaint-form, .profile-form) select { justify-self: start; width: auto !important; min-width: 11em; max-width: 100%; field-sizing: content; height: 34px; min-height: 34px !important; padding-inline: 10px 28px; font-size: 14px; }
+  :root:root:root .learner-root :is(.learner-support-form, .lesson-appeal-form, .monthly-complaint-form) label > input:not([type="file"]):not([type="checkbox"]):not([type="radio"]) { justify-self: start; width: 100%; max-width: 20em; height: 34px; min-height: 34px !important; font-size: 14px; }
+  :root:root:root .learner-root :is(.learner-support-form, .lesson-appeal-form, .monthly-complaint-form, .profile-form) textarea { width: 100%; min-height: 56px !important; height: auto; field-sizing: content; max-height: 40vh; resize: none; font-size: 14px; }
+  :root:root:root .learner-root :is(.learner-support-form, .lesson-appeal-form, .monthly-complaint-form) { gap: 10px !important; }
+  :root:root:root .learner-root .request-evidence-picker .btn { height: 32px; min-height: 32px !important; padding: 0 12px !important; font-size: 13px; }
+  /* Profile form: short text fields at a sensible width; choice lists as two-column compact chips. */
+  :root:root:root .learner-root .profile-form > section.card { padding: 12px !important; }
+  :root:root:root .learner-root .profile-form .grid.cols-2 { gap: 8px 12px !important; }
+  :root:root:root .learner-root .profile-form label > input:not([type="checkbox"]):not([type="radio"]) { max-width: 24em; height: 34px; min-height: 34px !important; font-size: 14px; }
+  :root:root:root .learner-root .profile-form .row:has(> .opt) { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px !important; }
+  :root:root:root .learner-root .profile-form .opt { display: flex !important; align-items: center; gap: 6px; min-height: 34px !important; height: auto; padding: 4px 8px !important; margin: 0 !important; border-radius: 10px; }
+  :root:root:root .learner-root .profile-form .opt > span { font-size: 13px; line-height: 1.25; }
+  :root:root:root .learner-root .profile-form .profile-edit-usage > div > p.small { margin: 8px 0 4px; font-size: 13px; font-weight: 600; }
+  :root:root:root .learner-root .bao-row:has(.learner-mascot--onboard) .bubble { display: none !important; }
+  :root:root:root .learner-root .bao-row .learner-mascot--onboard { width: 44px !important; height: 44px !important; }
+  :root:root:root .learner-root .bao-row:has(.learner-mascot--onboard) { margin-bottom: 8px !important; align-items: center !important; }
+}
+@media (max-width: 360px) {
+  :root:root:root .learner-root .profile-form .row:has(> .opt) { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 1024px) {
+  /* ── Taking a test/exam (round 2): sticky compact progress header, flat parts, readable questions, 2-column short options. ── */
+  :root:root:root .learner-root .test-page > .page-title { margin-bottom: 6px !important; }
+  :root:root:root .learner-root .test-page .assessment-runtime-header { position: sticky; top: 0; z-index: 5; padding: 6px 10px !important; margin-bottom: 8px !important; box-shadow: 0 4px 12px rgb(0 0 0 / .06); }
+  :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between { flex-wrap: nowrap !important; gap: 8px !important; }
+  :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between > .row:first-child { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; gap: 6px; }
+  :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between > .row:first-child > .badge:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between > .row:first-child > .badge { flex: none; }
+  :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between > .row:first-child > .badge:first-child { display: block; }
+  :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between > .row:first-child > .badge:first-child { flex: 0 1 auto; }
+  :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between > .row:last-child { flex: none; flex-wrap: nowrap; }
+  :root:root:root .learner-root .test-page .assessment-runtime-header .btn-sm.btn-primary { height: 32px; min-height: 32px !important; padding: 0 10px !important; white-space: nowrap; }
+  :root:root:root .learner-root .test-page .assessment-runtime-header > .progress { margin-top: 6px !important; }
+  :root:root:root .learner-root .test-page .assessment-content-card { padding: 12px !important; }
+  :root:root:root .learner-root .test-page .assessment-task-group { padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; }
+  :root:root:root .learner-root .test-page .assessment-task-group + .assessment-task-group { margin-top: 12px; padding-top: 12px !important; border-top: 1px solid var(--line) !important; }
+  :root:root:root .learner-root .test-page .assessment-task-card { padding: 10px 0 !important; border: 0 !important; border-top: 1px solid var(--line) !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; margin: 0 !important; }
+  :root:root:root .learner-root .test-page .assessment-task-prompt { font-size: 15px; line-height: 1.45; margin: 4px 0 6px; }
+  :root:root:root .learner-root .test-page .assessment-choices { display: grid !important; gap: 6px; }
+  :root:root:root .learner-root .test-page .assessment-choices--short { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  :root:root:root .learner-root .test-page .assessment-choice { min-height: 36px !important; padding: 6px 10px !important; margin: 0 !important; font-size: 15px; align-items: center; }
+  :root:root:root .learner-root .test-page textarea { min-height: 84px !important; height: auto !important; field-sizing: content; max-height: 60vh; resize: none; font-size: 15px; line-height: 1.45; }
+  :root:root:root .learner-root .test-page .assessment-task-heading h4 { font-size: 14px !important; }
+}
+@media (max-width: 1024px) {
+  /* ── Test preparation (round 2b): device row, a clean 4-row table, a 5-cell score row, three short rules, one start button. ── */
+  :root:root:root .learner-root .test-page .assessment-prep-table { width: 100% !important; max-width: none !important; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; table-layout: fixed; }
+  :root:root:root .learner-root .test-page .assessment-prep-table :is(th, td) { padding: 4px 6px; height: 28px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
+  :root:root:root .learner-root .test-page .assessment-prep-table :is(thead th) { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: none; letter-spacing: 0; }
+  :root:root:root .learner-root .test-page .assessment-prep-table :is(th:first-child) { text-align: left; }
+  :root:root:root .learner-root .test-page .assessment-prep-table tbody th { text-transform: none !important; letter-spacing: 0 !important; font-size: 14px !important; font-weight: 600; color: var(--text); }
+  :root:root:root .learner-root .test-page .assessment-prep-table tbody tr:last-child :is(th, td) { border-bottom: 0; }
+  :root:root:root .learner-root .test-page .assessment-score-bands { display: grid !important; gap: 4px; margin: 0 !important; }
+  :root:root:root .learner-root .test-page .assessment-score-bands > b { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  :root:root:root .learner-root .test-page .assessment-score-bands ul { display: grid !important; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px !important; margin: 0; padding: 0; list-style: none; }
+  :root:root:root .learner-root .test-page .assessment-score-bands li { display: grid !important; justify-items: center; align-content: center; gap: 1px !important; min-height: 40px !important; padding: 4px 2px !important; border-radius: 8px; background: var(--surface-2); line-height: 1.2; }
+  :root:root:root .learner-root .test-page .assessment-score-bands li b { font-size: 14px; }
+  :root:root:root .learner-root .test-page .assessment-score-bands li small { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  :root:root:root .learner-root .test-page .prep-compact { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; align-items: start; }
+  :root:root:root .learner-root .test-page .prep-compact .prep-device { height: 36px !important; min-height: 36px !important; align-self: stretch; }
+  :root:root:root .learner-root .test-page .assessment-start-actions { display: grid !important; justify-items: center; gap: 6px !important; }
+  :root:root:root .learner-root .test-page .assessment-start-actions .assessment-start-button { width: 100%; height: 40px; min-height: 40px !important; }
+  :root:root:root .learner-root .test-page .assessment-back-link { font-size: 13px; color: var(--muted); text-decoration: underline; min-height: 0 !important; }
+  /* Dialog action pairs: same height, one row, vertically aligned, primary on the right. */
+  :root:root:root:has(.learner-root) .dialog .modal-actions { flex-wrap: nowrap !important; align-items: center; gap: 8px; }
+  :root:root:root:has(.learner-root) .dialog .modal-actions > :is(button, .btn) { height: 36px !important; min-height: 36px !important; padding: 0 14px !important; border-radius: 10px !important; white-space: nowrap; font-size: 14px; line-height: 1; }
+  /* ── Lesson Study flow (round 2b): one progress line + one bottom bar. ── */
+  :root:root:root .learner-root .lesson-study-steps { display: grid !important; grid-template-columns: minmax(0, 1fr); justify-content: stretch !important; gap: 4px; width: 100%; }
+  :root:root:root .learner-root .lesson-study-steps-bar { display: block; height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+  :root:root:root .learner-root .lesson-study-steps-bar > i { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+  :root:root:root .learner-root .lesson-study-step-nav .btn { height: 38px !important; min-height: 38px !important; }
+  :root:root:root .learner-root .lesson-study-step-nav .btn-primary { max-width: 72%; }
+}
+@media (max-width: 1024px) {
+  /* A dialog container that receives focus on open shows no ring (it is not a control). */
+  :root:root:root:has(.learner-root) .modal-backdrop > .dialog:focus { outline: none; box-shadow: 0 12px 35px rgb(24 31 28 / 22%); }
+  :root:root:root .learner-root .test-page .assessment-prep-compact > table.assessment-prep-table { display: table !important; width: 100% !important; }
+}

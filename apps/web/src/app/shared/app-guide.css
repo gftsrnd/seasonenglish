@@ -183,3 +183,36 @@ body:has(.app-guide-panel) .app-scroll-jump {
     display: none;
   }
 }
+
+/* Phones and tablets: a compact centred card (max 380px, side margins) that sizes to its text, sits above the
+   bottom nav, keeps Trước / Tiếp theo on one row and uses the same 32px × square as every popup. */
+@media (max-width: 1024px) {
+  .app-guide-panel[data-compact],
+  .app-guide-panel[data-popup] {
+    inset-inline: 0;
+    margin-inline: auto;
+    inline-size: min(380px, calc(100vw - 32px));
+    block-size: auto;
+    max-block-size: min(320px, calc(100dvh - 160px));
+    padding: 8px 12px 10px;
+    gap: 2px;
+  }
+  .app-guide-panel[data-compact]:not([data-popup]) {
+    inset-block-end: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+  .app-guide-panel .app-guide-header { min-block-size: 32px; }
+  .app-guide-panel .app-guide-close {
+    inline-size: 32px;
+    min-inline-size: 32px;
+    block-size: 32px;
+    min-block-size: 32px !important;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+  }
+  .app-guide-panel .app-guide-close:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+  .app-guide-panel .app-guide-copy { overflow: auto; min-block-size: 0; }
+  .app-guide-panel .app-guide-actions { flex-wrap: nowrap; margin-block-start: 8px; }
+  .app-guide-panel .app-guide-actions button { min-block-size: 32px !important; block-size: 32px; padding-inline: 12px; white-space: nowrap; }
+}

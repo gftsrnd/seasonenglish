@@ -1,32 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { ATTENDANCE_PATTERNS, PASS_COMPLETED_SCORES, QA_ACCOUNTS, lateCohortStart, qaProfile, qaRowId, shiftMonth } from "./prepare-qa-accounts.js";
+import { ATTENDANCE_PATTERNS, PASS_COMPLETED_SCORES, QA_ACCOUNTS, QA_SHARED_PIN, lateCohortStart, qaProfile, qaRowId, shiftMonth } from "./prepare-qa-accounts.js";
 
 describe("QA learner cohort", () => {
   it("matches the QA account spec exactly", () => {
     expect(QA_ACCOUNTS.map(({ email, pin, cefr, status }) => [email.split("@")[0], pin, cefr, status])).toEqual([
-      ["qa-level-a1", "190972", "A1", "active"],
-      ["qa-level-a2", "622215", "A2", "active"],
-      ["qa-level-b1", "304972", "B1", "active"],
-      ["qa-level-b2", "307028", "B2", "active"],
-      ["qa-level-c1", "379202", "C1", "active"],
-      ["qa-onboarding", "505484", null, "active"],
-      ["qa-placement", "396648", null, "active"],
-      ["qa-locked", "322483", "A2", "disabled"],
-      ["qa-lesson-resume", "115196", "A1", "active"],
-      ["qa-learned-game", "662721", "A1", "active"],
-      ["qa-monthly-appeal", "154738", "A1", "active"],
-      ["qa-monthly-ready", "326235", "A1", "active"],
-      ["qa-level-ready", "587853", "A1", "active"],
-      ["qa-pass-ready", "381901", "C1", "active"],
-      ["qa-pass-completed", "105068", "C1", "active"],
-      ["qa-lowered-a1", "767961", "A1", "active"],
-      ["qa-learning-appeal", "214541", "A1", "active"],
-      ["qa-absent-1", "829505", "A2", "active"],
-      ["qa-absent-2", "751480", "B1", "active"],
-      ["qa-monthly-ineligible-1", "720698", "A1", "active"],
-      ["qa-monthly-ineligible-2", "320988", "B2", "active"]
+      ["qa-level-a1", QA_SHARED_PIN, "A1", "active"],
+      ["qa-level-a2", QA_SHARED_PIN, "A2", "active"],
+      ["qa-level-b1", QA_SHARED_PIN, "B1", "active"],
+      ["qa-level-b2", QA_SHARED_PIN, "B2", "active"],
+      ["qa-level-c1", QA_SHARED_PIN, "C1", "active"],
+      ["qa-onboarding", QA_SHARED_PIN, null, "active"],
+      ["qa-placement", QA_SHARED_PIN, null, "active"],
+      ["qa-locked", QA_SHARED_PIN, "A2", "disabled"],
+      ["qa-lesson-resume", QA_SHARED_PIN, "A1", "active"],
+      ["qa-learned-game", QA_SHARED_PIN, "A1", "active"],
+      ["qa-monthly-appeal", QA_SHARED_PIN, "A1", "active"],
+      ["qa-monthly-ready", QA_SHARED_PIN, "A1", "active"],
+      ["qa-level-ready", QA_SHARED_PIN, "A1", "active"],
+      ["qa-pass-ready", QA_SHARED_PIN, "C1", "active"],
+      ["qa-pass-completed", QA_SHARED_PIN, "C1", "active"],
+      ["qa-lowered-a1", QA_SHARED_PIN, "A1", "active"],
+      ["qa-learning-appeal", QA_SHARED_PIN, "A1", "active"],
+      ["qa-absent-1", QA_SHARED_PIN, "A2", "active"],
+      ["qa-absent-2", QA_SHARED_PIN, "B1", "active"],
+      ["qa-monthly-ineligible-1", QA_SHARED_PIN, "A1", "active"],
+      ["qa-monthly-ineligible-2", QA_SHARED_PIN, "B2", "active"]
     ]);
-    for (const field of ["id", "email", "pin"] as const) {
+    expect(/^\d{6}$/.test(QA_SHARED_PIN)).toBe(true);
+    for (const field of ["id", "email"] as const) {
       expect(new Set(QA_ACCOUNTS.map((account) => account[field])).size).toBe(QA_ACCOUNTS.length);
     }
     expect(QA_ACCOUNTS.every((account) => account.email.endsWith("@learner-qa.e4s.local") && /^\d{6}$/.test(account.pin))).toBe(true);

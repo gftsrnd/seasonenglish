@@ -5,12 +5,14 @@ import { CATCH_ROUND_SIZE, choices, prepareGameAttempt, type FinishGame, type Ga
 import { currentSeasonVisual, DinoGameOverArt, SeasonCatchItem, SeasonHero } from "./season-art.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import { GameFeedback } from "./GameFeedback.js";
+import { InfoTitle, useCompactUi } from "../shared/CompactUi.js";
 
 type FallingItem = { word: GameWord; x: number; y: number; speed: number };
 type CatchEvent = { kind: "caught"; item: FallingItem };
 const speedByLevel: Record<GameWordSetView["cefr"], number> = { A1: 1, A2: 1.5, B1: 2, B2: 2.5, C1: 3 };
 
 export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0 }: { words: GameWord[]; cefr: GameWordSetView["cefr"]; onFinish: FinishGame; attemptSeed?: number }) {
+  const compactUi = useCompactUi();
   const season = currentSeasonVisual();
   const words = useMemo(() => prepareGameAttempt(source, attemptSeed).slice(0, CATCH_ROUND_SIZE), [attemptSeed, source]);
   const [round, setRound] = useState(0);
@@ -146,7 +148,7 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
   };
   const noticeTone = notice.startsWith("Đúng") ? "is-success" : notice.startsWith("Chưa") ? "is-error" : "";
   return <div className="game-runner" aria-busy={busy || undefined}>
-    <div className="game-hud"><h2>Lượt {Math.min(round + 1, words.length)}/{words.length}</h2><span>Điểm <strong>{score}</strong></span><span className="game-lives" aria-label={`${lives} mạng còn lại`}>{[0, 1, 2].map((life) => <Heart className={life < lives ? "is-active" : "is-lost"} fill={life < lives ? "currentColor" : "none"} size={17} strokeWidth={2} aria-hidden="true" key={life} />)}</span></div>
+    <div className="game-hud">{compactUi ? <InfoTitle as="h2" title={<>Lượt {Math.min(round + 1, words.length)}/{words.length}</>} tip={<>Đưa {season.heroName} và rổ tới dưới {season.catchItem.name} đúng bằng kéo/chạm hoặc phím ← →. Tốc độ {cefr} ×{speedByLevel[cefr]}.</>} label="Cách chơi Season catch" /> : <h2>Lượt {Math.min(round + 1, words.length)}/{words.length}</h2>}<span>Điểm <strong>{score}</strong></span><span className="game-lives" aria-label={`${lives} mạng còn lại`}>{[0, 1, 2].map((life) => <Heart className={life < lives ? "is-active" : "is-lost"} fill={life < lives ? "currentColor" : "none"} size={17} strokeWidth={2} aria-hidden="true" key={life} />)}</span></div>
     <div ref={sceneRef} className="catch-scene catch-arena" role="application" aria-label="Màn chơi Season catch" tabIndex={0} onBlur={() => { eventPending.current = false; pointerDown.current = false; }} onPointerMove={(event) => { if (!pointerDown.current && event.buttons === 0) return; event.preventDefault(); setFromPointer(event.clientX, event.currentTarget); }} onPointerDown={(event) => { event.preventDefault(); pointerDown.current = true; event.currentTarget.setPointerCapture?.(event.pointerId); event.currentTarget.focus({ preventScroll: true }); setFromPointer(event.clientX, event.currentTarget); }} onPointerUp={(event) => { pointerDown.current = false; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); }} onPointerCancel={() => { pointerDown.current = false; }} onLostPointerCapture={() => { pointerDown.current = false; }}>
       <p className="catch-prompt"><SeasonCatchItem /><strong>{current.vietnamese}</strong><small>{current.definition}</small></p>
       <div className="catch-sky" aria-hidden="true"><span className="cloud cloud--one" /><span className="cloud cloud--two" /></div>
@@ -155,7 +157,7 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
       <div className="catch-ground" />
       {gameOver ? <div className="game-ending" role="status"><DinoGameOverArt /><strong>Hết mạng!</strong><small>Khủng long đã xuất hiện.</small></div> : null}
     </div>
-    <p className="catch-help">Đưa {season.heroName} và rổ tới dưới {season.catchItem.name} đúng bằng kéo/chạm hoặc phím ← →. Tốc độ {cefr} ×{speedByLevel[cefr]}.</p>
+    {compactUi ? null : <p className="catch-help">Đưa {season.heroName} và rổ tới dưới {season.catchItem.name} đúng bằng kéo/chạm hoặc phím ← →. Tốc độ {cefr} ×{speedByLevel[cefr]}.</p>}
      {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
      <GameFeedback message={notice} tone={noticeTone === "is-success" ? "success" : noticeTone === "is-error" ? "error" : "info"} />
   </div>;

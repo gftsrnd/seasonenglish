@@ -1,5 +1,6 @@
 import { Check, LockKeyhole } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
+import { InfoTip } from "./CompactUi.js";
 import type { LearnerProgressView } from "@e4s/contracts";
 import { REWARD_SEASONS, type RewardSeasonLevel } from "@e4s/domain/engagement";
 import { Progress } from "../learner/ui.js";
@@ -32,13 +33,20 @@ export const REWARD_SEASON_RULES: readonly string[] = [
 
 type SeasonCardData = Pick<LearnerProgressView, "season" | "points" | "badgeRoadmap"> & { badgeCount: number };
 
-export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel }: {
+/**
+ * `compact` (learner phones/tablets): the summary lines move into the ⓘ of the Season title, the point and
+ * Season rules into the ⓘ of "Huy hiệu theo cấp", and every badge is a small chip (icon · name · lock) whose
+ * description opens on tap. Without it (desktop, manager simulator) the card renders exactly as before.
+ */
+export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel, compact = false }: {
   view: SeasonCardData;
   certificateAction: ReactNode;
   revealedBadgeLevel?: number | undefined;
+  compact?: boolean;
 }) {
   const levelsId = useId();
   const [showAllBadges, setShowAllBadges] = useState(false);
+  const [openBadge, setOpenBadge] = useState<string | null>(null);
   const cefr = view.season.cefr ?? null;
   const pointsInLevel = view.season.pointsInLevel ?? view.points;
   const next = view.season.next;
@@ -53,14 +61,22 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
     showAllBadges || level === revealedBadgeLevel || level === next?.level || (showCurrent && level === currentLevel)
   );
   const inLevel = cefr ? `trong ${cefr}` : "trong trình độ";
-  return <section className="card profile-season-card" aria-label="Mùa học">
+  const nextLine = next ? `Tiếp theo: ${next.name}` : `Đã đạt Season cao nhất${cefr ? ` của ${cefr}` : ""}`;
+  const rulesTip = <span className="profile-season-rules-tip">
+    <b>Cách tính điểm</b>
+    <ul data-testid="reward-point-rules">{REWARD_POINT_RULES.map(([label, points]) => <li key={label}>{label}: <b>{points}</b></li>)}</ul>
+    <b>Lên Season</b>
+    <ul data-testid="reward-season-rules">{REWARD_SEASON_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ul>
+  </span>;
+  return <section className={`card profile-season-card${compact ? " profile-season-card--compact" : ""}`} aria-label="Mùa học">
     <div className="profile-season-heading">
       <SeasonFigure level={currentLevel} />
       <div>
         <div className="eyebrow">Mùa học {currentLevel}/4{cefr ? ` · Trình độ ${cefr}` : ""}</div>
+        {compact ? <h2 className="profile-season-title info-title" data-testid="season-ladder-title"><span className="info-title-text">{current.shortName}{cefr ? ` · ${cefr}` : ""}</span><InfoTip label="Mùa học: chi tiết" text={<>{nextLine}. Điểm {inLevel}: <b>{formatPoints(pointsInLevel)}</b> · Tổng điểm tích lũy: <b>★ {formatPoints(view.points)}</b></>} /></h2> : <>
         <h2 className="profile-season-title" data-testid="season-ladder-title">{current.shortName}{cefr ? ` · ${cefr}` : ""}</h2>
-        <div className="small muted">{next ? `Tiếp theo: ${next.name}` : `Đã đạt Season cao nhất${cefr ? ` của ${cefr}` : ""}`}</div>
-        <div className="small muted" data-testid="season-points-summary">Điểm {inLevel}: <b>{formatPoints(pointsInLevel)}</b> · Tổng điểm tích lũy: <b>★ {formatPoints(view.points)}</b></div>
+        <div className="small muted">{nextLine}</div>
+        <div className="small muted" data-testid="season-points-summary">Điểm {inLevel}: <b>{formatPoints(pointsInLevel)}</b> · Tổng điểm tích lũy: <b>★ {formatPoints(view.points)}</b></div></>}
       </div>
     </div>
     {next && <>
@@ -72,7 +88,7 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
         <b>Thiếu huy hiệu</b> · {missing.map((badge) => badge.label).join(", ")}
       </p>}
     </>}
-    <div className="row between profile-badges-heading" style={{ marginTop: 14 }}><h3 style={{ margin: 0 }}>Huy hiệu theo cấp</h3><span className="small muted" style={{ fontWeight: 800 }}>{view.badgeCount}/{view.badgeRoadmap.length} huy hiệu · giữ mãi</span></div>
+    <div className="row between profile-badges-heading" style={{ marginTop: 14 }}>{compact ? <h3 className="info-title" style={{ margin: 0 }}><span className="info-title-text">Huy hiệu theo cấp</span><InfoTip label="Cách tính điểm và lên Season" text={rulesTip} /></h3> : <h3 style={{ margin: 0 }}>Huy hiệu theo cấp</h3>}<span className="small muted" style={{ fontWeight: 800 }}>{view.badgeCount}/{view.badgeRoadmap.length} huy hiệu · giữ mãi</span></div>
     <div id={levelsId} className="profile-season-levels">
       {visibleLevels.map((seasonLevel) => {
         const list = view.badgeRoadmap.filter((badge) => badge.seasonLevel === seasonLevel);
@@ -82,13 +98,24 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
         const nextLevel = currentLevel + 1 === seasonLevel;
         return <div className="profile-season-level" data-season-level={seasonLevel} key={seasonLevel}>
           <div className="profile-season-level-heading">
-            <span className={`badge ${completed ? "ok" : nextLevel ? "warn" : isCurrent ? "primary" : ""}`}>
+            <span className={`badge ${completed ? "ok" : nextLevel ? "warn" : isCurrent ? "primary" : ""}`} {...(compact ? { title: `${meta.pointsRequired ? `${formatPoints(meta.pointsRequired)} điểm ${inLevel}` : "Bắt đầu trình độ"}${list.length ? ` + ${list.length} huy hiệu` : ""}` } : {})}>
               <span className="profile-season-emoji" role="img" aria-label={`Biểu tượng ${meta.name}`}>{REWARD_SEASON_ICONS[meta.level]}</span>
               <span>Cấp {seasonLevel} · {meta.name}</span>
             </span>
-            <span className="xs muted">{meta.pointsRequired ? `${formatPoints(meta.pointsRequired)} điểm ${inLevel}` : "Bắt đầu trình độ"}{list.length ? ` + ${list.length} huy hiệu` : " · không yêu cầu huy hiệu"}{completed ? " · đã đạt" : nextLevel ? " · cấp tiếp theo" : isCurrent ? " · đang ở đây" : ""}</span>
+            {compact ? null : <span className="xs muted">{meta.pointsRequired ? `${formatPoints(meta.pointsRequired)} điểm ${inLevel}` : "Bắt đầu trình độ"}{list.length ? ` + ${list.length} huy hiệu` : " · không yêu cầu huy hiệu"}{completed ? " · đã đạt" : nextLevel ? " · cấp tiếp theo" : isCurrent ? " · đang ở đây" : ""}</span>}
           </div>
-          {list.length ? <div className="badges">
+          {list.length && compact ? <><div className="badges badge-chips">
+            {list.map((badge) => {
+              const StatusIcon = badge.earned ? Check : LockKeyhole;
+              const isOpen = openBadge === badge.key;
+              return <button type="button" className={`bdg-chip${badge.earned ? " is-earned" : ""}`} key={badge.key} data-badge-key={badge.key} aria-expanded={isOpen} title={badge.description} onClick={() => setOpenBadge(isOpen ? null : badge.key)}>
+                <span className="profile-badge-emoji" role="img" aria-label={`Biểu tượng ${badge.label}`}>{rewardBadgeIcon(badge.key) ?? "🏅"}</span>
+                <b>{badge.label}</b>
+                <span className="profile-badge-state" role="img" aria-label={badge.earned ? "Đã đạt" : "Chưa đạt"}><StatusIcon size={13} aria-hidden="true" /></span>
+              </button>;
+            })}
+          </div>{list.some((badge) => badge.key === openBadge) ? <p className="small profile-badge-tip" role="note">{(() => { const badge = list.find((item) => item.key === openBadge)!; return <><b>{badge.label}</b> · {badge.description}{badge.earned ? ` · ${badge.earnedLevel ? `Đạt ở ${badge.earnedLevel}` : "Đã đạt"}` : ""}</>; })()}</p> : null}</>
+          : list.length ? <div className="badges">
             {list.map((badge) => {
               const StatusIcon = badge.earned ? Check : LockKeyhole;
               return <article className={`bdg${badge.earned ? "" : " off"}`} key={badge.key} data-badge-key={badge.key}>
@@ -101,16 +128,16 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
                 <span className="profile-badge-description">{badge.description}</span>
               </article>;
             })}
-          </div> : <p className="profile-season-empty xs muted">Mùa bắt đầu của mỗi trình độ. Đủ điều kiện từ đây sẽ mở Cấp 2.</p>}
+          </div> : compact ? null : <p className="profile-season-empty xs muted">Mùa bắt đầu của mỗi trình độ. Đủ điều kiện từ đây sẽ mở Cấp 2.</p>}
         </div>;
       })}
     </div>
     <div className="profile-season-actions"><button type="button" className="btn btn-sm" aria-controls={levelsId} aria-expanded={showAllBadges} onClick={() => setShowAllBadges((value) => !value)}>{showAllBadges ? "Thu gọn huy hiệu" : "Xem tất cả huy hiệu"}</button>
     {certificateAction}</div>
-    <details style={{ marginTop: 10 }}><summary className="small" style={{ fontWeight: 800, cursor: "pointer" }}>Cách tính điểm và lên Season</summary>
+    {compact ? null : <details style={{ marginTop: 10 }}><summary className="small" style={{ fontWeight: 800, cursor: "pointer" }}>Cách tính điểm và lên Season</summary>
       <ul className="small" data-testid="reward-point-rules" style={{ margin: "6px 0 0", paddingLeft: 20 }}>{REWARD_POINT_RULES.map(([label, points]) => <li key={label}>{label}: <b>{points}</b></li>)}</ul>
       <ul className="small" data-testid="reward-season-rules" style={{ margin: "6px 0 0", paddingLeft: 20 }}>{REWARD_SEASON_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ul>
-    </details>
+    </details>}
   </section>;
 }
 

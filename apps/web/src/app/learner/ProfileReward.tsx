@@ -7,6 +7,7 @@ import { ErrorText, Notice, PageTitle, AppLink, LearnerSupportCard } from "./ui.
 import { BadgeCertificate, CertificateActions } from "./CertificateDocument.js";
 import { CourseAssessmentResult } from "./CourseCompletion.js";
 import { SeasonProgressCard } from "../shared/SeasonProgressCard.js";
+import { useCompactUi } from "../shared/CompactUi.js";
 import { formatPercent, formatScore, formatScoreOutOf } from "../shared/format-score.js";
 
 export function LearnerSurvey({ view, actions }: { view: SurveyView; actions: LearnerCallbacks }) {
@@ -45,6 +46,7 @@ export function LearnerSurvey({ view, actions }: { view: SurveyView; actions: Le
 export function LearnerProfile({ view, actions, courseCompleted = false }: { view: ProfileView; actions: LearnerCallbacks; courseCompleted?: boolean }) {
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const compactUi = useCompactUi();
   const avatarReturnRef = useRef<HTMLButtonElement | null>(null);
   const openAvatar = (event: MouseEvent<HTMLButtonElement>) => {
     avatarReturnRef.current = event.currentTarget;
@@ -71,7 +73,7 @@ export function LearnerProfile({ view, actions, courseCompleted = false }: { vie
     </section>
     <LearnerSupportCard from="profile" navigate={actions.navigate} />
     {courseCompleted ? <section className="card profile-progress-section"><div className="profile-completion-heading"><div><div className="eyebrow">Pass Course</div><h2>Đã hoàn thành khóa E4S</h2></div><AppLink className="btn" href="/reward/course" navigate={actions.navigate}>Xem chứng nhận</AppLink></div></section> : null}
-    {level ? <SeasonProgressCard view={{ ...view, badgeCount: view.badges.length }} certificateAction={
+    {level ? <SeasonProgressCard compact={compactUi} view={{ ...view, badgeCount: view.badges.length }} certificateAction={
       // Only a learner who can open the certificate gets the link to it; everyone else sees its preview.
       <AppLink className="btn btn-sm" href={view.badgeCertificateAvailable ? "/reward/done" : "/reward/preview"} navigate={actions.navigate}>
         {view.badgeCertificateAvailable ? "Xem chứng nhận huy hiệu" : "Xem trước chứng nhận"}
@@ -237,8 +239,8 @@ export function LearnerReward({ view, actions }: { view: RewardView; actions: Le
     {preview && <p className="reward-preview-note no-print" role="note">
       <b>Bản xem trước</b> · Bạn đã đạt {view.earnedBadgeCount}/{view.requiredBadgeCount} huy hiệu.
     </p>}
-    <BadgeCertificate view={view} preview={preview} />
-    <CertificateActions>{preview ? <span className="xs muted">Nút in / lưu chỉ mở khi đạt cấp cao nhất thật.</span> : <button className="btn" type="button" disabled={!view.printable} onClick={actions.printReward}>In / lưu chứng nhận (PDF, 1 trang A4 ngang)</button>}<AppLink className="btn btn-primary" href={backHref} navigate={actions.navigate}>{preview ? "← Quay lại" : "Tiếp tục học"}</AppLink></CertificateActions>
+    <BadgeCertificate view={view} preview={preview} {...(preview ? { summaryNote: "Nút in / lưu chỉ mở khi đạt cấp cao nhất thật." } : {})} />
+    <CertificateActions>{preview ? <span className="xs muted reward-print-note">Nút in / lưu chỉ mở khi đạt cấp cao nhất thật.</span> : <button className="btn" type="button" disabled={!view.printable} onClick={actions.printReward}>In / lưu chứng nhận (PDF, 1 trang A4 ngang)</button>}<AppLink className="btn btn-primary" href={backHref} navigate={actions.navigate}>{preview ? "← Quay lại" : "Tiếp tục học"}</AppLink></CertificateActions>
   </div>;
 }
 

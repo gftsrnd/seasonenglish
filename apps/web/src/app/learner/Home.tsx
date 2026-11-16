@@ -6,12 +6,14 @@ import { Notice, PageTitle, Progress, AppLink, learnerLessonLabel, learnerLesson
 import { buildMonthlyTeachingCalendar } from "@e4s/domain/monthly";
 import { LevelReadinessCard } from "./LevelReadiness.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
+import { InfoTitle, useCompactUi } from "../shared/CompactUi.js";
 import { monthlyUncountedText } from "../shared/monthly-uncounted.js";
 import type { LearnerComplaintView } from "@e4s/contracts";
 
 export function LearnerHome({ view, actions, courseCompleted = false }: { view: LearnerHomeView; actions: LearnerCallbacks; courseCompleted?: boolean }) {
   const [celebration, setCelebration] = useState(view.rewardAnnouncement && view.rewardAnnouncement.kind !== "normal" ? view.rewardAnnouncement : null);
   const [assessmentCelebration, setAssessmentCelebration] = useState(false);
+  const compactUi = useCompactUi();
   useEffect(() => {
     setCelebration(view.rewardAnnouncement && view.rewardAnnouncement.kind !== "normal" ? view.rewardAnnouncement : null);
   }, [view.rewardAnnouncement?.announcementId, view.rewardAnnouncement?.kind]);
@@ -62,14 +64,14 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
     </section> : null}
     {monthly ? <MonthlyCalendar month={monthly} lessons={view.lessons} actions={actions} /> : null}
     <section className="grid cols-2" style={{ marginTop: 16, alignItems: "stretch", gridAutoRows: "1fr", minWidth: 0 }} data-home-block="activities" aria-label="Hoạt động tháng">
-      <AppLink className={`tile ${!monthlyPreparation && (view.coach.turnsToday ?? 0) > 0 ? "mint" : "peach"}`} style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/coach" navigate={actions.navigate}><ActivityIcon /><span className="t">Season AI Coach</span><span className="s">{monthlyPreparation ? "Luyện theo trình độ đã được duyệt trong khi chờ bộ bài tháng." : `Lượt hợp lệ hôm nay ${view.coach.turnsToday ?? 0}/${view.coach.targetTurns}`}</span></AppLink>
-      <AppLink className="tile mint" style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/monthly" navigate={actions.navigate}><BookOpen aria-hidden="true" /><span className="t">Bài tháng</span><span className="s">{monthlyPreparation ? "Xem trạng thái chuẩn bị lộ trình tháng." : "Xem lịch bài học, bài ôn và bài thi tháng."}</span></AppLink>
+      <AppLink className={`tile ${!monthlyPreparation && (view.coach.turnsToday ?? 0) > 0 ? "mint" : "peach"}`} style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/coach" navigate={actions.navigate}><ActivityIcon /><span className="t">Season AI Coach</span><span className={`s${monthlyPreparation ? " home-tile-desc" : ""}`}>{monthlyPreparation ? "Luyện theo trình độ đã được duyệt trong khi chờ bộ bài tháng." : `Lượt hợp lệ hôm nay ${view.coach.turnsToday ?? 0}/${view.coach.targetTurns}`}</span></AppLink>
+      <AppLink className="tile mint" style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/monthly" navigate={actions.navigate}><BookOpen aria-hidden="true" /><span className="t">Bài tháng</span><span className="s home-tile-desc">{monthlyPreparation ? "Xem trạng thái chuẩn bị lộ trình tháng." : "Xem lịch bài học, bài ôn và bài thi tháng."}</span></AppLink>
     </section>
     {!monthlyPreparation && view.learner.cefr !== "C1" ? <LevelReadinessCard readiness={view.levelReadiness} phase={view.levelUpPhase} monthLabel={monthly ? formatMonth(monthly.month) : undefined} navigate={actions.navigate} className="home-readiness" /> : null}
     {view.monthlyExam ? <MonthlyExamOverview exam={view.monthlyExam} month={!view.monthlyEligibility || view.monthlyEligibility.month === monthly?.month ? monthly : null} navigate={actions.navigate} /> : null}
     <section className="card learner-summary-card learner-summary-card--profile" style={{ marginTop: 12 }} aria-label="Hồ sơ và đánh giá đầu vào">
       <div className="row between" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div><div className="eyebrow">Thông tin của bạn</div><h3 style={{ margin: "2px 0 4px" }}>Hồ sơ và đánh giá đầu vào</h3><p className="small muted" style={{ margin: 0 }}>Trình độ đã duyệt: <b>{view.learner.cefr}</b>. {monthlyPreparation ? "Kết quả đầu vào và hồ sơ vẫn xem được khi lộ trình tháng đang chuẩn bị." : "Xem kết quả đầu vào và thông tin hồ sơ của bạn."}</p></div>
+        <div><div className="eyebrow">Thông tin của bạn</div>{compactUi ? <InfoTitle as="h3" title="Hồ sơ và đánh giá đầu vào" tip={monthlyPreparation ? "Kết quả đầu vào và hồ sơ vẫn xem được khi lộ trình tháng đang chuẩn bị." : "Xem kết quả đầu vào và thông tin hồ sơ của bạn."} /> : <h3 style={{ margin: "2px 0 4px" }}>Hồ sơ và đánh giá đầu vào</h3>}<p className="small muted" style={{ margin: 0 }}>Trình độ đã duyệt: <b>{view.learner.cefr}</b>.{compactUi ? null : <> {monthlyPreparation ? "Kết quả đầu vào và hồ sơ vẫn xem được khi lộ trình tháng đang chuẩn bị." : "Xem kết quả đầu vào và thông tin hồ sơ của bạn."}</>}</p></div>
         <div className="row learner-summary-actions" style={{ flexWrap: "wrap" }}>
           <AppLink className="btn" href="/profile" navigate={actions.navigate}>Hồ sơ học tập & đầu vào</AppLink>
           {!monthly && !monthlyPreparation ? <AppLink className="btn" href="/survey" navigate={actions.navigate}>Khảo sát cuối pilot</AppLink> : null}
@@ -144,13 +146,19 @@ export function LevelUpCelebration({
   </div>;
 }
 
+/** Waiting/info card: title + paragraph on desktop; on phones/tablets the paragraph moves into an ⓘ next to the title. */
+function HomeInfoCard({ title, text }: { title: string; text: string }) {
+  const compact = useCompactUi();
+  return <section className="card" data-home-block="primary">{compact ? <InfoTitle as="h2" title={title} tip={text} /> : <><h2>{title}</h2><p>{text}</p></>}</section>;
+}
+
 function PrimaryLesson({ view, next, actions }: { view: LearnerHomeView; next: LearnerHomeView["nextLesson"]; actions: LearnerCallbacks }) {
   const monthly = view.month ?? null;
-  if (view.monthlyStartDate) return <section className="card" data-home-block="primary"><h2>Bạn sẽ bắt đầu học từ ngày {view.monthlyStartDate.slice(8)}/{view.monthlyStartDate.slice(5, 7)}</h2><p>Bạn có thể luyện với Season và chơi mini game trong lúc chờ.</p></section>;
+  if (view.monthlyStartDate) return <HomeInfoCard title={`Bạn sẽ bắt đầu học từ ngày ${view.monthlyStartDate.slice(8)}/${view.monthlyStartDate.slice(5, 7)}`} text="Bạn có thể luyện với Season và chơi mini game trong lúc chờ." />;
   if (view.monthlyLessonsLocked) return <section className="card" data-home-block="primary"><h2>Bài học tháng này bị khóa</h2><p>Bạn đã bỏ lỡ bài thi tháng trước. Hãy gửi lý do để Quản lý xem xét mở lại bài học.</p><AppLink className="btn btn-primary" href="/support?type=complaints&kind=lesson_unlock" navigate={actions.navigate}>Gửi đơn xin mở</AppLink></section>;
-  if (!monthly) return <section className="card" data-home-block="primary"><h2>Lộ trình tháng đang được chuẩn bị</h2><p>Người vận hành đang chuẩn bị và duyệt bộ bài tháng cho mức {view.learner.cefr ?? "—"}. Bạn có thể luyện với Season trong lúc chờ.</p></section>;
+  if (!monthly) return <HomeInfoCard title="Lộ trình tháng đang được chuẩn bị" text={`Người vận hành đang chuẩn bị và duyệt bộ bài tháng cho mức ${view.learner.cefr ?? "—"}. Bạn có thể luyện với Season trong lúc chờ.`} />;
   const period = `Tháng ${formatMonth(monthly.month)}`;
-  if (!next && !view.lessons.length) return <section className="card" data-home-block="primary"><h2>{period}: {monthly.themeTitle}</h2><p>Bộ bài tháng đang được chuẩn bị và duyệt. Quay lại sau nhé.</p></section>;
+  if (!next && !view.lessons.length) return <HomeInfoCard title={`${period}: ${monthly.themeTitle}`} text="Bộ bài tháng đang được chuẩn bị và duyệt. Quay lại sau nhé." />;
   if (!next) return <section className="hero" style={{ background: "var(--mint)", color: "var(--text)" }} data-home-block="primary"><div className="eyebrow">{period}</div><h2>Xong hết {view.lessons.length} bài rồi!</h2><p>Ôn lại bài hoặc luyện thêm với Season nhé.</p></section>;
   if (next.lock) {
     const blocker = next.lock.blocker;
@@ -351,6 +359,9 @@ function MonthlyEligibilitySummary({ eligibility, actions }: { eligibility: NonN
   const [submittingComplaint, setSubmittingComplaint] = useState(false);
   useEffect(() => { void actions.getComplaints?.().then((result) => setComplaints(result.complaints)).catch(() => undefined); }, [actions.getComplaints]);
   const appealRequired = eligibility.accessState === "appeal_required";
+  const compactUi = useCompactUi();
+  // Phones/tablets: the rules list lives in the ⓘ next to "Điều kiện dự thi" instead of a fold under the metrics.
+  const rules = <ul><li>Bài thi tháng cố định dành cho mọi học viên cùng trình độ, kể cả khi chưa hoàn thành hết bài học.</li><li>Hoàn thành ít nhất một bài trong ngày để được tính một lần điểm danh; học bù nhiều bài cùng ngày vẫn chỉ tính một lần.</li><li>Ngày học hiệu lực là Thứ Hai–Thứ Sáu, không tính ngày thi; được vắng tối đa {eligibility.maxAbsences} ngày.</li><li>Đề mở trong cửa sổ hệ thống sau khi form được phát hành; chỉ số bài học và Season dùng để theo dõi tiến độ.</li>{appealRequired ? <li>Gửi khiếu nại tới Quản lý để được xem xét điều kiện dự thi.</li> : null}</ul>;
   const openToday = eligibility.accessEligible ?? eligibility.accessState === "eligible";
   const state = appealRequired
     ? { label: "Cần kháng nghị", tone: "warn", copy: "Số ngày vắng đã vượt giới hạn." }
@@ -358,7 +369,7 @@ function MonthlyEligibilitySummary({ eligibility, actions }: { eligibility: NonN
       ? { label: "Đủ điều kiện", tone: "ok", copy: "Đã đến ngày thi." }
       : null;
   return <section className="monthly-eligibility-summary" aria-label="Điều kiện vào bài thi tháng">
-    <h3>Điều kiện dự thi</h3>
+    {compactUi ? <InfoTitle as="h3" title="Điều kiện dự thi" tip={<><b>Quy tắc điểm danh và giờ vào đề</b>{rules}</>} label="Quy tắc điểm danh và giờ vào đề" /> : <h3>Điều kiện dự thi</h3>}
     {state ? <div className="monthly-eligibility-state"><span className={`badge ${state.tone}`}>{state.label}</span><span className="small muted">{state.copy}</span></div> : null}
     <div className="monthly-eligibility-metrics">
       <Metric label="Điểm danh" secondary={`Vắng ${eligibility.absenceDays}/${eligibility.maxAbsences}`} value={`${eligibility.attendedDays}/${eligibility.effectiveDays}`} percent={ratio(eligibility.attendedDays, eligibility.effectiveDays)} color={appealRequired ? "var(--danger)" : "var(--olive)"} />
@@ -367,7 +378,7 @@ function MonthlyEligibilitySummary({ eligibility, actions }: { eligibility: NonN
         : <Metric label="Hoàn thành lịch học" pending="Chờ chốt lịch học" percent={0} color="var(--primary)" />}
       <Metric label="Season hợp lệ" value={`${eligibility.seasonTurns ?? 0}/${eligibility.seasonTurnsRequired ?? 100}`} percent={ratio(eligibility.seasonTurns ?? 0, eligibility.seasonTurnsRequired ?? 100)} color="var(--lav)" />
     </div>
-    <details className="monthly-eligibility-rules"><summary>Quy tắc điểm danh và giờ vào đề</summary><ul><li>Bài thi tháng cố định dành cho mọi học viên cùng trình độ, kể cả khi chưa hoàn thành hết bài học.</li><li>Hoàn thành ít nhất một bài trong ngày để được tính một lần điểm danh; học bù nhiều bài cùng ngày vẫn chỉ tính một lần.</li><li>Ngày học hiệu lực là Thứ Hai–Thứ Sáu, không tính ngày thi; được vắng tối đa {eligibility.maxAbsences} ngày.</li><li>Đề mở trong cửa sổ hệ thống sau khi form được phát hành; chỉ số bài học và Season dùng để theo dõi tiến độ.</li>{appealRequired ? <li>Gửi khiếu nại tới Quản lý để được xem xét điều kiện dự thi.</li> : null}</ul></details>
+    {compactUi ? null : <details className="monthly-eligibility-rules"><summary>Quy tắc điểm danh và giờ vào đề</summary>{rules}</details>}
     {appealRequired ? <section className="card monthly-complaint-form"><h3>Khiếu nại điều kiện dự thi</h3><p className="small muted">Quản lý sẽ phản hồi trong 24 giờ. Nếu chưa xử lý đúng hạn, đơn sẽ được tự duyệt.</p>{complaints.filter((item) => item.kind === "exam_eligibility" && (item.month ?? item.submittedAt.slice(0, 7)) === eligibility.month).slice(0, 1).map((item) => <p className="small" key={item.id}>Đơn gần nhất: {item.status === "pending" ? "Đang chờ xử lý" : item.status === "auto_approved" || item.status === "approved" ? `Đã duyệt${item.resolution ? ` · ${item.resolution}` : ""}` : `Bị từ chối${item.resolution ? ` · ${item.resolution}` : ""}`}</p>)}{complaintError ? <p role="alert" className="small danger-text">{complaintError}</p> : null}<RequestEvidenceFields key={complaintRevision} value={complaintEvidence} onChange={setComplaintEvidence} label="Ngày hoặc mục cần kiểm tra" placeholder="Ví dụ: Điểm danh ngày 06/11" disabled={submittingComplaint} /><label>Lý do<textarea value={complaintReason} maxLength={2000} onChange={(event) => setComplaintReason(event.target.value)} /></label><button className="btn-sm btn-primary" type="button" disabled={submittingComplaint || complaintEvidence.blocked || complaintReason.trim().length < 5 || complaints.some((item) => item.kind === "exam_eligibility" && item.status === "pending")} onClick={() => { const submit = actions.submitComplaint; if (!submit) return; setSubmittingComplaint(true); setComplaintError(""); void submit("exam_eligibility", complaintReason.trim(), ...requestEvidenceArgs(complaintEvidence)).then(() => { setComplaintReason(""); setComplaintEvidence({}); setComplaintRevision(value => value + 1); return actions.getComplaints?.(); }).then((result) => { if (result) setComplaints(result.complaints); }).catch(() => setComplaintError("Không gửi được khiếu nại. Hãy thử lại sau.")).finally(() => setSubmittingComplaint(false)); }}>Gửi khiếu nại</button></section> : null}
   </section>;
 }

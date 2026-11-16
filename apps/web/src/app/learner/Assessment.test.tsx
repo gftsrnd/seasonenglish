@@ -321,7 +321,7 @@ describe("assessment HCI states", () => {
     expect(dialog.querySelectorAll(".assessment-start-keyword")).toHaveLength(4);
     expect(dialog.querySelector(".assessment-start-keyword")).toHaveTextContent("Câu trả lời được tự động lưu");
     expect(dialog.querySelector("[role='note']")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Đóng hộp thoại" })).toHaveClass("modal-close-button");
+    expect(screen.getByRole("button", { name: "Đóng hộp thoại" })).toHaveClass("modal-close");
     expect(screen.getByRole("dialog", { name: "Bắt đầu bài test?" })).toHaveTextContent(/tối đa 20 phút/i);
 
     await user.click(screen.getByRole("button", { name: "Tôi đã sẵn sàng, bắt đầu" }));

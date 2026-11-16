@@ -1,4 +1,5 @@
 import { ChevronRight } from "lucide-react";
+import { InfoTitle, ModalCloseButton, useCompactUi } from "../shared/CompactUi.js";
 import { useEffect, useId, useRef, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type CSSProperties, type HTMLAttributes, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
 /** "Bài 5" / "Ôn tuần 2" at A1–A2; `english` (B1+ learners, who see no Vietnamese) gives "Lesson 5" / "Week 2 review". */
@@ -97,7 +98,8 @@ export function Modal({ open = true, title, description, children, actions, onCl
     if (!open) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dialog = dialogRef.current;
-    const initial = dialog?.querySelector<HTMLElement>("[data-modal-initial-focus]") ?? dialog?.querySelector<HTMLElement>("button, input, select, textarea, [tabindex]:not([tabindex='-1'])");
+    // Focus lands on the dialog itself (no ring on the × or an action), unless a field asks for it; Tab moves into the controls.
+    const initial = dialog?.querySelector<HTMLElement>("[data-modal-initial-focus]") ?? dialog?.querySelector<HTMLElement>("input, select, textarea");
     (initial ?? dialog)?.focus();
     return () => {
       if (previous?.isConnected) previous.focus();
@@ -112,10 +114,10 @@ export function Modal({ open = true, title, description, children, actions, onCl
     }
   };
   return <div className="modal-backdrop" role="presentation"><section ref={dialogRef} className={["dialog", className].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} tabIndex={-1} onKeyDown={handleKeyDown}>
-    <div className="row between"><h2 id={titleId}>{title}</h2>{onClose ? <Button className="modal-close-button" variant="ghost" size="sm" aria-label="Đóng hộp thoại" onClick={onClose}>×</Button> : null}</div>
+    <div className="row between"><h2 id={titleId}>{title}</h2>{onClose ? <ModalCloseButton label="Đóng hộp thoại" onClick={onClose} /> : null}</div>
     {description ? <p id={descriptionId} className="small">{description}</p> : null}
     {children}
-    {actions ? <div className="row" style={{ justifyContent: "flex-end", marginTop: 12 }}>{actions}</div> : null}
+    {actions ? <div className="row modal-actions" style={{ justifyContent: "flex-end", marginTop: 12 }}>{actions}</div> : null}
   </section></div>;
 }
 
@@ -123,8 +125,15 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "warn" | "
   return <div className={`banner ${tone}`} role={tone === "danger" ? "alert" : "note"} aria-atomic="true"><div className="body small">{children}</div></div>;
 }
 
-export function PageTitle({ eyebrow, title, detail, aside }: { eyebrow?: string; title: string; detail?: ReactNode; aside?: ReactNode }) {
-  return <header className="page-title"><div>{eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}<h1>{title}</h1>{detail ? <p className="muted">{detail}</p> : null}</div>{aside}</header>;
+/**
+ * Page header. `tip` = guidance shown behind an ⓘ next to the title on phones/tablets
+ * (desktop renders the plain title, unchanged); `compactDetail: false` hides the detail
+ * line on phones/tablets (use it when the same text is in `tip`).
+ */
+export function PageTitle({ eyebrow, title, detail, aside, tip, compactDetail = true }: { eyebrow?: string; title: string; detail?: ReactNode; aside?: ReactNode; tip?: ReactNode; compactDetail?: boolean }) {
+  const compact = useCompactUi();
+  const showDetail = detail && (compactDetail || !compact);
+  return <header className="page-title"><div>{eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}{tip ? <InfoTitle as="h1" title={title} tip={tip} /> : <h1>{title}</h1>}{showDetail ? <p className="muted">{detail}</p> : null}</div>{aside}</header>;
 }
 
 export function Progress({ value, max, label, segmented = false }: { value: number; max: number; label: string; segmented?: boolean }) {
