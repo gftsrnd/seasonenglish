@@ -1257,6 +1257,33 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
   background: var(--surface);
   padding: 7px 6px;
   text-transform: uppercase;
+  /* A key has a bottom edge that collapses when it is pressed. */
+  box-shadow: inset 0 0 0 1px var(--border), 0 2px 0 var(--border);
+  transition: transform .06s ease-out, box-shadow .06s ease-out, background-color .06s ease-out, color .06s ease-out;
+}
+
+/* Pressed key: clicked, tapped, or the matching physical key held down (`is-pressed` from TypingRaceGame). */
+.virtual-keyboard button:active:not(:disabled),
+.virtual-keyboard button.is-pressed {
+  transform: translateY(2px) scale(.97);
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--border), inset 0 1px 2px rgba(0, 0, 0, .1);
+}
+
+/* Disabled keys (between words) still show a physical press, just without the dimmed opacity hiding it. */
+.virtual-keyboard button.is-pressed:disabled { opacity: .65; }
+
+/* Flash matching the typed-letter slots: olive for the right next letter, danger for a wrong one. */
+.virtual-keyboard button.is-pressed.is-hit {
+  background: var(--ok-tint);
+  box-shadow: inset 0 0 0 1px var(--olive), inset 0 1px 2px rgba(0, 0, 0, .1);
+  color: var(--olive-dark);
+}
+
+.virtual-keyboard button.is-pressed.is-miss {
+  background: var(--danger-soft);
+  box-shadow: inset 0 0 0 1px var(--danger), inset 0 1px 2px rgba(0, 0, 0, .1);
+  color: var(--danger);
 }
 
 .keyboard-row--actions button { flex: 1; }
@@ -1445,6 +1472,12 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
   /* Stepped once per second from the remaining-time sample instead. */
   .typing-timer i {
     animation: none;
+  }
+
+  /* Pressed keys still darken and lose their edge, but do not move. */
+  .virtual-keyboard button:active:not(:disabled),
+  .virtual-keyboard button.is-pressed {
+    transform: none;
   }
 
   .game-loading::before,

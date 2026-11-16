@@ -9,6 +9,16 @@ import { GameFeedback } from "./GameFeedback.js";
 
 const keyboardRows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
 const timeFor = (word: string) => Math.max(4_000, word.replace(/\s/g, "").length * 900);
+/** How a key press landed: `hit`/`miss` flash the key, `pressed` only animates it (backspace, ignored presses). */
+type KeyTone = "pressed" | "hit" | "miss";
+/** On-screen key name (`data-key`) for an answer key; space is spelled out so it can be a selector. */
+const keyName = (key: string) => key === " " ? "space" : key;
+/** Physical KeyboardEvent.key → answer key, or null for keys the game does not use. */
+const answerKey = (key: string) => key === "Backspace" ? "backspace" : key === " " || /^[a-z'-]$/i.test(key) ? key.toLowerCase() : null;
+// A held physical key stays down until keyup; this only rescues a lost keyup (e.g. focus moved mid-press).
+const HELD_KEY_FALLBACK_MS = 1_000;
+// A click/tap has no hold of its own once released, so it shows a short press.
+const TAP_PRESS_MS = 160;
 
 export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, imageSetId, resolveImage }: {
   words: GameWord[]; onFinish: FinishGame; attemptSeed?: number;
@@ -73,14 +83,50 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, image
   // No submit key: the word is checked as it is typed. A match advances at
   // once; a wrong word only counts once every slot is filled (as a wrong
   // Enter used to), so mid-word typos are never penalised.
-  const press = (key: string) => {
-    if (!word || busy || locked) return;
-    if (key === "backspace") { setTyped((value) => value.slice(0, -1)); return; }
-    if (typed.length >= target.length) return;
+  const press = (key: string): KeyTone => {
+    // Ignored presses (busy/locked/full) still animate the key but change nothing.
+    if (!word || busy || locked) return "pressed";
+    if (key === "backspace") { setTyped((value) => value.slice(0, -1)); return "pressed"; }
+    if (typed.length >= target.length) return "pressed";
     const nextTyped = typed + key;
     setTyped(nextTyped);
     if (normalize(nextTyped) === target) void next(nextTyped, true);
     else if (nextTyped.length >= target.length) void next(nextTyped, false);
+    return key === target[typed.length] ? "hit" : "miss";
+  };
+  // Keys currently shown pressed on the on-screen keyboard (physical keys and clicks alike).
+  const [pressedKeys, setPressedKeys] = useState<Readonly<Record<string, KeyTone>>>({});
+  const pressTimers = useRef(new Map<string, number>());
+  const releaseKey = (name: string) => {
+    const timer = pressTimers.current.get(name);
+    if (timer !== undefined) { window.clearTimeout(timer); pressTimers.current.delete(name); }
+    setPressedKeys((current) => {
+      if (!(name in current)) return current;
+      const { [name]: _released, ...rest } = current;
+      return rest;
+    });
+  };
+  const holdKey = (name: string, tone: KeyTone, fallbackMs: number) => {
+    const timer = pressTimers.current.get(name);
+    if (timer !== undefined) window.clearTimeout(timer);
+    pressTimers.current.set(name, window.setTimeout(() => releaseKey(name), fallbackMs));
+    setPressedKeys((current) => current[name] === tone ? current : { ...current, [name]: tone });
+  };
+  // Shared props for every on-screen key: a pointer/touch holds it down, the click types it and
+  // keeps a short press (with the hit/miss flash) after the finger lifts.
+  const keyProps = (key: string, base?: string) => {
+    const name = keyName(key);
+    const tone = pressedKeys[name];
+    return {
+      type: "button" as const,
+      "data-key": name,
+      className: [base, tone && "is-pressed", tone === "hit" && "is-hit", tone === "miss" && "is-miss"].filter(Boolean).join(" ") || undefined,
+      disabled: busy || locked,
+      onPointerDown: () => holdKey(name, "pressed", HELD_KEY_FALLBACK_MS),
+      onPointerLeave: () => { if (pressedKeys[name] === "pressed") releaseKey(name); },
+      onPointerCancel: () => releaseKey(name),
+      onClick: () => holdKey(name, press(key), TAP_PRESS_MS)
+    };
   };
 
   useEffect(() => {
@@ -107,6 +153,11 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, image
     return () => { window.clearInterval(interval); window.clearTimeout(timeout); };
   }, [busy, index, locked]);
   useEffect(() => () => { if (transitionTimer.current !== null) window.clearTimeout(transitionTimer.current); }, []);
+  // Subscribed once; the handlers read the latest render through these refs.
+  const pressRef = useRef(press);
+  pressRef.current = press;
+  const keyActions = useRef({ holdKey, releaseKey });
+  keyActions.current = { holdKey, releaseKey };
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const scene = sceneRef.current;
@@ -114,13 +165,30 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, image
       // Browser/application shortcuts must never become game answers.
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       // Enter is no longer needed (answers are checked as they are typed); swallow it harmlessly.
-      if (event.key === "Enter") event.preventDefault();
-      else if (event.key === "Backspace") { event.preventDefault(); press("backspace"); }
-      else if (event.key === " " || /^[a-z'-]$/i.test(event.key)) press(event.key.toLowerCase());
+      if (event.key === "Enter") { event.preventDefault(); return; }
+      const key = answerKey(event.key);
+      if (key === null) return;
+      if (key === "backspace") event.preventDefault();
+      keyActions.current.holdKey(keyName(key), pressRef.current(key), HELD_KEY_FALLBACK_MS);
     };
+    // Released wherever focus is, so a key never stays stuck down.
+    const keyup = (event: KeyboardEvent) => {
+      const key = answerKey(event.key);
+      if (key !== null) keyActions.current.releaseKey(keyName(key));
+    };
+    const timers = pressTimers.current;
+    const releaseAll = () => { for (const name of [...timers.keys()]) keyActions.current.releaseKey(name); };
     window.addEventListener("keydown", keydown);
-    return () => window.removeEventListener("keydown", keydown);
-  });
+    window.addEventListener("keyup", keyup);
+    window.addEventListener("blur", releaseAll);
+    return () => {
+      window.removeEventListener("keydown", keydown);
+      window.removeEventListener("keyup", keyup);
+      window.removeEventListener("blur", releaseAll);
+      for (const timer of timers.values()) window.clearTimeout(timer);
+      timers.clear();
+    };
+  }, []);
   if (!word) return <p className="muted">Bộ từ chưa đủ từ phù hợp cho Typing race.</p>;
   const noticeTone = notice.startsWith("Đúng") ? "is-success" : notice.startsWith("Chưa") ? "is-error" : notice.startsWith("Hết giờ") ? "is-warning" : "";
   const imageUrl = word.imageUrl?.trim() ?? "";
@@ -147,7 +215,7 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, image
       <div className="typing-clue">{hasDirectImage || imageSetId && resolveImage ? <div className="typing-clue-image"><ContentImage term={word.english} load={loadImage} unavailable="hide" /></div> : null}<button type="button" className="typing-clue-speak" aria-label={`Nghe ${word.english}`} onClick={() => speak(word.english)}><Volume2 className="game-control-icon" size={18} strokeWidth={2} aria-hidden="true" /></button><div className="typing-clue-copy"><span className="eyebrow">Gợi ý</span><strong>{word.vietnamese}</strong><small>{word.definition} · {target.replace(/\s/g, "").length} chữ cái{target.includes(" ") ? ", có dấu cách" : ""}</small></div></div>
       <div className="typing-timer" role="progressbar" aria-label="Thời gian còn lại" aria-valuemin={0} aria-valuemax={maximum} aria-valuenow={Math.round(remaining)}><i key={index} data-testid="typing-timer-fill" className={busy || locked ? "is-paused" : undefined} style={{ "--typing-time-limit": `${maximum}ms`, "--typing-time-left": `${Math.max(0, Math.min(100, remaining / maximum * 100))}%` } as CSSProperties} /></div>
       <div className="typing-word" aria-label="Từ đang gõ" aria-live="polite">{target.split("").map((character, characterIndex) => { const value = typed[characterIndex]; const state = value === undefined ? "" : value === character ? "is-correct" : "is-wrong"; return <span data-testid="typing-character" className={state} key={characterIndex}>{character === " " ? " " : value?.toUpperCase() ?? ""}</span>; })}</div>
-      <div className="virtual-keyboard" role="group" aria-label="Bàn phím ảo">{keyboardRows.map((row) => <div className="keyboard-row" key={row}>{row.split("").map((letter) => <button type="button" disabled={busy || locked} key={letter} onClick={() => press(letter)}>{letter}</button>)}</div>)}<div className="keyboard-row keyboard-row--actions">{target.includes("-") ? <button type="button" aria-label="Dấu gạch nối" disabled={busy || locked} onClick={() => press("-")}>-</button> : null}{target.includes("'") ? <button type="button" aria-label="Dấu nháy đơn" disabled={busy || locked} onClick={() => press("'")}>′</button> : null}{target.includes(" ") ? <button type="button" data-key="space" disabled={busy || locked} onClick={() => press(" ")}>Dấu cách</button> : null}<button className="is-backspace" type="button" aria-label="Xoá ký tự cuối" disabled={busy || locked} onClick={() => press("backspace")}><Delete className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" /></button></div></div>
+      <div className="virtual-keyboard" role="group" aria-label="Bàn phím ảo">{keyboardRows.map((row) => <div className="keyboard-row" key={row}>{row.split("").map((letter) => <button key={letter} {...keyProps(letter)}>{letter}</button>)}</div>)}<div className="keyboard-row keyboard-row--actions">{target.includes("-") ? <button aria-label="Dấu gạch nối" {...keyProps("-")}>-</button> : null}{target.includes("'") ? <button aria-label="Dấu nháy đơn" {...keyProps("'")}>′</button> : null}{target.includes(" ") ? <button {...keyProps(" ")}>Dấu cách</button> : null}<button aria-label="Xoá ký tự cuối" {...keyProps("backspace", "is-backspace")}><Delete className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" /></button></div></div>
       {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
       <GameFeedback message={notice} tone={noticeTone === "is-success" ? "success" : noticeTone === "is-error" ? "error" : noticeTone === "is-warning" ? "warning" : "info"} />
     </div>

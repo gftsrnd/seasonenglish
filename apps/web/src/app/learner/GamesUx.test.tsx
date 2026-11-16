@@ -430,6 +430,53 @@ describe("learner game visual and interaction regressions", () => {
     expect(typedText()).toBe("");
   });
 
+  it("presses the matching on-screen key down while a physical key is held", () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const { container } = render(<TypingRaceGame words={[{ id: "role", english: "role", vietnamese: "vai trò", definition: "a job function", partOfSpeech: "noun" }]} onFinish={vi.fn()} />);
+    const key = (name: string) => container.querySelector<HTMLButtonElement>(`.virtual-keyboard button[data-key="${name}"]`)!;
+    expect(container.querySelectorAll(".virtual-keyboard button:not([data-key])")).toHaveLength(0);
+
+    fireEvent.keyDown(window, { key: "R" });
+    expect(key("r")).toHaveClass("is-pressed", "is-hit");
+    expect(container.querySelectorAll(".virtual-keyboard .is-pressed")).toHaveLength(1);
+    fireEvent.keyUp(window, { key: "R" });
+    expect(key("r")).not.toHaveClass("is-pressed");
+
+    fireEvent.keyDown(window, { key: "x" });
+    expect(key("x")).toHaveClass("is-pressed", "is-miss");
+    fireEvent.keyUp(window, { key: "x" });
+    expect(key("x")).not.toHaveClass("is-pressed");
+
+    fireEvent.keyDown(window, { key: "Backspace" });
+    expect(key("backspace")).toHaveClass("is-pressed", "is-backspace");
+    fireEvent.keyUp(window, { key: "Backspace" });
+    expect(key("backspace")).not.toHaveClass("is-pressed");
+  });
+
+  it("maps space to its on-screen key and presses a clicked key briefly", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "performance", "Date"] });
+    try {
+      const { container } = render(<TypingRaceGame words={[{ id: "ice-cream", english: "ice cream", vietnamese: "kem", definition: "a frozen dessert", partOfSpeech: "noun" }]} onFinish={vi.fn()} />);
+      const key = (name: string) => container.querySelector<HTMLButtonElement>(`.virtual-keyboard button[data-key="${name}"]`)!;
+      expect(key("space")).toHaveTextContent("Dấu cách");
+
+      fireEvent.keyDown(window, { key: " " });
+      expect(key("space")).toHaveClass("is-pressed");
+      fireEvent.keyUp(window, { key: " " });
+      expect(key("space")).not.toHaveClass("is-pressed");
+
+      fireEvent.click(key("backspace"));
+      fireEvent.click(key("i"));
+      expect(key("i")).toHaveClass("is-pressed", "is-hit");
+      expect(screen.getAllByTestId("typing-character")[0]).toHaveTextContent("I");
+      act(() => { vi.advanceTimersByTime(200); });
+      expect(key("i")).not.toHaveClass("is-pressed");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps one exit choice on a completed game result", async () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
