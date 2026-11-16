@@ -8,6 +8,9 @@ import { LearnerAssessment } from "./Assessment.js";
 import { AssessmentRecorder, AssessmentRuntime } from "./AssessmentRuntime.js";
 import type { AssessmentView, LearnerCallbacks } from "./contracts.js";
 import { ExperienceProvider } from "../../features/experience/Experience.js";
+import { ToastProvider } from "../shared/design-system.js";
+import { ApiError } from "../../api/runtime.js";
+import { StrictMode } from "react";
 import { cancelAllExclusiveAudio, claimExclusiveAudio } from "../../features/experience/audio-precedence.js";
 
 const canvasContext = {
@@ -523,7 +526,7 @@ describe("assessment HCI states", () => {
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error("offline"));
     const completeAssessmentSection = vi.fn();
-    render(<LearnerAssessment view={makeView()} actions={makeActions({ saveAssessmentResponse, completeAssessmentSection })} />);
+    render(<ToastProvider><LearnerAssessment view={makeView()} actions={makeActions({ saveAssessmentResponse, completeAssessmentSection })} /></ToastProvider>);
 
     fireEvent.click(screen.getByRole("radio", { name: "A" }));
     const submitSection = screen.getByRole("button", { name: /nộp phần nghe/i });
@@ -826,9 +829,9 @@ describe("assessment HCI states", () => {
   });
 
   it("puts exam timing and submission notices in the same stack", () => {
-    render(<AssessmentRuntime view={makeView()} actions={makeActions()} submitError="Không thể nộp bài.">
+    render(<ToastProvider><AssessmentRuntime view={makeView()} actions={makeActions()} submitError="Không thể nộp bài.">
       {state => <span>{state.formattedTime}</span>}
-    </AssessmentRuntime>);
+    </AssessmentRuntime></ToastProvider>);
 
     const warning = screen.getByText(/Còn 5 phút/u).closest(".assessment-toast");
     const error = screen.getByRole("alert");
@@ -871,7 +874,7 @@ describe("assessment HCI states", () => {
     const recordViolation = vi.fn().mockRejectedValueOnce(new Error("offline"));
     const actions = makeActions({ recordAssessmentViolation: recordViolation });
     const view = makeView();
-    render(<AssessmentRuntime view={view} actions={actions}>{(state) => <span>{state.formattedTime}</span>}</AssessmentRuntime>);
+    render(<ToastProvider><AssessmentRuntime view={view} actions={actions}>{(state) => <span>{state.formattedTime}</span>}</AssessmentRuntime></ToastProvider>);
 
     await act(async () => {
       window.dispatchEvent(new Event("blur"));
@@ -905,4 +908,47 @@ describe("assessment HCI states", () => {
     expect(screen.getByText(/Bạn có thể gửi kháng nghị khi kết quả được trả về/i)).toBeInTheDocument();
   });
 
+});
+
+describe("one feedback per exam action (toast audit 16/11)", () => {
+  const dangerToasts = () => Array.from(document.querySelectorAll(".assessment-toast-viewport .assessment-toast-danger"));
+  const submitListening = async () => {
+    fireEvent.click(screen.getByRole("radio", { name: "A" }));
+    const submitSection = screen.getByRole("button", { name: /nộp phần nghe/i });
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(submitSection);
+    fireEvent.click(screen.getByRole("button", { name: "Nộp phần này" }));
+    await finishSubmitCountdown();
+  };
+
+  it("a section submitted successfully shows no error toast", async () => {
+    vi.useFakeTimers();
+    const completeAssessmentSection = vi.fn().mockResolvedValue(undefined);
+    render(<ToastProvider><LearnerAssessment view={makeView()} actions={makeActions({ saveAssessmentResponse: vi.fn().mockResolvedValue(undefined), completeAssessmentSection })} /></ToastProvider>);
+    await submitListening();
+    expect(completeAssessmentSection).toHaveBeenCalledWith("listening");
+    expect(dangerToasts()).toHaveLength(0);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("a failed section submit (HTTP 500) shows exactly one toast, in Vietnamese, never the code", async () => {
+    vi.useFakeTimers();
+    const completeAssessmentSection = vi.fn().mockRejectedValue(new ApiError("HTTP_500", "http", 500));
+    render(<StrictMode><ToastProvider><LearnerAssessment view={makeView()} actions={makeActions({ saveAssessmentResponse: vi.fn().mockResolvedValue(undefined), completeAssessmentSection })} /></ToastProvider></StrictMode>);
+    await submitListening();
+    expect(dangerToasts()).toHaveLength(1);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByRole("alert")).toHaveTextContent("Không thể nộp phần này lúc này.");
+    expect(document.body).not.toHaveTextContent("HTTP_500");
+  });
+
+  it("re-rendering the same exam error keeps one toast, and clearing it removes the toast", () => {
+    const view = makeView();
+    const actions = makeActions();
+    const { rerender } = render(<StrictMode><ToastProvider><AssessmentRuntime view={view} actions={actions} submitError="Không thể nộp bài.">{() => null}</AssessmentRuntime></ToastProvider></StrictMode>);
+    rerender(<StrictMode><ToastProvider><AssessmentRuntime view={view} actions={actions} submitError="Không thể nộp bài.">{() => null}</AssessmentRuntime></ToastProvider></StrictMode>);
+    expect(dangerToasts()).toHaveLength(1);
+    rerender(<StrictMode><ToastProvider><AssessmentRuntime view={view} actions={actions}>{() => null}</AssessmentRuntime></ToastProvider></StrictMode>);
+    expect(dangerToasts()).toHaveLength(0);
+  });
 });

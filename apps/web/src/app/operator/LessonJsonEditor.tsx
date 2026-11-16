@@ -3,6 +3,7 @@ import type { ContentLessonDraftInput, LessonPartCode } from "@e4s/contracts";
 import { TriangleAlert } from "lucide-react";
 import { Banner, Button } from "./primitives.js";
 import { OPERATOR_LESSON_PART_ORDER, OPERATOR_REQUIRED_LESSON_PARTS, type LessonJsonEditorProps, type LessonJsonValidationResult } from "./types.js";
+import { errorMessage } from "../shared/error-message.js";
 
 const partCodes = new Set<LessonPartCode>(OPERATOR_LESSON_PART_ORDER);
 const partOrder = new Map<LessonPartCode, number>(OPERATOR_LESSON_PART_ORDER.map((code, index) => [code, index]));
@@ -16,7 +17,7 @@ function isPartCode(value: unknown): value is LessonPartCode {
 }
 
 function describeError(reason: unknown, fallback: string): string {
-  return reason instanceof Error && reason.message.trim() ? reason.message : fallback;
+  return errorMessage(reason, undefined, fallback);
 }
 
 const focusableSelector = "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex='-1'])";

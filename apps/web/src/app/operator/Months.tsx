@@ -4,6 +4,7 @@ import { Check, ChevronLeft, ChevronRight, Eye, MessageSquareWarning, Pencil, Sp
 import type { CefrLevel, MonthlyResourceEditInput, MonthlyFinalDraftView, MonthlyFinalUpdateInput, MonthlyOperatorOverviewView, MonthlyQualityFindingView } from "@e4s/contracts";
 import { buildMonthlyCalendar, monthlyDayKind, monthlyNewLessonOrdinal, recommendedMonthlyResourceCriteria, formatMonthlyDayLabel, monthlyDefaultLessonTitle, monthlyLessonDisplayTitle, withMonthlyExpandedTerms, withMonthlyGrammarSteps, withMonthlyGrammarTopicName, withMonthlyReadAloudTargets, monthlyGrammarDayTopicName, monthlyReadablePlanObjective, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { useToast } from "../shared/design-system.js";
+import { errorMessage } from "../shared/error-message.js";
 import { useDialog, useModal } from "../shared/ModalProvider.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { useManagerSectionHeader } from "../manager/shared.js";
@@ -231,7 +232,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       await actions.onPublishMonth(framework.id, preview.publishOn);
       toast.show({ message: "Đã công bố nội dung tháng.", tone: "ok" });
     } catch (error) {
-      showUnavailable(error instanceof Error ? error.message : "Không công bố được tháng.");
+      showUnavailable(errorMessage(error, undefined, "Không công bố được tháng."));
     }
   };
   // The month was published on a later simulated date than today's (the test date was moved back).
@@ -256,7 +257,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       await actions.onRepublishMonth(framework.id, preview.republishOn);
       toast.show({ message: "Đã công bố lại theo ngày hệ thống.", tone: "ok" });
     } catch (error) {
-      showUnavailable(error instanceof Error && error.message ? error.message : "Không công bố lại được tháng.");
+      showUnavailable(errorMessage(error, undefined, "Không công bố lại được tháng."));
     }
   };
   const illustrationFrameworkId = framework?.resources ? framework.id : undefined;
@@ -667,7 +668,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
   </main>;
 }
 
-export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPart, busy = false, onClose, onRequestReopen, onApprove, onApproveAnyway, approveBlocked, onEdit, onRegenerate }: { date: string; cefr: CefrLevel; lesson: MonthlyOperatorOverviewView["frameworks"][number]["lessons"][number]; resources?: MonthlyOperatorOverviewView["frameworks"][number]["resources"]; focusedPart?: string | null; busy?: boolean; onClose(): void; onRequestReopen?(reason: string): Promise<void>; onApprove?(): Promise<void> | void; /** 13/11 "Vẫn duyệt": approve a saved draft although severe findings remain (asks for confirmation first). */ onApproveAnyway?(): Promise<void> | void; /** 13/11: why "Vẫn duyệt" is not offered (structural problems the server would refuse); shown with a "Sửa tay" action. */ approveBlocked?: string | undefined; onEdit?(findingKey?: string): void; onRegenerate?(): Promise<void> | void }) {
+export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPart, busy = false, onClose, onRequestReopen, onApprove, onApproveAnyway, approveBlocked, onEdit, onRegenerate }: { date: string; cefr: CefrLevel; lesson: MonthlyOperatorOverviewView["frameworks"][number]["lessons"][number]; resources?: MonthlyOperatorOverviewView["frameworks"][number]["resources"]; focusedPart?: string | null; busy?: boolean; onClose(): void; /** Resolves false when the request was not sent (the route already showed why); the dialog then stays open. */ onRequestReopen?(reason: string): Promise<boolean | void>; onApprove?(): Promise<void> | void; /** 13/11 "Vẫn duyệt": approve a saved draft although severe findings remain (asks for confirmation first). */ onApproveAnyway?(): Promise<void> | void; /** 13/11: why "Vẫn duyệt" is not offered (structural problems the server would refuse); shown with a "Sửa tay" action. */ approveBlocked?: string | undefined; onEdit?(findingKey?: string): void; onRegenerate?(): Promise<void> | void }) {
   const isDraft = lesson.status !== "approved";
   const [requestingReopen, setRequestingReopen] = useState(false);
   const parts = lesson.content?.parts ?? [];
@@ -731,7 +732,7 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
       <div className="row between operator-card-header"><h3>Bản AI chưa đạt</h3><Badge tone="danger">Không duyệt được</Badge></div>
       <OperatorLessonPreview cefr={cefr} lessonId={`monthly-failed-${lesson.lessonNumber}`} parts={failedParts as never} {...(lesson.kind === "review" ? { studyTabLabel: cefr === "A1" || cefr === "A2" ? "Ôn tập" : "Review", collapsibleVocabulary: true, practiceContent: <MonthlyReviewPractice parts={failedParts} english={!(cefr === "A1" || cefr === "A2")} /> } : {})} />
     </section>}
-    {requestingReopen && <MonthlyReopenRequest label={lesson.kind === "review" ? "bài ôn" : dayOrdinal ? `bài ${dayOrdinal}` : "bài học"} onCancel={() => setRequestingReopen(false)} onSubmit={async (reason) => { await onRequestReopen?.(reason); setRequestingReopen(false); }} />}
+    {requestingReopen && <MonthlyReopenRequest label={lesson.kind === "review" ? "bài ôn" : dayOrdinal ? `bài ${dayOrdinal}` : "bài học"} onCancel={() => setRequestingReopen(false)} onSubmit={async (reason) => { if (await onRequestReopen?.(reason) !== false) setRequestingReopen(false); }} />}
   </OperatorPage>;
 }
 

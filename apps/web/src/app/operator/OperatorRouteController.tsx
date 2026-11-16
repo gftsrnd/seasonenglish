@@ -44,6 +44,7 @@ import { ModalProvider, useDialog, useModal } from "../shared/ModalProvider.js";
 import { AssessmentDefinitionPreview } from "../shared/AssessmentDefinitionPreview.js";
 import { ScrollJumpButton, useScrollJump } from "../shared/ScrollJump.js";
 import { useToast } from "../shared/design-system.js";
+import { errorCode, errorMessage, GENERIC_ERROR_MESSAGE } from "../shared/error-message.js";
 import type { AudioEvidence } from "../shared/media/audio-evidence.js";
 import { formatScore, formatScoreOutOf } from "../shared/format-score.js";
 import { adaptAssessmentOverview, adaptLevelForms, adaptLessonMatrix, adaptLessonSet, adaptPrompts, adaptReview, adaptWeeks } from "./adapters.js";
@@ -256,18 +257,21 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     timer=setTimeout(()=>void poll(),300);
     return ()=>{stopped=true;clearTimeout(timer);};
   },[client,month,cefr,resourceGenerationActive,resourceCheckpoint?.progress?.status,resourceCheckpoint?.progress?.runId]);
+  const fetchOverview = async () => {
+    const [next, checkpoint] = await Promise.all([
+      client.getContentMonth(month),
+      loadResourceCheckpoint()
+    ]);
+    setOverview(next);
+    setResourceCheckpoint(checkpoint);
+  };
   const load = async () => {
     setError(undefined);
-    try {
-      const [next, checkpoint] = await Promise.all([
-        client.getContentMonth(month),
-        loadResourceCheckpoint()
-      ]);
-      setOverview(next);
-      setResourceCheckpoint(checkpoint);
-    }
+    try { await fetchOverview(); }
     catch (reason) { setError(message(reason)); }
   };
+  /** After an action: never turns its result into an error (see reloadQuietly). */
+  const reload = () => reloadQuietly(fetchOverview);
   useEffect(() => {
     setOverview(undefined);
     void Promise.all([
@@ -289,8 +293,9 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
   }, [overview, error]);
   const run = async <T,>(action: () => Promise<T>, success?: string, propagateError = false): Promise<T | undefined> => {
     setBusy(true); setError(undefined);
-    try { const result = await action(); await load(); if (success) toast.show({ message: success, tone: "ok" }); return result; }
-    catch (reason) { if (propagateError) throw reason; const detail = message(reason); setError(detail); toast.show({ message: detail, tone: "danger" }); return undefined; }
+    // One feedback per action: a failure is this toast only (the page's inline alert is for a failed page load).
+    try { const result = await action(); await reload(); if (success) toast.show({ message: success, tone: "ok" }); return result; }
+    catch (reason) { if (propagateError) throw reason; toast.show(errorNotice(reason)); return undefined; }
     finally { setBusy(false); }
   };
   /**
@@ -434,8 +439,9 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         } } : {})
       } : {})}
       {...(!isDraft ? { onRequestReopen: async (reason: string) => {
+        // run() already toasted a failure: report it as `false` (the dialog stays open) instead of throwing again.
         const result = await run(() => client.createContentMonthCorrection(framework.id, lesson.lessonNumber, reason), "Đã gửi yêu cầu mở lại tới Manager.");
-        if (!result) throw new Error("Không gửi được yêu cầu mở lại.");
+        return Boolean(result);
       } } : {})} />{dayEditor}</>;
   }
   return <><OperatorMonths
@@ -492,7 +498,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
           setBusy(true);
           try {
             await client.createManualContentMonthResources!(selectedMonth, selectedLevel, input);
-            await load();
+            await reload();
             toast.show({ message: "Đã lưu bản nháp tài nguyên tháng.", tone: "ok" });
           } finally { setBusy(false); }
         }
@@ -503,7 +509,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
           setBusy(true); setError(undefined);
           try {
             await client.saveContentMonthResources!(id, input);
-            await load();
+            await reload();
             toast.show({ message: "Đã lưu bản nháp tài nguyên tháng.", tone: "ok" });
           } finally { setBusy(false); }
         }
@@ -559,12 +565,12 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
       },
       onGenerateDay: async (id, dayNumber) => {
         // A quality failure stores the failing candidate for the day view: reload so "Lỗi" appears.
-        const result = await act(() => client.generateContentMonthDay(id, dayNumber)).catch(async (reason: unknown) => { await load(); throw reason; });
+        const result = await act(() => client.generateContentMonthDay(id, dayNumber)).catch(async (reason: unknown) => { await reload(); throw reason; });
         if (!result) throw new Error("AI không sinh được bài ngày đạt chuẩn.");
         return result;
       },
       onGenerateReview: async (id, dayNumber) => {
-        const result = await act(() => client.generateContentMonthReview(id, dayNumber)).catch(async (reason: unknown) => { await load(); throw reason; });
+        const result = await act(() => client.generateContentMonthReview(id, dayNumber)).catch(async (reason: unknown) => { await reload(); throw reason; });
         if (!result) throw new Error("AI không sinh được bài ôn đạt chuẩn.");
         return result;
       },
@@ -600,15 +606,10 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
   const [pendingAssessmentDetails, setPendingAssessmentDetails] = useState<Record<string, ContentReviewAssessmentDetailView>>({});
   const [rescoreBusy, setRescoreBusy] = useState<string>();
   const [deletionPendingLearners, setDeletionPendingLearners] = useState<Set<string>>(() => new Set());
-  const [toast, setToast] = useState<{ tone: "success" | "danger" | "info"; message: string }>();
   const capabilities = useCapabilities(client);
-  const notify = (message: string, tone: "success" | "danger" | "info" = "success") => setToast({ tone, message });
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast(undefined), 4200);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
-  const load = () => client.getAssessmentReviewOverview().then(setData).catch(reason => setError(message(reason)));
+  const { notify, notifyError } = useOperatorNotify();
+  const fetchData = () => client.getAssessmentReviewOverview().then(setData);
+  const load = () => fetchData().catch(reason => setError(message(reason)));
   useEffect(() => { void load(); }, [client]);
   useEffect(() => {
     if (!data) return;
@@ -652,7 +653,8 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
   };
   const targetFor = (attemptId: string) => view.levelRequests.find(item => item.id === attemptId)?.to;
   const learnerIdFor = (id: string) => data.pendingAssessments.find(item => item.attemptId === id)?.learnerId ?? id;
-  const refresh = (promise: Promise<unknown>) => void promise.then(() => { notify("Đã cập nhật trạng thái."); return load(); }).catch(reason => notify(message(reason), "danger"));
+  // The action's own result decides the toast; the refresh after it is quiet (a failed refresh is not a failed action).
+  const refresh = (promise: Promise<unknown>) => void promise.then(() => { notify("Đã cập nhật trạng thái."); return reloadQuietly(fetchData); }, notifyError);
   const missing = {
     ...(typeof client.decideAssessment !== "function" ? { approvePlacement: unavailable("endpoint duyệt mức đầu vào"), decideLevelRequest: unavailable("endpoint xử lý yêu cầu lên mức") } : {}),
     ...(typeof client.getContentReviewAssessment !== "function" ? { viewTest: unavailable("endpoint xem chi tiết bài test của học viên") } : {}),
@@ -670,7 +672,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
   };
   const showAttempt = (attemptId: string) => {
     if (typeof client.getContentReviewAssessment !== "function") return;
-    void client.getContentReviewAssessment(attemptId).then(detail => { setAssessmentDialog(detail); }).catch(reason => notify(message(reason), "danger"));
+    void client.getContentReviewAssessment(attemptId).then(detail => { setAssessmentDialog(detail); }).catch(reason => notifyError(reason));
   };
   const saveManualScore = (input: ManualScoreInput) => {
     if (!assessmentDialog || typeof client.manualScoreAssessment !== "function" || readOnly) return;
@@ -678,7 +680,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     void client.manualScoreAssessment(assessmentDialog.attemptId, input)
       .then(() => client.getContentReviewAssessment(assessmentDialog.attemptId))
       .then(detail => { setAssessmentDialog(detail); notify("Đã lưu điểm chấm tay."); })
-      .catch(reason => notify(message(reason), "danger"))
+      .catch(reason => notifyError(reason))
       .finally(() => setManualScoreBusy(false));
   };
   const deleteAssessmentAudio = async (evidence: AudioEvidence) => {
@@ -689,8 +691,8 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     setAssessmentDialog(refreshed);
     notify("Đã xoá bản ghi âm; transcript và kết quả vẫn được giữ.");
   };
-  const showChallenge = (attemptId: string) => void client.getAssessmentReviewChallenge(attemptId).then(detail => { setDialog({ kind: "challenge", detail, learnerName: view.levelRequests.find(item => item.id === attemptId)?.learnerName ?? "" }); }).catch(reason => notify(message(reason), "danger"));
-  const showProfile = (learnerId: string) => void client.getAssessmentReviewLearner(learnerId).then(detail => { setDialog({ kind: "profile", detail }); }).catch(reason => notify(message(reason), "danger"));
+  const showChallenge = (attemptId: string) => void client.getAssessmentReviewChallenge(attemptId).then(detail => { setDialog({ kind: "challenge", detail, learnerName: view.levelRequests.find(item => item.id === attemptId)?.learnerName ?? "" }); }).catch(reason => notifyError(reason));
+  const showProfile = (learnerId: string) => void client.getAssessmentReviewLearner(learnerId).then(detail => { setDialog({ kind: "profile", detail }); }).catch(reason => notifyError(reason));
   const togglePendingProfile = (attemptId: string) => {
     if (expandedPendingProfiles[attemptId]) {
       setExpandedPendingProfiles(current => { const next = { ...current }; delete next[attemptId]; return next; });
@@ -703,7 +705,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     setPendingProfiles(current => ({ ...current, [attemptId]: null }));
     void client.getAssessmentReviewLearner(pending.learnerId)
       .then(detail => setPendingProfiles(current => ({ ...current, [attemptId]: detail })))
-      .catch(reason => { setPendingProfiles(current => { const next = { ...current }; delete next[attemptId]; return next; }); notify(message(reason), "danger"); });
+      .catch(reason => { setPendingProfiles(current => { const next = { ...current }; delete next[attemptId]; return next; }); notifyError(reason); });
   };
   const changeLevel = async (learnerId: string, mode: "direct" | "scheduled" | "recommend_lower") => {
     if (readOnly) return;
@@ -744,9 +746,9 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
       await client.requestAssessmentReviewLearnerDeletion(learnerId, reason);
       setDeletionPendingLearners((current) => new Set(current).add(learnerId));
       notify("Đã gửi yêu cầu xoá cho Quản lý duyệt.");
-      await load();
+      await reloadQuietly(fetchData);
     } catch (reason) {
-      notify(message(reason), "danger");
+      notifyError(reason);
     }
   };
   const rescore = async (attemptId: string) => {
@@ -757,8 +759,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
       ? crypto.randomUUID()
       : `${attemptId}:${Date.now()}`;
     void client.rescoreAssessment(attemptId, requestId)
-      .then(() => { notify("Đã chấm lại bài bằng AI."); return load(); })
-      .catch(reason => notify(message(reason), "danger"))
+      .then(() => { notify("Đã chấm lại bài bằng AI."); return reloadQuietly(fetchData); }, notifyError)
       .finally(() => setRescoreBusy(undefined));
   };
   return <><OperatorDashboard view={{ ...view, pendingProfiles, expandedPendingProfiles }} readOnly={readOnly} unavailable={missing} actions={{
@@ -801,7 +802,6 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
   }} />
   {assessmentDialog && <OperatorReviewAssessmentDetail detail={assessmentDialog} onClose={() => setAssessmentDialog(undefined)} {...(typeof client.manualScoreAssessment === "function" && !readOnly && (assessmentDialog.status === "pending_review" || assessmentDialog.status === "submitted") ? { onSaveManualScore: saveManualScore } : {})} {...(typeof client.confirmAssessmentAudioDeletion === "function" && typeof client.deleteAssessmentAudio === "function" && !readOnly ? { onDeleteAudio: deleteAssessmentAudio } : {})} savingManualScore={manualScoreBusy} />}
   {dialog && <OperatorDashboardDialog dialog={dialog} onClose={() => setDialog(undefined)} />}
-  {toast && <div className={`operator-toast operator-toast-${toast.tone}`} role={toast.tone === "danger" ? "alert" : "status"} aria-live={toast.tone === "danger" ? "assertive" : "polite"}>{toast.message}</div>}
   </>;
 }
 
@@ -1104,37 +1104,40 @@ function LevelFormsRoute({ client, readOnly, embedded = false }: { client: Opera
   const [error, setError] = useState<string>();
   const [dialog, setDialog] = useState<{ detail: AssessmentLevelFormDetailView; editing: boolean }>();
   const capabilities = useCapabilities(client);
-  const load = () => client.getAssessmentLevelForms().then(setData).catch(reason => setError(message(reason)));
+  const { notify, notifyError } = useOperatorNotify();
+  const fetchData = () => client.getAssessmentLevelForms().then(setData);
+  // Only a failed page load replaces the page; a failed action is one toast and the list stays.
+  const load = () => fetchData().catch(reason => setError(message(reason)));
+  const reload = () => reloadQuietly(fetchData);
   useEffect(() => { void load(); }, [client]);
   if (error) return <Status tone="error">Không tải được đề thi lên mức: {error}</Status>;
   if (!data) return <Status>Đang tải đề thi lên mức…</Status>;
-  const refresh = (promise: Promise<unknown>) => void promise.then(load).catch(reason => setError(message(reason))).finally(() => setGenerating(null));
+  const refresh = (promise: Promise<unknown>, success: string) => void promise.then(() => { notify(success); return reload(); }, notifyError).finally(() => setGenerating(null));
   const missing = {
     ...(typeof client.getAssessmentLevelForm !== "function" ? { view: unavailable("endpoint đọc nội dung đầy đủ của phiên bản đề") } : {}),
     ...(typeof client.deleteAssessmentLevelForm !== "function" ? { delete: unavailable("endpoint xoá đề thi lên mức") } : {})
   };
   const show = (versionId: string, editing = false) => {
     if (typeof client.getAssessmentLevelForm !== "function") return;
-    void client.getAssessmentLevelForm(versionId).then(detail => setDialog({ detail, editing })).catch(reason => setError(message(reason)));
+    void client.getAssessmentLevelForm(versionId).then(detail => setDialog({ detail, editing })).catch(notifyError);
   };
   return <><OperatorLevelForms readOnly={readOnly} embedded={embedded} unavailable={missing} view={adaptLevelForms(data, { aiConnected: capabilities?.ai ?? false, generatingTarget: generating })} actions={{
     onBack: () => navigate(paths.root), onOpenSettings: () => navigate("/settings"),
-    onGenerate: target => { if (readOnly) return; setGenerating(target); refresh(client.generateAssessmentLevelForm(target as Exclude<CefrLevel, "A1">)); },
+    onGenerate: target => { if (readOnly) return; setGenerating(target); refresh(client.generateAssessmentLevelForm(target as Exclude<CefrLevel, "A1">), `Đã sinh bản nháp đề thi lên mức ${target}.`); },
     onCreateManual: target => {
       if (readOnly) return;
       setGenerating(target);
       void client.createManualAssessmentLevelForm(target as Exclude<CefrLevel, "A1">)
         .then(form => client.getAssessmentLevelForm(form.versionId))
-        .then(detail => { setDialog({ detail, editing: true }); return load(); })
-        .catch(reason => setError(message(reason)))
+        .then(detail => { setDialog({ detail, editing: true }); return reload(); }, notifyError)
         .finally(() => setGenerating(null));
     },
     onView: id => show(id), onEdit: (id, fromPublished) => {
       if (readOnly) return;
-      if (fromPublished) void client.copyAssessmentLevelFormToDraft(id).then(detail => { setDialog({ detail, editing: true }); void load(); }).catch(reason => setError(message(reason)));
+      if (fromPublished) void client.copyAssessmentLevelFormToDraft(id).then(detail => { setDialog({ detail, editing: true }); void reload(); }, notifyError);
       else show(id, true);
     },
-    onDelete: id => { if (readOnly || typeof client.deleteAssessmentLevelForm !== "function") return; void modal.confirm({ title: "Xoá bản nháp đề thi?", message: "Bản nháp này sẽ bị xoá khỏi danh sách đề lên mức.", confirmLabel: "Xoá bản nháp", tone: "danger" }).then(confirmed => { if (confirmed) refresh(client.deleteAssessmentLevelForm(id)); }); }
+    onDelete: id => { if (readOnly || typeof client.deleteAssessmentLevelForm !== "function") return; void modal.confirm({ title: "Xoá bản nháp đề thi?", message: "Bản nháp này sẽ bị xoá khỏi danh sách đề lên mức.", confirmLabel: "Xoá bản nháp", tone: "danger" }).then(confirmed => { if (confirmed) refresh(client.deleteAssessmentLevelForm(id), "Đã xoá bản nháp đề thi."); }); }
   }} />
     {dialog && !dialog.editing ? <AssessmentPreviewDialog
       form={promotionPreview(dialog.detail)}
@@ -1154,14 +1157,14 @@ function LevelFormsRoute({ client, readOnly, embedded = false }: { client: Opera
       onSave={async input => {
         const updated = await client.updateAssessmentLevelForm(dialog.detail.versionId, input);
         setDialog({ detail: updated, editing: true });
-        await load();
+        await reload();
       }}
       onPublish={async (confirmation) => {
         const confirmed = await modal.confirm({ title: "Duyệt và phát hành đề lên mức?", message: "Phiên bản này sẽ dùng cho các lượt thi lên mức mới.", confirmLabel: "Duyệt & phát hành", cancelLabel: "Quay lại" });
         if (!confirmed) return;
         await client.publishAssessmentLevelForm(dialog.detail.versionId, confirmation);
         setDialog(undefined);
-        await load();
+        await reload();
       }}
     /> : null}
   </>;
@@ -1172,7 +1175,6 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
   const paths = useOperatorRoutePaths();
   const [data, setData] = useState<ContentWeekFrameView>();
   const [suggestions, setSuggestions] = useState<Record<number, WeekSuggestion>>({});
-  const [toast, setToast] = useState<{ tone: "success" | "danger"; message: string }>();
   const [generatingWeek, setGeneratingWeek] = useState<number | null>(null);
   const [generationStatus, setGenerationStatus] = useState("");
   const [generationLevels, setGenerationLevels] = useState<Cefr[]>(["A1", "A2", "B1", "B2", "C1"]);
@@ -1182,12 +1184,7 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
   const [error, setError] = useState<string>();
   const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const capabilities = useCapabilities(client);
-  const notify = (message: string, tone: "success" | "danger" = "success") => setToast({ tone, message });
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast(undefined), 4200);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
+  const { notify, notifyError } = useOperatorNotify();
   useEffect(() => { void client.getContentWeeks().then(setData).catch(reason => setError(message(reason))); }, [client]);
   useEffect(() => {
     if (typeof client.getContentLessonMatrix !== "function") return;
@@ -1202,7 +1199,7 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
   const inputs = (source = data) => source.weeks
     .filter(week => week.topic.trim())
     .map(week => ({ weekNumber: week.weekNumber, topic: week.topic, description: week.description, objectives: week.objectives, keyVocabHint: week.keyVocabHint, ...(week.plan ? { plan: week.plan } : {}) }));
-  const suggest = (numbers: number[]) => { if (readOnly) return; numbers.forEach(number => setSuggestions(current => ({ ...current, [number]: { state: "loading" } }))); void client.suggestContentWeeks(numbers).then(result => { const next: Record<number, WeekSuggestion> = {}; result.weeks.forEach(week => { next[week.weekNumber] = { state: "options", levels: week.levels ?? [], options: week.options.map(option => ({ ...option, plan: option.plan ?? {} })) }; }); setSuggestions(current => ({ ...current, ...next })); notify("Đã tải 3 phương án chủ đề kèm kế hoạch CEFR × 5 ngày."); }).catch(reason => { setSuggestions(current => { const next = { ...current }; numbers.forEach(number => delete next[number]); return next; }); notify(message(reason), "danger"); }); };
+  const suggest = (numbers: number[]) => { if (readOnly) return; numbers.forEach(number => setSuggestions(current => ({ ...current, [number]: { state: "loading" } }))); void client.suggestContentWeeks(numbers).then(result => { const next: Record<number, WeekSuggestion> = {}; result.weeks.forEach(week => { next[week.weekNumber] = { state: "options", levels: week.levels ?? [], options: week.options.map(option => ({ ...option, plan: option.plan ?? {} })) }; }); setSuggestions(current => ({ ...current, ...next })); notify("Đã tải 3 phương án chủ đề kèm kế hoạch CEFR × 5 ngày."); }).catch(reason => { setSuggestions(current => { const next = { ...current }; numbers.forEach(number => delete next[number]); return next; }); notifyError(reason); }); };
   const save = (source = data, options: { promptForGeneration?: boolean } = {}) => {
     if (readOnly) return Promise.resolve(undefined);
     const payload = inputs(source);
@@ -1221,7 +1218,7 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
       }
       return saved;
     });
-    void completed.catch(reason => notify(message(reason), "danger"));
+    void completed.catch(reason => notifyError(reason));
     return completed;
   };
   const startGeneration = (weekNumbers: number[], levels = generationLevels, savePromise?: Promise<ContentWeekFrameView | undefined>) => {
@@ -1301,7 +1298,7 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
     onCancelGeneration: () => setGenerationDialog(undefined),
     onStartGeneration: weeks => { if (!generatingWeek && weeks.length) startGeneration(weeks); },
     onOpenLessons: () => { if (!generatingWeek) navigate(paths.lessons); }
-  }} />{toast && <div className={`operator-toast operator-toast-${toast.tone}`} role={toast.tone === "danger" ? "alert" : "status"} aria-live={toast.tone === "danger" ? "assertive" : "polite"}>{toast.message}</div>}</>;
+  }} /></>;
 }
 
 function LessonsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
@@ -1311,28 +1308,25 @@ function LessonsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
   const [data, setData] = useState<ContentLessonMatrixView>();
   const generationJobs = useSyncExternalStore(subscribeLessonGenerationJobs, lessonGenerationJobsSnapshot, lessonGenerationJobsSnapshot);
   const [error, setError] = useState<string>();
-  const [toast, setToast] = useState<{ tone: "success" | "danger"; message: string; sticky?: boolean }>();
   const capabilities = useCapabilities(client);
-  const notify = (message: string, tone: "success" | "danger" = "danger") => setToast({ tone, message });
-  useEffect(() => {
-    if (!toast || toast.sticky) return;
-    const timer = window.setTimeout(() => setToast(undefined), 4200);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
+  const { toast, notify, notifyError } = useOperatorNotify();
   useEffect(() => { void client.getContentLessonMatrix().then(setData).catch(reason => setError(message(reason))); }, [client]);
   if (error) return <Status tone="error">Không tải được ma trận bài học: {error}</Status>;
   if (!data) return <Status>Đang tải ma trận bài học…</Status>;
   const open = (week: number, cefr: Cefr, state?: { manualCreate?: boolean; topic?: string }) => navigate(`${paths.lessons}/${week}/${cefr}`, state ? { state } : undefined);
   const produce = (week: number, cefr: Cefr) => {
-    setToast({ tone: "success", message: "Đang chuẩn bị bộ 5 bài…", sticky: true });
+    // One toast at a time for this action: "preparing" stays until the job ends, then gives way to its result.
+    const preparing = toast.show({ message: "Đang chuẩn bị bộ 5 bài…", tone: "ok", durationMs: 0 });
     void startLessonGenerationJob(week, cefr, () => client.generateContentLessonDraft(week, cefr))
-      .then(() => client.getContentLessonMatrix())
-      .then(next => { setData(next); notify(`Đã sinh xong tuần ${week} · mức ${cefr}.`, "success"); })
-      .catch(reason => notify(message(reason), "danger"));
+      .then(() => {
+        toast.dismiss(preparing);
+        notify(`Đã sinh xong tuần ${week} · mức ${cefr}.`);
+        return reloadQuietly(() => client.getContentLessonMatrix().then(setData));
+      }, (reason: unknown) => { toast.dismiss(preparing); notifyError(reason); });
   };
   const saveLevels = (levels: Cefr[]) => {
     if (readOnly || typeof client.setContentLessonLevels !== "function") return;
-    void client.setContentLessonLevels(levels).then(setData).catch(reason => notify(message(reason)));
+    void client.setContentLessonLevels(levels).then(setData).catch(notifyError);
   };
   const removeLevel = async (cefr: Cefr) => {
     if (cefr !== "C1" || readOnly || data.levels.length <= 1) return;
@@ -1346,7 +1340,7 @@ function LessonsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
   };
   return <><OperatorLessons readOnly={readOnly} view={adaptLessonMatrix(data, { aiConnected: capabilities?.ai ?? false, extraLevels: data.levels.some(item => item.cefr === "C1") ? [] : ["C1"], generatingCells: generationJobs.filter(job => job.status === "running").map(job => ({ week: job.week, cefr: job.level as Cefr, message: "Đang sinh bộ 5 bài…" })) })} actions={{
     onOpenSettings: () => navigate("/settings"), onAddLevel: cefr => { if (cefr === "C1") saveLevels([...data.levels.map(level => level.cefr), cefr]); }, onRemoveLevel: removeLevel, onGenerate: (week, cefr) => { if (!readOnly) produce(week, cefr); }, onCreateManual: (week, cefr) => { if (!readOnly) { const topic = data.weeks.find(candidate => candidate.weekNumber === week)?.topic; open(week, cefr, topic ? { manualCreate: true, topic } : { manualCreate: true }); } }, onOpenSet: open
-  }} />{toast && <div className={`operator-toast operator-toast-${toast.tone}`} role={toast.tone === "danger" ? "alert" : "status"} aria-live={toast.tone === "danger" ? "assertive" : "polite"}>{toast.message}</div>}</>;
+  }} /></>;
 }
 
 function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiClient; readOnly: boolean; week: number; cefr: Cefr }) {
@@ -1497,7 +1491,8 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly =
   const [dialog, setDialog] = useState<ContentReviewAssessmentDetailView>();
   const [gradingAction, setGradingAction] = useState<"manual" | "ai">();
   const capabilities = useCapabilities(client);
-  const load = async () => {
+  /** `quiet`: a refresh after a successful action rethrows instead of replacing the page with an error. */
+  const load = async (quiet = false) => {
     try {
       const next = await client.getContentReview();
       if (typeof client.listAssessmentAudio !== "function") {
@@ -1535,9 +1530,11 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly =
         setData(next);
       }
     } catch (reason) {
+      if (quiet) throw reason;
       setError(message(reason));
     }
   };
+  const reload = () => reloadQuietly(() => load(true));
   useEffect(() => { void load(); }, [client]);
   const attemptFromNotification = assessmentOnly ? new URLSearchParams(location.search).get("attemptId") : null;
   useEffect(() => {
@@ -1554,7 +1551,8 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly =
   }, [assessmentOnly, attemptFromNotification, client, location.key]);
   if (error) return <Status tone="error">Không tải được dữ liệu đọc mẫu: {error}</Status>;
   if (!data) return <Status>Đang tải dữ liệu đọc mẫu…</Status>;
-  const refresh = (promise: Promise<unknown>) => void promise.then(load).catch(reason => setError(message(reason)));
+  // A failed action is one toast; the page stays (only a failed page load shows the page error).
+  const refresh = (promise: Promise<unknown>) => void promise.then(reload, reason => { toast.show(errorNotice(reason)); });
   const missing = {
     ...(typeof client.gradeReviewedSubmissionAi !== "function" ? { gradeAi: unavailable("endpoint chấm bài review bằng AI") } : {}),
     ...(typeof client.getContentReviewAssessment !== "function" ? { viewTest: unavailable("endpoint xem chi tiết bài test") } : {})
@@ -1565,18 +1563,18 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly =
   const gradeAi = async (id: string) => {
     if (readOnly || typeof client.gradeReviewedSubmissionAi !== "function" || !await confirmRegrade(id)) return;
     await client.gradeReviewedSubmissionAi(id);
-    await load();
+    await reload();
   };
   const viewTest = (attemptId: string) => {
     if (typeof client.getContentReviewAssessment !== "function") return;
-    void client.getContentReviewAssessment(attemptId).then(setDialog).catch(reason => setError(message(reason)));
+    void client.getContentReviewAssessment(attemptId).then(setDialog).catch(reason => { toast.show(errorNotice(reason)); });
   };
   const deleteReviewedAudio = async (evidence: AudioEvidence) => {
     if (readOnly || !evidence.fileId || typeof client.confirmAssessmentAudioDeletion !== "function" || typeof client.deleteAssessmentAudio !== "function") return;
     const confirmation = await client.confirmAssessmentAudioDeletion(evidence.fileId);
     await client.deleteAssessmentAudio(evidence.fileId, confirmation.confirmationToken);
     if (dialog) setDialog(await client.getContentReviewAssessment(dialog.attemptId));
-    await load();
+    await reload();
   };
   const updateExamGrade = async (action: "manual" | "ai", attemptId: string, update: () => Promise<unknown>) => {
     setGradingAction(action);
@@ -1585,7 +1583,7 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly =
       const updated = await client.getContentReviewAssessment(attemptId);
       setDialog(current => current?.attemptId === attemptId ? updated : current);
       toast.show({ message: action === "manual" ? "Đã lưu điểm chấm tay." : "Đã cập nhật kết quả chấm AI.", tone: "ok" });
-      await load();
+      await reload();
     } catch (reason) {
       const label = reason instanceof Error ? reason.message : "";
       toast.show({ message: label === "AI_UNAVAILABLE" ? "AI hiện không khả dụng. Bạn vẫn có thể chấm tay."
@@ -1697,9 +1695,39 @@ const operatorErrorMessages: Record<string, string> = {
   MONTHLY_RESOURCES_LOCKED: "Ảnh này đã khóa cùng tài nguyên, không đổi được."
 };
 
+/**
+ * Operator toasts go through the app's one ToastProvider. `notify` keeps the old route tones
+ * ("success" | "danger" | "info"); `notifyError` turns a caught error into text through message().
+ */
+function useOperatorNotify() {
+  const toast = useToast();
+  return useMemo(() => ({
+    toast,
+    notify: (text: string, tone: "success" | "danger" | "info" = "success") => { toast.show({ message: text, tone: tone === "success" ? "ok" : tone }); },
+    notifyError: (reason: unknown) => { toast.show(errorNotice(reason)); }
+  }), [toast]);
+}
+
+/**
+ * Refreshes a screen after an action that already succeeded. A failed refresh must not turn that success into
+ * an error (toast or page alert): it stays silent and retries a few times in the background.
+ */
+function reloadQuietly(reload: () => Promise<unknown>, attempts = 3, delayMs = 1_500): Promise<void> {
+  return reload().then(() => undefined, () => {
+    if (attempts > 1) window.setTimeout(() => { void reloadQuietly(reload, attempts - 1, delayMs * 2); }, delayMs);
+  });
+}
+
+/** Toast fields for a caught error: never a bare code; a generic text keeps its code as the tooltip only. */
+function errorNotice(reason: unknown): { message: string; tone: "danger"; detail?: string } {
+  const text = message(reason);
+  const code = errorCode(reason);
+  return text === GENERIC_ERROR_MESSAGE && code ? { message: text, tone: "danger", detail: `Mã lỗi: ${code}` } : { message: text, tone: "danger" };
+}
+
 function message(reason: unknown) {
   const raw = reason instanceof Error ? reason.message : String(reason);
-  const label = operatorErrorMessages[raw] ?? raw;
+  const label = operatorErrorMessages[raw] ?? errorMessage(reason, operatorErrorMessages);
   const details = reason && typeof reason === "object" && "details" in reason ? (reason as { details?: unknown }).details : undefined;
   const issues = details && typeof details === "object" && "issues" in details ? (details as { issues?: unknown }).issues : undefined;
   const missing = details && typeof details === "object" && "missing" in details ? (details as { missing?: unknown }).missing : undefined;
@@ -1715,9 +1743,7 @@ function message(reason: unknown) {
     }).join("; ");
     return `${label} Chi tiết: ${summary}`;
   }
-  // Never a bare code: an unknown 4xx code shows the server's own Vietnamese message when it sent one.
-  const serverMessage = details && typeof details === "object" && "message" in details ? (details as { message?: unknown }).message : undefined;
-  if (label === raw && /^[A-Z][A-Z0-9_]+$/u.test(raw) && typeof serverMessage === "string" && /[À-ỹ]/u.test(serverMessage)) return serverMessage;
+  // Never a bare code: errorMessage() already fell back to the server's Vietnamese message or the generic text.
   return label;
 }
 

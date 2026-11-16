@@ -18,6 +18,7 @@
 .ds-toast--ok { border-color: var(--ok-line); background: var(--ok-tint); }
 .ds-toast--danger { border-color: var(--danger-line); background: var(--danger-soft); }
 .ds-toast__message { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; line-height: 1.45; }
+.ds-toast__actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
 .ds-toast__dismiss { display: grid; place-items: center; flex: 0 0 32px; min-width: 32px; min-height: 32px; margin-inline-start: auto; padding: 0; border: 0; border-radius: 999px; background: transparent; color: inherit; box-shadow: none; font-size: 1.2rem; line-height: 1; }
 .ds-toast:not(:last-child):not(:focus-within) .ds-toast__message { align-self: flex-start; }
 .ds-toast:not(:last-child) .ds-toast__dismiss:not(:focus-visible) { opacity: 0; pointer-events: none; }

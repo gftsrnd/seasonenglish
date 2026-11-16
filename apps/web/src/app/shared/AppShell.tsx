@@ -245,7 +245,6 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
     {scroll.visible && <ScrollJumpButton atTop={scroll.atTop} onClick={scroll.jump}
       style={compact ? { insetBlockEnd: (bottomNavHeight || 64) + 12 } : undefined} />}
     <nav ref={bottomNav} className="bottomnav" data-role={role} aria-label="Điều hướng trên thiết bị di động">{links(true)}</nav>
-    <div id="toast" />
     <div id="saved" aria-live="polite">✓ Đã lưu</div>
     <AssessmentLogoutDialog open={logoutConfirmOpen} onCancel={() => setLogoutConfirmOpen(false)} onConfirm={() => { setLogoutConfirmOpen(false); beginLogout(); }} />
   </>;

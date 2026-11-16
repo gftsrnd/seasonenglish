@@ -6,6 +6,7 @@ import type { AiTaskRunner, SpeechTranscriber } from "@e4s/ai";
 import type { ObjectStorage } from "@e4s/storage";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { Pool } from "pg";
+import { registerApiErrorHandler } from "./error-handler.js";
 import { registerAssessmentRoutes } from "./modules/assessment/index.js";
 import type { EdgeTtsRunner } from "./modules/assessment/edge-tts.js";
 import { registerCoachRoutes } from "./modules/coach/index.js";
@@ -53,6 +54,7 @@ export interface BuildApiOptions {
 
 export function buildApi(options: BuildApiOptions): FastifyInstance {
   const app = Fastify({ logger: false, trustProxy: true });
+  registerApiErrorHandler(app);
   // The guarded demo reset only covers PostgreSQL. Keep it disabled when object storage
   // is mounted until a matching object purge/backup workflow exists.
   const maintenanceEnabled = (options.maintenanceEnabled ?? false) && !options.storage;

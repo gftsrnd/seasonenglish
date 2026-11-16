@@ -10,6 +10,7 @@ import { EditorSection, Field, LineField, OptionFields } from "./LessonEditorFie
 import { EditorFindingsStrip } from "./MonthlyFindingsPanel.js";
 import { MONTHLY_REVIEW_SECTIONS, type MonthlyFindingLine } from "./monthly-failure-findings.js";
 import { applyReviewContents, readReviewContents, REVIEW_SECTION_CODES, reviewItemKey, ReviewSectionEditor, reviewSectionKey, validateReviewContents, type ReviewContents } from "./LessonFormEditorReview.js";
+import { errorMessage } from "../shared/error-message.js";
 
 const lessonPartOrder = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"] as const;
 type VocabularyRow = {
@@ -58,7 +59,7 @@ function focusableElements(container: HTMLElement): HTMLElement[] {
 }
 
 function describeSaveError(reason: unknown): string {
-  return reason instanceof Error && reason.message.trim() ? reason.message : "Không lưu được bài học.";
+  return errorMessage(reason, undefined, "Không lưu được bài học.");
 }
 
 export function emptyLesson(dayNumber: number): ContentLessonDraftInput {

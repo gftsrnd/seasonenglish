@@ -13,6 +13,7 @@ import { normalizeBlankPrompt } from "../learner/text.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { formatScore, formatScoreOutOf } from "../shared/format-score.js";
 import { LineField } from "../shared/LineField.js";
+import { errorMessage } from "../shared/error-message.js";
 
 const TABS: Array<[ReviewTab, string]> = [["coach", "Phản hồi Season"], ["appeals", "Kháng nghị"], ["attempts", "Cảnh báo bài tập"]];
 
@@ -52,7 +53,7 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
 }
 
 function actionErrorMessage(reason: unknown): string {
-  return reason instanceof Error && reason.message.trim() ? reason.message : "Không hoàn tất thao tác. Hãy thử lại.";
+  return errorMessage(reason, undefined, "Không hoàn tất thao tác. Hãy thử lại.");
 }
 
 function SubmissionReviewCard({

@@ -119,13 +119,6 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "warn" | "
   return <div className={`banner ${tone}`} role={tone === "danger" ? "alert" : "note"} aria-atomic="true"><div className="body small">{children}</div></div>;
 }
 
-export function Toast({ tone = "info", children, actions }: { tone?: "info" | "warn" | "danger" | "ok"; children: ReactNode; actions?: ReactNode }) {
-  return <div className={`assessment-toast assessment-toast-${tone}`} role={tone === "danger" ? "alert" : "status"} aria-live={tone === "danger" ? "assertive" : "polite"} aria-atomic="true">
-    <div className="assessment-toast-body">{children}</div>
-    {actions ? <div className="assessment-toast-actions">{actions}</div> : null}
-  </div>;
-}
-
 export function PageTitle({ eyebrow, title, detail, aside }: { eyebrow?: string; title: string; detail?: ReactNode; aside?: ReactNode }) {
   return <header className="page-title"><div>{eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}<h1>{title}</h1>{detail ? <p className="muted">{detail}</p> : null}</div>{aside}</header>;
 }

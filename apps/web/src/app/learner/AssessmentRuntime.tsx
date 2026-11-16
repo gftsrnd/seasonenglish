@@ -8,7 +8,8 @@ import type {
 import { useExperience } from "../../features/experience/Experience.js";
 import { Clock3, Mic, Play, Square, TriangleAlert, Upload } from "lucide-react";
 import type { AssessmentView, LearnerCallbacks } from "./contracts.js";
-import { Notice, Toast } from "./ui.js";
+import { Notice } from "./ui.js";
+import { useToastWhile } from "../shared/design-system.js";
 import { registerAssessmentLogoutGuard } from "../shared/assessment-logout-guard.js";
 import { cancelExclusiveAudio, claimExclusiveAudio } from "../../features/experience/audio-precedence.js";
 
@@ -263,16 +264,18 @@ export function AssessmentRuntime({ view, actions, submitError, children }: Asse
     void reportViolation(reason);
   };
 
-  const errorNotice = runtimeError ? <Toast tone="danger" actions={autoSubmitFailed || failedViolationReason ? <button className="btn-sm" type="button" onClick={retryRuntimeError}>Thử lại</button> : null}>{runtimeError}</Toast> : null;
+  // Exam notices are toasts of the app's one ToastProvider (assessment panel style). Each stays while its
+  // condition holds: the timing warning for its window, an error until it is cleared or retried.
+  const retryRef = useRef(retryRuntimeError);
+  retryRef.current = retryRuntimeError;
+  const canRetry = Boolean(autoSubmitFailed || failedViolationReason);
+  useToastWhile(runtimeState.warning === "five_minutes" ? { key: "assessment:warning:five_minutes", variant: "assessment", tone: "warn", message: <><Clock3 size={17} aria-hidden="true" /> Còn 5 phút. Hãy kiểm tra lại câu trả lời trước khi nộp.</> } : null);
+  useToastWhile(runtimeState.warning === "one_minute" ? { key: "assessment:warning:one_minute", variant: "assessment", tone: "warn", message: <><Clock3 size={17} aria-hidden="true" /> Còn 1 phút! Hết giờ hệ thống sẽ tự chuyển phần.</> } : null);
+  useToastWhile(submitError ? { key: `assessment:submit:${submitError}`, variant: "assessment", tone: "danger", message: submitError } : null);
+  useToastWhile(runtimeError ? { key: `assessment:runtime:${runtimeError}:${canRetry ? "retry" : ""}`, variant: "assessment", tone: "danger", message: runtimeError, ...(canRetry ? { actions: <button className="btn-sm" type="button" onClick={() => retryRef.current()}>Thử lại</button> } : {}) } : null);
 
   return <>
     {children(runtimeState)}
-    {runtimeState.warning || submitError || errorNotice ? <div className="assessment-toast-viewport">
-      {runtimeState.warning === "five_minutes" ? <Toast tone="warn"><Clock3 size={17} aria-hidden="true" /> Còn 5 phút. Hãy kiểm tra lại câu trả lời trước khi nộp.</Toast> : null}
-      {runtimeState.warning === "one_minute" ? <Toast tone="warn"><Clock3 size={17} aria-hidden="true" /> Còn 1 phút! Hết giờ hệ thống sẽ tự chuyển phần.</Toast> : null}
-      {submitError ? <Toast tone="danger">{submitError}</Toast> : null}
-      {errorNotice}
-    </div> : null}
     {violationDialog ? <div className="modal-backdrop" role="presentation"><div ref={runtimeDialogRef} className="dialog assessment-violation-dialog" role="dialog" aria-modal="true" aria-labelledby="assessment-violation-title" aria-describedby="assessment-violation-description" tabIndex={-1} onKeyDown={trapDialogFocus}>
       <h2 id="assessment-violation-title"><TriangleAlert size={22} aria-hidden="true" /><span>Cảnh báo {violationDialog.count}/{violationDialog.limit}</span></h2>
       <p id="assessment-violation-description">{violationReasonText(violationDialog.reason)} Trong lúc thi, <strong>không được mở tab, cửa sổ khác hoặc sao chép nội dung</strong>.</p>

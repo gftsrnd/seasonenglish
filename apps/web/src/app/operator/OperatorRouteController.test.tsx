@@ -454,12 +454,12 @@ describe("OperatorRouteController", () => {
     const user = userEvent.setup();
     const weeks = { pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [{ id: "w1", weekNumber: 1, startDate: "2026-10-05", endDate: "2026-10-11", current: true, topic: "Meetings", description: "", objectives: "", keyVocabHint: "" }] };
     const client = { getContentWeeks: vi.fn().mockResolvedValue(weeks), saveContentWeeks: vi.fn().mockResolvedValue(weeks), suggestContentWeeks: vi.fn() };
-    render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
 
     await user.click(await screen.findByRole("button", { name: "Lưu khung chủ đề" }));
 
     const feedback = await screen.findByText("Đã lưu khung chủ đề.");
-    expect(feedback.closest(".operator-toast")).not.toBeNull();
+    expect(feedback.closest(".ds-toast")).not.toBeNull();
     expect(document.querySelector(".operator-status-message")).toBeNull();
   });
 
@@ -623,11 +623,11 @@ describe("OperatorRouteController", () => {
         ] }
       }))
     };
-    render(<MemoryRouter initialEntries={["/op/lessons"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter initialEntries={["/op/lessons"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
 
     await user.click(await screen.findByRole("button", { name: "Sinh" }));
 
-    expect(await screen.findByText(/AI trả về nội dung không đúng định dạng.*bấm Sinh để thử lại.*Soạn tay/i)).toHaveClass("operator-toast");
+    expect((await screen.findByText(/AI trả về nội dung không đúng định dạng.*bấm Sinh để thử lại.*Soạn tay/i)).closest(".ds-toast")).toHaveClass("ds-toast--danger");
     expect(screen.queryByText(/lessons\.0\.parts\.0\.content\.steps/)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sinh & duyệt bài học" })).toBeInTheDocument();
   });
@@ -639,11 +639,11 @@ describe("OperatorRouteController", () => {
       getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }),
       generateContentLessonDraft: vi.fn().mockRejectedValue(new Error("HTTP_504"))
     };
-    render(<MemoryRouter initialEntries={["/op/lessons"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter initialEntries={["/op/lessons"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
 
     await user.click(await screen.findByRole("button", { name: "Sinh" }));
 
-    expect(await screen.findByText(/Hệ thống vẫn đang hoàn tất bộ bài/)).toHaveClass("operator-toast-danger");
+    expect((await screen.findByText(/Hệ thống vẫn đang hoàn tất bộ bài/)).closest(".ds-toast")).toHaveClass("ds-toast--danger");
   });
 
   it("shows preparation as a green bottom toast while one lesson set is generating", async () => {
@@ -654,11 +654,11 @@ describe("OperatorRouteController", () => {
       getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }),
       generateContentLessonDraft: vi.fn().mockReturnValue(new Promise<ContentLessonSetVersionView>(resolve => { resolveGeneration = resolve; }))
     };
-    render(<MemoryRouter initialEntries={["/op/lessons"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter initialEntries={["/op/lessons"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
 
     await user.click(await screen.findByRole("button", { name: "Sinh" }));
 
-    expect(await screen.findByText("Đang chuẩn bị bộ 5 bài…")).toHaveClass("operator-toast-success");
+    expect((await screen.findByText("Đang chuẩn bị bộ 5 bài…")).closest(".ds-toast")).toHaveClass("ds-toast--ok");
     resolveGeneration({} as ContentLessonSetVersionView);
   });
 
@@ -924,11 +924,13 @@ describe("OperatorRouteController", () => {
       levelSignals: { windowDays: 14, ready: [], weak: [] }, topicReports: []
     };
     const rescoreAssessment = vi.fn().mockRejectedValue(new Error("ASSESSMENT_RESCORE_FAILED"));
-    render(<MemoryRouter initialEntries={["/op"]}><OperatorRouteController session={operator} client={{ getAssessmentReviewOverview: vi.fn().mockResolvedValue(overview), rescoreAssessment } as any} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter initialEntries={["/op"]}><OperatorRouteController session={operator} client={{ getAssessmentReviewOverview: vi.fn().mockResolvedValue(overview), rescoreAssessment } as any} /></MemoryRouter></ToastProvider>);
 
     await user.click(await screen.findByRole("button", { name: "Chấm lại bằng AI" }));
     await user.click(within(screen.getByRole("dialog", { name: "Chấm lại bằng AI?" })).getByRole("button", { name: "Chấm lại" }));
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("ASSESSMENT_RESCORE_FAILED"));
+    // An unknown code never reaches the screen: the generic text shows, the code stays in the tooltip.
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Có lỗi xảy ra, vui lòng thử lại."));
+    expect(screen.getByRole("alert")).toHaveAttribute("title", "Mã lỗi: ASSESSMENT_RESCORE_FAILED");
     expect(screen.getByRole("heading", { name: "Duyệt trình độ" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Chấm lại bằng AI" })).toBeInTheDocument();
   });
@@ -1341,7 +1343,8 @@ describe("OperatorRouteController", () => {
     await user.click(await screen.findByRole("button", { name: "Duyệt bộ bài" }));
     await user.click(within(screen.getByRole("dialog", { name: "Duyệt bộ bài?" })).getByRole("button", { name: "Duyệt bộ bài" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("CONTENT_NOT_PUBLISHABLE");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Có lỗi xảy ra, vui lòng thử lại.");
+    expect(screen.queryByText("CONTENT_NOT_PUBLISHABLE")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Tuần 2 · Mức A2/ })).toBeInTheDocument();
     expect(screen.getByText(draft.topic)).toBeInTheDocument();
   });
@@ -1447,7 +1450,8 @@ describe("OperatorRouteController", () => {
     } finally {
       vi.useRealTimers();
     }
-    expect(await screen.findByRole("alert")).toHaveTextContent("CONTENT_DRAFT_IN_USE");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Có lỗi xảy ra, vui lòng thử lại.");
+    expect(screen.queryByText("CONTENT_DRAFT_IN_USE")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Tuần 2 · Mức A2/ })).toBeInTheDocument();
   });
 

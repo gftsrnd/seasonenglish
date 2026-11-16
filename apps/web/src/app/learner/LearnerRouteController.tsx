@@ -14,6 +14,7 @@ import type {
 import { learnerApiClient as apiClient } from "../../api/learner.js";
 import { ApiError } from "../../api/runtime.js";
 import { useExperience } from "../../features/experience/Experience.js";
+import { useToast } from "../shared/design-system.js";
 // This controller is lazy-loaded directly by the role router. Keep the
 // Learner-only visual layer in the same chunk so its lesson/profile spacing
 // rules are present when the first Learner screen mounts.
@@ -74,19 +75,6 @@ export function shouldRedirectUnavailableChallenge(route: ResolvedLearnerRoute["
 }
 
 const assessmentCelebrationKey = "e4s:assessment-complete-celebration";
-
-function showLearnerToast(message: string, tone: "info" | "ok" | "danger" = "info") {
-  if (typeof document === "undefined") return;
-  const host = document.getElementById("toast");
-  if (!host) return;
-  const toast = document.createElement("div");
-  toast.className = `toast ${tone === "danger" ? "err" : tone}`;
-  toast.textContent = message;
-  host.replaceChildren(toast);
-  window.setTimeout(() => {
-    if (toast.parentElement === host) toast.remove();
-  }, 3500);
-}
 
 export function resolveLearnerRoute(pathname: string): ResolvedLearnerRoute {
   const clean = (pathname.startsWith("#") ? pathname.slice(1) : pathname).split(/[?#]/, 1)[0] || "/";
@@ -158,6 +146,9 @@ function LearnerContent({ courseCompleted }: { courseCompleted: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
   const experience = useExperience();
+  const toast = useToast();
+  // Learner toasts go through the app's one ToastProvider, in the learner pill style (#toast).
+  const showLearnerToast = (message: string, tone: "info" | "ok" | "danger" = "info") => { toast.show({ message, tone, variant: "learner", durationMs: 3_500 }); };
   const route = useMemo(() => resolveLearnerRoute(location.pathname), [location.pathname]);
   const [contracts, setContracts] = useState<LearnerContractBundle>({});
   const [profileRecord, setProfileRecord] = useState<LearnerProfileView>();
