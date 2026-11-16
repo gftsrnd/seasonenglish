@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { monthlyGatedLightFindings, type MonthlyCurriculumContract } from "@e4s/domain";
-import { applyMonthlyLockedPlanFields, monthlyAnswerTranslationRule, dropSupportTermVocabularyCards, generateMonthlyDay, generateMonthlyDayWithAi, generateMonthlyReviewWithAi, keepMeaningfulVocabularyRelations, monthlyCheckpointKey, monthlyDailyTeachingContract, monthlyLearnerLanguageContract, monthlyReviewExerciseContract, monthlyReviewWordFormCandidates, monthlyVocabularyRelationContract } from "./monthly-day-generation.js";
-import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
+import { applyMonthlyLockedPlanFields, MONTHLY_GRAMMAR_FORMULA_EXAMPLE_RULE, monthlyAnswerTranslationRule, dropSupportTermVocabularyCards, generateMonthlyDay, generateMonthlyDayWithAi, generateMonthlyReviewWithAi, keepMeaningfulVocabularyRelations, monthlyCheckpointKey, monthlyDailyTeachingContract, monthlyLearnerLanguageContract, monthlyReviewExerciseContract, monthlyReviewWordFormCandidates, monthlyVocabularyRelationContract } from "./monthly-day-generation.js";
+import { evaluateMonthlyLessonQuality, normalizeFormula } from "./monthly-quality.js";
 
 const components = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"];
 
@@ -219,6 +219,27 @@ function monthlyExercises(resourceIds: string[]) {
   return ["listening", "reading", "writing", "word_class", "word_use", "speaking"].map((exerciseCode) => ({ exerciseCode: exerciseCode as "listening" | "reading" | "writing" | "word_class" | "word_use" | "speaking", focus: "Use the monthly resources in this exercise.", resourceIds }));
 }
 
+describe("B1+ review listening meanings and formula layout in the prompts (16/11)", () => {
+  it("asks B1+ for English definitions as listening options and A1-A2 for Vietnamese meanings", () => {
+    for (const cefr of ["B1", "B2", "C1"]) {
+      const text = monthlyReviewExerciseContract(12, 2, cefr);
+      expect(text).toContain("options = 4 short simple-English definitions of week words");
+      expect(text).not.toContain("Vietnamese meanings of week words");
+      expect(text).not.toContain("only the listening options/answers (word meanings) are Vietnamese");
+      expect(text).not.toContain("khách hàng");
+    }
+    const a1 = monthlyReviewExerciseContract(12, 2, "A1");
+    expect(a1).toContain("options = 4 Vietnamese meanings of week words");
+    expect(a1).toContain("\"options\":[\"khách hàng\"");
+  });
+
+  it("asks for one formula rule per line, and treats a line break and \";\" alike when matching the locked formula", () => {
+    expect(MONTHLY_GRAMMAR_FORMULA_EXAMPLE_RULE).toContain("one rule per line");
+    expect(MONTHLY_GRAMMAR_FORMULA_EXAMPLE_RULE).toContain("never several rules joined with \";\"");
+    expect(normalizeFormula("Subject + am/is/are + verb-ing\nSubject + present simple")).toBe(normalizeFormula("Subject + am/is/are + verb-ing; Subject + present simple"));
+  });
+});
+
 describe("exercise translations in the generation prompts (12/11)", () => {
   it("asks A1-A2 for questionTranslation/answerTranslation and never asks B1+ for them (13/11)", () => {
     expect(monthlyReviewExerciseContract(3, 1, "A1")).toContain("items: [{ id, prompt, options, answer, explanation, questionTranslation, answerTranslation, variants }]");
@@ -434,7 +455,8 @@ describe("Friday review light findings are repaired at the source (12/11)", () =
     scope.daySpecs.push({ ...scope.daySpecs[0]!, lessonNumber: 5, date: "2026-11-06", kind: "review", coreTermIds: [], expandedTermIds: [], reviewTermIds: scope.coreTerms.map((term) => term.id), reviewGrammarStepIds: ["step", "step-2"], reviewSoundIds: ["sound", "sound-2"], reviewPronunciationExampleIds: scope.sounds.flatMap((sound) => sound.examples.map((example) => example.id)) });
     const vi = cefr === "A1";
     const candidate = reviewLessonCandidate(vi);
-    const meaning = (word: string) => `nghĩa của ${word}`;
+    // A1–A2 options are Vietnamese meanings; B1+ English definitions (16/11).
+    const meaning = (word: string) => vi ? `nghĩa của ${word}` : `the meaning of the word ${word}`;
     const listeningItem = (word: string, index: number) => translated({ id: `l${index + 1}`, audioText: word, prompt: vi ? "Nghe và chọn nghĩa đúng" : "Listen and choose the meaning", options: [meaning(word), ...scope.coreTerms.filter((term) => term.word !== word).slice(0, 3).map((term) => meaning(term.word))], answer: meaning(word), explanation: vi ? `Từ này nghĩa là ${meaning(word)}.` : `The word ${word} has this meaning.` });
     const choice = (id: string, word: string) => translated({ id, prompt: vi ? `Chọn từ đúng: The ${word} is ready.` : `Choose the word: The ${word} is ready.`, options: [word, "others", "spares", "tables"], answer: word, explanation: vi ? "Vì đúng nghĩa." : "It fits." });
     const passage = `Hi team, this is a short update before the meeting with our client on Friday. The budget for next month is small, and the cost of travel is still high. The forecast shows a small profit if we keep to the plan. Please send the report by email before the deadline, and add one step for each task in the plan so the team knows what to update next week. Thanks, Minh`;

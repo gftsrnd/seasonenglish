@@ -65,7 +65,7 @@ describe("learner lesson study content", () => {
     expect(resumeMusic).toHaveBeenCalledTimes(2);
   });
 
-  it("uses the shared English learner language context for B1+ labels and guidance while keeping vocabulary meanings Vietnamese", () => {
+  it("uses the shared English learner language context for B1+ labels and guidance and shows no Vietnamese vocabulary meaning (16/11)", () => {
     const lesson = {
       id: "lesson-b1-language-context",
       title: "Giving a project update",
@@ -96,7 +96,7 @@ describe("learner lesson study content", () => {
     expect(screen.getByRole("list", { name: "Instructions" })).toHaveTextContent("Review the grammar structure, usage and example sentences.");
     expect(screen.getByRole("list", { name: "Instructions" })).toHaveTextContent("Practise the target sound and the three model words.");
     expect(screen.getByText("noun")).toBeInTheDocument();
-    expect(screen.getByText("nhà cung cấp")).toBeInTheDocument();
+    expect(screen.queryByText("nhà cung cấp")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: /2\. Practice/i }));
     expect(screen.getByRole("list", { name: "Instructions" })).toHaveTextContent("Complete 1 section: Listening.");
@@ -151,7 +151,7 @@ describe("learner lesson study content", () => {
     expect(screen.getByRole("list", { name: "Instructions" })).toHaveTextContent("Study the vocabulary, meanings and common collocations.");
     expect(screen.getByText("Use this structure to express the lesson's target meaning.")).toBeInTheDocument();
     expect(screen.getByText("Practise the target sound with the model words below.")).toBeInTheDocument();
-    expect(screen.getByText("hạn chót")).toBeInTheDocument();
+    expect(screen.queryByText("hạn chót")).not.toBeInTheDocument();
   });
 
   it("maps A1-A2 to Vietnamese, B1-C1 to English, and unknown CEFR to the safe Vietnamese fallback", () => {
@@ -171,7 +171,7 @@ describe("learner lesson study content", () => {
     ["B1", "LESSON OBJECTIVES", "hạn chót"],
     ["B2", "LESSON OBJECTIVES", "bên liên quan"],
     ["C1", "LESSON OBJECTIVES", "sự tuân thủ"]
-  ])("keeps %s vocabulary meanings Vietnamese while using the level's framing language", (cefr, objectiveHeading, meaning) => {
+  ])("%s: vocabulary meanings are Vietnamese at A1-A2 and hidden from B1 (no Vietnamese, 16/11), in the level's framing language", (cefr, objectiveHeading, meaning) => {
     const lesson = {
       id: `lesson-${cefr.toLocaleLowerCase()}-meaning`, title: "Workplace communication", dayNumber: 1, weekNumber: 1,
       weekTopic: "Communication", durationMinutes: 10, cefr,
@@ -185,7 +185,8 @@ describe("learner lesson study content", () => {
     render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
 
     expect(screen.getByRole("heading", { name: objectiveHeading })).toBeInTheDocument();
-    expect(screen.getByText(meaning)).toBeInTheDocument();
+    if (cefr === "A1" || cefr === "A2") expect(screen.getByText(meaning)).toBeInTheDocument();
+    else expect(screen.queryByText(meaning)).not.toBeInTheDocument();
   });
 
   it("hides the structure badge and language-only objectives when grammar is unavailable", () => {

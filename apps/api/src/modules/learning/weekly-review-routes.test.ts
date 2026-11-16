@@ -40,4 +40,11 @@ describe("weekly review session view", () => {
     const view = buildWeeklyReviewSessionView("lesson-1", parts, sections, first.state);
     expect(view.currentQuestion).toMatchObject({ sectionCode: "speaking", freeResponse: true, acceptsAudio: true });
   });
+
+  it("B1+: English section titles and no Vietnamese warm-up meaning (16/11)", () => {
+    const view = buildWeeklyReviewSessionView("lesson-1", parts, sections, resumeWeeklyReviewSession(null, sections), "B1");
+    expect(view.sections.map((section) => section.title)).toEqual(["Listen & recognise words", "Pronunciation, speaking & writing"]);
+    expect(view.warmup.cards).toEqual([{ word: "deadline" }]);
+    expect(buildWeeklyReviewSessionView("lesson-1", parts, sections, resumeWeeklyReviewSession(null, sections), "A2").sections[0]!.title).toBe("Nghe & nhận biết từ");
+  });
 });

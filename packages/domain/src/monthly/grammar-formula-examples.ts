@@ -205,16 +205,51 @@ function endsWithPlaceholder(pattern: string): boolean {
 }
 
 /**
- * The rule rows of a formula, as the learner reads them: one per line, " → ",
- * "|", " · ", ";", " vs ", and " / " between two "+" patterns (never inside
- * a slot such as "am/is/are" or "must have / can't have").
+ * Formula layout for generation prompts (16/11): one rule per line. Learners read each line (and each top-level
+ * ";" rule of older content) as its own row of the formula band; several rules joined with ";" on one line
+ * read as one long sentence.
+ */
+export const MONTHLY_GRAMMAR_FORMULA_LAYOUT_RULE = "FORMULA LAYOUT: write each formula with one rule per line, rules separated by a line break (\"\\n\" in the JSON string), never several rules joined with \";\" on one line (write \"Subject + am/is/are + verb-ing\\nSubject + present simple for facts\", not \"Subject + am/is/are + verb-ing; Subject + present simple for facts\"). A slot with alternatives stays on its rule's line (am/is/are, (always)).";
+
+/** "Subject + V-ing: I am working" — a top-level ": " after a "+" pattern starts the formula's own examples. */
+function hasExamplesTail(text: string): boolean {
+  const colon = topLevelIndex(text, ": ");
+  return colon > 0 && text.slice(0, colon).includes("+");
+}
+
+/**
+ * The lines a formula is shown on (16/11): one per line break and one per top-level ";" rule
+ * ("Subject + (always) + am/is/are + verb-ing for complaints; Subject + present simple for facts" → two
+ * lines). Never inside parentheses, and never inside the formula's own examples list ("Subject + V-ing: I am
+ * working; she is calling" stays one line). The learner and operator formula band and the row numbering of
+ * monthlyGrammarFormulaRows both start from these lines, so the display and the gate agree.
+ */
+export function monthlyGrammarFormulaLines(formula: string): string[] {
+  const lines: string[] = [];
+  for (const raw of formula.split(/\r?\n/u)) {
+    const text = raw.replace(/\s+/gu, " ").trim();
+    if (!text) continue;
+    const pieces: string[] = [];
+    for (const part of splitTop(text, /;\s*/uy).parts.map((piece) => piece.trim()).filter(Boolean)) {
+      const previous = pieces[pieces.length - 1];
+      // An example after "; " (no "+" pattern, no "Label:") continues the previous line's examples.
+      if (previous !== undefined && hasExamplesTail(previous) && !part.includes("+") && !/^\p{L}[\p{L}'’ -]{1,30}:\s/u.test(part)) pieces[pieces.length - 1] = `${previous}; ${part}`;
+      else pieces.push(part);
+    }
+    lines.push(...pieces);
+  }
+  return lines;
+}
+
+/**
+ * The rule rows of a formula, as the learner reads them: one per formula line (line breaks and
+ * top-level ";", see monthlyGrammarFormulaLines), " → ", "|", " · ", " vs ", and " / " between two
+ * "+" patterns (never inside a slot such as "am/is/are" or "must have / can't have").
  */
 export function monthlyGrammarFormulaRows(formula: string): string[] {
   const rows: string[] = [];
-  for (const line of formula.split(/\r?\n/u)) {
-    const text = line.replace(/\s+/gu, " ").trim();
-    if (!text) continue;
-    const coarse = splitTop(text, /\s+→\s+|\s+\|\|?\s+|\s+·\s+|;\s*|\.\s+(?=\p{Lu}[\p{L}'’ -]{2,30}:\s)/uy).parts;
+  for (const text of monthlyGrammarFormulaLines(formula)) {
+    const coarse = splitTop(text, /\s+→\s+|\s+\|\|?\s+|\s+·\s+|\.\s+(?=\p{Lu}[\p{L}'’ -]{2,30}:\s)/uy).parts;
     for (const chunk of coarse) {
       for (const side of splitTop(stripLabelAndExamples(chunk), /\s+vs\.?\s+/iuy).parts) {
         const { parts, seps } = splitTop(stripLabelAndExamples(side), /\s+\/\s+/uy);

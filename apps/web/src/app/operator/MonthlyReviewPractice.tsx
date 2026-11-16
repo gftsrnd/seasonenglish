@@ -22,20 +22,23 @@ export function MonthlyReviewPractice({ parts, english = false }: { parts: reado
   const passage = text(parts.find((part) => part.code === "reading")?.content?.passage);
   const total = SECTIONS.reduce((sum, section) => sum + itemsOf(section.code).length, 0);
   const steps = english
-    ? ["Do the 6 sections in order: " + SECTIONS.map((section) => section.title).join(" → ") + ".", "Read each question, choose or type the answer, then submit.", "A wrong answer shows a short explanation and comes back at the end of the section as a new question on the same point."]
+    ? ["Do the 6 sections in order: " + SECTIONS.map((section) => section.titleEn).join(" → ") + ".", "Read each question, choose or type the answer, then submit.", "A wrong answer shows a short explanation and comes back at the end of the section as a new question on the same point."]
     : ["Làm lần lượt 6 phần: " + SECTIONS.map((section) => section.title).join(" → ") + ".", "Đọc yêu cầu từng câu, chọn hoặc nhập câu trả lời rồi bấm Nộp bài.", "Câu sai hiện giải thích ngắn, rồi quay lại ở cuối phần bằng một câu hỏi khác cùng điểm kiến thức; phần xong khi mọi câu đã đúng một lần."];
   return <>
     <section className="card lesson-part lesson-part--instruction">
       <div className="row between"><h2>{english ? "Instructions" : "Hướng dẫn làm bài"}</h2></div>
-      <p>{english ? `This review has 6 sections (${total} items), from recognising words to speaking and writing.` : `Bài ôn gồm 6 phần (${total} câu), đi từ nhận biết từ đến tự nói và viết.`}</p>
+      <p>{english ? `This review has 6 sections (${total} questions), from recognising words to speaking and writing.` : `Bài ôn gồm 6 phần (${total} câu), đi từ nhận biết từ đến tự nói và viết.`}</p>
       <ul className="lesson-instruction-list">{steps.map((step) => <li key={step}>{step}</li>)}</ul>
     </section>
     {SECTIONS.map((section, sectionIndex) => {
       const items = itemsOf(section.code);
-      return <section className="card monthly-review-block" id={`review-section-${section.code}`} key={section.code} aria-label={section.title}>
-        <header className="monthly-review-block-header"><h2>{sectionIndex + 1}. {section.title}</h2><span className="badge">{items.length} {english ? "items" : "câu"}</span></header>
+      // B1+ previews show what the learner reads: English section names.
+      const title = english ? section.titleEn : section.title;
+      return <section className="card monthly-review-block" id={`review-section-${section.code}`} key={section.code} aria-label={title}>
+        <header className="monthly-review-block-header"><h2>{sectionIndex + 1}. {title}</h2><span className="badge">{items.length} {english ? "questions" : "câu"}</span></header>
         {!items.length ? <p className="muted">{english ? "No items." : "Chưa có câu."}</p> : <ReviewScrollBox visible={section.code === "listening" ? 3 : 2}>{items.map((item, index) => {
-          const heading = `${english ? "Item" : "Câu"} ${index + 1}`;
+          // The question label is operator chrome (the Vận hành UI is Vietnamese): always "Câu N", never "Item N".
+          const heading = monthlyReviewQuestionLabel(index + 1, "operator");
           const variants = Array.isArray(item.variants) ? item.variants.filter((variant): variant is Item => Boolean(variant) && typeof variant === "object") : [];
           const showPassage = section.code === "reading" && index === 0 ? passage : "";
           return <section className={`card lesson-part lesson-part--${section.code} operator-practice-review monthly-review-card`} key={`${section.code}-${text(item.id) || index}`}>
@@ -43,7 +46,7 @@ export function MonthlyReviewPractice({ parts, english = false }: { parts: reado
             {text(item.audioText) ? <AudioSynthesisNotice mark={item.audioSynthesis} hasAudio={Boolean(text(item.audioUrl))} retry="học viên sẽ nghe bằng giọng đọc của trình duyệt; sinh lại bài ôn để thử lại" /> : null}
             {text(item.explanation) ? <p className="small monthly-review-explanation"><strong>{english ? "Explanation" : "Giải thích"}:</strong> {text(item.explanation)}</p> : null}
             {variants.length ? <details className="monthly-review-variant"><summary className="small">{english ? "Question asked again if the learner gets this wrong (same point, new context)" : "Câu hỏi lại khi học viên làm sai (cùng điểm kiến thức, ngữ cảnh khác)"}</summary>{variants.map((variant, variantIndex) => <div className="monthly-review-variant-card" key={text(variant.id) || variantIndex}>
-              <OperatorPracticeReview sectionNumber={sectionIndex + 1} headingText={`${heading} · ${english ? "asked again" : "hỏi lại"}`} part={asPracticePart(section.code, heading, variant, "", english)} />
+              <OperatorPracticeReview sectionNumber={sectionIndex + 1} headingText={`${heading} · hỏi lại`} part={asPracticePart(section.code, heading, variant, "", english)} />
               {text(variant.explanation) ? <p className="small monthly-review-explanation"><strong>{english ? "Explanation" : "Giải thích"}:</strong> {text(variant.explanation)}</p> : null}
             </div>)}</details> : null}
           </section>;
@@ -76,6 +79,14 @@ function asPracticePart(sectionCode: string, title: string, item: Item, passage:
       ...(code === "reading" ? { text: passage || text(item.passage) } : {})
     }
   } as unknown as OperatorLessonPart;
+}
+
+/**
+ * A review question's label: the operator (Vietnamese) UI always says "Câu N"; learners read "Question N"
+ * from B1 and "Câu N" at A1–A2. Never "Item N".
+ */
+export function monthlyReviewQuestionLabel(number: number, audience: "operator" | { cefr: string }): string {
+  return audience !== "operator" && !["A1", "A2"].includes(audience.cefr) ? `Question ${number}` : `Câu ${number}`;
 }
 
 function text(value: unknown): string { return typeof value === "string" ? value.trim() : ""; }

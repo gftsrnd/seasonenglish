@@ -25,6 +25,12 @@ const choiceFields = {
 };
 /** 13/11: the translations are A1–A2 only, so the shared schema no longer requires them (the A1–A2 quality gate does). */
 const choiceRequired = ["prompt", "options", "answer", "explanation"];
+/** Listen-and-choose-the-meaning: A1–A2 read Vietnamese meanings, B1+ English definitions (B1+ learners see no Vietnamese). */
+const listeningChoiceFields = {
+  ...choiceFields,
+  options: { type: "array", minItems: 4, maxItems: 4, items: { type: "string" }, description: "exactly 4 different meanings of week words, similar length: A1-A2 short Vietnamese meanings; B1 and above short simple-English definitions, never Vietnamese" },
+  answer: str("the meaning of the spoken word, copied exactly from options (B1 and above: an English definition, never Vietnamese)")
+};
 
 function choiceVariantJsonSchema(listening: boolean) {
   return {
@@ -33,7 +39,7 @@ function choiceVariantJsonSchema(listening: boolean) {
     properties: {
       id: str(),
       ...(listening ? { audioText: str("the SAME core word as the item: the retry tests the word the learner missed") } : {}),
-      ...choiceFields,
+      ...(listening ? listeningChoiceFields : choiceFields),
       passage: str("reading only: the same passage as the item")
     }
   };
@@ -46,7 +52,7 @@ function choiceItemJsonSchema(listening: boolean) {
     properties: {
       id: str(),
       ...(listening ? { audioText: str("the English core word the app speaks (not shown)") } : {}),
-      ...choiceFields,
+      ...(listening ? listeningChoiceFields : choiceFields),
       variants: {
         type: "array", minItems: 1, maxItems: 1, items: choiceVariantJsonSchema(listening),
         description: "REQUIRED on every item: exactly 1 retry item testing the same point in a different context (never a copy of the item); shown when the learner answers wrong."

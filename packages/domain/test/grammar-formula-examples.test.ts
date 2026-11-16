@@ -5,6 +5,7 @@ import {
   monthlyGatedLightFindings,
   monthlyGrammarFormulaExampleIssues,
   monthlyGrammarFormulaExampleMessage,
+  monthlyGrammarFormulaLines,
   monthlyGrammarFormulaRows
 } from "../src/monthly/grammar-formula-examples.js";
 
@@ -93,5 +94,24 @@ describe("advisory light findings", () => {
   it("are left out of the counted light findings", () => {
     const light = [{ code: "MONTHLY_SYNONYM_OR_ANTONYM_MISSING" }, { code: MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH }];
     expect(monthlyGatedLightFindings(light)).toEqual([{ code: "MONTHLY_SYNONYM_OR_ANTONYM_MISSING" }]);
+  });
+});
+
+describe("formula lines: one rule per row (16/11, B1 December)", () => {
+  const live = "Subject + (always) + am/is/are + verb-ing for complaints; Subject + present simple for facts and state verbs";
+  it("splits top-level \";\" rules and line breaks, never inside parentheses", () => {
+    expect(monthlyGrammarFormulaLines(live)).toEqual(["Subject + (always) + am/is/are + verb-ing for complaints", "Subject + present simple for facts and state verbs"]);
+    expect(monthlyGrammarFormulaLines("Subject + V-ing\nSubject + V-ed")).toEqual(["Subject + V-ing", "Subject + V-ed"]);
+    expect(monthlyGrammarFormulaLines("Subject + V (e.g. work; works)")).toEqual(["Subject + V (e.g. work; works)"]);
+    expect(monthlyGrammarFormulaLines("")).toEqual([]);
+  });
+  it("keeps a formula's own example list on its line", () => {
+    expect(monthlyGrammarFormulaLines("Subject + am/is/are + V-ing: I am working; she is calling")).toEqual(["Subject + am/is/are + V-ing: I am working; she is calling"]);
+    expect(monthlyGrammarFormulaLines("Past simple: Subject + V-ed; Past continuous: Subject + was/were + V-ing")).toEqual(["Past simple: Subject + V-ed", "Past continuous: Subject + was/were + V-ing"]);
+  });
+  it("the gate's rows start from the same lines", () => {
+    expect(monthlyGrammarFormulaRows(live)).toHaveLength(2);
+    expect(monthlyGrammarFormulaRows(live.replace("; ", "\n"))).toEqual(monthlyGrammarFormulaRows(live));
+    expect(monthlyGrammarFormulaRows("Subject + am/is/are + V-ing: I am working; she is calling")).toEqual(["Subject + am/is/are + V-ing"]);
   });
 });

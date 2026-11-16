@@ -418,7 +418,7 @@ describe("lesson detail warnings", () => {
     expect(screen.getByRole("list", { name: "Lesson objectives" })).toHaveTextContent("Explain a delivery delay.");
     expect(screen.getByRole("list", { name: "Lesson objectives" })).not.toHaveTextContent("By the end of this lesson");
     expect(screen.queryByLabelText("Nghe audio phần Mục tiêu bài học")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe từ feedback" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Listen to feedback" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Nghe audio phần Ngữ pháp")).not.toBeInTheDocument();
   });
 

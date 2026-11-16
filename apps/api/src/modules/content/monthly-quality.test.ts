@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MonthlyCurriculumContract } from "@e4s/domain";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
-import { evaluateMonthlyReviewSections } from "./monthly-review-quality.js";
+import { evaluateMonthlyReviewSections, isVietnameseReviewText, monthlyReviewVietnameseStrings } from "./monthly-review-quality.js";
 
 const requiredCodes = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"];
 
@@ -422,7 +422,7 @@ describe("Friday review gate (AI quality round 2, 11/11)", () => {
   const english = (cefr: "B1" | "C1") => {
     const plan = contract(); plan.cefr = cefr;
     const choice = (id: string, prompt: string, answer: string, others: string[]) => ({ id, prompt, options: [answer, ...others], answer, explanation: "It fits the sentence.", variants: [{ id: `${id}-v1`, prompt: `${prompt}?`, options: [answer, ...others], answer, explanation: "Same reason." }] });
-    const listening = { items: ["core-one", "core-two", "core-three"].map((word, index) => ({ ...choice(`l${index}`, "Listen and choose the meaning", ["một", "hai", "ba"][index]!, ["bốn", "năm", "sáu"]), audioText: word })) };
+    const listening = { items: ["core-one", "core-two", "core-three"].map((word, index) => ({ ...choice(`l${index}`, "Listen and choose the meaning", ["the first thing in a list", "the second thing in a list", "the third thing in a list"][index]!, ["a short written note", "a long meeting", "the last day for work"]), audioText: word })) };
     const speaking = { items: [
       { id: "s1", prompt: "Listen and choose the word", audioText: "cost", options: ["cost", "coast"], answer: "cost", explanation: "Short /ɒ/." },
       { id: "s2", prompt: "Listen and choose the word", audioText: "can", options: ["can", "cane"], answer: "can", explanation: "Short /æ/." },
@@ -434,7 +434,7 @@ describe("Friday review gate (AI quality round 2, 11/11)", () => {
   };
   const codes = (result: { severe: Array<{ code: string }> }) => result.severe.map((item) => item.code);
 
-  it("B1+: accepts English sections with Vietnamese listening meanings, rejects Vietnamese prompts (\"Nghe và chọn nghĩa đúng\" at B1, C1)", () => {
+  it("B1+: accepts English sections with English listening definitions, rejects Vietnamese prompts (\"Nghe và chọn nghĩa đúng\" at B1, C1)", () => {
     for (const cefr of ["B1", "C1"] as const) {
       const { plan, parts } = english(cefr);
       expect(evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, parts).severe).toEqual([]);
@@ -457,6 +457,22 @@ describe("Friday review gate (AI quality round 2, 11/11)", () => {
       parts.set("grammar", { content: { ...parts.get("grammar")!.content, text: "Trong khi các lập trình viên đang kiểm thử ứng dụng, nhà thiết kế cập nhật màn hình." } });
       expect(codes(evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, parts))).toContain("MONTHLY_REVIEW_INSTRUCTION_LANGUAGE");
     }
+  });
+
+  it("B1+: Vietnamese listening options and answers are rejected; the options are English definitions (16/11, B1/B2/C1 December reviews)", () => {
+    for (const cefr of ["B1", "C1"] as const) {
+      const { plan, parts } = english(cefr);
+      const listening = parts.get("listening")!.content as { items: Array<Record<string, unknown>> };
+      const vietnamese = (item: Record<string, unknown>) => ({ ...item, options: ["mục tiêu", "quyền hạn, thẩm quyền", "khách hàng", "báo cáo"], answer: "mục tiêu", explanation: "It names the goal.", variants: [{ id: `${String(item.id)}-v1`, prompt: "Listen and choose the meaning", options: ["báo cáo", "mục tiêu", "khách hàng", "hạn chót"], answer: "mục tiêu", explanation: "Same word." }] });
+      parts.set("listening", { content: { items: [vietnamese(listening.items[0]!), ...listening.items.slice(1)] } });
+      const finding = evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, parts).severe.find((item) => item.code === "MONTHLY_REVIEW_INSTRUCTION_LANGUAGE" && item.component === "listening");
+      expect(finding?.message).toContain("mục tiêu");
+      expect(finding?.message).toContain("simple-English definitions");
+    }
+    // A short meaning with no Vietnamese instruction word ("khách hàng") is still caught by its letters; "café" is English.
+    expect(isVietnameseReviewText("khách hàng")).toBe(true);
+    expect(isVietnameseReviewText("a small café near the office")).toBe(false);
+    expect(monthlyReviewVietnameseStrings({ items: [{ options: ["a person who buys a service", "khách hàng"], answer: "a person who buys a service" }] })).toEqual(["khách hàng"]);
   });
 
   it("A1-A2 reviews keep their Vietnamese prompts (the English-only check does not apply)", () => {

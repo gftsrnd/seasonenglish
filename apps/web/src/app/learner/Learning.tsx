@@ -29,10 +29,10 @@ export { normalizeLessonBlankPrompt } from "./text.js";
 import { normalizeLessonBlankPrompt } from "./text.js";
 import { grammarExplanationParagraphs, grammarFormulaLines, withoutGrammarStepLabel } from "../shared/lesson/presentation.js";
 
-export function LessonPromptText({ value }: { value: string | undefined }): ReactNode {
+export function LessonPromptText({ value, language = "vi" }: { value: string | undefined; language?: LearnerLessonLanguage }): ReactNode {
   const prompt = normalizeLessonBlankPrompt(value);
   return prompt.split(/(_{5,})/u).filter(Boolean).map((part, index) => /^_{5,}$/u.test(part)
-    ? <span className="lesson-blank-underline" role="img" aria-label="Ô trống cần điền" key={`blank-${index}`} />
+    ? <span className="lesson-blank-underline" role="img" aria-label={language === "en" ? "Blank to fill in" : "Ô trống cần điền"} key={`blank-${index}`} />
     : <span key={`text-${index}`}>{part}</span>);
 }
 
@@ -209,11 +209,19 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
     const reviewGate = view.lock.reason === "review";
     const prior = view.lock.reason === "prior" || reviewGate;
     const openDate = view.lock.opensAt ? formatLessonDate(view.lock.opensAt) : null;
-    const heading = reviewGate
+    // B1+ learners see no Vietnamese (16/11): the lock screen is English and the server's Vietnamese message is replaced.
+    const english = language === "en";
+    const englishDate = view.lock.opensAt ? formatLessonDate(view.lock.opensAt, "en") : null;
+    const heading = english
+      ? reviewGate ? `Finish ${englishReviewWeekLabel(view.lock.reviewWeekNumber)} to open this lesson` : prior ? "Catch up on the earlier lesson first" : englishDate ? `This lesson opens on ${englishDate}` : "This lesson is not open yet"
+      : reviewGate
       ? `Hoàn thành ${reviewWeekLabel(view.lock.reviewWeekNumber)} để mở bài này`
       : prior ? "Học bù bài trước đã nhé" : openDate ? `Bài này mở vào ${openDate}` : "Bài này chưa mở";
-    const blockerLabel = reviewGate ? `Làm ${reviewWeekLabel(view.lock.reviewWeekNumber)}` : view.lock.blocker ? `Học ${view.lock.blocker.label ? learnerLessonPhrase(view.lock.blocker.label) : `bài ${lessonDayLabel(view.lock.blocker.dayNumber)}`} ngay` : "";
-    return <div className="app-learner-page"><div className="card"><div className="row" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ flex: 1 }}><div className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><LockKeyhole size={16} aria-hidden="true" /> {view.lesson.teachingLabel ? learnerLessonLabel(view.lesson) : `Bài ${view.lesson.dayNumber}/${view.lock.totalLessons}`} · {prior ? "chưa mở" : "chưa đến ngày"}</div><h3>{heading}</h3><p className="small">{view.lock.message}</p><div className="row">{prior && view.lock.blocker ? <AppLink className="btn btn-primary" href={`/lesson/${view.lock.blocker.id}`} navigate={actions.navigate}>{blockerLabel}</AppLink> : <AppLink className="btn btn-primary" href="/coach" navigate={actions.navigate}>Luyện với Season</AppLink>}<AppLink className="btn" href="/home" navigate={actions.navigate}>← Về trang chủ</AppLink></div></div></div></div></div>;
+    const blockerLabel = english
+      ? reviewGate ? `Do ${englishReviewWeekLabel(view.lock.reviewWeekNumber)}` : view.lock.blocker ? `Study ${view.lock.blocker.label ? learnerLessonLabel({ dayNumber: view.lock.blocker.dayNumber, teachingLabel: view.lock.blocker.label }, true).toLocaleLowerCase("en") : `lesson ${view.lock.blocker.dayNumber}`} now` : ""
+      : reviewGate ? `Làm ${reviewWeekLabel(view.lock.reviewWeekNumber)}` : view.lock.blocker ? `Học ${view.lock.blocker.label ? learnerLessonPhrase(view.lock.blocker.label) : `bài ${lessonDayLabel(view.lock.blocker.dayNumber)}`} ngay` : "";
+    const lockMessage = english ? (prior ? "Lessons build on each other, so finish the earlier one first." : "Come back on the day it opens.") : view.lock.message;
+    return <div className="app-learner-page"><div className="card"><div className="row" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ flex: 1 }}><div className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><LockKeyhole size={16} aria-hidden="true" /> {view.lesson.teachingLabel ? learnerLessonLabel(view.lesson, english) : english ? `Lesson ${view.lesson.dayNumber}/${view.lock.totalLessons}` : `Bài ${view.lesson.dayNumber}/${view.lock.totalLessons}`} · {english ? prior ? "locked" : "not open yet" : prior ? "chưa mở" : "chưa đến ngày"}</div><h3>{heading}</h3><p className="small">{lockMessage}</p><div className="row">{prior && view.lock.blocker ? <AppLink className="btn btn-primary" href={`/lesson/${view.lock.blocker.id}`} navigate={actions.navigate}>{blockerLabel}</AppLink> : <AppLink className="btn btn-primary" href="/coach" navigate={actions.navigate}>{english ? "Practise with Season" : "Luyện với Season"}</AppLink>}<AppLink className="btn" href="/home" navigate={actions.navigate}>{english ? "← Back to home" : "← Về trang chủ"}</AppLink></div></div></div></div></div>;
   }
   if (lesson.kind === "review" && actions.getWeeklyReviewSession) {
     return <WeeklyReview key={lesson.id} title={lesson.title} cefr={lesson.cefr} actions={actions} />;
@@ -332,9 +340,9 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
   const grammarAvailable = sharedLessonGrammarAvailable(lesson.content.parts);
   return <div className="app-learner-page lesson-page" style={{ display: "grid", gap: 16, width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}>
     <div className="lesson-heading">
-      <AppLink className="lesson-back" href="/home" navigate={actions.navigate} ariaLabel="Về trang chủ" title="Về trang chủ" style={{ minWidth: 32, minHeight: 32 }}><ChevronLeft size={22} aria-hidden="true" /></AppLink>
+      <AppLink className="lesson-back" href="/home" navigate={actions.navigate} ariaLabel={language === "en" ? "Back to home" : "Về trang chủ"} title={language === "en" ? "Back to home" : "Về trang chủ"} style={{ minWidth: 32, minHeight: 32 }}><ChevronLeft size={22} aria-hidden="true" /></AppLink>
       <PageTitle
-        title={`${learnerLessonLabel(lesson)} · ${lesson.weekTopic}`}
+        title={`${learnerLessonLabel(lesson, language === "en")} · ${lesson.weekTopic}`}
         // December 2026 (#15/N5): no "CẤU TRÚC" step label above a recognition-step lesson; like 5a9fbf0,
         // the learner view shows the lesson's own title without roadmap step labels.
         detail={grammarAvailable ? <span className="badge lesson-structure-chip"><span data-lesson-structure>{lesson.title}</span></span> : undefined}
@@ -500,6 +508,9 @@ function partHasVisibleOutcome(evidence: PartEvidence | undefined): boolean {
  * (e.g. "Đã gửi để kiểm tra" above a long server note). Submitted Speaking/Writing get a
  * plain "waiting to be marked" line; an appeal shows its own label; otherwise the feedback wins.
  */
+/** Letters only Vietnamese uses (no plain é/à, so "café" stays English). */
+const VIETNAMESE_ONLY_LETTERS = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/iu;
+
 function partStatusNotice(part: LessonPart, evidence: PartEvidence | undefined, copy: LearnerLessonCopy): { tone: "ok" | "info" | "warn"; text: string } | null {
   const status = evidence?.status;
   if (status === "submitted") {
@@ -511,6 +522,9 @@ function partStatusNotice(part: LessonPart, evidence: PartEvidence | undefined, 
   const feedback = evidence?.feedback?.trim();
   // The server's stock retry note ("Chưa đúng… còn 1/một lượt thử…") is shown in the lesson language at every level.
   if (status === "wrong_retry" && (!feedback || /^chưa đúng.*lượt thử/iu.test(feedback))) return { tone, text: copy.status.retryNotice };
+  // B1+ learners see no Vietnamese (16/11): the server's stock notes ("Bạn đã hoàn thành phần này", "hết lượt thử")
+  // give way to the English outcome label.
+  if (feedback && copy === learnerLessonCopy.en && VIETNAMESE_ONLY_LETTERS.test(feedback.normalize("NFC"))) return { tone, text: partOutcomeLabel(status, copy) };
   if (feedback) return { tone, text: feedback };
   return partHasVisibleOutcome(evidence) ? { tone, text: partOutcomeLabel(status, copy) } : null;
 }
@@ -537,6 +551,10 @@ function partOutcomeLabel(status: PartEvidence["status"], copy: LearnerLessonCop
   }
 }
 
+function englishReviewWeekLabel(weekNumber: number | undefined): string {
+  return weekNumber ? `the week ${weekNumber} review` : "last week's review";
+}
+
 function reviewWeekLabel(weekNumber: number | undefined): string {
   return weekNumber ? `bài ôn tuần ${weekNumber}` : "bài ôn tuần trước";
 }
@@ -545,11 +563,12 @@ function lessonDayLabel(dayNumber: number): string {
   return (["T2", "T3", "T4", "T5", "T6", "T7", "CN"] as const)[dayNumber - 1] ?? `Bài ${dayNumber}`;
 }
 
-function formatLessonDate(value: string): string {
+function formatLessonDate(value: string, language: LearnerLessonLanguage = "vi"): string {
   const parsed = new Date(`${value.slice(0, 10)}T00:00:00Z`);
   if (!Number.isFinite(parsed.getTime())) return value.slice(0, 10);
-  const weekday = new Intl.DateTimeFormat("vi-VN", { weekday: "long", timeZone: "UTC" }).format(parsed);
-  const date = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }).format(parsed);
+  const locale = language === "en" ? "en-GB" : "vi-VN";
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" }).format(parsed);
+  const date = new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }).format(parsed);
   return `${weekday} ${date}`;
 }
 
@@ -608,7 +627,7 @@ function LessonAudioControl({ source, speak, copy, language, label = "Listening"
   const [attempt, setAttempt] = useState(0);
   if (!source.src && !source.text) return <Notice tone="warn">{copy.errors.noAudio}</Notice>;
   if (source.src) return <div className="stack" aria-label={label}>
-    <ExclusiveLessonAudio key={`${source.src}-${attempt}`} src={source.src} label={`Nghe audio phần ${label.replace(/^Nghe phần\s+/u, "")}`} style={{ maxWidth: "100%", width: "100%" }} onError={() => setFailed(true)} />
+    <ExclusiveLessonAudio key={`${source.src}-${attempt}`} src={source.src} label={language === "en" ? `Listen to the ${label} audio` : `Nghe audio phần ${label.replace(/^Nghe phần\s+/u, "")}`} style={{ maxWidth: "100%", width: "100%" }} onError={() => setFailed(true)} />
     {failed ? <><Notice tone="warn">{copy.errors.audioFailed}</Notice><button className="btn-sm btn-ghost" type="button" style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }} onClick={() => { setFailed(false); setAttempt((value) => value + 1); }}><RotateCcw size={16} aria-hidden="true" /> {copy.notices.retryAudio}</button></> : null}
   </div>;
   return <button className="btn-sm btn-ghost vocabulary-card-sound lesson-audio-primary lesson-listening-audio-button" type="button" aria-label={`${language === "en" ? "Listen to" : "Nghe nội dung phần"} ${label}`} onClick={() => speak(source.text!, "en-US", { rate: 0.85 })}><Volume2 size={16} aria-hidden="true" /> {language === "en" ? "Listen" : "Nghe nội dung"}</button>;
@@ -848,7 +867,7 @@ export function SharedLessonPartContent({
   return <>
     {part.code === "grammar" || part.code === "pronunciation" ? null : <div className="row between"><h2 className={part.code === "vocabulary" ? "lesson-vocabulary-heading" : undefined}>{part.code === "objective" ? copy.objectiveHeading : part.code === "instruction" ? copy.instructionHeading : part.code === "vocabulary" ? copy.vocabularyHeading : `${sectionNumber}. ${partHeading(part, language)}`}</h2></div>}
     {part.code === "objective" && objectiveItems.length ? <><p className="lesson-objective-lead">{learnerObjectiveLead(cefr)}</p><ul className="lesson-objective-list" aria-label={copy.objectiveAria}>{objectiveItems.map((text, index) => <li key={`${index}-${text}`}>{learnerFacingObjectiveBody(text)}</li>)}</ul></> : content.text && part.code !== "grammar" && part.code !== "pronunciation" ? <p className={part.code === "objective" ? "lesson-objective-text" : part.code === "reading" ? "lesson-reading-passage" : undefined}>{part.code === "objective" ? learnerFacingObjective(conciseLessonObjective(content.text), cefr) : content.text}</p> : null}
-    {learnerPrompt && part.code !== "speaking" ? <p><LessonPromptText value={learnerPrompt} /></p> : null}
+    {learnerPrompt && part.code !== "speaking" ? <p><LessonPromptText value={learnerPrompt} language={language} /></p> : null}
     {guidanceSteps.length ? <ul className="lesson-instruction-list" aria-label={copy.instructionAria}>{guidanceSteps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ul> : null}
     {audioSource ? <LessonAudioControl source={audioSource} speak={speak} copy={copy} language={language} /> : null}
     {part.code === "grammar" && readGrammarSteps(content).length >= 2 ? <div className="lesson-study-block"><div className="lesson-study-panel-header"><h2>{copy.grammarHeading}</h2></div>{grammarName ? <p className="lesson-grammar-name"><strong>{grammarName}</strong></p> : null}<div className="lesson-grammar-steps">{readGrammarSteps(content).map((step, stepIndex) => { const matcher = grammarExampleMatcher(grammarFormulaLines(step.formula)); return <section className="lesson-grammar-step" key={`${stepIndex}-${step.formula}`}><GrammarExplanation paragraphs={grammarExplanationParagraphs(stepIndex === 0 ? grammarGoal : undefined, step.text ? grammarCopy(grammarUsageCopy(step.text, language)) : undefined)} language={language} /><GrammarFormula formula={step.formula} language={language} names={grammarCompareNames} />{step.examples.length ? <div className="lesson-example-list" aria-label={language === "en" ? "Grammar examples" : "Câu ví dụ ngữ pháp"}>{step.examples.map((example, index) => { const text = conciseGrammarExample(example); const pair = grammarExamplePair(text); const spoken = sanitizeGrammarSpeechText(pair?.right ?? text); return <GrammarExampleButton key={example} text={text} display={<GrammarExampleDisplay text={text} pair={pair} matcher={matcher} marks={step.marks[index]} cefr={cefr} />} spoken={spoken} translation={language === "en" ? undefined : step.translations[index]} listenLabel={language === "en" ? "Listen to example" : "Nghe câu ví dụ"} onPlay={() => playLessonText(spoken, undefined, speak)} />; })}</div> : null}</section>; })}</div></div> : part.code === "grammar" && content.formula ? <div className="lesson-study-block"><div className="lesson-study-panel-header"><h2>{copy.grammarHeading}</h2></div>{grammarName ? <p className="lesson-grammar-name"><strong>{grammarName}</strong></p> : null}<div className="lesson-grammar-copy">{grammarRows(content.formula, content.usage || content.text, language).map((row, rowIndex) => <div className="lesson-grammar-row" key={`${rowIndex}-${row.formula}`}><GrammarExplanation paragraphs={grammarExplanationParagraphs(rowIndex === 0 ? grammarGoal : undefined, row.explanation ? grammarCopy(row.explanation) : undefined)} language={language} /><div className="lesson-grammar-formula-row"><GrammarFormula formula={row.formula} language={language} names={grammarCompareNames} />{rowIndex === 0 ? <LessonAudioAssetButton audioSrc={content.audioUrl} label={language === "en" ? "Listen to grammar example" : "Nghe mẫu ngữ pháp"} title={language === "en" ? "Listen to grammar structure" : "Nghe cấu trúc ngữ pháp"} className="lesson-grammar-audio-icon" speak={speak} /> : null}</div></div>)}</div>{grammarExamples.length ? <div className="lesson-example-list" aria-label={language === "en" ? "Grammar examples" : "Câu ví dụ ngữ pháp"}>{grammarExamples.map((example, index) => { const text = conciseGrammarExample(example); const pair = grammarExamplePair(text); const spoken = sanitizeGrammarSpeechText(pair?.right ?? text); return <GrammarExampleButton key={example} text={text} display={<GrammarExampleDisplay text={text} pair={pair} matcher={grammarMatcher} marks={grammarExampleMarkWords(part.content.exampleMarks, index)} cefr={cefr} />} spoken={spoken} translation={language === "en" ? undefined : grammarExampleTranslations[index]} listenLabel={language === "en" ? "Listen to example" : "Nghe câu ví dụ"} onPlay={() => playLessonText(spoken, pair ? undefined : content.exampleAudioUrls?.[index], speak)} />; })}</div> : null}</div> : null}
@@ -860,7 +879,7 @@ export function SharedLessonPartContent({
       ? <section className="lesson-vocabulary-group" key={`group-${block.umbrella.word}`}><h3 className="lesson-vocabulary-group-heading">{language === "en" ? "UMBRELLA WORD" : "TỪ BAO TRÙM"} {block.umbrella.word}</h3><div className="lesson-vocabulary-group-items">{block.items.map((item) => <VocabularyCard key={item.word} cefr={cefr} language={language} item={item} itemIndex={words.indexOf(item)} speak={speak} openModal={openVocabularyModal} resolveImage={resolveVocabularyImage} hideUmbrella />)}</div></section>
       : <VocabularyCard key={block.item.word} cefr={cefr} language={language} item={block.item} itemIndex={words.indexOf(block.item)} speak={speak} openModal={openVocabularyModal} resolveImage={resolveVocabularyImage} />
     )}</div> : null}
-    {part.code !== "vocabulary" && part.code !== "objective" ? (content.items as LessonVocabularyItem[] | undefined)?.filter((item) => typeof item?.word === "string" && Boolean(item.word.trim())).map((item) => <article className="word-card" key={item.word}><h3>{item.word}</h3><span className="ipa">{item.pronunciation}</span><p>{item.meaning}</p>{item.examples?.map((example) => <small key={example}>{example}</small>)}</article>) : null}
+    {part.code !== "vocabulary" && part.code !== "objective" ? (content.items as LessonVocabularyItem[] | undefined)?.filter((item) => typeof item?.word === "string" && Boolean(item.word.trim())).map((item) => <article className="word-card" key={item.word}><h3>{item.word}</h3><span className="ipa">{item.pronunciation}</span>{language === "vi" ? <p>{item.meaning}</p> : null}{item.examples?.map((example) => <small key={example}>{example}</small>)}</article>) : null}
     {content.examples?.length && part.code !== "grammar" ? <ul>{content.examples.map((example) => <li key={example}>{example}</li>)}</ul> : null}
   </>;
 }

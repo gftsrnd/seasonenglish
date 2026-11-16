@@ -61,7 +61,7 @@ export function WeeklyReview({ title, cefr, actions }: { title: string; cefr: Ce
   };
 
   const header = <div className="row" style={{ gap: 8, alignItems: "center" }}>
-    <AppLink className="lesson-back" href="/home" navigate={actions.navigate} ariaLabel="Về trang chủ" title="Về trang chủ"><ChevronLeft size={22} aria-hidden="true" /></AppLink>
+    <AppLink className="lesson-back" href="/home" navigate={actions.navigate} ariaLabel={english ? "Back to home" : "Về trang chủ"} title={english ? "Back to home" : "Về trang chủ"}><ChevronLeft size={22} aria-hidden="true" /></AppLink>
     <div><div className="eyebrow">{english ? "Friday review" : "Bài ôn thứ Sáu"}</div><h2 style={{ margin: 0 }}>{title}</h2></div>
   </div>;
 
@@ -78,7 +78,7 @@ export function WeeklyReview({ title, cefr, actions }: { title: string; cefr: Ce
         <div className="eyebrow">{english ? "Part 0 · optional, not graded" : "Phần 0 · tùy chọn, không chấm"}</div>
         <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
           {session.warmup.cards.map((card, index) => <button type="button" className="card flat" key={`${card.word}-${index}`} aria-pressed={flipped.has(index)} onClick={() => setFlipped((current) => { const next = new Set(current); if (next.has(index)) next.delete(index); else next.add(index); return next; })}>
-            {flipped.has(index) ? <><strong>{card.word}</strong>{card.pronunciation ? ` ${card.pronunciation}` : ""}</> : <>{card.meaning ?? "?"}</>}
+            {flipped.has(index) ? <><strong>{card.word}</strong>{card.pronunciation ? ` ${card.pronunciation}` : ""}</> : <>{card.meaning ?? (english ? card.word : "?")}</>}
           </button>)}
         </div>
         <div className="row">

@@ -5,7 +5,7 @@ import { createRepositories } from "@e4s/database";
 import {
   answerWeeklyReviewItem, currentWeeklyReviewSection, isWeeklyReviewComplete, resumeWeeklyReviewSession,
   setWeeklyReviewWarmup, variantFor, weeklyReviewSectionsFromParts, weeklyReviewWarmupCards,
-  WEEKLY_REVIEW_SECTION_TITLES, type WeeklyReviewSectionDefinition, type WeeklyReviewSessionState
+  weeklyReviewSectionTitle, type WeeklyReviewSectionDefinition, type WeeklyReviewSessionState
 } from "@e4s/domain/monthly";
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import type { Pool } from "pg";
@@ -25,7 +25,9 @@ export function buildWeeklyReviewSessionView(
   lessonId: string,
   parts: readonly LessonPart[],
   sections: readonly WeeklyReviewSectionDefinition[],
-  state: WeeklyReviewSessionState
+  state: WeeklyReviewSessionState,
+  /** The lesson's level: B1+ section titles are English. */
+  cefr?: CefrLevel | string | null
 ): WeeklyReviewSessionView {
   const current = currentWeeklyReviewSection(state);
   const head = current?.queue[0];
@@ -33,12 +35,12 @@ export function buildWeeklyReviewSessionView(
   const variant = item && head ? variantFor(item, head.variant) : undefined;
   return {
     lessonId,
-    warmup: { status: state.warmup, cards: weeklyReviewWarmupCards(parts) },
+    warmup: { status: state.warmup, cards: weeklyReviewWarmupCards(parts, cefr) },
     sections: state.sections.map((section) => {
       const total = sections.find((candidate) => candidate.code === section.code)?.items.length ?? 0;
       return {
         code: section.code,
-        title: WEEKLY_REVIEW_SECTION_TITLES[section.code],
+        title: weeklyReviewSectionTitle(section.code, cefr),
         totalItems: total,
         correctItems: section.correctItemIds.length,
         completed: section.queue.length === 0
@@ -92,7 +94,7 @@ export function registerWeeklyReviewRoutes(app: FastifyInstance, pool: Pool, lea
     if (!params.success) return reply.code(400).send({ code: "INVALID_LESSON_ID" });
     const loaded = await load(request.e4sSession!.user.id, params.data.lessonId);
     if ("error" in loaded) return reply.code(loaded.error.status).send(loaded.error.body);
-    return buildWeeklyReviewSessionView(loaded.lesson.id, loaded.lesson.content.parts, loaded.sections, loaded.state);
+    return buildWeeklyReviewSessionView(loaded.lesson.id, loaded.lesson.content.parts, loaded.sections, loaded.state, loaded.lesson.cefr);
   });
 
   app.post("/api/v1/lessons/:lessonId/review-session/warmup", { preHandler: learnerOnly }, async (request, reply) => {
@@ -104,7 +106,7 @@ export function registerWeeklyReviewRoutes(app: FastifyInstance, pool: Pool, lea
     if ("error" in loaded) return reply.code(loaded.error.status).send(loaded.error.body);
     const state = setWeeklyReviewWarmup(loaded.state, body.data.status);
     await repositories.learning.saveWeeklyReviewState({ learnerId, lessonId: loaded.lesson.id, state, completed: isWeeklyReviewComplete(state) });
-    return buildWeeklyReviewSessionView(loaded.lesson.id, loaded.lesson.content.parts, loaded.sections, state);
+    return buildWeeklyReviewSessionView(loaded.lesson.id, loaded.lesson.content.parts, loaded.sections, state, loaded.lesson.cefr);
   });
 
   app.post("/api/v1/lessons/:lessonId/review-session/answers", { preHandler: learnerOnly }, async (request, reply) => {
@@ -128,7 +130,7 @@ export function registerWeeklyReviewRoutes(app: FastifyInstance, pool: Pool, lea
       cefr: loaded.lesson.cefr as CefrLevel
     });
     if (!outcome.ok) {
-      return reply.code(409).send({ code: outcome.code, session: buildWeeklyReviewSessionView(loaded.lesson.id, loaded.lesson.content.parts, loaded.sections, loaded.state) });
+      return reply.code(409).send({ code: outcome.code, session: buildWeeklyReviewSessionView(loaded.lesson.id, loaded.lesson.content.parts, loaded.sections, loaded.state, loaded.lesson.cefr) });
     }
     const completed = isWeeklyReviewComplete(outcome.state);
     await repositories.learning.saveWeeklyReviewState({ learnerId, lessonId: loaded.lesson.id, state: outcome.state, completed });
@@ -137,7 +139,7 @@ export function registerWeeklyReviewRoutes(app: FastifyInstance, pool: Pool, lea
       feedback: outcome.feedback,
       willRetry: outcome.willRetry,
       ...(outcome.translation ? { translation: outcome.translation } : {}),
-      session: buildWeeklyReviewSessionView(loaded.lesson.id, loaded.lesson.content.parts, loaded.sections, outcome.state)
+      session: buildWeeklyReviewSessionView(loaded.lesson.id, loaded.lesson.content.parts, loaded.sections, outcome.state, loaded.lesson.cefr)
     };
     return result;
   });

@@ -1,12 +1,16 @@
 import { ChevronRight } from "lucide-react";
 import { useEffect, useId, useRef, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type CSSProperties, type HTMLAttributes, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
-export function learnerLessonLabel(lesson: { dayNumber: number; newLessonNumber?: number; teachingLabel?: string; kind?: "new" | "review" }) {
-  if (lesson.kind === "review" || /^Ôn (tuần|tập)/u.test(lesson.teachingLabel ?? "")) {
-    return /^Ôn tuần \d+$/u.test(lesson.teachingLabel ?? "") ? lesson.teachingLabel! : "Ôn tập";
+/** "Bài 5" / "Ôn tuần 2" at A1–A2; `english` (B1+ learners, who see no Vietnamese) gives "Lesson 5" / "Week 2 review". */
+export function learnerLessonLabel(lesson: { dayNumber: number; newLessonNumber?: number; teachingLabel?: string; kind?: "new" | "review" }, english = false) {
+  if (lesson.kind === "review" || /^(?:Ôn (?:tuần|tập)|Week \d+ review|Weekly review)/u.test(lesson.teachingLabel ?? "")) {
+    const week = /^(?:Ôn tuần (\d+)|Week (\d+) review)$/u.exec(lesson.teachingLabel ?? "");
+    const number = week?.[1] ?? week?.[2];
+    if (english) return number ? `Week ${number} review` : "Review";
+    return number ? `Ôn tuần ${number}` : "Ôn tập";
   }
-  const legacyOrdinal = /^(?:N|Bài )(\d+)/u.exec(lesson.teachingLabel ?? "")?.[1];
-  return `Bài ${lesson.newLessonNumber ?? legacyOrdinal ?? lesson.dayNumber}`;
+  const legacyOrdinal = /^(?:N|Bài |Lesson )(\d+)/u.exec(lesson.teachingLabel ?? "")?.[1];
+  return `${english ? "Lesson" : "Bài"} ${lesson.newLessonNumber ?? legacyOrdinal ?? lesson.dayNumber}`;
 }
 
 /** In-sentence form of a lesson label: "Bài 5" -> "bài 5", "Ôn tuần 1" -> "bài ôn tuần 1". */

@@ -178,12 +178,14 @@ describe("review exercise output shape", () => {
   });
 });
 
-describe("B1+ review listening explanations (B1 N15)", () => {
-  it("may quote the item's Vietnamese meaning but not other Vietnamese prose", () => {
+describe("B1+ review listening meanings (B1 N15; 16/11 English definitions)", () => {
+  it("accepts English definitions and rejects Vietnamese meanings in options, answers and explanations", () => {
     const contract = plan("B1");
-    const item = (explanation: string) => ({ id: "l1", prompt: "Listen and choose the meaning", audioText: "review", options: ["xem lại", "hạn chót", "đồng ý", "tốc độ"], answer: "xem lại", explanation, variants: [{ id: "l1-v1", prompt: "Listen and choose the meaning", audioText: "review", options: ["xem lại", "đồng ý", "hạn chót", "tốc độ"], answer: "xem lại", explanation: "Review means xem lại." }] });
-    const findings = (explanation: string) => evaluateMonthlyReviewSections(contract, contract.daySpecs[0]!, 5, new Map([["listening", { content: { items: [item(explanation)] } }]])).severe.filter((finding) => finding.code === "MONTHLY_REVIEW_INSTRUCTION_LANGUAGE");
-    expect(findings("Review means xem lại.")).toEqual([]);
+    const english = ["look at something again to check it", "the last day to finish a task", "say yes to an idea", "how fast something moves"];
+    const item = (explanation: string, options = english) => ({ id: "l1", prompt: "Listen and choose the meaning", audioText: "review", options, answer: options[0]!, explanation, variants: [{ id: "l1-v1", prompt: "Listen and choose the meaning", audioText: "review", options: [options[0]!, options[2]!, options[1]!, options[3]!], answer: options[0]!, explanation: "Review means to look at something again." }] });
+    const findings = (explanation: string, options?: string[]) => evaluateMonthlyReviewSections(contract, contract.daySpecs[0]!, 5, new Map([["listening", { content: { items: [item(explanation, options)] } }]])).severe.filter((finding) => finding.code === "MONTHLY_REVIEW_INSTRUCTION_LANGUAGE");
+    expect(findings("Review means to look at something again to check it.")).toEqual([]);
+    expect(findings("Review means xem lại.", ["xem lại", "hạn chót", "đồng ý", "tốc độ"])).toHaveLength(1);
     expect(findings("Từ này nghĩa là xem lại công việc.")).toHaveLength(1);
   });
 });

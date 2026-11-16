@@ -32,7 +32,7 @@ import type {
 import { Check, Mic, Square, Volume2 } from "lucide-react";
 import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } from "../shared/lesson/VocabularyCard.js";
 import { vocabularyPresentationBlocks } from "../shared/lesson/vocabulary-groups.js";
-import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead, learnerObjectiveStatements } from "../shared/lesson/presentation.js";
+import { conciseGrammarExample, conciseLessonObjective, grammarFormulaLines, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead, learnerObjectiveStatements } from "../shared/lesson/presentation.js";
 import { lessonInstructionSteps } from "../shared/lesson/instructions.js";
 import { formatPercent, formatScoreOutOf } from "../shared/format-score.js";
 import { learnerLessonLanguageForCefr, lessonCopyForCefr, type LearnerLessonLanguage } from "../shared/lesson/language.js";
@@ -508,9 +508,11 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
   }
   if (code === "grammar") {
     const formula = text("formula", "theory") || "—";
+    // One rule per row, as the learner band shows it (line breaks and top-level ";" rules).
+    const formulaLines = grammarFormulaLines(formula);
     const examples = strings("examples").slice(0, 3);
     const exampleAudioUrls = strings("exampleAudioUrls");
-    return <div className="operator-study-block"><div className="lesson-study-panel-header"><h2>{copy.grammarHeading}</h2></div><div className="lesson-grammar-copy"><div className="lesson-grammar-formula-row"><p className="lesson-study-focus"><strong>{formula}</strong></p><OperatorAssetAudioButton audioSrc={text("audioUrl")} label={language === "en" ? "Listen to the grammar model" : "Nghe mẫu ngữ pháp"} /></div>{text("usage") ? <p className="lesson-study-explanation">{grammarUsageCopy(text("usage")!)}</p> : null}</div>{examples.length ? <div className="lesson-example-list" aria-label={language === "en" ? "Grammar examples" : "Câu ví dụ ngữ pháp"}>{examples.map((example, index) => { const spoken = sanitizeOperatorGrammarSpeechText(conciseGrammarExample(example)); return <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound operator-audio-button" type="button" aria-label={language === "en" ? `Listen to example: ${spoken}` : `Nghe câu ví dụ: ${spoken}`} onClick={() => playOperatorWord(spoken, exampleAudioUrls[index])} key={`${example}-${index}`}><Volume2 size={14} aria-hidden="true" />{conciseGrammarExample(example)}</button>; })}</div> : null}</div>;
+    return <div className="operator-study-block"><div className="lesson-study-panel-header"><h2>{copy.grammarHeading}</h2></div><div className="lesson-grammar-copy"><div className="lesson-grammar-formula-row"><p className="lesson-study-focus"><strong>{formulaLines.length > 1 ? formulaLines.map((line, index) => <span className="lesson-grammar-formula-line" style={{ display: "block" }} key={`${index}-${line}`}>{line}</span>) : formula}</strong></p><OperatorAssetAudioButton audioSrc={text("audioUrl")} label={language === "en" ? "Listen to the grammar model" : "Nghe mẫu ngữ pháp"} /></div>{text("usage") ? <p className="lesson-study-explanation">{grammarUsageCopy(text("usage")!)}</p> : null}</div>{examples.length ? <div className="lesson-example-list" aria-label={language === "en" ? "Grammar examples" : "Câu ví dụ ngữ pháp"}>{examples.map((example, index) => { const spoken = sanitizeOperatorGrammarSpeechText(conciseGrammarExample(example)); return <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound operator-audio-button" type="button" aria-label={language === "en" ? `Listen to example: ${spoken}` : `Nghe câu ví dụ: ${spoken}`} onClick={() => playOperatorWord(spoken, exampleAudioUrls[index])} key={`${example}-${index}`}><Volume2 size={14} aria-hidden="true" />{conciseGrammarExample(example)}</button>; })}</div> : null}</div>;
   }
   if (code === "pronunciation") {
     const focus = text("focus") || "—";

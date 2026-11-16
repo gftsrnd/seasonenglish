@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { LessonPart } from "@e4s/contracts";
 import {
   answerWeeklyReviewItem, currentWeeklyReviewSection, gradeWeeklyReviewAnswer, isWeeklyReviewComplete,
-  resumeWeeklyReviewSession, setWeeklyReviewWarmup, weeklyReviewSectionsFromParts, weeklyReviewWarmupCards,
+  resumeWeeklyReviewSession, setWeeklyReviewWarmup, weeklyReviewSectionsFromParts, weeklyReviewSectionTitle, weeklyReviewWarmupCards,
   type WeeklyReviewSessionState
 } from "../src/monthly/weekly-review-session.js";
 
@@ -112,5 +112,19 @@ describe("weekly review session", () => {
     expect(gradeWeeklyReviewAnswer(variant, { answer: "I check the budget." })).toBe(false);
     expect(gradeWeeklyReviewAnswer(variant, { answer: "budget deadline is tomorrow and we has no money" })).toBe(true);
     expect(gradeWeeklyReviewAnswer({ id: "a", prompt: "Read aloud", acceptsAudio: true }, { artifactKey: "audio/1" })).toBe(true);
+  });
+});
+
+describe("B1+ review language (16/11)", () => {
+  it("names the sections in English from B1 and in Vietnamese at A1-A2", () => {
+    const codes = ["listening", "word_use", "word_class", "grammar", "reading", "speaking"] as const;
+    expect(codes.map((code) => weeklyReviewSectionTitle(code, "B1"))).toEqual(["Listen & recognise words", "Word use", "Word form", "Grammar", "Listening & reading", "Pronunciation, speaking & writing"]);
+    expect(codes.map((code) => weeklyReviewSectionTitle(code, "A2"))).toEqual(["Nghe & nhận biết từ", "Word use", "Word form", "Ngữ pháp", "Nghe – Đọc hiểu", "Phát âm & Nói – Viết"]);
+    for (const cefr of ["B1", "B2", "C1"]) for (const code of codes) expect(weeklyReviewSectionTitle(code, cefr)).not.toMatch(/[ăâđêôơưàáảãạầấậèéẹềếệìíịòóọồốộờớợùúụừứựỳýỵ]/iu);
+  });
+  it("warm-up cards carry no Vietnamese meaning from B1", () => {
+    const parts = [{ code: "vocabulary", title: "Vocabulary", content: { items: [{ word: "deadline", meaning: "hạn chót" }] } }] as unknown as LessonPart[];
+    expect(weeklyReviewWarmupCards(parts, "B1")).toEqual([{ word: "deadline" }]);
+    expect(weeklyReviewWarmupCards(parts, "A1")).toEqual([{ word: "deadline", meaning: "hạn chót" }]);
   });
 });

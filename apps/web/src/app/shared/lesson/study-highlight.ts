@@ -1,5 +1,5 @@
 import type { CefrLevel } from "@e4s/contracts";
-import { findMonthlyGrammarCatalogTopic, monthlyGrammarCatalog, monthlyGrammarMarkSpans, monthlyReadAloudTargetSpans, readMonthlyGrammarExampleMarks, type MonthlyGrammarCatalogTopic } from "@e4s/domain/monthly";
+import { findMonthlyGrammarCatalogTopic, monthlyGrammarCatalog, monthlyGrammarFormulaLines, monthlyGrammarMarkSpans, monthlyReadAloudTargetSpans, readMonthlyGrammarExampleMarks, type MonthlyGrammarCatalogTopic } from "@e4s/domain/monthly";
 
 /**
  * Study-block highlights (grammar formula slots, the matching words of the
@@ -715,9 +715,10 @@ const cleanPiece = (value: string) => value.replace(/^[\s/;,.()]+|[\s/;,(]+$/gu,
 /**
  * Splits a formula into the boxes it shows: one neutral box normally; a green "correct" and a red "wrong" box when
  * the text marks a wrong pattern (✓/✗, "Đúng:/Sai:", "Correct:/Wrong:", "not: …"); two neutral boxes for a
- * comparison of two structures ("A vs B", "A ; B" with a "+" pattern on each side). Unsure → one box.
+ * comparison of two structures ("A vs B" with a "+" pattern on a side). Unsure → one box, one row per formula
+ * line and per top-level ";" rule.
  */
-export function grammarFormulaBoxes(formula: string, language: "vi" | "en", splitLines: (formula: string) => string[] = (value) => [value.trim()], names: readonly string[] = []): GrammarFormulaBox[] {
+export function grammarFormulaBoxes(formula: string, language: "vi" | "en", splitLines: (formula: string) => string[] = monthlyGrammarFormulaLines, names: readonly string[] = []): GrammarFormulaBox[] {
   const text = formula.replace(/\s+/gu, " ").trim();
   const single: GrammarFormulaBox[] = [{ tone: "neutral", lines: splitLines(formula) }];
   if (!text) return single;
@@ -747,9 +748,10 @@ export function grammarFormulaBoxes(formula: string, language: "vi" | "en", spli
     }
     return single;
   }
-  // (a) two structures compared.
-  const sides = text.split(/\s+vs\.?\s+|\s+;\s+/iu).map((side) => side.trim()).filter(Boolean);
-  if (sides.length === 2 && sides.every((side) => side.length >= 3) && sides.some((side) => side.includes("+")) && (/\s+vs\.?\s+/iu.test(text) || sides.every((side) => side.includes("+")))) {
+  // (a) two structures compared ("A vs B" on one formula line). Rules on several lines or separated by ";"
+  // are one rule per row of a single band (16/11), the rows the gate numbers (monthlyGrammarFormulaLines).
+  const sides = monthlyGrammarFormulaLines(formula).length === 1 ? text.split(/\s+vs\.?\s+/iu).map((side) => side.trim()).filter(Boolean) : [];
+  if (sides.length === 2 && sides.every((side) => side.length >= 3) && sides.some((side) => side.includes("+"))) {
     return sides.map((side, index) => {
       const labelled = side.match(/^([\p{L}][\p{L}'’ -]{1,30}):\s+(.+)$/u);
       const label = labelled && !labelled[1]!.includes("+") ? labelled[1]!.trim() : names.length === 2 ? names[index]!.trim() : undefined;

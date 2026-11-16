@@ -1,4 +1,5 @@
 import { containsVietnameseLearnerText } from "@e4s/domain/content";
+import { monthlyGrammarFormulaLines } from "@e4s/domain/monthly";
 import { learnerLessonLanguageForCefr, type LearnerLessonLanguage } from "./language.js";
 
 export function conciseLessonObjective(value: string | undefined): string {
@@ -114,14 +115,18 @@ export function withoutGrammarStepLabel(value: string): string {
 }
 
 /**
- * A stored formula can chain patterns with "→" ("Subject + am/is/are … → Question: … → Short answer: …").
- * Long chains read better as one pattern per line, so they are split at the arrows into at most
- * `maxLines` lines (labels such as "Question:" stay inline). Short arrows inside one pattern
+ * The lines a formula band shows. Each formula line and each top-level ";" rule is its own line (16/11, the
+ * same split as the gate's formula rows: monthlyGrammarFormulaLines; never inside parentheses or inside the
+ * formula's own examples). A line can also chain patterns with "→" ("Subject + am/is/are … → Question: … →
+ * Short answer: …"): long chains read better as one pattern per line, so they are split at the arrows into
+ * at most `maxLines` lines (labels such as "Question:" stay inline). Short arrows inside one pattern
  * ("work → working") are left alone.
  */
 export function grammarFormulaLines(formula: string, maxLines = 3): string[] {
-  const text = formula.replace(/\s+/gu, " ").trim();
-  if (!text) return [];
+  return monthlyGrammarFormulaLines(formula).flatMap((line) => arrowLines(line, maxLines));
+}
+
+function arrowLines(text: string, maxLines: number): string[] {
   let parts = text.split(/\s+→\s+/u).map((part) => part.trim()).filter(Boolean);
   // Two named patterns written as sentences ("Past simple: … (…). Past continuous: … (…)") also get a line each.
   if (parts.length < 2) parts = text.split(/(?<=[.;)])\s+(?=\p{Lu}[\p{L}'’ -]{2,30}:\s)/u).map((part) => part.replace(/\.$/u, "").trim()).filter(Boolean);

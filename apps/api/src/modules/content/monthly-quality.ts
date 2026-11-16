@@ -293,6 +293,8 @@ export function normalizeFormula(value: string): string {
     .replace(/[‘’‚‛′]/gu, "'")
     .replace(/[“”„‟″]/gu, "\"")
     .replace(/[‐-―−]/gu, "-")
+    // One rule per line (16/11) or the older "; " between rules: the same formula either way.
+    .replace(/\s*(?:\r?\n|;)\s*/gu, ";")
     .replace(/\s+/gu, " ")
     .replace(/\s*([+/()[\]|;,=])\s*/gu, "$1")
     .toLocaleLowerCase("en-US")

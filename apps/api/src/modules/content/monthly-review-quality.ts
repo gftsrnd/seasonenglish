@@ -169,28 +169,38 @@ export function evaluateMonthlyReviewSections(
     const outside = required.filter((word) => !coreWords.map(normalize).includes(word));
     if (outside.length) add("severe", "speaking", "MONTHLY_REVIEW_REQUIRED_WORD_SCOPE", `Free-response requiredWords must only list this week's core words, copied exactly (${coreWords.join(", ")}); remove: ${outside.join(", ")}`);
   }
-  // Round 2: B1+ review sections are English-only. The publication check skips review
-  // sections (they use items), so check them here; listening options/answers are the
-  // Vietnamese word meanings and stay allowed.
+  // B1+ review sections are English-only (16/11: the listening options/answers too: from B1 they are
+  // short English definitions, never Vietnamese meanings). The publication check skips review sections
+  // (they use items), so check them here, options and answers included.
   if (!["A1", "A2"].includes(contract.cefr)) {
     for (const code of MONTHLY_REVIEW_SECTIONS) {
       const content = parts.get(code)?.content;
       if (!content) continue;
-      const vietnamese = vietnameseStrings(code === "listening" ? withoutQuotedMeanings(content) : content, code === "listening");
-      if (vietnamese.length) add("severe", code, "MONTHLY_REVIEW_INSTRUCTION_LANGUAGE", `${contract.cefr} review sections must be written in English (prompts, questions, explanations, passages; only listening options/answers, the word meanings, may be Vietnamese). Rewrite in English: ${vietnamese.slice(0, 3).map((value) => `"${value.length > 80 ? `${value.slice(0, 80)}…` : value}"`).join("; ")}`);
+      const vietnamese = monthlyReviewVietnameseStrings(content);
+      if (!vietnamese.length) continue;
+      const meaning = code === "listening" ? " Listening options and answers are short simple-English definitions of the week words (e.g. client: \"a person or company that pays for your work\"), never Vietnamese meanings." : "";
+      add("severe", code, "MONTHLY_REVIEW_INSTRUCTION_LANGUAGE", `${contract.cefr} review sections must be written in English (prompts, questions, options, answers, explanations, passages).${meaning} Rewrite in English: ${vietnamese.slice(0, 3).map((value) => `"${value.length > 80 ? `${value.slice(0, 80)}…` : value}"`).join("; ")}`);
     }
   }
   return { severe, light };
 }
 
-/** Learner strings containing Vietnamese prose, at any depth; `meaningsAllowed` skips options/answer (listening meanings). */
-function vietnameseStrings(content: Content, meaningsAllowed: boolean): string[] {
+/** Max words of a B1+ listening definition option ("a person or company that pays for your work"). */
+export const MONTHLY_REVIEW_DEFINITION_MAX_WORDS = 12;
+
+/**
+ * Learner strings of a B1+ review section containing Vietnamese, at any depth, options and answers
+ * included. Translation fields (question/answer translations, grammar exampleTranslations) and staff
+ * `meaning` fields are Vietnamese by design and never shown at B1+ (13/11: a B1 review failed on
+ * grammar.exampleTranslations[1]).
+ */
+export function monthlyReviewVietnameseStrings(content: Content): string[] {
   const found: string[] = [];
   const visit = (value: unknown, key: string) => {
-    // Translation fields (question/answer translations, grammar exampleTranslations) are Vietnamese by
-    // design and never English-only prose (13/11: a B1 review failed on grammar.exampleTranslations[1]).
-    if (/meaning$/iu.test(key) || key === "id" || isExerciseTranslationKey(key) || isVietnameseTranslationKey(key) || (meaningsAllowed && (key === "options" || key === "answer"))) return;
-    if (typeof value === "string") { if (containsVietnameseLearnerText(value)) found.push(value.trim()); return; }
+    if (/meaning$/iu.test(key) || key === "id" || isExerciseTranslationKey(key) || isVietnameseTranslationKey(key)) return;
+    // Options and answers are checked by their letters too (a short meaning such as "khách hàng" has no
+    // instruction word); prose only by its words, so a Vietnamese name in a passage ("Hương") stays allowed.
+    if (typeof value === "string") { if (key === "options" || key === "answer" ? isVietnameseReviewText(value) : containsVietnameseLearnerText(value)) found.push(value.trim()); return; }
     if (Array.isArray(value)) { for (const item of value) visit(item, key === "items" || key === "variants" ? "" : key); return; }
     if (isRecord(value)) for (const [childKey, item] of Object.entries(value)) visit(item, childKey);
   };
@@ -198,20 +208,16 @@ function vietnameseStrings(content: Content, meaningsAllowed: boolean): string[]
   return [...new Set(found)];
 }
 
+const VIETNAMESE_LETTERS = /[ăâđêôơưàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/iu;
+/** English words written with accents ("café", "résumé"): never a reason to call a definition Vietnamese. */
+const ACCENTED_ENGLISH = /(?<![\p{L}])(?:caf[ée]s?|r[ée]sum[ée]s?|clich[ée]s?|fianc[ée]e?s?|d[ée]j[àa]|prot[ée]g[ée]s?|soir[ée]es?|entr[ée]es?|d[ée]cor|fa[çc]ade|na[ïi]ve|r[ôo]le|cr[êe]pes?|d[ée]but|[àa] la)(?![\p{L}])/giu;
+
 /**
- * Listening explanations naturally quote the Vietnamese meaning ("Agree means
- * đồng ý."): the meaning is the item's own option/answer, so remove those
- * quoted meanings before the English-only check; other Vietnamese prose stays flagged.
+ * Vietnamese in a review option or answer: Vietnamese instruction words, or Vietnamese letters (a short
+ * meaning such as "khách hàng" or "mục tiêu" has no instruction word, so word lists alone miss it).
  */
-function withoutQuotedMeanings(content: Content): Content {
-  const strip = (item: unknown): unknown => {
-    if (!isRecord(item)) return item;
-    const meanings = [...strings(item.options), text(item.answer)].filter(Boolean).sort((a, b) => b.length - a.length);
-    let explanation = text(item.explanation);
-    for (const meaning of meanings) explanation = explanation.split(meaning).join(" ");
-    return { ...item, explanation, ...(Array.isArray(item.variants) ? { variants: item.variants.map(strip) } : {}) };
-  };
-  return Array.isArray(content.items) ? { ...content, items: content.items.map(strip) } : content;
+export function isVietnameseReviewText(value: string): boolean {
+  return containsVietnameseLearnerText(value) || VIETNAMESE_LETTERS.test(value.normalize("NFC").replace(ACCENTED_ENGLISH, " "));
 }
 
 export interface WeekPronunciationExample {

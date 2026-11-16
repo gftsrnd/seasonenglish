@@ -1,4 +1,5 @@
 import type { MonthlyIntegrityIssueView, MonthlyQualityFindingView } from "@e4s/contracts";
+import { WEEKLY_REVIEW_SECTION_TITLES, WEEKLY_REVIEW_SECTION_TITLES_EN } from "@e4s/domain/monthly";
 import { lessonPartsForTab, lessonPracticeCodes } from "../shared/lesson/structure.js";
 
 /** Vietnamese section names, as the operator lesson preview titles them. */
@@ -7,15 +8,12 @@ export const MONTHLY_PART_TITLES: Record<string, string> = {
   listening: "Nghe", reading: "Đọc", writing: "Viết", word_class: "Từ loại", word_use: "Dùng từ", speaking: "Nói"
 };
 
-/** Friday review sections in the order MonthlyReviewPractice shows them. */
-export const MONTHLY_REVIEW_SECTIONS: ReadonlyArray<{ code: string; title: string }> = [
-  { code: "listening", title: "Nghe & nhận biết từ" },
-  { code: "word_use", title: "Word use" },
-  { code: "word_class", title: "Word form" },
-  { code: "grammar", title: "Ngữ pháp" },
-  { code: "reading", title: "Nghe – Đọc hiểu" },
-  { code: "speaking", title: "Phát âm & Nói – Viết" }
-];
+/**
+ * Friday review sections in the order MonthlyReviewPractice shows them. `title` is the operator (Vietnamese)
+ * name, also what A1–A2 learners read; `titleEn` is what B1+ learners read (they see no Vietnamese).
+ */
+export const MONTHLY_REVIEW_SECTIONS: ReadonlyArray<{ code: string; title: string; titleEn: string }> = (["listening", "word_use", "word_class", "grammar", "reading", "speaking"] as const)
+  .map((code) => ({ code, title: WEEKLY_REVIEW_SECTION_TITLES[code], titleEn: WEEKLY_REVIEW_SECTION_TITLES_EN[code] }));
 
 type Part = { code?: string; title?: string; content?: Record<string, unknown> };
 export interface MonthlyFindingContext { kind: "new" | "review"; parts: readonly Part[] }

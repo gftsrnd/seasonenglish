@@ -224,7 +224,8 @@ describe("grammar formula boxes", () => {
       { tone: "neutral", label: "Present simple", lines: ["Subject + V/V-s"] },
       { tone: "neutral", label: "present continuous", lines: ["Subject + am/is/are + V-ing"] }
     ]);
-    expect(grammarFormulaBoxes("Was/Were + subject + V-ing? ; past continuous + when + simple past", "en", lines)).toHaveLength(2);
+    // Rules separated by ";" are rows of one band (16/11), not two compared boxes.
+    expect(grammarFormulaBoxes("Was/Were + subject + V-ing? ; past continuous + when + simple past", "en")).toEqual([{ tone: "neutral", lines: ["Was/Were + subject + V-ing?", "past continuous + when + simple past"] }]);
   });
 
   it("keeps one box when unsure", () => {

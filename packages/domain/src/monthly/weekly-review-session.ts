@@ -27,6 +27,22 @@ export const WEEKLY_REVIEW_SECTION_TITLES: Record<WeeklyReviewSectionCode, strin
   speaking: "Phát âm & Nói – Viết"
 };
 
+/** B1+ learners see no Vietnamese: the same sections named in English. */
+export const WEEKLY_REVIEW_SECTION_TITLES_EN: Record<WeeklyReviewSectionCode, string> = {
+  listening: "Listen & recognise words",
+  word_use: "Word use",
+  word_class: "Word form",
+  grammar: "Grammar",
+  reading: "Listening & reading",
+  writing: "Writing",
+  speaking: "Pronunciation, speaking & writing"
+};
+
+/** The learner-facing section title: Vietnamese at A1–A2 (and when the level is unknown), English from B1. */
+export function weeklyReviewSectionTitle(code: WeeklyReviewSectionCode, cefr?: CefrLevel | string | null): string {
+  return cefr && !["A1", "A2"].includes(cefr) ? WEEKLY_REVIEW_SECTION_TITLES_EN[code] : WEEKLY_REVIEW_SECTION_TITLES[code];
+}
+
 export interface WeeklyReviewSectionDefinition {
   code: WeeklyReviewSectionCode;
   items: WeeklyReviewItem[];
@@ -64,8 +80,12 @@ export function weeklyReviewSectionsFromParts(parts: readonly LessonPart[]): Wee
   });
 }
 
-/** Flip cards for the optional, ungraded part 0. */
-export function weeklyReviewWarmupCards(parts: readonly LessonPart[]): WeeklyReviewWarmupCard[] {
+/**
+ * Flip cards for the optional, ungraded part 0. The vocabulary `meaning` is Vietnamese, so from B1 (learners see
+ * no Vietnamese, 16/11) a card carries no meaning and shows the word itself.
+ */
+export function weeklyReviewWarmupCards(parts: readonly LessonPart[], cefr?: CefrLevel | string | null): WeeklyReviewWarmupCard[] {
+  const vietnameseMeaning = !cefr || ["A1", "A2"].includes(cefr);
   const vocabulary = parts.find((part) => part.code === "vocabulary")?.content;
   const items = Array.isArray(vocabulary?.items) ? vocabulary.items : [];
   return items.flatMap((raw) => {
@@ -74,7 +94,7 @@ export function weeklyReviewWarmupCards(parts: readonly LessonPart[]): WeeklyRev
     if (typeof item.word !== "string" || !item.word.trim()) return [];
     return [{
       word: item.word,
-      ...(typeof item.meaning === "string" ? { meaning: item.meaning } : {}),
+      ...(vietnameseMeaning && typeof item.meaning === "string" ? { meaning: item.meaning } : {}),
       ...(typeof item.pronunciation === "string" ? { pronunciation: item.pronunciation } : {}),
       ...(typeof item.imageUrl === "string" ? { imageUrl: item.imageUrl } : {}),
       ...(typeof item.audioUrl === "string" ? { audioUrl: item.audioUrl } : {})

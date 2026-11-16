@@ -32,13 +32,15 @@ export function VocabularyCard({ item, loadImage, speak, relations = [], languag
   const phraseTranslations = language === "vi" && item.collocations?.length ? item.collocationTranslations ?? [] : [];
   const copy = learnerLessonCopy[language];
   const type = copy.vocabularyPartOfSpeech(item.type, item.word);
+  const wordLabel = language === "en" ? `Listen to ${item.word}` : `Nghe từ ${item.word}`;
   return <article className="word-card vocabulary-card" aria-label={item.word}>
     <div className="vocabulary-card-heading">
       <ContentImage term={item.word} unavailable="hide" load={loadImage} />
       <div className="vocabulary-card-main">
         <div className="vocabulary-card-word"><h3>{item.word}</h3>{type ? <span className="vocabulary-card-type">{type}</span> : null}{item.pronunciation ? <span className="ipa vocabulary-card-pronunciation">{item.pronunciation}</span> : null}</div>
-        {item.audioUrl ? <VocabularyAudioButton src={item.audioUrl} label={`Nghe từ ${item.word}`} fallback={() => speak(item.word)} /> : <VocabularySpeechButton text={item.word} label={`Nghe từ ${item.word}`} iconOnly speak={speak} />}
-        {item.meaning ? <p className="vocabulary-card-meaning">{item.meaning}</p> : null}
+        {item.audioUrl ? <VocabularyAudioButton src={item.audioUrl} label={wordLabel} fallback={() => speak(item.word)} /> : <VocabularySpeechButton text={item.word} label={wordLabel} iconOnly speak={speak} />}
+        {/* The meaning is Vietnamese: A1–A2 only (B1+ learners see no Vietnamese; the operator preview keeps the default "vi"). */}
+        {item.meaning && language === "vi" ? <p className="vocabulary-card-meaning">{item.meaning}</p> : null}
       </div>
     </div>
     {phrases.length ? <div className="vocabulary-card-phrases" aria-label={`${phrases.length} ${copy.vocabulary.collocations.toLocaleLowerCase()}`}><span className="vocabulary-card-label">{copy.vocabulary.collocations}</span><div className="vocabulary-card-phrase-list">{phrases.map((phrase, index) => { const phraseLabel = language === "vi" ? `Nghe cụm từ: ${phrase}` : `Listen to common collocation: ${phrase}`; const button = phraseAudioUrls[index] ? <VocabularyAudioButton src={phraseAudioUrls[index]!} label={phraseLabel} visibleLabel={phrase} fallback={() => speak(phrase)} key={phrase} /> : <VocabularySpeechButton text={phrase} label={phraseLabel} visibleLabel={phrase} speak={speak} key={phrase} />; const translation = phraseTranslations[index]?.trim(); return translation ? <MeaningPopupControl key={phrase} hint={translation} label={`Xem nghĩa: ${phrase}`} lang="vi" variant="phrase">{button}</MeaningPopupControl> : button; })}</div></div> : null}
@@ -47,7 +49,7 @@ export function VocabularyCard({ item, loadImage, speak, relations = [], languag
       const className = `chip${relation.tone ? ` ${relation.tone}` : ""}`;
       const content = <>{relation.icon === "umbrella" ? <Umbrella size={14} aria-hidden="true" /> : relation.icon === "family" ? <Users size={14} aria-hidden="true" /> : null}{relation.tag ? <span className="vocabulary-card-chip-tag">{relation.tag}</span> : null}<span className="vocabulary-card-chip-label">{relation.label}</span>{relation.count ? <span className="vocabulary-card-chip-count">+{relation.count}</span> : null}</>;
       const chip = relation.onClick
-        ? <button className={className} type="button" title={relation.label} aria-label={relation.ariaLabel ?? (relation.count ? `${relation.label} · ${relation.count} từ` : relation.label)} onClick={relation.onClick} key={relation.ariaLabel ?? relation.label}>{content}</button>
+        ? <button className={className} type="button" title={relation.label} aria-label={relation.ariaLabel ?? (relation.count ? `${relation.label} · ${relation.count} ${language === "en" ? "words" : "từ"}` : relation.label)} onClick={relation.onClick} key={relation.ariaLabel ?? relation.label}>{content}</button>
         : <span className={className} key={relation.label}>{content}</span>;
       if (!relation.meaning?.trim()) return chip;
       const english = relation.meaningLang === "en";
