@@ -346,6 +346,49 @@ describe("OperatorRouteController", () => {
     expect(exitDialog).toHaveTextContent("pass_course actual listening prompt");
   });
 
+  it("shows the placement retake form as its own card in Đề đầu vào, between the versions and the results, and not under Đề lên mức", async () => {
+    const user = userEvent.setup();
+    const generateAssessmentLevelForm = vi.fn().mockResolvedValue({});
+    const retakeDraft = { definitionId: "retake-def", versionId: "retake-v1", title: "Đề thi lại nháp", version: 1, publishedAt: null, listeningTaskCount: 15, readingTaskCount: 40, attemptCount: 0, status: "draft" as const, publicationReady: true };
+    let retakeSlot: { targetLevel: "placement-retake"; publishedForm: null; draftForm: typeof retakeDraft | null } = { targetLevel: "placement-retake", publishedForm: null, draftForm: null };
+    const client = {
+      getContentReview: vi.fn().mockResolvedValue({ tabs: [], submissions: [], coachSamples: [], microLessons: [], appeals: [], lessonAttempts: [], assessments: [], weeklyPractices: [] }),
+      getAssessmentFormPreviews: vi.fn().mockImplementation(async (kind) => ({ kind, forms: [] })),
+      getAssessmentLevelForms: vi.fn().mockImplementation(async () => [{ targetLevel: "B1", publishedForm: null, draftForm: null }, retakeSlot]),
+      getAssessmentLevelForm: vi.fn(),
+      generateAssessmentLevelForm: generateAssessmentLevelForm.mockImplementation(async () => { retakeSlot = { ...retakeSlot, draftForm: retakeDraft }; return {}; }),
+      getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true })
+    };
+    render(<ToastProvider><MemoryRouter initialEntries={["/op/tests"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
+
+    const navigation = await screen.findByRole("tablist", { name: "Loại bài kiểm tra" });
+    expect(within(navigation).getByRole("tab", { name: "Đề đầu vào" })).toHaveAttribute("aria-selected", "true");
+    const retakeCard = await screen.findByRole("region", { name: "Đề thi lại (1 lần)" });
+    expect(within(retakeCard).getByRole("heading", { name: "Đề thi lại (1 lần)" })).toBeInTheDocument();
+    expect(within(retakeCard).getByText("Chưa có đề")).toBeInTheDocument();
+    expect(within(retakeCard).queryByRole("heading", { name: "B1" })).not.toBeInTheDocument();
+    // Between the "Đề đầu vào" versions card and the learners' results.
+    const versionsCard = screen.getByRole("region", { name: "Chưa có nội dung đề thi" });
+    expect(versionsCard.compareDocumentPosition(retakeCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const results = await screen.findByText("Chưa có bài test.");
+    expect(retakeCard.compareDocumentPosition(results) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await waitFor(() => expect(within(retakeCard).getByRole("button", { name: "Sinh đề bằng AI" })).toBeEnabled());
+    await user.click(within(retakeCard).getByRole("button", { name: "Sinh đề bằng AI" }));
+    expect(generateAssessmentLevelForm).toHaveBeenCalledWith("placement-retake");
+    const refreshed = await screen.findByRole("region", { name: "Đề thi lại (1 lần)" });
+    expect(await within(refreshed).findByText("Đề thi lại nháp")).toBeInTheDocument();
+    expect(within(refreshed).getByRole("button", { name: "Xem Đề thi lại nháp" })).toBeEnabled();
+    expect(within(refreshed).getByRole("button", { name: "Sửa & phát hành" })).toBeEnabled();
+
+    await user.click(within(navigation).getByRole("tab", { name: "Đề lên mức" }));
+    const levelCard = await screen.findByRole("region", { name: "Phiên bản đề lên mức" });
+    expect(within(levelCard).getByRole("heading", { name: "B1" })).toBeInTheDocument();
+    expect(levelCard).not.toHaveTextContent("Đề thi lại");
+    expect(screen.queryByRole("region", { name: "Đề thi lại (1 lần)" })).not.toBeInTheDocument();
+  });
+
+
   it("opens the submitted attempt from a manual-grading notification in the monthly exam tab", async () => {
     const attemptId = "dd8828fc-27c5-4321-8876-515725d2569a";
     const getContentReviewAssessment = vi.fn().mockResolvedValue({

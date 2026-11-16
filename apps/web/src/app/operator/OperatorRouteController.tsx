@@ -30,6 +30,7 @@ import type {
 import { operatorApiClient as apiClient } from "../../api/operator.js";
 import { OperatorDashboard, OperatorProfileRows } from "./Dashboard.js";
 import { OperatorLevelFormDetail, OperatorLevelForms } from "./LevelForms.js";
+import { PlacementRetakeCard } from "./PlacementRetakeCard.js";
 import { OperatorLessonSet, OperatorLessons } from "./Lessons.js";
 import { emptyLesson, LessonFormEditor } from "./LessonFormEditor.js";
 import { OperatorPrompts } from "./Prompts.js";
@@ -1089,7 +1090,9 @@ function TestsRoute({ client, readOnly, initialTab }: { client: OperatorApiClien
       <button type="button" role="tab" aria-selected={activeTab === "promotion"} className={activeTab === "promotion" ? "active" : ""} onClick={() => setActiveTab("promotion")}>Đề lên mức</button>
       <button type="button" role="tab" aria-selected={activeTab === "exit"} className={activeTab === "exit" ? "active" : ""} onClick={() => setActiveTab("exit")}>Đề đầu ra</button>
     </div>
-    {activeTab === "promotion" ? <LevelFormsRoute client={client} readOnly={readOnly} embedded /> : <AssessmentPreviewControl key={activeTab} client={client} kind={resultPreviewKind[activeTab]} readOnly={readOnly} />}
+    {activeTab === "promotion" ? <LevelFormsRoute client={client} readOnly={readOnly} embedded slots="promotion" /> : <AssessmentPreviewControl key={activeTab} client={client} kind={resultPreviewKind[activeTab]} readOnly={readOnly} />}
+    {/* The placement retake form is a placement form: its own card sits under the "Đề đầu vào" versions, above the results table. */}
+    {activeTab === "placement" ? <LevelFormsRoute client={client} readOnly={readOnly} embedded slots="placement-retake" /> : null}
     <ReviewRoute client={client} readOnly={readOnly} canEditWeeklyPractice={false} assessmentOnly embedded assessmentKinds={kinds[activeTab]} />
   </OperatorPage>;
 }
@@ -1108,7 +1111,8 @@ function promotionPreview(detail: AssessmentLevelFormDetailView): AssessmentForm
   };
 }
 
-function LevelFormsRoute({ client, readOnly, embedded = false }: { client: OperatorApiClient; readOnly: boolean; embedded?: boolean }) {
+/** `slots` picks what to show: the level-up targets list, or the placement retake form's own card. Both share the API calls and dialogs. */
+function LevelFormsRoute({ client, readOnly, embedded = false, slots }: { client: OperatorApiClient; readOnly: boolean; embedded?: boolean; slots: "promotion" | "placement-retake" }) {
   const modal = useModal();
   const navigate = useNavigate();
   const paths = useOperatorRoutePaths();
@@ -1122,9 +1126,11 @@ function LevelFormsRoute({ client, readOnly, embedded = false }: { client: Opera
   // Only a failed page load replaces the page; a failed action is one toast and the list stays.
   const load = () => fetchData().catch(reason => setError(message(reason)));
   const reload = () => reloadQuietly(fetchData);
-  useEffect(() => { void load(); }, [client]);
-  if (error) return <Status tone="error">Không tải được đề thi lên mức: {error}</Status>;
-  if (!data) return <Status>Đang tải đề thi lên mức…</Status>;
+  const retakeOnly = slots === "placement-retake";
+  useEffect(() => { if (!retakeOnly || typeof client.getAssessmentLevelForms === "function") void load(); }, [client]);
+  if (retakeOnly && typeof client.getAssessmentLevelForms !== "function") return null;
+  if (error) return <Status tone="error">{retakeOnly ? "Không tải được đề thi lại" : "Không tải được đề thi lên mức"}: {error}</Status>;
+  if (!data) return <Status>{retakeOnly ? "Đang tải đề thi lại…" : "Đang tải đề thi lên mức…"}</Status>;
   const refresh = (promise: Promise<unknown>, success: string) => void promise.then(() => { notify(success); return reload(); }, notifyError).finally(() => setGenerating(null));
   const missing = {
     ...(typeof client.getAssessmentLevelForm !== "function" ? { view: unavailable("endpoint đọc nội dung đầy đủ của phiên bản đề") } : {}),
@@ -1134,24 +1140,33 @@ function LevelFormsRoute({ client, readOnly, embedded = false }: { client: Opera
     if (typeof client.getAssessmentLevelForm !== "function") return;
     void client.getAssessmentLevelForm(versionId).then(detail => setDialog({ detail, editing })).catch(notifyError);
   };
-  return <><OperatorLevelForms readOnly={readOnly} embedded={embedded} unavailable={missing} view={adaptLevelForms(data, { aiConnected: capabilities?.ai ?? false, generatingTarget: generating })} actions={{
+  const onGenerate = (target: LevelFormTarget) => { if (readOnly) return; setGenerating(target); refresh(client.generateAssessmentLevelForm(target), target === "placement-retake" ? "Đã sinh bản nháp đề thi lại bài đầu vào." : `Đã sinh bản nháp đề thi lên mức ${target}.`); };
+  const onCreateManual = (target: LevelFormTarget) => {
+    if (readOnly) return;
+    setGenerating(target);
+    void client.createManualAssessmentLevelForm(target)
+      .then(form => client.getAssessmentLevelForm(form.versionId))
+      .then(detail => { setDialog({ detail, editing: true }); return reload(); }, notifyError)
+      .finally(() => setGenerating(null));
+  };
+  const onEdit = (id: string, fromPublished?: boolean) => {
+    if (readOnly) return;
+    if (fromPublished) void client.copyAssessmentLevelFormToDraft(id).then(detail => { setDialog({ detail, editing: true }); void reload(); }, notifyError);
+    else show(id, true);
+  };
+  const onDelete = (id: string) => { if (readOnly || typeof client.deleteAssessmentLevelForm !== "function") return; void modal.confirm({ title: "Xoá bản nháp đề thi?", message: retakeOnly ? "Bản nháp đề thi lại này sẽ bị xoá." : "Bản nháp này sẽ bị xoá khỏi danh sách đề lên mức.", confirmLabel: "Xoá bản nháp", tone: "danger" }).then(confirmed => { if (confirmed) refresh(client.deleteAssessmentLevelForm(id), "Đã xoá bản nháp đề thi."); }); };
+  // The placement retake form has its own card in "Đề đầu vào"; the level-up list never includes it.
+  return <>{retakeOnly ? <PlacementRetakeCard
+    slot={data.find(slot => slot.targetLevel === "placement-retake") ?? null}
+    aiConnected={capabilities?.ai ?? false}
+    generating={generating === "placement-retake"}
+    readOnly={readOnly}
+    unavailable={missing}
+    actions={{ onGenerate: () => onGenerate("placement-retake"), onCreateManual: () => onCreateManual("placement-retake"), onView: id => show(id), onEdit, onDelete }}
+  /> : <OperatorLevelForms readOnly={readOnly} embedded={embedded} unavailable={missing} view={adaptLevelForms(data.filter(slot => slot.targetLevel !== "placement-retake"), { aiConnected: capabilities?.ai ?? false, generatingTarget: generating })} actions={{
     onBack: () => navigate(paths.root), onOpenSettings: () => navigate("/settings"),
-    onGenerate: target => { if (readOnly) return; setGenerating(target); refresh(client.generateAssessmentLevelForm(target), target === "placement-retake" ? "Đã sinh bản nháp đề thi lại bài đầu vào." : `Đã sinh bản nháp đề thi lên mức ${target}.`); },
-    onCreateManual: target => {
-      if (readOnly) return;
-      setGenerating(target);
-      void client.createManualAssessmentLevelForm(target)
-        .then(form => client.getAssessmentLevelForm(form.versionId))
-        .then(detail => { setDialog({ detail, editing: true }); return reload(); }, notifyError)
-        .finally(() => setGenerating(null));
-    },
-    onView: id => show(id), onEdit: (id, fromPublished) => {
-      if (readOnly) return;
-      if (fromPublished) void client.copyAssessmentLevelFormToDraft(id).then(detail => { setDialog({ detail, editing: true }); void reload(); }, notifyError);
-      else show(id, true);
-    },
-    onDelete: id => { if (readOnly || typeof client.deleteAssessmentLevelForm !== "function") return; void modal.confirm({ title: "Xoá bản nháp đề thi?", message: "Bản nháp này sẽ bị xoá khỏi danh sách đề lên mức.", confirmLabel: "Xoá bản nháp", tone: "danger" }).then(confirmed => { if (confirmed) refresh(client.deleteAssessmentLevelForm(id), "Đã xoá bản nháp đề thi."); }); }
-  }} />
+    onGenerate, onCreateManual, onView: id => show(id), onEdit, onDelete
+  }} />}
     {dialog && !dialog.editing ? <AssessmentPreviewDialog
       form={promotionPreview(dialog.detail)}
       readOnly={readOnly || dialog.detail.status !== "draft"}
@@ -1173,7 +1188,9 @@ function LevelFormsRoute({ client, readOnly, embedded = false }: { client: Opera
         await reload();
       }}
       onPublish={async (confirmation) => {
-        const confirmed = await modal.confirm({ title: "Duyệt và phát hành đề lên mức?", message: "Phiên bản này sẽ dùng cho các lượt thi lên mức mới.", confirmLabel: "Duyệt & phát hành", cancelLabel: "Quay lại" });
+        const confirmed = await modal.confirm(retakeOnly
+          ? { title: "Duyệt và phát hành đề thi lại?", message: "Phiên bản này sẽ dùng cho các lượt thi lại bài đầu vào được duyệt.", confirmLabel: "Duyệt & phát hành", cancelLabel: "Quay lại" }
+          : { title: "Duyệt và phát hành đề lên mức?", message: "Phiên bản này sẽ dùng cho các lượt thi lên mức mới.", confirmLabel: "Duyệt & phát hành", cancelLabel: "Quay lại" });
         if (!confirmed) return;
         await client.publishAssessmentLevelForm(dialog.detail.versionId, confirmation);
         setDialog(undefined);
