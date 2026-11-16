@@ -12,7 +12,7 @@ import type {
   MonthlyExamEligibilityView
 } from "@e4s/contracts";
 import { buildPronunciationAssets, microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
-import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerLearningAbsenceStreak, syncLearnerAbsenceNotice, learnerMonthlyAccess, learnerMonthlyAttendanceDates, learnerMonthlyLessonDates, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
+import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerLearningAbsenceStreak, syncLearnerAbsenceNotice, syncLearnerUncountedMonthNotice, learnerMonthlyAccess, learnerMonthlyAttendanceDates, learnerMonthlyLessonDates, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
 import { gradeLessonAnswer, SENSITIVE_NAME_MESSAGE_VI, sensitiveTextIssue, validateGeneratedFeedback } from "@e4s/domain/content";
 import { evaluateMonthlyExamEligibility, learnerMonthlySeasonTarget, monthlyAttendanceCountedDates, MONTHLY_EXAM_ENTRY_CUTOFF, monthlyExamEntryState } from "@e4s/domain/progression";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
@@ -193,6 +193,15 @@ export function registerLearningRoutes(
     } catch (error) {
       request.log.warn({ err: error }, "Unable to sync absence notification");
     }
+    // Học thử month: one bell notification per month (the event key holds the month).
+    const uncounted = monthlyAccess?.state === "uncounted";
+    if (uncounted) {
+      try {
+        await syncLearnerUncountedMonthNotice(pool, learnerId, monthlyAccess);
+      } catch (error) {
+        request.log.warn({ err: error }, "Unable to sync uncounted month notification");
+      }
+    }
     // Home follows the organisation (Manager test) date everywhere, also when the month is not published yet.
     const organizationDate = monthlyContext?.systemDate ?? monthlyAccess?.systemDate ?? monthlyEligibility.systemDate;
     const lifecycle = progress.learner.cefr
@@ -277,9 +286,11 @@ export function registerLearningRoutes(
       } : null,
       monthlyPreparation: !monthlyContext,
       ...(monthlyAccess?.state === "waiting_next_month" ? { monthlyStartDate: monthlyAccess.startDate } : {}),
+      ...(uncounted ? { monthlyUncounted: { countsFrom: monthlyAccess.startDate } } : {}),
       ...(monthlyAccess?.state === "missed_exam" ? { monthlyLessonsLocked: true } : {}),
-      monthlyEligibility,
-      monthlyExam: monthlyContext || monthlyEligibility.accessEligible || monthlyAttempt ? {
+      // An uncounted month has no attendance and no monthly exam (Home shows the học thử notice instead).
+      ...(uncounted ? {} : { monthlyEligibility }),
+      monthlyExam: !uncounted && (monthlyContext || monthlyEligibility.accessEligible || monthlyAttempt) ? {
         status: monthlyExamStatus,
         ...(monthlyAttempt ? { inProgress: true } : {}),
         completedLessons,
@@ -322,7 +333,7 @@ export function registerLearningRoutes(
       },
       ...(inactiveDays >= 3 ? { inactivityReminder: { inactiveDays } } : {}),
       schedule: monthlyContext
-        ? buildMonthlySchedule(summaries, monthlyContext.systemDate, Number(progress.learner.profile.durationMinutes ?? 10), monthlyAccess?.state === "active" ? monthlyAccess.startDate : undefined)
+        ? buildMonthlySchedule(summaries, monthlyContext.systemDate, Number(progress.learner.profile.durationMinutes ?? 10), monthlyAccess?.state === "active" || uncounted ? monthlyAccess!.startDate : undefined)
         : buildSchedule(Number(progress.learner.profile.durationMinutes ?? 10), [], organizationDate),
       coach: { turnsToday: monthlyContext ? progress.stats.coachTurnsToday ?? 0 : 0, turnsThisWeek: monthlyContext ? progress.stats.coachTurns : 0, targetTurns: coachTarget, href: "/coach" },
       practice: {

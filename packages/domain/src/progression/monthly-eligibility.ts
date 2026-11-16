@@ -21,7 +21,37 @@ export function monthlySeasonTurnTarget(approvalDate: string, month: string, exa
  * learner is actually in this month's cohort; otherwise the full target holds.
  */
 export function learnerMonthlySeasonTarget(access: { readonly state: string; readonly seasonTarget: number } | null | undefined): number {
-  return access?.state === "active" ? access.seasonTarget : MONTHLY_SEASON_TURN_TARGET;
+  return monthlyAccessCounts(access?.state) ? access!.seasonTarget : MONTHLY_SEASON_TURN_TARGET;
+}
+
+/**
+ * Monthly access states of a learner. `uncounted` ("học thử tháng này"): the level was approved
+ * (or the month published) after more than 25% of the month's school days, so the learner studies
+ * the whole month (catch-up from lesson 1) but nothing in it counts: no attendance, absences,
+ * absence lock or warnings, monthly final eligibility, Season target or level-up month. Counting
+ * starts with the next month.
+ */
+export type LearnerMonthlyAccessState = "active" | "uncounted" | "unplaced" | "waiting_content" | "waiting_next_month" | "missed_exam";
+
+/** States in which the month's lessons are listed and can be opened. */
+export function monthlyAccessCanStudy(state: string | null | undefined): boolean {
+  return state === "active" || state === "uncounted";
+}
+
+/** The month counts (attendance, absences, monthly final, Season target, level-up records) only when active. */
+export function monthlyAccessCounts(state: string | null | undefined): boolean {
+  return state === "active";
+}
+
+/**
+ * Access state from the learner window: content must be published, the approval date reached,
+ * and a window with fewer than 75% of the school days left is studied but not counted.
+ */
+export function monthlyAccessState(input: { cefr: string | null; publishedOn: string | null; approvalDate: string; systemDate: string; canStudy: boolean }): Exclude<LearnerMonthlyAccessState, "missed_exam"> {
+  if (!input.cefr) return "unplaced";
+  if (!input.publishedOn || input.publishedOn > input.systemDate) return "waiting_content";
+  if (input.approvalDate > input.systemDate) return "waiting_next_month";
+  return input.canStudy ? "active" : "uncounted";
 }
 
 export function monthlyLearnerWindow(month: string, examDate: string, approvalDate: string) {

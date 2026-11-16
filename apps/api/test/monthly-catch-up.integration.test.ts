@@ -117,11 +117,19 @@ describe("mid-month catch-up learners", () => {
     expect(await learnerConsecutiveLearningAbsences(pool, id)).toBe(0);
   });
 
-  it("defers a learner approved on 12/11 to next month with no lessons", async () => {
+  it("lets a learner approved on 12/11 study the whole month from lesson 1 without counting it", async () => {
     await systemDate("2026-11-12");
     const id = await learner("2026-11-12");
-    expect(await learnerMonthlyAccess(pool, id)).toMatchObject({ state: "waiting_next_month", startDate: "2026-12-01" });
-    expect(await repositories.learning.listMonthlyLessons(id, month)).toEqual([]);
+    expect(await learnerMonthlyAccess(pool, id)).toMatchObject({ state: "uncounted", startDate: "2026-12-01", approvalDate: "2026-11-12" });
+    const lessons = await repositories.learning.listMonthlyLessons(id, month);
+    expect(lessons.map((lesson) => lesson.dayNumber)).toEqual(days.map((day) => day.lessonNumber));
+    // Catch-up from lesson 1; a Friday review before the approval date does not gate later lessons.
+    expect((await lockOf(id)).get(1)).toBeNull();
+    await complete(id, 1);
+    expect((await lockOf(id)).get(2)).toBeNull();
+    // Nothing counts: no absences, no attendance window, no monthly final eligibility.
+    await systemDate("2026-11-20");
     expect(await learnerConsecutiveLearningAbsences(pool, id)).toBe(0);
+    expect(await monthlyExamEligibility(pool, id)).toMatchObject({ effectiveDays: 0, absenceDays: 0, accessEligible: false });
   });
 });

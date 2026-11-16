@@ -224,7 +224,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
     try {
       const preview = await actions.onPreviewPublication(framework.id);
       const impact = preview.waitingNextMonth
-        ? `${preview.waitingNextMonth} học viên ${cefr} sẽ bắt đầu từ ${preview.nextMonth} vì còn dưới 75% số ngày học.`
+        ? `${preview.waitingNextMonth} học viên ${cefr} sẽ học thử tháng này (không tính tiến độ, điểm danh, thi tháng) và bắt đầu tính từ ${preview.nextMonth} vì còn dưới 75% số ngày học.`
         : `${preview.affectedLearners} học viên ${cefr} chịu ảnh hưởng bởi ngày công bố.`;
       const confirmed = await modal.confirm({ title: `Công bố tháng ${month} · ${cefr}?`, message: `Học viên sẽ thấy bài theo lịch. ${impact}`, confirmLabel: "Công bố tháng" });
       if (!confirmed) return;

@@ -376,6 +376,12 @@ export interface LearnerHomeView {
   /** No approved monthly framework exists for this learner's level yet. */
   monthlyPreparation?: boolean;
   monthlyStartDate?: string;
+  /**
+   * Học thử: approved after more than 25% of the month's school days. The learner studies the whole
+   * month (catch-up included) but nothing counts; progress, attendance and the monthly exam count
+   * from `countsFrom` (first day of the next month).
+   */
+  monthlyUncounted?: { countsFrom: string };
   monthlyLessonsLocked?: boolean;
   /** Attendance eligibility is available even before a framework or form is published. */
   monthlyEligibility?: MonthlyExamEligibilityView;

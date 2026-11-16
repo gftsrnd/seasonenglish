@@ -17,6 +17,7 @@ const learnerStates: Record<ManagerMonthlyLearnerView["state"], string> = {
   placement_pending: "Chờ duyệt mức",
   placement_retry: "Cần làm lại bài đầu vào",
   waiting_content: "Chờ nội dung",
+  uncounted: "Học thử, không tính",
   waiting_next_month: "Chờ tháng sau",
   missed_exam: "Khóa do chưa thi tháng trước",
   graduated: "Đã hoàn thành khóa"

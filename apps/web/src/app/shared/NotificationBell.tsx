@@ -7,6 +7,7 @@ import { getNotificationInbox, markInboxRead } from "../../api/notifications.js"
 import { hasAssessmentLogoutGuard } from "./assessment-logout-guard.js";
 import { useDialog } from "./ModalProvider.js";
 import { rewardBadgeIconForLabel } from "./reward-badge-icons.js";
+import { monthlyUncountedCountsFromText } from "./monthly-uncounted.js";
 import "./notification-bell.css";
 
 const assessmentNames: Record<string, string> = {
@@ -132,6 +133,8 @@ function notificationContent(item: InboxNotificationView): { title: string; desc
       return { title: "Lịch học tháng đã thay đổi", description: "Mở lịch để xem các bài hiện có.", path: "/monthly", action: "Xem lịch học" };
     case "lesson_reopened":
       return { title: "Một bài học đang được cập nhật", description: "Kết quả đã hoàn thành của bạn vẫn được giữ nguyên. Bài sẽ mở lại khi được duyệt.", path: "/monthly", action: "Xem lịch học" };
+    case "monthly_uncounted":
+      return { title: "Tháng này bạn học thử để làm quen", description: monthlyUncountedCountsFromText(item.context), path: "/home", action: "Học bài ngay" };
     case "absence_warning": {
       const days = /^\d+$/.test(item.context) ? Number(item.context) : 3;
       const left = Math.max(1, 5 - days);

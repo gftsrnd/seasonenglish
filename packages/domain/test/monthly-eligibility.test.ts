@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consecutiveLearningAbsences, learningAbsenceStreak, evaluateMonthlyExamEligibility, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, monthlyExamEntryState, learnerMonthlySeasonTarget, monthlyLearnerWindow, monthlySeasonTurnTarget } from "../src/progression/monthly-eligibility.js";
+import { consecutiveLearningAbsences, learningAbsenceStreak, evaluateMonthlyExamEligibility, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, monthlyExamEntryState, learnerMonthlySeasonTarget, monthlyLearnerWindow, monthlySeasonTurnTarget, monthlyAccessState, monthlyAccessCanStudy, monthlyAccessCounts } from "../src/progression/monthly-eligibility.js";
 
 it("allows starts through the 23:24 ICT minute and closes at 23:25", () => {
   expect(monthlyExamEntryState("2026-11-29", "2026-11-30", "23:59:59")).toBe("upcoming");
@@ -150,6 +150,7 @@ it("uses one Season target rule for Coach and monthly-exam eligibility", () => {
   const late = monthlyLearnerWindow("2026-11", "2026-11-30", "2026-11-11");
   expect(late.canStudy).toBe(false);
   expect(learnerMonthlySeasonTarget({ ...late, state: "waiting_next_month" })).toBe(100);
+  expect(learnerMonthlySeasonTarget({ ...late, state: "uncounted" })).toBe(100);
   const prorated = monthlyLearnerWindow("2026-11", "2026-11-30", "2026-11-09");
   expect(learnerMonthlySeasonTarget({ ...prorated, state: "active" })).toBe(prorated.seasonTarget);
   expect(learnerMonthlySeasonTarget(null)).toBe(100);
@@ -173,4 +174,37 @@ it("counts absences only on days that had an approved lesson (December 2026: 22 
   // Mid-month: today and later days stay counted (their lessons may still be approved); past days without a lesson do not.
   expect(monthlyAttendanceCountedDates(window.effectiveDates, lessonDates, "2026-12-09").slice(0, 7)).toEqual(["2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04", "2026-12-07", "2026-12-09", "2026-12-10"]);
   expect(consecutiveLearningAbsences(examDay, ["2026-12-01"], "2026-12-31")).toBe(6);
+});
+
+describe("uncounted (học thử) month access", () => {
+  const base = { cefr: "A1", publishedOn: "2026-11-02", systemDate: "2026-11-12" };
+  it("lets a learner approved after 25% of the school days study a month that does not count", () => {
+    const late = monthlyLearnerWindow("2026-11", "2026-11-30", "2026-11-12");
+    expect(late.canStudy).toBe(false);
+    const state = monthlyAccessState({ ...base, approvalDate: "2026-11-12", canStudy: late.canStudy });
+    expect(state).toBe("uncounted");
+    expect(monthlyAccessCanStudy(state)).toBe(true);
+    expect(monthlyAccessCounts(state)).toBe(false);
+    // Counting starts on the first day of the next month.
+    expect(late.startDate).toBe("2026-12-01");
+  });
+
+  it("counts a month approved within the 75% window and the month after an uncounted one", () => {
+    const onTime = monthlyLearnerWindow("2026-11", "2026-11-30", "2026-11-09");
+    expect(monthlyAccessState({ ...base, approvalDate: "2026-11-09", canStudy: onTime.canStudy })).toBe("active");
+    const nextMonth = monthlyLearnerWindow("2026-12", "2026-12-31", "2026-12-01");
+    const state = monthlyAccessState({ cefr: "A1", publishedOn: "2026-12-01", systemDate: "2026-12-03", approvalDate: "2026-12-01", canStudy: nextMonth.canStudy });
+    expect(state).toBe("active");
+    expect(monthlyAccessCounts(state)).toBe(true);
+  });
+
+  it("keeps the other states", () => {
+    expect(monthlyAccessState({ ...base, cefr: null, approvalDate: "2026-11-02", canStudy: true })).toBe("unplaced");
+    expect(monthlyAccessState({ ...base, publishedOn: null, approvalDate: "2026-11-02", canStudy: true })).toBe("waiting_content");
+    expect(monthlyAccessState({ ...base, approvalDate: "2026-12-01", canStudy: false })).toBe("waiting_next_month");
+    for (const state of ["unplaced", "waiting_content", "waiting_next_month", "missed_exam"]) {
+      expect(monthlyAccessCanStudy(state)).toBe(false);
+      expect(monthlyAccessCounts(state)).toBe(false);
+    }
+  });
 });

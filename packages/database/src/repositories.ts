@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, learningAbsenceStreak, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, LEVEL_READINESS_THRESHOLDS, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
+import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, learningAbsenceStreak, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, monthlyAccessCanStudy, monthlyAccessCounts, monthlyAccessState, LEVEL_READINESS_THRESHOLDS, type LearnerMonthlyAccessState, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
 import { longestScheduledLessonStreak, nextRewardSeason, rewardBadgeDescription, rewardBadgeThreshold, rewardSeasonFor, rewardSeasonLabel, REWARD_BADGE_KEYS, REWARD_SEASONS, pickGameWordExample, type RewardSeason } from "@e4s/domain/engagement";
@@ -328,6 +328,8 @@ export interface ActiveMonthlyLearningContext {
   examDate: string;
   systemDate: string;
   holidays: Array<{ date: string; name: string }>;
+  /** Học thử: the learner studies this month but it does not count; counting starts on `countsFrom`. */
+  uncounted?: { countsFrom: string };
 }
 
 export interface LearnerProfileRecord {
@@ -901,7 +903,8 @@ class LearningRepository {
   }
 
   async getActiveMonthlyContext(learnerId: string): Promise<ActiveMonthlyLearningContext | null> {
-    if ((await learnerMonthlyAccess(this.pool, learnerId))?.state !== "active") return null;
+    const access = await learnerMonthlyAccess(this.pool, learnerId);
+    if (!monthlyAccessCanStudy(access?.state)) return null;
     const result = await this.pool.query<{
       month: string; theme_title: string; theme_brief: string; communication_goal: string; cefr: CefrLevel; exam_date: string; system_date: string; holiday_dates: string[] | null;
     }>(
@@ -926,7 +929,8 @@ class LearningRepository {
       cefr: row.cefr,
       examDate: row.exam_date,
       systemDate: row.system_date,
-      holidays: mergedVietnamHolidays(row.month, (row.holiday_dates ?? []).map(date => ({ date })))
+      holidays: mergedVietnamHolidays(row.month, (row.holiday_dates ?? []).map(date => ({ date }))),
+      ...(access?.state === "uncounted" ? { uncounted: { countsFrom: access.startDate } } : {})
     } : null;
   }
 
@@ -1352,7 +1356,8 @@ class LearningRepository {
 
   async listMonthlyLessons(learnerId: string, month: string): Promise<LearnerLessonRecord[]> {
     const access = await learnerMonthlyAccess(this.pool, learnerId, month);
-    if (access?.state !== "active") return [];
+    // An uncounted (học thử) month is studied like an active one, with catch-up from lesson 1.
+    if (!access || !monthlyAccessCanStudy(access.state)) return [];
     const result = await this.pool.query<LearnerLessonQueryRow & { organization_id: string; review_gates_next_week: boolean | null; review_from_previous_month: boolean | null }>(
       `select l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content, mf.curriculum_contract->'coreTerms' as monthly_core_terms,
               ${FROZEN_MONTHLY_ILLUSTRATIONS_SQL} as frozen_illustrations, (select lesson_spec.item from jsonb_array_elements(mf.curriculum_contract->'daySpecs') as lesson_spec(item) where (lesson_spec.item->>'lessonNumber')::int = ml.lesson_number limit 1) as monthly_day_spec,
@@ -1385,8 +1390,10 @@ class LearningRepository {
     // A learner who joins mid-month (≥ 75% window) still studies the whole month
     // from lesson 1 in sequence (catch-up). The start date only bounds the
     // attendance window; a Friday review dated before it never gates later lessons.
+    // An uncounted month's startDate is next month: its own study start is the approval date.
+    const studyStart = access.state === "uncounted" ? access.approvalDate : access.startDate;
     for (const row of result.rows) {
-      if (row.monthly_kind === "review" && row.lesson_date && row.lesson_date < access.startDate) row.review_gates_next_week = false;
+      if (row.monthly_kind === "review" && row.lesson_date && row.lesson_date < studyStart) row.review_gates_next_week = false;
     }
     const first = result.rows[0];
     if (!first) return [];
@@ -2315,6 +2322,8 @@ class LearningRepository {
               return { status: 'completed' as const, totalScore: attempt.total_score === null ? null : Number(attempt.total_score) };
             }
             if (attempt) return { status: 'locked' as const, totalScore: null };
+            // Học thử: the monthly final does not apply to an uncounted month.
+            if (monthlyContext.uncounted) return { status: 'locked' as const, totalScore: null };
             if (totalLessons === 0 || completedLessons < totalLessons) return { status: 'locked' as const, totalScore: null };
             if (!monthlyFinalPublished.rows[0]?.published) return { status: 'unpublished' as const, totalScore: null };
             return { status: 'ready' as const, totalScore: null };
@@ -2399,7 +2408,15 @@ class LearningRepository {
     );
     const levelStartedAt = candidateMonths.rows[0]?.level_started_at;
     if (!levelStartedAt) return evaluateMonthlyLevelUpReadiness({ currentLevel, months: [] });
-    const attendance = await learnerMonthlyAttendanceDates(this.pool, learnerId, candidateMonths.rows.map((row) => row.month), { cefr: currentLevel, from: levelStartedAt });
+    // Same window as monthly access: an uncounted (học thử, < 75% of the school days) month is no
+    // level-up month at all, and a counted month's effective days start at its access approval date.
+    const accessByMonth = await Promise.all(candidateMonths.rows.map(async (row) => [row.month, await learnerMonthlyAccess(this.pool, learnerId, row.month)] as const));
+    const uncountedMonths = accessByMonth.filter(([, access]) => access?.state === "uncounted").map(([month]) => month);
+    const countedStarts = Object.fromEntries(accessByMonth
+      .filter(([, access]) => access && access.cefr === currentLevel && monthlyAccessCounts(access.state))
+      .map(([month, access]) => [month, access!.approvalDate]));
+    const recordMonths = candidateMonths.rows.map((row) => row.month).filter((month) => !uncountedMonths.includes(month));
+    const attendance = await learnerMonthlyAttendanceDates(this.pool, learnerId, recordMonths, { cefr: currentLevel, from: levelStartedAt });
     const attendedByMonth = Object.fromEntries([...attendance].map(([month, dates]) => [month, dates.length]));
     const result = await this.pool.query<MonthlyLevelRecord>(
       `with identity as (
@@ -2415,12 +2432,13 @@ class LearningRepository {
                 (mf.status = 'approved') as framework_approved
          from identity i join program_months pm on pm.organization_id = i.organization_id
            and pm.month between to_char(i.level_start_date, 'YYYY-MM') and least(coalesce($5::text, '9999-12'), to_char(i.system_date, 'YYYY-MM'))
+           and not (pm.month = any($7::text[]))
          left join month_frameworks mf on mf.program_month_id = pm.id and mf.cefr = i.cefr
        ), lesson_facts as (
          select m.*, count(ml.id) filter (where ml.status = 'approved')::int as scheduled_lessons,
                 count(ml.id) filter (where ml.status = 'approved' and pr.status = 'completed')::int as completed_lessons,
                 coalesce(($2::jsonb->>m.month)::int, 0) as attended_days,
-                (select count(*)::int from generate_series(greatest((m.month || '-01')::date, m.level_start_date), m.exam_date - 1, interval '1 day') d where extract(isodow from d) <= 5
+                (select count(*)::int from generate_series(greatest((m.month || '-01')::date, m.level_start_date, coalesce(($6::jsonb->>m.month)::date, (m.month || '-01')::date)), m.exam_date - 1, interval '1 day') d where extract(isodow from d) <= 5
                    -- Only days with an approved lesson count; later days of the running month still count as planned.
                    and (d::date >= (select identity.system_date from identity) or exists (select 1 from month_lessons available where available.framework_id = m.framework_id and available.status = 'approved' and available.lesson_date = d::date))) as effective_days,
                 (select count(*)::int from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
@@ -2473,7 +2491,7 @@ class LearningRepository {
            limit 1
          ) latest
        ) final_result on true
-       order by lf.month`, [learnerId, JSON.stringify(attendedByMonth), levelStartedAt, currentLevel, throughMonth ?? null]
+       order by lf.month`, [learnerId, JSON.stringify(attendedByMonth), levelStartedAt, currentLevel, throughMonth ?? null, JSON.stringify(countedStarts), uncountedMonths]
     );
     return evaluateMonthlyLevelUpReadiness({ currentLevel, months: result.rows });
   }
@@ -2990,8 +3008,10 @@ export function notAfterSystemDate(date: string | null, systemDate: string): str
   return date !== null && date > systemDate ? systemDate : date;
 }
 
-type LearnerMonthlyAccess = ReturnType<typeof monthlyLearnerWindow> & {
-  state: "active" | "unplaced" | "waiting_content" | "waiting_next_month" | "missed_exam";
+export type LearnerMonthlyAccess = ReturnType<typeof monthlyLearnerWindow> & {
+  state: LearnerMonthlyAccessState;
+  /** First day the learner may study this month (level approval, publication, unlock). */
+  approvalDate: string;
   month: string; systemDate: string; examDate: string; cefr: CefrLevel | null; resetOn: string | null; graduated: boolean;
 };
 
@@ -3033,15 +3053,14 @@ export async function learnerMonthlyAccess(db: Pool | PoolClient, learnerId: str
     notAfterSystemDate(row.unlocked_on, row.system_date)]
     .filter((date): date is string => date !== null).sort().at(-1)!;
   const window = monthlyLearnerWindow(row.month, examDate, approvalDate);
-  let state: LearnerMonthlyAccess["state"] = !row.cefr ? "unplaced"
-    : !publishedOn || publishedOn > row.system_date ? "waiting_content"
-    : !window.canStudy || approvalDate > row.system_date ? "waiting_next_month"
-    : "active";
+  // Fewer than 75% of the school days left: "uncounted" (học thử) — the learner studies the whole
+  // month with catch-up, but the month never counts; counting starts next month.
+  let state: LearnerMonthlyAccess["state"] = monthlyAccessState({ cefr: row.cefr, publishedOn, approvalDate, systemDate: row.system_date, canStudy: window.canStudy });
   if (row.cefr && !row.graduated && !row.unlocked_on && row.month === row.system_date.slice(0, 7)
       && await learnerMissedPreviousExam(db, learnerId, row.month, row.cefr)) {
     state = "missed_exam";
   }
-  return { ...window, state, month: row.month, systemDate: row.system_date, examDate, cefr: row.cefr, resetOn: row.reset_on, graduated: row.graduated };
+  return { ...window, state, approvalDate, month: row.month, systemDate: row.system_date, examDate, cefr: row.cefr, resetOn: row.reset_on, graduated: row.graduated };
 }
 
 function previousLearningMonth(month: string): string {
@@ -3073,7 +3092,8 @@ async function learnerMissedPreviousExam(db: Pool | PoolClient, learnerId: strin
   );
   if (!exam || exam.grace_open) return false;
   const prior = await learnerMonthlyAccess(db, learnerId, previousMonth);
-  if (prior?.state !== "active") return false;
+  // Only a counted month can be missed: an uncounted (học thử) month never locks the next one.
+  if (!prior || !monthlyAccessCounts(prior.state)) return false;
   if (exam.override) return true;
   const [attendanceByMonth, lessonDates] = await Promise.all([
     learnerMonthlyAttendanceDates(db, learnerId, [previousMonth], { cefr }),
@@ -3091,9 +3111,10 @@ async function learnerLearningAbsences(db: Pool | PoolClient, learnerId: string,
 }
 
 async function learnerAbsenceStreak(db: Pool | PoolClient, learnerId: string, access: LearnerMonthlyAccess): Promise<{ days: number; startedOn: string | null }> {
-  if (access.state !== "active" || !access.cefr || access.graduated) return { days: 0, startedOn: null };
+  // An uncounted month has no absences (no warning, no lock), also when the streak would run into it.
+  if (!monthlyAccessCounts(access.state) || !access.cefr || access.graduated) return { days: 0, startedOn: null };
   const previous = await learnerMonthlyAccess(db, learnerId, previousLearningMonth(access.month));
-  const windows = previous?.state === "active" ? [previous, access] : [access];
+  const windows = previous && monthlyAccessCounts(previous.state) ? [previous, access] : [access];
   const [attendance, lessonDates] = await Promise.all([
     learnerMonthlyAttendanceDates(db, learnerId, windows.map(item => item.month), { cefr: access.cefr }),
     learnerMonthlyLessonDates(db, learnerId, windows.map(item => item.month), access.cefr)
@@ -3131,6 +3152,20 @@ export async function syncLearnerAbsenceNotice(db: Pool | PoolClient, learnerId:
     `select notify_inbox(organization_id, 'learner', id, $2, 'absence_warning', $3)
      from users where id = $1 and role = 'learner' and status = 'active'`,
     [learnerId, `absence:${current.startedOn}:${current.days}`, String(current.days)]
+  );
+}
+
+/**
+ * Tells a learner in an uncounted (học thử) month through the notification bell, once per month:
+ * the event key holds the month, the context the date counting starts (first day of next month).
+ */
+export async function syncLearnerUncountedMonthNotice(db: Pool | PoolClient, learnerId: string, access?: Pick<LearnerMonthlyAccess, "state" | "month" | "startDate"> | null): Promise<void> {
+  const current = access === undefined ? await learnerMonthlyAccess(db, learnerId) : access;
+  if (current?.state !== "uncounted") return;
+  await db.query(
+    `select notify_inbox(organization_id, 'learner', id, $2, 'monthly_uncounted', $3)
+     from users where id = $1 and role = 'learner' and status = 'active'`,
+    [learnerId, `monthly-uncounted:${current.month}`, current.startDate]
   );
 }
 
@@ -12151,7 +12186,7 @@ class ManagerRepository {
         )).rows;
         if (!facts) throw new Error("MANAGER_MONTHLY_FACTS_MISSING");
         const examDate = facts.exam_date ?? buildMonthlyCalendar(month).examDate;
-        const historicalWindow = cefr && (cefr !== access?.cefr || (month < currentMonth && access?.state !== "active" && facts.framework_published))
+        const historicalWindow = cefr && (cefr !== access?.cefr || (month < currentMonth && access?.state !== "active" && access?.state !== "uncounted" && facts.framework_published))
           ? monthlyLearnerWindow(month, examDate, row.enrolled_on ?? `${month}-01`) : null;
         const learningWindow = historicalWindow ?? access;
         const placementState = managerPlacementState(row.placement_status);
@@ -12159,7 +12194,7 @@ class ManagerRepository {
           : access?.graduated && month === currentMonth ? "graduated"
           : !cefr ? placementState
           : historicalWindow && facts.framework_published && historicalWindow.canStudy ? "active"
-          : access?.state === "active" || access?.state === "waiting_next_month" || access?.state === "missed_exam" ? access.state
+          : access?.state === "active" || access?.state === "uncounted" || access?.state === "waiting_next_month" || access?.state === "missed_exam" ? access.state
           : "waiting_content";
         const hasAttendance = state === "active" || state === "graduated" || (state === "locked" && (access?.state === "active" || historicalWindow?.canStudy));
         // Past weekdays without an approved lesson of this level are not absences (December 2026).

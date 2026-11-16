@@ -6,6 +6,7 @@ import { Notice, PageTitle, Progress, AppLink, learnerLessonLabel, learnerLesson
 import { buildMonthlyTeachingCalendar } from "@e4s/domain/monthly";
 import { LevelReadinessCard } from "./LevelReadiness.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
+import { monthlyUncountedText } from "../shared/monthly-uncounted.js";
 import type { LearnerComplaintView } from "@e4s/contracts";
 
 export function LearnerHome({ view, actions, courseCompleted = false }: { view: LearnerHomeView; actions: LearnerCallbacks; courseCompleted?: boolean }) {
@@ -37,6 +38,7 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
         account lock stays on the page, as one compact line. */}
     {view.inactivityReminder && view.inactivityReminder.inactiveDays >= ABSENCE_LOCK_DAYS - 1 ? <p className="home-blocking-banner" role="alert"><b>Vắng thêm 1 ngày học sẽ bị khóa tài khoản.</b> Học bài hôm nay để giữ tài khoản.</p> : null}
     {!view.aiAvailable && view.aiAvailable !== undefined ? <Notice tone="warn">Bạn vẫn có thể học, làm bài thi và luyện với Season. Nhận xét AI đang tạm thời gián đoạn.</Notice> : null}
+    {view.monthlyUncounted ? <section className="card" data-home-block="uncounted" role="status"><p style={{ margin: 0 }}>{monthlyUncountedText(view.monthlyUncounted.countsFrom)}</p></section> : null}
     <PrimaryLesson view={view} next={next} actions={actions} />
     {view.learner.cefr === "C1" && !courseCompleted ? <section className="card learner-summary-card pass-course-home-card" aria-label="Bài thi đầu ra">
       <div className="row between">

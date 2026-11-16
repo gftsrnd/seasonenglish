@@ -75,7 +75,7 @@ describe("accepted placement appeal changes the level", () => {
     expect(await level()).toEqual({ cefr: "A1", started: "2026-11-02" });
   });
 
-  it("moves to the proposed level from the approval date and waits for next month after the 75% cut-off", async () => {
+  it("moves to the proposed level from the approval date and studies an uncounted month after the 75% cut-off", async () => {
     await setSystemDate("2026-11-12");
     const id = await pendingAppeal("A2");
     const response = await app.inject({ method: "POST", url: `/api/v1/assessment-appeals/${id}/decision`, headers: { cookie: await operatorCookie() },
@@ -83,7 +83,7 @@ describe("accepted placement appeal changes the level", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(await level()).toEqual({ cefr: "A2", started: "2026-11-12" });
     const access = await learnerMonthlyAccess(pool, DEMO_IDS.learner, month);
-    expect(access).toMatchObject({ state: "waiting_next_month", startDate: "2026-12-01", cefr: "A2" });
+    expect(access).toMatchObject({ state: "uncounted", startDate: "2026-12-01", cefr: "A2" });
     const audit = await pool.query("select payload from audit_events where action = 'assessment.learner.level_changed' and entity_id = $1", [DEMO_IDS.learner]);
     expect(audit.rows.at(-1)?.payload).toMatchObject({ mode: "direct", targetLevel: "A2", previousLevel: "A1", evidence: `appeal:${id}` });
   });

@@ -104,13 +104,14 @@ describe("audited monthly learning lifecycle", () => {
     expect(current.json().complaints).toEqual([expect.objectContaining({ id: second.json().complaint.id, status: "rejected", resolution: "Chưa đủ lý do." })]);
   });
 
-  it("prorates newcomers and excludes those deferred to the next month", async () => {
+  it("prorates newcomers and lets late learners study an uncounted month", async () => {
     await systemDate("2026-11-11");
     const active = await learner("A1", "2026-11-09");
     const deferred = await learner("A1", "2026-11-10");
     expect(await monthlyExamEligibility(pool, active.id)).toMatchObject({ effectiveDays: 15, absenceDays: 2, maxAbsences: 4, seasonTurnsRequired: 75 });
-    expect(await learnerMonthlyAccess(pool, deferred.id)).toMatchObject({ state: "waiting_next_month", startDate: "2026-12-01" });
+    expect(await learnerMonthlyAccess(pool, deferred.id)).toMatchObject({ state: "uncounted", startDate: "2026-12-01" });
     expect(await learnerConsecutiveLearningAbsences(pool, deferred.id)).toBe(0);
+    expect(await monthlyExamEligibility(pool, deferred.id)).toMatchObject({ effectiveDays: 0, absenceDays: 0, accessEligible: false, seasonTurnsRequired: 100 });
   });
 
   it("uses the late complaint for its original exam across a month boundary and resumes the same attempt", async () => {
@@ -152,6 +153,6 @@ describe("audited monthly learning lifecycle", () => {
     expect(request.statusCode, request.body).toBe(201);
     const approved = await app.inject({ method: "POST", url: `/api/v1/manager/complaints/${request.json().complaint.id}/decision`, headers: { cookie: managerCookie }, payload: { decision: "approved", resolution: "Đồng ý mở lại bài học." } });
     expect(approved.statusCode, approved.body).toBe(200);
-    expect(await learnerMonthlyAccess(pool, learnerAccount.id)).toMatchObject({ state: "waiting_next_month", startDate: "2027-01-01" });
+    expect(await learnerMonthlyAccess(pool, learnerAccount.id)).toMatchObject({ state: "uncounted", startDate: "2027-01-01" });
   });
 });

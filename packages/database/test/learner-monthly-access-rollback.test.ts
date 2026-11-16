@@ -44,7 +44,8 @@ describe("monthly access after the simulated system date moves backwards", () =>
 
   it("does not change a system date that moved forward", async () => {
     const access = await learnerMonthlyAccess(poolReturning({ system_date: "2026-11-20", published_on: "2026-11-13" }), "learner-1");
-    expect(access?.state).toBe("waiting_next_month");
+    // Published after 25% of the school days: studied, not counted (học thử).
+    expect(access?.state).toBe("uncounted");
     expect(access?.effectiveDates[0]).toBe("2026-11-13");
   });
 
