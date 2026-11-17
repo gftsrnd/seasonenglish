@@ -447,6 +447,7 @@ export interface ReviewAttempt {
 }
 
 export interface ReviewTest {
+  isPlacementRetake?: true | undefined;
   id: string;
   learnerName: string;
   kind: "placement" | "level_up" | "final" | "pass_course";

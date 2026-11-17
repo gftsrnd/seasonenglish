@@ -265,6 +265,7 @@ export interface ContentReviewView {
   assessments: Array<{
     id: string; learnerName: string; kind: "placement" | "level_up" | "final" | "pass_course";
     title: string; status: string; submittedAt: string | null; totalScore: number | null;
+    isPlacementRetake?: true;
   }>;
 }
 

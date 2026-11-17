@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ContentReviewAssessmentDetailView } from "@e4s/contracts";
 import { OperatorReview, OperatorReviewAssessmentDetail } from "./Review.js";
@@ -71,7 +71,8 @@ describe("Operator score display formatting", () => {
       submissions: [], coachTurns: [], weeklyPractices: [], appeals: [], attempts: [],
       tests: [
         { id: "t1", learnerName: "Kiểm thử monthly ready", kind: "final", status: "completed", submittedAt: "15/10/2026 08:30", total: 18.766666666666666 },
-        { id: "t2", learnerName: "Lan", kind: "placement", status: "submitted", submittedAt: "15/10/2026 09:00" }
+        { id: "t2", learnerName: "Lan", kind: "placement", status: "submitted", submittedAt: "15/10/2026 09:00" },
+        { id: "t3", learnerName: "An", kind: "placement", isPlacementRetake: true, status: "approved", total: 64 }
       ],
       aiConnected: true
     } as unknown as OperatorReviewView;
@@ -82,5 +83,9 @@ describe("Operator score display formatting", () => {
     expect(screen.getByText("18,8/100")).toBeInTheDocument();
     expect(screen.queryByText("Mức thô")).not.toBeInTheDocument();
     expect(screen.queryByText("AI")).not.toBeInTheDocument();
+    expect(screen.getByText("Thi lại đầu vào")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Chỉ hiện thi lại đầu vào" }));
+    expect(screen.getByText("An")).toBeVisible();
+    expect(screen.queryByText("Lan")).not.toBeInTheDocument();
   });
 });

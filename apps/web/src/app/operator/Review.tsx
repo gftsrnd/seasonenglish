@@ -263,6 +263,7 @@ export function OperatorReview({ view, actions, readOnly = false, unavailable = 
   const blocked = (key: ReviewActionKey) => unavailable[key];
   const [pending, setPending] = useState<PendingReviewAction>();
   const [actionError, setActionError] = useState<ReviewActionError>();
+  const [retakeOnly, setRetakeOnly] = useState(false);
 
   const isBusy = (key: ReviewActionKey, id: string, decision?: boolean) => pending?.key === key && pending.id === id && (decision === undefined || pending.decision === decision);
   const isSameItemBusy = (key: ReviewActionKey, id: string) => pending?.key === key && pending.id === id;
@@ -321,12 +322,16 @@ export function OperatorReview({ view, actions, readOnly = false, unavailable = 
     if (view.activeTab === "attempts") return view.attempts.length ? <div className="card"><p className="small muted operator-status-legend">Mỗi kỹ năng tối đa 2 lượt: <span><Check className="operator-inline-icon" size={14} strokeWidth={2.5} aria-hidden="true" /> đúng</span>, <span><X className="operator-inline-icon" size={14} strokeWidth={2.5} aria-hidden="true" /> hết lượt vẫn sai/đã hiện đáp án</span>, … đang làm.</p><div className="operator-attempt-learner-list">{groupAttemptsByLearner(view.attempts).map(group => { const first = group.items[0]!; const total = group.items.reduce((sum, item) => sum + item.total, 0); return <details className="operator-review-learner-group" data-testid="attempt-learner-group" key={group.learnerId}><summary><span><b>{first.learnerName}</b> {first.cefr && <LevelChip level={first.cefr} />}</span><span className="xs muted">{group.items.length} bài · {total} lượt</span></summary><div className="table-wrap"><table><thead><tr><th>Bài</th><th>Nghe</th><th>Đọc</th><th>Viết</th><th>Từ loại</th><th>Dùng từ</th><th>Nói</th><th>Tổng lần</th></tr></thead><tbody>{group.items.map(item => <tr key={item.id}><td className="small">{item.lesson}</td><td>{item.listening}</td><td>{item.reading}</td><td>{item.writing}</td><td>{item.wordClass}</td><td>{item.wordUse}</td><td>{item.speaking}{item.audioArtifact ? <AudioEvidencePanel label={`Bản ghi âm bài học của ${item.learnerName}`} evidence={item.audioArtifact} {...(actions.onDeleteAudio ? { onDelete: actions.onDeleteAudio } : {})} /> : null}</td><td><b>{item.total}</b></td></tr>)}</tbody></table></div></details>; })}</div></div> : <Empty>Chưa có học viên nào làm bài thực hành.</Empty>;
 
     const assessmentLabel = (kind: typeof view.tests[number]["kind"]) => kind === "placement" ? "Đầu vào" : kind === "final" ? "Bài thi tháng" : kind === "pass_course" ? "Đề đầu ra" : "Lên mức";
-    return view.tests.length ? <div className="card"><Paged items={view.tests} label="lượt làm bài">{tests => <div className="table-wrap operator-action-table-wrap">
+    const hasRetake = view.tests.some(item => item.isPlacementRetake);
+    const filtered = hasRetake && retakeOnly ? view.tests.filter(item => item.isPlacementRetake) : view.tests;
+    return filtered.length ? <div className="card">
+      {hasRetake ? <label className="row small"><input type="checkbox" checked={retakeOnly} onChange={event => setRetakeOnly(event.target.checked)} /> Chỉ hiện thi lại đầu vào</label> : null}
+      <Paged items={filtered} label="lượt làm bài">{tests => <div className="table-wrap operator-action-table-wrap">
       <table className="operator-action-table operator-results-table" role="table" aria-label="Lượt làm bài thi">
         <thead><tr><th scope="col">Người học</th><th scope="col">Loại</th><th scope="col">Nộp</th><th scope="col">Tổng</th><th scope="col" aria-label="Thao tác" /></tr></thead>
         <tbody>{tests.map(item => <tr role="row" key={item.id}>
           <td className="operator-result-name">{item.learnerName}</td>
-          <td className="operator-result-type">{assessmentLabel(item.kind)}{item.status && assessmentStatusLabels[item.status] ? <span className="operator-result-status"> · {assessmentStatusLabels[item.status]}</span> : null}</td>
+          <td className="operator-result-type">{item.isPlacementRetake ? "Thi lại đầu vào" : assessmentLabel(item.kind)}{item.status && assessmentStatusLabels[item.status] ? <span className="operator-result-status"> · {assessmentStatusLabels[item.status]}</span> : null}</td>
           <td className="operator-result-desktop-detail">{item.submittedAt || "—"}</td>
           <td className="operator-result-score">{item.total == null ? "—" : formatScoreOutOf(item.total, 100)}</td>
           <td className="operator-result-action"><Button small disabled={Boolean(blocked("viewTest"))} title={blocked("viewTest")} onClick={() => actions.onViewTest(item.id)}>Xem</Button></td>

@@ -4717,15 +4717,15 @@ class ContentRepository {
           where u.organization_id = $1 and pr.evidence <> '{}'::jsonb order by pr.updated_at desc limit 100`, [organizationId]),
       this.pool.query<{
         id: string; learner_name: string; kind: "placement" | "level_up" | "final" | "pass_course"; title: string;
-        status: string; submitted_at: Date | null; total_score: string | null;
-      }>(`select aa.id, u.display_name as learner_name, ad.kind, ad.title, aa.status, aa.submitted_at,
+        status: string; submitted_at: Date | null; total_score: string | null; assessment_key: string;
+      }>(`select aa.id, u.display_name as learner_name, ad.kind, ad.title, aa.status, aa.submitted_at, ad.assessment_key,
                  sum(sc.score)::text as total_score
           from assessment_attempts aa join users u on u.id = aa.learner_id and u.role = 'learner' and u.status = 'active'
           join assessment_versions av on av.id = aa.assessment_version_id
           join assessment_definitions ad on ad.id = av.definition_id
           left join assessment_scores sc on sc.attempt_id = aa.id
           where u.organization_id = $1 and ad.kind in ('placement', 'level_up', 'final', 'pass_course')
-          group by aa.id, u.display_name, ad.kind, ad.title order by aa.started_at desc limit 100`, [organizationId]),
+          group by aa.id, u.display_name, ad.kind, ad.title, ad.assessment_key order by aa.started_at desc limit 100`, [organizationId]),
       this.pool.query<{ id: string }>(
         `select distinct on (ls.id) lsv.id
          from programs p
@@ -4855,6 +4855,7 @@ class ContentRepository {
       }),
       assessments: assessments.rows.map((row) => ({
         id: row.id, learnerName: row.learner_name, kind: row.kind, title: row.title, status: row.status,
+        ...(row.assessment_key === PLACEMENT_RETAKE_ASSESSMENT_KEY ? { isPlacementRetake: true as const } : {}),
         submittedAt: row.submitted_at?.toISOString() ?? null,
         totalScore: row.total_score === null ? null : Number(row.total_score)
       }))
