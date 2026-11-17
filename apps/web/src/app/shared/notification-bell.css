@@ -107,6 +107,7 @@
   box-shadow: 0 10px 28px rgb(0 0 0 / 16%);
   animation: inbox-arrival-in 180ms ease-out;
 }
+body.app-modal-open .inbox-arrival { visibility: hidden; }
 .inbox-arrival-open {
   display: flex;
   min-width: 0;

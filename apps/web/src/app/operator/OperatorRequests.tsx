@@ -226,6 +226,7 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
       rows={loadFailed ? [] : data?.appeals.map(item => {
         const open = item.id === id;
         const compactCollapse = compact && open && item.requestKind === "retake";
+        const retakeCollapse = open && item.requestKind === "retake" && item.status === "pending";
         const view = adaptReviewAppeal(item);
         const detailId = `appeal-detail-${item.id}`;
         return {
@@ -236,7 +237,7 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
           status: item.overdue ? <Badge tone="warn">Quá hạn xử lý</Badge> : <StatusBadge status={item.status} />,
           date: item.createdAt,
           action: <>
-            <Link to={requestSearch("appeals", listStatus, open ? undefined : item.id, listPage)} className={compactCollapse ? "btn-sm request-collapse" : "btn-sm"}
+            <Link to={requestSearch("appeals", listStatus, open ? undefined : item.id, listPage)} className={["btn-sm", compactCollapse && "request-collapse", retakeCollapse && "request-retake-collapse"].filter(Boolean).join(" ")}
               aria-expanded={open} aria-controls={open ? detailId : undefined}
               {...(compactCollapse ? { title: "Thu gọn", "aria-label": "Thu gọn" } : {})}>
               {compactCollapse ? <Triangle size={12} strokeWidth={0} fill="currentColor" aria-hidden="true" style={{ rotate: "180deg" }} /> : open ? "Thu gọn" : item.status === "pending" ? "Xử lý" : "Chi tiết"}

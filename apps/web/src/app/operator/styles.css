@@ -4325,7 +4325,12 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 }
 .operator-request-expanded .operator-review-action-footer { justify-content: flex-end; }
 .operator-request-expanded .operator-review-appeal-compact { padding: 0; border: 0; background: transparent; box-shadow: none; }
-.operator-request-expanded .operator-review-appeal-compact .operator-review-action-footer { justify-content: flex-start; flex-wrap: wrap; gap: 6px; padding: 0; }
+.operator-request-expanded .operator-review-appeal-compact .operator-review-action-footer { justify-content: flex-end; flex-wrap: wrap; gap: 6px; padding: 0; }
+.operator-requests .request-table .request-actions:has(> .request-retake-collapse) { justify-content: flex-end; }
+@container (max-width: 640px) {
+  .operator-requests .request-table .request-commands:has(.request-retake-collapse) { margin-inline-start: auto; }
+  .operator-requests .request-expanded-row:has(.operator-review-appeal-compact) > td { padding-inline: 4px; }
+}
 .app-operator .operator-review-action-footer .operator-retake-approve:not(:disabled) {
   border-color: #17603e;
   background: #17603e;

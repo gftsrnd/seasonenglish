@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
 import { AppGuide } from "./AppGuide.js";
 import { NotificationBell } from "./NotificationBell.js";
+import { Modal } from "../learner/ui.js";
 
 const api = vi.hoisted(() => ({ getNotificationInbox: vi.fn(), markInboxRead: vi.fn(), resolveTopicReport: vi.fn() }));
 vi.mock("../../api/notifications.js", () => api);
@@ -130,11 +131,16 @@ describe("NotificationBell new-notification card", () => {
     renderBell();
     const bell = await screen.findByRole("button", { name: "Thông báo" });
     const bounds = vi.spyOn(bell, "getBoundingClientRect").mockReturnValue(new DOMRect(270, 12, 40, 40));
+    const measure = HTMLElement.prototype.getBoundingClientRect;
+    const cardBounds = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("inbox-arrival") ? new DOMRect(0, 0, 220, 40) : measure.call(this);
+    });
     server.arrive(item("approved", "assessment_result", "placement"));
     await poll();
     const card = await screen.findByTestId("inbox-arrival");
-    expect(card).toHaveStyle({ top: "56px", left: "310px" });
+    expect(card).toHaveStyle({ top: "56px", left: "180px" });
     bounds.mockRestore();
+    cardBounds.mockRestore();
     expect(card).toHaveTextContent("Có kết quả Test đầu vào");
     expect(card).not.toHaveTextContent(/xin thi lại/);
     expect(within(card).getByRole("button", { name: "Ẩn thông báo mới" })).toHaveTextContent(/^$/);
@@ -164,6 +170,25 @@ describe("NotificationBell new-notification card", () => {
     expect(await screen.findByTestId("inbox-arrival")).toHaveTextContent("Có kết quả Test đầu vào");
     expect(api.markInboxRead).not.toHaveBeenCalled();
     visible.mockRestore();
+  });
+
+  it("keeps a new notification queued while a centered decision modal is open", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const server = inbox([]);
+    const Fixture = () => {
+      const [open, setOpen] = useState(true);
+      return <><NotificationBell /><Modal open={open} title="Bạn đã lên mức B2" onClose={() => setOpen(false)} /></>;
+    };
+    render(<MemoryRouter><Fixture /></MemoryRouter>);
+    await screen.findByRole("dialog", { name: "Bạn đã lên mức B2" });
+    server.arrive(item("final", "assessment_result", "placement_retake"));
+    await poll();
+    expect(await screen.findByRole("button", { name: /1 chưa đọc/ })).toBeInTheDocument();
+    await act(async () => { vi.advanceTimersByTime(7_000); });
+    expect(screen.queryByTestId("inbox-arrival")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Đóng hộp thoại" }));
+    expect(await screen.findByTestId("inbox-arrival")).toHaveTextContent("Đã xếp lớp sau bài thi lại");
+    expect(api.markInboxRead).not.toHaveBeenCalled();
   });
 
   it("does not pop up while the bell is open", async () => {

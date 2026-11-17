@@ -265,6 +265,8 @@ export function NotificationBell({ deferArrival = false }: { deferArrival?: bool
   const [arrival, setArrival] = useState<Arrival | null>(null);
   const arrivalRef = useRef<Arrival | null>(null);
   const [arrivalHeld, setArrivalHeld] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const arrivalDeferred = deferArrival || modalOpen;
   const close = () => setOpen(false);
   // Focus the popup itself on open (no focus ring parked on the close button).
   useDialog(open, dialog, close, dialog);
@@ -296,15 +298,24 @@ export function NotificationBell({ deferArrival = false }: { deferArrival?: bool
     }
   };
 
-  useEffect(() => {
-    if (!arrival || deferArrival || arrivalHeld) return;
-    const timer = window.setTimeout(() => announce(null), ARRIVAL_MS);
-    return () => window.clearTimeout(timer);
-  }, [arrival, arrivalHeld, deferArrival]);
+  useLayoutEffect(() => {
+    const body = document.body;
+    const sync = () => setModalOpen(body.classList.contains("app-modal-open"));
+    const observer = new MutationObserver(sync);
+    observer.observe(body, { attributes: true, attributeFilter: ["class"] });
+    sync();
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
-    if (deferArrival) setArrivalHeld(false);
-  }, [deferArrival]);
+    if (!arrival || arrivalDeferred || arrivalHeld) return;
+    const timer = window.setTimeout(() => announce(null), ARRIVAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [arrival, arrivalHeld, arrivalDeferred]);
+
+  useEffect(() => {
+    if (arrivalDeferred) setArrivalHeld(false);
+  }, [arrivalDeferred]);
 
   useLayoutEffect(() => {
     const bell = trigger.current;
@@ -316,7 +327,8 @@ export function NotificationBell({ deferArrival = false }: { deferArrival?: bool
       const cardWidth = card.getBoundingClientRect().width;
       const gutter = 8;
       card.style.top = `${anchor.bottom + 4}px`;
-      card.style.left = `${Math.max(gutter, Math.min(anchor.right - cardWidth, viewportWidth - gutter - cardWidth))}px`;
+      const centeredLeft = anchor.left + (anchor.width - cardWidth) / 2;
+      card.style.left = `${Math.max(gutter, Math.min(centeredLeft, viewportWidth - gutter - cardWidth))}px`;
     };
     place();
     const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(place);
@@ -329,7 +341,7 @@ export function NotificationBell({ deferArrival = false }: { deferArrival?: bool
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
     };
-  }, [arrival, deferArrival, open]);
+  }, [arrival, arrivalDeferred, open]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -484,7 +496,7 @@ export function NotificationBell({ deferArrival = false }: { deferArrival?: bool
         <Pager {...feedPaged} label="thông báo" />
       </section>
     </div>, document.body) : null}
-    {arrival && !open && !deferArrival ? createPortal(<div ref={arrivalCard} className="inbox-arrival" role="status" aria-live="polite" data-testid="inbox-arrival" data-guide-ignore
+    {arrival && !open && !arrivalDeferred ? createPortal(<div ref={arrivalCard} className="inbox-arrival" role="status" aria-live="polite" data-testid="inbox-arrival" data-guide-ignore
       onPointerEnter={() => setArrivalHeld(true)} onPointerLeave={() => setArrivalHeld(false)}
       onFocus={() => setArrivalHeld(true)} onBlur={() => setArrivalHeld(false)}>
       <button type="button" className="inbox-arrival-open" onClick={openArrival}>
