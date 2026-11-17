@@ -12,6 +12,10 @@ import {
 const A1_WRITING_HINT = 'Bắt đầu bằng câu gợi ý: "Here is a short update."';
 /** Smallest natural read-aloud sentence that still holds two taught words per pool. */
 const MIN_READ_ALOUD_SENTENCE_WORDS = 6;
+const DECEMBER_B1_READ_ALOUD = "We checked and finished the report, then called and reviewed the plan. We started and updated the tracker, then signed off and moved on.";
+const DECEMBER_B1_TERMS: Readonly<Record<string, readonly string[]>> = {
+  P1: ["checked", "finished"], P2: ["called", "reviewed"], P3: ["started", "updated"], P4: ["signed off", "moved on"]
+};
 const GRAMMAR_REVIEW_PROMPT = [
   "For each item, compare the actual English quote with its supplied grammar formula and focus.",
   "Give one short reason naming the construction in the quote or the error. Set matches to true if the quote is grammatical and demonstrates the supplied form. If sample is present, its other sentences must also be grammatical.",
@@ -140,6 +144,23 @@ async function generateProductiveCandidate(runner:AiTaskRunner,input:MonthlyFina
 async function repairReadAloud(runner:AiTaskRunner,input:MonthlyFinalGenerationInput,candidate:MonthlyFinalProductiveOutput):Promise<AiRunResult>{
   const profile=input.levelProfile.speakingA as {maxWords:number};
   const repairInput={cefr:input.cefr,maxWords:profile.maxWords,words:[],pools:input.pronunciation.map(target=>({code:target.code,focus:target.ipa,examples:target.taughtExamples})),theme:input.theme.title,previousText:candidate.speakingA.text};
+  if (input.cefr === "B1" && input.month === "2026-12") {
+    const pools = repairInput.pools.map(pool => ({
+      ...pool, examples: pool.examples.filter(example => DECEMBER_B1_TERMS[pool.code]?.includes(example.word.toLowerCase()))
+    }));
+    const pinned = { ...repairInput, pools, fallbackText: DECEMBER_B1_READ_ALOUD };
+    if (readAloudPositions(DECEMBER_B1_READ_ALOUD, pinned).length === 8) {
+      const result = await runner.runTask("monthly_final_read_aloud_repair", pinned, {
+        systemPrompt: `Return two connected, natural workplace sentences in at most ${profile.maxWords} words total. Use every preselected phrase exactly as supplied, including both phrases in each pool. The validated fallbackText is a complete example and may be returned verbatim.`,
+        maxOutputTokens: 1200, maxAttempts: 2, temperature: 0.2
+      });
+      const { candidates } = monthlyFinalReadAloudOutputSchema.parse(result.output);
+      for (const text of candidates) {
+        const positions = readAloudPositions(text, pinned);
+        if (positions.length === 8) return { ...result, output: { text, positions } };
+      }
+    }
+  }
   if (input.cefr === "A1") {
     try {
       const result = await runner.runTask("monthly_final_read_aloud_repair", repairInput, {

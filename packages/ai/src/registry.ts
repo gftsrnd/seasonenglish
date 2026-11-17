@@ -51,7 +51,7 @@ import {
   validateMonthlyFinalProductiveOutput, validateMonthlyFinalReceptiveOutput
 } from "./monthly-final-schemas.js";
 import { z } from "zod";
-import {monthlyFinalReadAloudInputSchema,monthlyFinalReadAloudOutputSchema,monthlyFinalReadAloudOutputJsonSchema,validateMonthlyFinalReadAloudOutput} from "./monthly-final-read-aloud.js";
+import {monthlyFinalReadAloudInputSchema,monthlyFinalReadAloudOutputSchema,monthlyFinalReadAloudOutputJsonSchema,normalizeMonthlyFinalReadAloudOutput,validateMonthlyFinalReadAloudOutput} from "./monthly-final-read-aloud.js";
 import {monthlyFinalSampleRepairInputSchema,monthlyFinalSpeakingSampleRepairJsonSchema,validateMonthlyFinalSampleRepair} from "./monthly-final-sample-repair.js";
 import {monthlyFinalWritingBlocksInputSchema,monthlyFinalWritingBlocksOutputSchema,monthlyFinalWritingBlocksJsonSchema,validateMonthlyFinalWritingBlocks} from "./monthly-final-writing-blocks.js";
 import {monthlyFinalWritingBlockInputSchema,monthlyFinalWritingBlockOutputSchema,monthlyFinalWritingBlockJsonSchema,validateMonthlyFinalWritingBlock} from "./monthly-final-writing-blocks.js";
@@ -178,6 +178,7 @@ export const AI_TASKS = new AiTaskRegistry([
   {
     id:"monthly_final_read_aloud_repair",promptKey:"monthly_final_generation",maxValidationIssues:32,inputSchema:monthlyFinalReadAloudInputSchema,
     outputSchema:monthlyFinalReadAloudOutputSchema,outputJsonSchema:monthlyFinalReadAloudOutputJsonSchema,
+    normalizeOutput:(output,input)=>normalizeMonthlyFinalReadAloudOutput(output,monthlyFinalReadAloudInputSchema.parse(input)),
     validateOutput:(output,input)=>validateMonthlyFinalReadAloudOutput(monthlyFinalReadAloudOutputSchema.parse(output),monthlyFinalReadAloudInputSchema.parse(input))
   },
   {

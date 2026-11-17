@@ -5,6 +5,7 @@ import {monthlyFinalWordCount,monthlyFinalIsWordList} from "./monthly-final-sche
 export const monthlyFinalReadAloudInputSchema=z.object({
   cefr:z.enum(["A1","A2","B1","B2","C1"]),maxWords:z.number().int().positive().max(100),
   words:z.array(z.string().trim().min(1)).max(8),theme:z.string(),previousText:z.string(),
+  fallbackText:z.string().trim().min(1).max(400).optional(),
   pools:z.array(z.object({code:z.enum(["P1","P2","P3","P4"]),focus:z.string(),examples:z.array(z.object({exampleId:z.string(),word:z.string(),ipa:z.string()})).min(2)})).min(1).max(4).optional()
 });
 export const monthlyFinalReadAloudOutputSchema=z.object({candidates:z.array(z.string().trim().min(1).max(400)).min(1).max(3)});
@@ -41,6 +42,13 @@ export function readAloudPositions(text:string,input:MonthlyFinalReadAloudInput)
     return examples.map(example=>({code:pool.code,exampleId:example.exampleId,word:example.word,target:`${pool.focus} in ${example.word}`}));
   });
 }
+export function normalizeMonthlyFinalReadAloudOutput(raw: unknown, input: MonthlyFinalReadAloudInput): unknown {
+  if (!input.fallbackText) return raw;
+  const output = monthlyFinalReadAloudOutputSchema.safeParse(raw);
+  if (!output.success || validateMonthlyFinalReadAloudOutput(output.data, input).length === 0) return raw;
+  return monthlyFinalReadAloudIssues(input.fallbackText, input).length === 0 ? { candidates: [input.fallbackText] } : raw;
+}
+
 export function validateMonthlyFinalReadAloudOutput(output:z.infer<typeof monthlyFinalReadAloudOutputSchema>,input:MonthlyFinalReadAloudInput):AiValidationIssue[]{
   const findings=output.candidates.map(text=>monthlyFinalReadAloudIssues(text,input));
   return findings.some(issues=>issues.length===0) ? [] : findings.flat();

@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import type {AiTaskRunner} from "@e4s/ai";
+import {normalizeMonthlyFinalReadAloudOutput, type AiTaskRunner, type MonthlyFinalReadAloudInput} from "@e4s/ai";
 import {buildMonthlyFinalGenerationInput} from "../src/modules/assessment/monthly-final-builder.js";
 import {generateMonthlyFinalProductive,withAcceptedGrammarReviewMemo} from "../src/modules/assessment/monthly-final-productive-generation.js";
 import {monthlyFinalContract,frameworkRef,fakeMonthlyFinalAiOutput} from "./support/monthly-final-fixture.js";
@@ -174,6 +174,33 @@ it("preserves the December B1 two-phrase sentence when its local word budget can
   ["checked", "finished", "called", "planned", "started", "updated", "signed off", "wrapped up early"]
  );
 });
+it("uses the validated December B1 passage when the provider omits pinned terms", async () => {
+ const input = buildMonthlyFinalGenerationInput(monthlyFinalContract("B1"), frameworkRef);
+ const candidate = fakeMonthlyFinalAiOutput(input).productive;
+ input.month = "2026-12";
+ const pairs = [["checked", "finished"], ["called", "reviewed"], ["started", "updated"], ["signed off", "moved on"]];
+ input.pronunciation.forEach((pool, index) => {
+  pool.taughtExamples = [...pairs[index]!, "extra example"].map(word => ({ word, exampleId: `${pool.code}-${word}`, ipa: pool.ipa }));
+ });
+ const metadata = { traceId: "read-aloud" };
+ const calls: MonthlyFinalReadAloudInput[] = [];
+ const runner = { runTask: async (taskId: string, raw: any) => {
+  if (taskId === "monthly_final_grammar_evidence_review") return { output: { items: raw.items.map((item: any) => ({ key: item.key, matches: true, reason: "Matches." })) }, metadata: {} };
+  if (taskId === "monthly_final_productive_generation") throw Object.assign(new Error("invalid"), {
+   code: "AI_OUTPUT_INVALID", details: { invalidOutput: JSON.stringify(candidate) }
+  });
+  calls.push(raw);
+  const omission = { candidates: ["We helped the team, then called about the plan. We started and updated the tracker, then signed off and moved on."] };
+  return { output: normalizeMonthlyFinalReadAloudOutput(omission, raw), metadata };
+ }} as unknown as AiTaskRunner;
+ const result = await generateMonthlyFinalProductive(runner, input, "Generate exam");
+ expect(calls).toHaveLength(1);
+ expect(calls[0]?.pools?.map(pool => pool.examples.map(example => example.word))).toEqual(pairs);
+ expect(result.metadata).toBe(metadata);
+ expect((result.output as any).speakingA.text).toBe(calls[0]?.fallbackText);
+ expect((result.output as any).speakingA.positions.map(({word}: {word:string}) => word)).toEqual(pairs.flat());
+});
+
 it("does not send an already accepted grammar quote to the reviewer again, but re-reviews rejected ones",async()=>{
  let reviews=0;
  const base={runTask:async(_taskId:string,raw:any)=>{reviews++;return {output:{items:raw.items.map((item:any)=>({key:item.key,matches:item.quote.startsWith("Good"),reason:"r"}))},metadata:{}};}} as unknown as AiTaskRunner;
