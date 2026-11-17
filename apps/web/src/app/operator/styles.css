@@ -2242,7 +2242,10 @@ body:has(.app-operator) #modal > .dialog > .row {
 }
 
 .app-operator button.operator-profile-disclosure {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
   width: 100%;
   min-height: 0;
   margin-top: 8px;
@@ -2257,8 +2260,6 @@ body:has(.app-operator) #modal > .dialog > .row {
   font-weight: 700;
   cursor: pointer;
 }
-
-.app-operator button.operator-profile-disclosure { display: flex; align-items: center; gap: 6px; }
 
 .app-operator button.operator-profile-disclosure:hover:not(:disabled),
 .app-operator button.operator-profile-disclosure:active:not(:disabled) {
