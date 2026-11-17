@@ -593,6 +593,7 @@
   .manager-progress-card-metrics {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 1fr;
     gap: 8px;
     margin: 0;
   }
@@ -621,18 +622,5 @@
     white-space: normal;
   }
 
-  .manager-progress-card-metrics > .manager-progress-card-attendance {
-    grid-column: 1 / -1;
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 8px;
-  }
-
-  .manager-progress-card-attendance dd { white-space: nowrap; }
   .manager-progress-learner-card summary { padding-block: 7px; cursor: pointer; }
-}
-
-@media (max-width: 420px) {
-  .manager-progress-card-metrics { grid-template-columns: minmax(0, 1fr); }
 }

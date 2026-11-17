@@ -128,7 +128,7 @@ function LearnerRow({ learner, monthly, weekStartDate, onOpen }: { learner: Mana
         </header>
         <div className="manager-progress-card-status">{statusBadge}</div>
         <dl className="manager-progress-card-metrics">
-          <div className="manager-progress-card-attendance">
+          <div>
             <dt>Điểm danh</dt>
             <dd>{absence ? <b>{absence}</b> : <span>{learner.sessionsThisWeek} buổi trong tuần</span>}</dd>
           </div>
