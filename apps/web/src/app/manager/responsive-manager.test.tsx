@@ -35,9 +35,9 @@ describe("Manager phone layout", () => {
   it("pages the learners and merges the waiting lists into one tabbed card without repeated helper text", async () => {
     phoneViewport();
     const user = userEvent.setup();
-    const { container } = render(<ManagerProgress view={progress} onOpenLearnerProfile={vi.fn()} />);
+    render(<ManagerProgress view={progress} onOpenLearnerProfile={vi.fn()} />);
     // 7 active learners → 5 on the first phone page, with the shared pager.
-    expect(container.querySelectorAll("tr.manager-progress-record")).toHaveLength(5);
+    expect(within(screen.getByRole("table", { name: "Tiến độ người học" })).getAllByRole("article", { name: /^Học viên/u })).toHaveLength(5);
     expect(screen.getByRole("navigation", { name: "Trang danh sách người học đang học" })).toHaveTextContent("Trang 1/2");
     // Page actions are icon squares with an accessible name.
     expect(screen.getByRole("button", { name: "Xuất CSV" })).toBeInTheDocument();
