@@ -103,6 +103,29 @@ describe.skipIf(!databaseUrl)("placement retake persistence", () => {
     expect(await bell(learnerId, "appeal_approved")).toEqual([]);
   });
 
+  it("blocks incomplete edits to an already complete retake draft and permits incremental manual drafts", async () => {
+    const complete = retakeBlueprint();
+    const draft = await repositories.assessments.createLevelFormDraft(DEMO_IDS.operator, "placement-retake", complete);
+    const reading = (paper: typeof complete) => paper.sections.find(section => section.code === "reading")!.groups[0]!.tasks[0]!;
+    for (const mutation of ["prompt", "answer", "duplicate"] as const) {
+      const broken = structuredClone(complete);
+      const task = reading(broken);
+      if (mutation === "prompt") task.prompt = "";
+      else if (mutation === "answer") delete task.correctAnswer;
+      else task.options![1]!.label = task.options![0]!.label;
+      await expect(repositories.assessments.updateLevelFormDraft(DEMO_IDS.operator, draft.versionId, broken))
+        .rejects.toMatchObject({ code: "PLACEMENT_RETAKE_QUESTION_INCOMPLETE", issue: { taskKey: task.key } });
+    }
+    const persisted = await repositories.assessments.getLevelFormDetail(DEMO_IDS.operator, draft.versionId);
+    expect(persisted?.sections.find(section => section.code === "reading")!.groups[0]!.tasks[0]!.prompt).toBe(reading(complete).prompt);
+    const partial = structuredClone(complete);
+    reading(partial).prompt = "";
+    const workInProgress = await repositories.assessments.createLevelFormDraft(DEMO_IDS.operator, "placement-retake", partial);
+    partial.title += " · đang soạn";
+    await expect(repositories.assessments.updateLevelFormDraft(DEMO_IDS.operator, workInProgress.versionId, partial))
+      .resolves.toMatchObject({ title: partial.title, publicationReady: false });
+  });
+
   it("grants once directly, refuses a second grant and notifies the learner", async () => {
     const grant = await grantPlacementRetake(pool, { learnerId: DEMO_IDS.learner, reviewerId: DEMO_IDS.operator, reason: "Học viên chưa hài lòng với kết quả" });
     expect(grant.sourceAttemptId).toBe(DEMO_IDS.placementAttempt);

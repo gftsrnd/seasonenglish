@@ -597,8 +597,15 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const params = levelFormVersionParam.safeParse(request.params);
     const body = levelFormUpdateInput.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_LEVEL_FORM_UPDATE" });
-    const updated = await repositories.assessments.updateLevelFormDraft(request.e4sSession!.user.id, params.data.versionId, body.data as AssessmentLevelFormUpdateInput);
-    return updated ? withLevelFormQualityWarnings(updated) : reply.code(409).send({ code: "LEVEL_FORM_NOT_EDITABLE" });
+    try {
+      const updated = await repositories.assessments.updateLevelFormDraft(request.e4sSession!.user.id, params.data.versionId, body.data as AssessmentLevelFormUpdateInput);
+      return updated ? withLevelFormQualityWarnings(updated) : reply.code(409).send({ code: "LEVEL_FORM_NOT_EDITABLE" });
+    } catch (error) {
+      if (error instanceof PlacementRetakeError && error.code === "PLACEMENT_RETAKE_QUESTION_INCOMPLETE") {
+        return reply.code(400).send({ code: error.code, issue: error.issue });
+      }
+      throw error;
+    }
   });
 
   app.post("/api/v1/assessment-level-forms/:versionId/draft", { preHandler: levelFormOperators }, async (request, reply): Promise<AssessmentLevelFormDetailView | void> => {

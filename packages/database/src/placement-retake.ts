@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import type { AssessmentRetakeStatus, AssessmentSectionCode, CefrLevel } from "@e4s/contracts";
+import type { AssessmentLevelFormUpdateInput, AssessmentRetakeStatus, AssessmentSectionCode, CefrLevel } from "@e4s/contracts";
 import { placementDefinition, type StoredAssessmentDefinition } from "./assessment-blueprints.js";
 
 /**
@@ -24,8 +24,25 @@ export type PlacementRetakeRefusal =
   | "PLACEMENT_RETAKE_NOT_AVAILABLE"
   | "PLACEMENT_RETAKE_FORM_NOT_PUBLISHED";
 
+interface PlacementRetakeQuestionIssue { taskKey: string; section: string; message: string }
+
+export function incompletePlacementRetakeQuestion(sections: AssessmentLevelFormUpdateInput["sections"]): PlacementRetakeQuestionIssue | null {
+  for (const section of sections) for (const group of section.groups) for (const task of group.tasks) {
+    const question = { taskKey: task.key, section: section.title };
+    if (!task.prompt.trim()) return { ...question, message: "Nhập nội dung câu hỏi." };
+    if (task.responseType !== "single_choice") continue;
+    const options = task.options ?? [];
+    if (options.length < 2 || options.some(option => !option.label.trim())) return { ...question, message: "Nhập đầy đủ các lựa chọn." };
+    if (new Set(options.map(option => option.label.trim().toLocaleLowerCase("vi-VN"))).size !== options.length) {
+      return { ...question, message: "Các lựa chọn không được trùng nhau." };
+    }
+    if (!options.some(option => option.value === task.correctAnswer)) return { ...question, message: "Chọn đáp án đúng." };
+  }
+  return null;
+}
+
 export class PlacementRetakeError extends Error {
-  constructor(readonly code: PlacementRetakeRefusal | "PLACEMENT_RETAKE_FINAL" | "PLACEMENT_RETAKE_DECIDED") {
+  constructor(readonly code: PlacementRetakeRefusal | "PLACEMENT_RETAKE_FINAL" | "PLACEMENT_RETAKE_DECIDED" | "PLACEMENT_RETAKE_QUESTION_INCOMPLETE", readonly issue?: PlacementRetakeQuestionIssue) {
     super(code);
   }
 }

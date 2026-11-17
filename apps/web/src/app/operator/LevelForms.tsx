@@ -131,6 +131,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
   const [publishing, setPublishing] = useState(false);
   const [answersReviewed, setAnswersReviewed] = useState(false);
   const [actionError, setActionError] = useState<string>();
+  const [questionError, setQuestionError] = useState<{ taskKey: string; message: string }>();
   const dirty = Boolean(onConfirmDiscard || onPublish) && (draft.title !== detail.title || JSON.stringify(draft.sections) !== JSON.stringify(detail.sections));
   const close = async () => {
     if (interactionLocked.current || saving || audioJob) return;
@@ -224,8 +225,17 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
     if (!onSave || readOnly || !editing || saving) return;
     setSaving(true);
     setActionError(undefined);
+    setQuestionError(undefined);
     try { await onSave(draft); }
-    catch { setActionError("Không lưu được bản nháp đề lên mức. Hãy thử lại."); }
+    catch (error) {
+      const details = error instanceof ApiError && error.code === "PLACEMENT_RETAKE_QUESTION_INCOMPLETE"
+        ? error.details as { issue?: { taskKey: string; section: string; message: string } } : undefined;
+      if (details?.issue) {
+        const { taskKey, section, message } = details.issue;
+        setQuestionError({ taskKey, message });
+        setActionError(`${section} · ${taskKey}. ${message}`);
+      } else setActionError(detail.targetLevel === "placement-retake" ? "Không lưu được bản nháp đề thi lại. Hãy thử lại." : "Không lưu được bản nháp đề lên mức. Hãy thử lại.");
+    }
     finally { setSaving(false); }
   };
   const publishBlocker = dirty ? "Lưu các thay đổi trước khi phát hành."
@@ -302,6 +312,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
         <div className="operator-level-question-list" role="list" aria-label={`Câu hỏi phần ${section.title}`}>{group.tasks.map((task, taskIndex) => <article className="operator-level-question" role="listitem" key={task.key}>
           <div className="operator-level-question-number">Câu {taskIndex + 1}<span>{task.key}</span></div>
           <div className="operator-level-question-content">{task.title ? <b>{task.title}</b> : null}{editing && !readOnly ? <textarea aria-label={`Nội dung ${task.key}`} value={task.prompt} onChange={(event) => updatePrompt(sectionIndex, groupIndex, taskIndex, event.target.value)} /> : <p>{task.prompt}</p>}{task.options?.length ? editing && !readOnly ? <div className="operator-level-option-editor">{task.options.map((option, optionIndex) => <label key={option.value}><span>{option.value}</span><LineField aria-label={`Lựa chọn ${option.value} của ${task.key}`} value={option.label} onChange={(event) => updateTask(sectionIndex, groupIndex, taskIndex, { options: task.options?.map((item, nextOptionIndex) => nextOptionIndex === optionIndex ? { ...item, label: event.target.value } : item) })} /></label>)}<label className="operator-level-answer-editor"><span>Đáp án đúng</span><select aria-label={`Đáp án đúng của ${task.key}`} value={task.correctAnswer ?? ""} onChange={(event) => updateTask(sectionIndex, groupIndex, taskIndex, { correctAnswer: event.target.value })}><option value="" disabled>Chọn đáp án</option>{task.options.map(option => <option value={option.value} key={option.value}>{option.value}</option>)}</select></label></div> : <ol className="operator-level-options" type="A">{task.options.map(option => <li key={option.value}>{option.label}</li>)}</ol> : null}</div>
+          {editing && questionError?.taskKey === task.key ? <p className="small form-error" role="alert">{questionError.message}</p> : null}
           {!editing && task.correctAnswer ? <Badge tone="ok">Đáp án {task.correctAnswer}</Badge> : null}
         </article>)}</div>
       </section>;

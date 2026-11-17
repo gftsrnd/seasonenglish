@@ -10,7 +10,7 @@ import { FROZEN_MONTHLY_ILLUSTRATIONS_SQL, withFrozenMonthlyIllustrations, type 
 import { generationFindingsFromPayload } from "./generation-findings.js";
 import { MonthlyContentRepository } from "./monthly-content-repository.js";
 import { learnerLevelStartedOnSql } from "./learner-level-start.js";
-import { grantPlacementRetakeInTransaction, hasPlacementRetakeStructure, PLACEMENT_RETAKE_ASSESSMENT_KEY, PLACEMENT_RETAKE_STRUCTURE, PlacementRetakeError } from "./placement-retake.js";
+import { grantPlacementRetakeInTransaction, hasPlacementRetakeStructure, incompletePlacementRetakeQuestion, PLACEMENT_RETAKE_ASSESSMENT_KEY, PLACEMENT_RETAKE_STRUCTURE, PlacementRetakeError } from "./placement-retake.js";
 import type {
   AccountRole,
   AudioArtifactInput,
@@ -8265,6 +8265,11 @@ class AssessmentRepository {
       );
       const row = target.rows[0];
       if (!row || Number(row.attempt_count) > 0) { await client.query("rollback"); return null; }
+      if (row.blueprint.key === PLACEMENT_RETAKE_ASSESSMENT_KEY && hasPlacementRetakeStructure(row.blueprint)
+        && !incompletePlacementRetakeQuestion(row.blueprint.sections)) {
+        const issue = incompletePlacementRetakeQuestion(input.sections);
+        if (issue) throw new PlacementRetakeError("PLACEMENT_RETAKE_QUESTION_INCOMPLETE", issue);
+      }
       const sections = input.sections.map((section) => ({
         ...section,
         groups: section.groups.map((group) => ({
