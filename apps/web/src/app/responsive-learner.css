@@ -114,7 +114,7 @@
   :root:root:root .learner-root .game-page .game-running-header > div:first-child { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 1 1 auto; }
   :root:root:root .learner-root .game-page .game-running-header .game-running-title { display: inline-flex; align-items: center; gap: 4px; flex: none; margin: 0; }
   :root:root:root .learner-root .game-page .game-running-header .game-running-title svg { width: 16px; height: 16px; }
-  :root:root:root .learner-root .game-page .game-running-header h1 { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px !important; }
+  :root:root:root .learner-root .game-page .game-running-header h1 { min-width: 0; max-width: 100%; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px !important; }
   :root:root:root .learner-root .game-page .game-running-header #gm-best { flex: none; white-space: nowrap; }
   :root:root:root .learner-root .game-page .game-running-header > div:first-child { flex-direction: column; align-items: flex-start; gap: 0; }
   /* Tutorial card: no big hero tile, compact steps. */

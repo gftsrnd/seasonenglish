@@ -6,7 +6,18 @@ import { describe, expect, it } from "vitest";
 
 const stylesheet = readFileSync(fileURLToPath(new URL("./games.css", import.meta.url)), "utf8");
 
+const responsiveStylesheet = readFileSync(fileURLToPath(new URL("../responsive-learner.css", import.meta.url)), "utf8");
+
 describe("game surface layout guardrails", () => {
+  it("allows the Typing scene and keyboard tracks to shrink at narrow viewport widths", () => {
+    expect(stylesheet).toMatch(/\.typing-scene\s*\{[^}]*min-width:\s*0\b[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
+    expect(stylesheet).toMatch(/\.virtual-keyboard\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
+  });
+
+  it("bounds the compact game topic to its column beside the record badge", () => {
+    expect(responsiveStylesheet).toMatch(/\.game-running-header h1\s*\{[^}]*max-width:\s*100%[^}]*text-overflow:\s*ellipsis/s);
+  });
+
   it("reserves the same safe bottom-nav clearance for the hub and every game route", () => {
     expect(stylesheet).toMatch(
       /\.app-learner-page\.game-page,\s*\.app-learner-page\.games-page\s*\{[^}]*padding-bottom:\s*calc\(128px\s*\+\s*env\(safe-area-inset-bottom\)\)/s

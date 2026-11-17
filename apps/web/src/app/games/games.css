@@ -1107,6 +1107,8 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
 }
 
 .typing-scene {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -1205,6 +1207,7 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
 
 .virtual-keyboard {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   width: min(620px, 100%);
 }
