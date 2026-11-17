@@ -1,4 +1,4 @@
-import { ChevronDown, Eye, Trash2 } from "lucide-react";
+import { Eye, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import type { ContentReviewAssessmentDetailView, ContentReviewView, ReopenRequestView } from "@e4s/contracts";
@@ -236,7 +236,7 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
             <Link to={requestSearch("appeals", listStatus, open ? undefined : item.id, listPage)} className={open && item.requestKind === "retake" ? "btn-sm request-collapse" : "btn-sm"}
               aria-expanded={open} aria-controls={open ? detailId : undefined}
               {...(open && item.requestKind === "retake" ? { title: "Thu gọn", "aria-label": "Thu gọn" } : {})}>
-              {open && item.requestKind === "retake" ? <ChevronDown size={16} aria-hidden="true" /> : open ? "Thu gọn" : item.status === "pending" ? "Xử lý" : "Chi tiết"}
+              {open && item.requestKind === "retake" ? <span aria-hidden="true">▼</span> : open ? "Thu gọn" : item.status === "pending" ? "Xử lý" : "Chi tiết"}
             </Link>
             {item.status !== "pending" ? <button className="btn-sm btn-danger request-delete" type="button" title="Xóa" aria-label="Xóa" disabled={removingId !== undefined || decisionId !== undefined}
               onClick={() => void remove(item)}><Trash2 size={15} aria-hidden="true" />{removingId === item.id ? "Đang xóa…" : <span>Xóa</span>}</button> : null}
