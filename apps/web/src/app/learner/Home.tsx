@@ -92,10 +92,10 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
     {celebration?.kind === "placement-approved" ? <Modal
       className="placement-retake-confirm"
       title={`Bạn đã được xếp mức ${celebration.level ?? view.learner.cefr}`}
-      description="Xem bài đầu vào, phản hồi của Vận hành và cách xin thi lại trong Hỗ trợ học tập."
+      description="Vào Kháng nghị đầu vào để xem bài làm, phản hồi hoặc xin thi lại."
       onClose={() => void finishPlacementWelcome(false)}
       dismissOnBackdrop
-      actions={<><Button onClick={() => void finishPlacementWelcome(true)}>Xem kết quả</Button><Button variant="primary" onClick={() => void finishPlacementWelcome(false)}>Xem hướng dẫn</Button></>}
+      actions={<><Button onClick={() => void finishPlacementWelcome(true)}>Kháng nghị đầu vào</Button><Button variant="primary" onClick={() => void finishPlacementWelcome(false)}>Xem hướng dẫn</Button></>}
     /> : celebration ? <LevelUpCelebration announcement={celebration} displayName={view.learner.displayName} onClose={acknowledgeCelebration} /> : null}
     {assessmentCelebration ? <AssessmentCelebration /> : null}
   </div>;
