@@ -60,6 +60,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const [profileRecord, setProfileRecord] = useState<LearnerProfileView>();
   const [learnerCefr, setLearnerCefr] = useState<CefrLevel>();
+  const [placementRetakeActive, setPlacementRetakeActive] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [musicAllowed, setMusicAllowed] = useState(true);
   const [musicConfig, setMusicConfig] = useState<OrganisationBackgroundMusicView>({ enabled: true, playlistId: "auto", customUrl: "", volume: 22 });
@@ -184,6 +185,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
     };
   }, [session, setTheme]);
   useEffect(() => {
+    setPlacementRetakeActive(false);
     if (session?.role !== "learner" || session.accountStatus === "disabled") { setProfileRecord(undefined); setLearnerCefr(undefined); setAvatarOpen(false); return; }
     void import("../api/learner.js").then(({ learnerApiClient }) => {
       void learnerApiClient.getProfile().then(setProfileRecord).catch(() => setProfileRecord(undefined));
@@ -232,7 +234,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
   const avatar = session.role === "learner" ? profileRecord?.profile.avatar : session.user.avatar;
   const avatarReady = session.role !== "learner" || Boolean(profileRecord);
   const learnerProfileComplete = session.role !== "learner" || profileRecord?.completed === true;
-  return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><BrowserRouter><RouteAudioStopper /><ModalScrollJump /><ModalProvider><AppShell session={session} avatar={avatar} onboardingComplete={learnerProfileComplete} learnerHomeOnly={session.role === "learner" && learnerCefr === undefined} {...(learnerCefr ? { learnerCefr } : {})} onAvatarClick={avatarReady ? () => setAvatarOpen(true) : undefined} onLogout={logout}>{sandboxMode ? <div role="status" data-sandbox-mode="true" className="banner info">Chế độ thử (sandbox): dữ liệu hồ sơ chỉ lưu trong trình duyệt này.</div> : null}{children ? children(session) : <RoleRoutes session={session} onSessionRevoked={clearSession} onLearnerCefr={setLearnerCefr} />}</AppShell>{avatarOpen && avatarReady ? <AvatarDialog initial={avatar} name={session.user.displayName} onClose={() => setAvatarOpen(false)} onSave={(nextAvatar) => void saveAvatar(nextAvatar)} /> : null}</ModalProvider></BrowserRouter></ExperienceProvider>;
+  return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><BrowserRouter><RouteAudioStopper /><ModalScrollJump /><ModalProvider><AppShell session={session} avatar={avatar} onboardingComplete={learnerProfileComplete} learnerHomeOnly={session.role === "learner" && (learnerCefr === undefined || placementRetakeActive)} {...(learnerCefr ? { learnerCefr } : {})} onAvatarClick={avatarReady ? () => setAvatarOpen(true) : undefined} onLogout={logout}>{sandboxMode ? <div role="status" data-sandbox-mode="true" className="banner info">Chế độ thử (sandbox): dữ liệu hồ sơ chỉ lưu trong trình duyệt này.</div> : null}{children ? children(session) : <RoleRoutes session={session} onSessionRevoked={clearSession} onLearnerCefr={setLearnerCefr} onPlacementRetakeActive={setPlacementRetakeActive} />}</AppShell>{avatarOpen && avatarReady ? <AvatarDialog initial={avatar} name={session.user.displayName} onClose={() => setAvatarOpen(false)} onSave={(nextAvatar) => void saveAvatar(nextAvatar)} /> : null}</ModalProvider></BrowserRouter></ExperienceProvider>;
 }
 
 export function RouteAudioStopper() {

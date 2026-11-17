@@ -701,7 +701,7 @@ async function openMicrophoneStream(): Promise<MediaStream> {
 }
 
 function assessmentHeading(view: AssessmentView) {
-  if (view.definition.kind === "placement") return "Test đầu vào";
+  if (view.definition.kind === "placement") return view.definition.key === "placement-retake" ? "Bài thi lại đầu vào" : "Test đầu vào";
   if (view.definition.kind === "final") return "Bài thi tháng";
   if (view.definition.kind === "pass-course") return "Pass Course – Form A";
   const targetLevel = assessmentTargetLevel(view);
@@ -725,13 +725,14 @@ function assessmentPendingCopy(view: AssessmentView): { title: string; detail: s
     if (status === "needs_retry") return { title: "Pass Course chưa đạt", detail: "Trạng thái sẵn sàng C1 đã được đặt lại. Bạn có 72 giờ từ lúc có kết quả để gửi kháng nghị nếu cần." };
     return { title: "Pass Course đang chờ xét", detail: "Vận hành đang đối chiếu bốn kỹ năng và tổng điểm. Bạn có 72 giờ để kháng nghị sau khi có kết quả." };
   }
-  if (status === "approved") return { title: "Test đầu vào đã được duyệt", detail: "Mức học sẽ được mở theo hồ sơ của bạn ngay khi hệ thống cập nhật." };
   const retake = view.placementRetake;
-  if (retake?.status === "used" && retake.retakeAttemptId === view.attempt?.id) {
-    return { title: "Bài thi lại đã được nộp", detail: "Vận hành sẽ xem kết quả và chốt mức học của bạn." };
+  if (view.definition.key === "placement-retake" || (retake?.status === "used" && retake.retakeAttemptId === view.attempt?.id)) {
+    if (status === "approved") return { title: "Bài thi lại đã được duyệt", detail: "Bạn có thể xem mức học đã chốt trong hồ sơ." };
+    return { title: "Đã nộp bài thi lại", detail: "Vận hành sẽ xem cả hai bài thi và chốt mức học của bạn." };
   }
+  if (retake?.status === "granted") return { title: "Đã duyệt thi lại", detail: "Đề thi lại đang được chuẩn bị. Khi đề sẵn sàng, bạn sẽ làm lại bài đầu vào trên trang này." };
+  if (status === "approved") return { title: "Test đầu vào đã được duyệt", detail: "Mức học sẽ được mở theo hồ sơ của bạn ngay khi hệ thống cập nhật." };
   if (status === "needs_retry") {
-    if (retake?.status === "granted") return { title: "Đã duyệt thi lại", detail: "Đề thi lại đang được chuẩn bị. Khi đề sẵn sàng, bạn sẽ làm lại bài đầu vào trên trang này." };
     return { title: "Test đầu vào chưa đủ để duyệt mức", detail: "Vận hành chưa duyệt mức từ bài này. Bạn có thể xin thi lại ở Hỗ trợ học tập, hoặc Vận hành sẽ xếp lớp trực tiếp; bạn sẽ nhận thông báo." };
   }
   return { title: "Test đầu vào đã được nộp", detail: "Vận hành sẽ xem lại kết quả trước khi duyệt mức. Bạn không cần làm lại bài trong lúc chờ." };

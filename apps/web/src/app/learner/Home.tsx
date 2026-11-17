@@ -30,6 +30,7 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
     const timer = window.setTimeout(() => setAssessmentCelebration(false), 4_500);
     return () => window.clearTimeout(timer);
   }, []);
+  if (view.placementRetake) return <PlacementRetakeHome status={view.placementRetake} learnerName={view.learner.displayName} actions={actions} />;
   if (view.onboardingRequired || view.learner.cefr === null) return <OnboardingHome view={view} actions={actions} />;
   const acknowledgeCelebration = async () => {
     if (celebration?.announcementId) await actions.acknowledgeRewardAnnouncement?.(celebration.announcementId);
@@ -55,13 +56,6 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
         account lock stays on the page, as one compact line. */}
     {view.inactivityReminder && view.inactivityReminder.inactiveDays >= ABSENCE_LOCK_DAYS - 1 ? <p className="home-blocking-banner" role="alert"><b>Vắng thêm 1 ngày học sẽ bị khóa tài khoản.</b> Học bài hôm nay để giữ tài khoản.</p> : null}
     {!view.aiAvailable && view.aiAvailable !== undefined ? <Notice tone="warn">Bạn vẫn có thể học, làm bài thi và luyện với Season. Nhận xét AI đang tạm thời gián đoạn.</Notice> : null}
-    {view.placementRetake ? <section className="card learner-summary-card" aria-label="Bài thi lại đầu vào">
-      <div className="row between">
-        <div><h3>{view.placementRetake === "pending_review" ? "Bài thi lại đã được nộp" : view.placementRetake === "in_progress" ? "Bài thi lại đang làm dở" : "Đã duyệt thi lại"}</h3>
-          {view.placementRetake === "pending_review" ? <p className="small muted">Vận hành đang xem bài và sẽ chốt mức học.</p> : null}</div>
-        {view.placementRetake === "pending_review" ? null : <AppLink className="btn" href="/test/placement" navigate={actions.navigate}>{view.placementRetake === "in_progress" ? "Tiếp tục bài thi lại" : "Mở bài thi lại"}</AppLink>}
-      </div>
-    </section> : null}
     <PrimaryLesson view={view} next={next} actions={actions} />
     {view.learner.cefr === "C1" && !courseCompleted ? <section className="card learner-summary-card pass-course-home-card" aria-label="Bài thi đầu ra">
       <div className="row between">
@@ -109,6 +103,25 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
       actions={<><Button onClick={() => void finishPlacementWelcome(true)}>Kháng nghị đầu vào</Button><Button variant="primary" onClick={() => void finishPlacementWelcome(false)}>Xem hướng dẫn</Button></>}
     /> : celebration ? <RewardAnnouncementDialog announcement={celebration} onClose={acknowledgeCelebration} /> : null}
     {assessmentCelebration ? <AssessmentCelebration /> : null}
+  </div>;
+}
+
+const placementRetakeCopy = {
+  granted: { title: "Đã duyệt thi lại", detail: "Bạn có thể làm bài thi lại đầu vào.", action: "Mở bài thi lại" },
+  in_progress: { title: "Bài thi lại đang làm dở", detail: "Bạn có thể vào lại để tiếp tục làm bài.", action: "Tiếp tục bài thi lại" },
+  pending_review: { title: "Đã nộp bài thi lại", detail: "Vận hành sẽ xem cả hai bài thi và chốt mức học của bạn.", action: "Xem trạng thái bài thi" }
+};
+
+function PlacementRetakeHome({ status, learnerName, actions }: { status: NonNullable<LearnerHomeView["placementRetake"]>; learnerName: string; actions: LearnerCallbacks }) {
+  const copy = placementRetakeCopy[status];
+  return <div className="app-learner-page home-page">
+    <PageTitle eyebrow="Thi lại đầu vào" title={`Chào ${learnerName}!`} />
+    <section className="card learner-summary-card" aria-label="Bài thi lại đầu vào">
+      <div className="row between">
+        <div><h2>{copy.title}</h2><p className="small muted">{copy.detail}</p></div>
+        <AppLink className="btn btn-primary" href="/test/placement" navigate={actions.navigate}>{copy.action}</AppLink>
+      </div>
+    </section>
   </div>;
 }
 

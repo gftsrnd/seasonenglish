@@ -35,14 +35,18 @@ describe("monthly learner home", () => {
     expect(screen.queryByText(/kháng nghị/i)).not.toBeInTheDocument();
   });
 
-  it("shows retake activity alongside the current level and available lessons", () => {
+  it("focuses Home on the retake through review and restores learning after the final decision", () => {
     const { rerender } = render(<LearnerHome view={view({ placementRetake: "in_progress" })} actions={actions} />);
     expect(screen.getByRole("link", { name: "Tiếp tục bài thi lại" })).toHaveAttribute("href", "/test/placement");
-    expect(screen.getByText("Trình độ A2")).toBeInTheDocument();
+    expect(screen.queryByText("Trình độ A2")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Học ngay" })).not.toBeInTheDocument();
     rerender(<LearnerHome view={view({ placementRetake: "pending_review" })} actions={actions} />);
     const state = screen.getByRole("region", { name: "Bài thi lại đầu vào" });
-    expect(within(state).getByRole("heading", { name: "Bài thi lại đã được nộp" })).toBeInTheDocument();
-    expect(within(state).queryByRole("link")).not.toBeInTheDocument();
+    expect(within(state).getByRole("heading", { name: "Đã nộp bài thi lại" })).toBeInTheDocument();
+    expect(within(state).getByRole("link", { name: "Xem trạng thái bài thi" })).toHaveAttribute("href", "/test/placement");
+    expect(screen.queryByRole("link", { name: /Season AI Coach/ })).not.toBeInTheDocument();
+    rerender(<LearnerHome view={view()} actions={actions} />);
+    expect(screen.queryByRole("region", { name: "Bài thi lại đầu vào" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Học ngay" })).toBeInTheDocument();
   });
 

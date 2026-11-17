@@ -28,7 +28,7 @@ import type { LearnerContractBundle, LearnerUiState } from "./Router.js";
 import { LearnerController, normalizeLearnerPath } from "./Router.js";
 import { CourseCompletion } from "./CourseCompletion.js";
 import { LearnerRequestHistory } from "./LearnerRequestHistory.js";
-import { Empty, Notice, PageTitle, AppLink } from "./ui.js";
+import { Empty, Notice, PageTitle, AppLink, Button, Modal } from "./ui.js";
 
 type StaticRouteName = "home" | "monthly" | "onboard" | "coach" | "challenge" | "practice" | "survey" | "profile" | "games";
 export type ResolvedLearnerRoute =
@@ -135,7 +135,12 @@ export function printLearnerReward() {
  * Full learner route integration. Mount once under the learner wildcard route;
  * it reads React Router location, fetches server contracts, and owns mutation refreshes.
  */
-type LearnerRouteProps = { courseCompleted?: boolean; onLearnerCefr?: ((level: CefrLevel) => void) | undefined };
+export type LearnerRouteProps = {
+  courseCompleted?: boolean;
+  learnerId?: string;
+  onLearnerCefr?: ((level: CefrLevel) => void) | undefined;
+  onPlacementRetakeActive?: ((active: boolean) => void) | undefined;
+};
 
 export function LearnerRouteController(props: LearnerRouteProps = {}) {
   // `.learner-root` (display: contents) scopes the phone/tablet rules in responsive-learner.css.
@@ -152,7 +157,7 @@ function LearnerRoutes(props: LearnerRouteProps) {
   return <LearnerContent {...props} />;
 }
 
-function LearnerContent({ courseCompleted = false, onLearnerCefr }: LearnerRouteProps) {
+function LearnerContent({ courseCompleted = false, learnerId, onLearnerCefr, onPlacementRetakeActive }: LearnerRouteProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const experience = useExperience();
@@ -163,6 +168,12 @@ function LearnerContent({ courseCompleted = false, onLearnerCefr }: LearnerRoute
   const [contracts, setContracts] = useState<LearnerContractBundle>({});
   const [profileRecord, setProfileRecord] = useState<LearnerProfileView>();
   const [uiState, setUiState] = useState<LearnerUiState>({});
+  // Each learner has a single placement retake grant. Keep one acknowledgement per browser session.
+  const retakeApprovalKey = learnerId ? `e4s:placement-retake-approved:${learnerId}` : null;
+  const [retakeApprovalSeen, setRetakeApprovalSeen] = useState(() => {
+    try { return retakeApprovalKey !== null && window.sessionStorage.getItem(retakeApprovalKey) === "1"; }
+    catch { return false; }
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const coachPending = useRef<{ message: string; requestId: string; audio?: AudioArtifactInput } | undefined>(undefined);
@@ -176,6 +187,7 @@ function LearnerContent({ courseCompleted = false, onLearnerCefr }: LearnerRoute
     setLoading(true); setError(""); setContracts({}); setUiState({});
     const accept = (bundle: LearnerContractBundle, profile?: LearnerProfileView, nextUiState?: LearnerUiState) => {
       if (!live) return;
+      if (bundle.home) onPlacementRetakeActive?.(Boolean(bundle.home.placementRetake));
       setContracts(bundle);
       if (profile) setProfileRecord(profile);
       if (nextUiState) setUiState(nextUiState);
@@ -202,6 +214,12 @@ function LearnerContent({ courseCompleted = false, onLearnerCefr }: LearnerRoute
     const load = async () => {
       if (needsPlacementUnlock) {
         const home = await apiClient.getHome();
+        if (!live) return;
+        onPlacementRetakeActive?.(Boolean(home.placementRetake));
+        if (home.placementRetake) {
+          navigate("/home", { replace: true });
+          return;
+        }
         if (home.onboardingRequired || home.learner.cefr === null) {
           showLearnerToast("Hoàn thành hồ sơ và test đầu vào để mở khu vực học.");
           navigate("/home", { replace: true });
@@ -213,7 +231,7 @@ function LearnerContent({ courseCompleted = false, onLearnerCefr }: LearnerRoute
         case "monthly": {
           // Notifications are read in the bell; Home only shows its own blocks.
           const home = await apiClient.getHome();
-          if (!home.onboardingRequired && home.learner.cefr === null) {
+          if (!home.placementRetake && !home.onboardingRequired && home.learner.cefr === null) {
             try {
               const placement = await apiClient.getAssessment("placement");
               const status = placement.attempt?.status;
@@ -245,7 +263,9 @@ function LearnerContent({ courseCompleted = false, onLearnerCefr }: LearnerRoute
             return;
           }
           const assessment = await apiClient.getAssessment(route.params.kind);
-          if (shouldRedirectApprovedPlacement(route.params.kind, assessment.attempt?.status, assessment.definition.key === "placement-retake")) {
+          if (!live) return;
+          if (route.params.kind === "placement") onPlacementRetakeActive?.(isActivePlacementRetake(assessment));
+          if (assessment.placementRetake?.status !== "granted" && shouldRedirectApprovedPlacement(route.params.kind, assessment.attempt?.status, assessment.definition.key === "placement-retake")) {
             navigate("/home", { replace: true });
             return;
           }
@@ -277,6 +297,7 @@ function LearnerContent({ courseCompleted = false, onLearnerCefr }: LearnerRoute
     return () => { live = false; };
   }, [route]);
 
+  const waitingForRetakeReview = contracts.assessment?.definition.key === "placement-retake" && contracts.assessment.screenState === "pending";
   useEffect(() => {
     if (route.name !== "assessment" || route.params.kind !== "placement") return;
     let live = true;
@@ -286,7 +307,8 @@ function LearnerContent({ courseCompleted = false, onLearnerCefr }: LearnerRoute
       refreshing = true;
       void apiClient.getAssessment("placement")
         .then((assessment) => {
-          if (live && shouldRedirectApprovedPlacement("placement", assessment.attempt?.status, assessment.definition.key === "placement-retake")) {
+          if (live && assessment.placementRetake?.status !== "granted" && shouldRedirectApprovedPlacement("placement", assessment.attempt?.status, assessment.definition.key === "placement-retake")) {
+            onPlacementRetakeActive?.(false);
             navigate("/home", { replace: true });
           }
         })
@@ -295,28 +317,35 @@ function LearnerContent({ courseCompleted = false, onLearnerCefr }: LearnerRoute
     };
     document.addEventListener("visibilitychange", syncTerminalPlacement);
     window.addEventListener("focus", syncTerminalPlacement);
+    const timer = waitingForRetakeReview ? window.setInterval(syncTerminalPlacement, 30_000) : undefined;
     return () => {
       live = false;
+      window.clearInterval(timer);
       document.removeEventListener("visibilitychange", syncTerminalPlacement);
       window.removeEventListener("focus", syncTerminalPlacement);
     };
-  }, [navigate, route]);
+  }, [navigate, route, onPlacementRetakeActive, waitingForRetakeReview]);
 
+  const waitingForPlacement = Boolean(uiState.home?.approvalPending);
+  const homeLoaded = Boolean(contracts.home);
+  const retakeActivity = contracts.home?.placementRetake;
   useEffect(() => {
-    if (route.name !== "home" || !uiState.home?.approvalPending) return;
+    if (route.name !== "home" || !homeLoaded) return;
     let live = true;
     let refreshing = false;
     const refreshApproval = () => {
       if (document.hidden || refreshing) return;
       refreshing = true;
       void apiClient.getHome().then(home => {
-        if (!live || home.onboardingRequired || !home.learner.cefr) return;
-        onLearnerCefr?.(home.learner.cefr);
+        if (!live) return;
+        onPlacementRetakeActive?.(Boolean(home.placementRetake));
+        if (home.learner.cefr) onLearnerCefr?.(home.learner.cefr);
+        if (!retakeActivity && !home.placementRetake && (!waitingForPlacement || !home.learner.cefr)) return;
         setContracts(current => ({ ...current, home }));
-        setUiState(current => ({ ...current, home: { ...current.home, approvalPending: false } }));
+        if (waitingForPlacement && home.learner.cefr) setUiState(current => ({ ...current, home: { ...current.home, approvalPending: false } }));
       }).catch(() => undefined).finally(() => { refreshing = false; });
     };
-    const timer = window.setInterval(refreshApproval, 30_000);
+    const timer = waitingForPlacement || retakeActivity ? window.setInterval(refreshApproval, 30_000) : undefined;
     window.addEventListener("focus", refreshApproval);
     document.addEventListener("visibilitychange", refreshApproval);
     return () => {
@@ -325,7 +354,7 @@ function LearnerContent({ courseCompleted = false, onLearnerCefr }: LearnerRoute
       window.removeEventListener("focus", refreshApproval);
       document.removeEventListener("visibilitychange", refreshApproval);
     };
-  }, [route.name, uiState.home?.approvalPending, onLearnerCefr]);
+  }, [route.name, homeLoaded, retakeActivity, waitingForPlacement, onLearnerCefr, onPlacementRetakeActive]);
 
   const saveProfileRecord = async (profile: LearnerProfileData, leave: boolean) => {
     if (!profileRecord) throw new Error("PROFILE_NOT_LOADED");
@@ -386,19 +415,25 @@ function LearnerContent({ courseCompleted = false, onLearnerCefr }: LearnerRoute
       setContracts({ assessment: await apiClient.completeAssessmentSection(attempt.id, section) });
     },
     submitAssessment: async () => {
-      const attempt = contracts.assessment?.attempt;
+      const previous = contracts.assessment;
+      const attempt = previous?.attempt;
       if (!attempt) throw new Error("ASSESSMENT_ATTEMPT_NOT_ACTIVE");
       const assessment = await apiClient.submitAssessment(attempt.id);
       setContracts({ assessment });
       const submitReason = assessment.attempt?.runtime?.submitReason ?? assessment.runtime?.submitReason;
-      if (submitReason === "manual") {
+      const isRetake = previous?.definition.key === "placement-retake" || assessment.definition.key === "placement-retake";
+      if (submitReason === "manual" && !isRetake) {
         try { window.sessionStorage.setItem(assessmentCelebrationKey, "1"); } catch { /* keep navigation safe in restricted storage */ }
         experience.play("celebrate");
       }
       if (assessment.attempt && assessment.attempt.status !== "in_progress") {
-        showLearnerToast(submitReason === "manual" ? "Đã nộp bài thành công. Chúc mừng bạn đã hoàn thành!" : "Bài thi đã được nộp.", "ok");
+        showLearnerToast(isRetake ? "Đã nộp bài thi lại." : submitReason === "manual" ? "Đã nộp bài thành công. Chúc mừng bạn đã hoàn thành!" : "Bài thi đã được nộp.", "ok");
       }
-      if (route.name === "assessment" && route.params.kind === "placement" || submitReason === "manual") navigate("/home", { replace: true });
+      if (isRetake) {
+        onPlacementRetakeActive?.(isActivePlacementRetake(assessment));
+      } else if ((route.name === "assessment" && route.params.kind === "placement") || submitReason === "manual") {
+        navigate("/home", { replace: true });
+      }
     },
     recordAssessmentViolation: async (attemptId: string, input: AssessmentViolationInput) => {
       const runtime = await apiClient.recordAssessmentViolation(attemptId, input);
@@ -568,7 +603,29 @@ function LearnerContent({ courseCompleted = false, onLearnerCefr }: LearnerRoute
   if (loading) return <div className="app-learner-page"><section className="card" aria-live="polite">{loadingLabel(route.name)}…</section></div>;
   if (error) return <LearnerLoadFailure route={route.name} message={error} onRetry={() => navigate(0)} navigate={navigate} />;
   if (route.name === "notFound") return <div className="app-learner-page"><PageTitle title="Không tìm thấy trang." /><button type="button" onClick={() => navigate("/home")}>Về trang chủ</button></div>;
-  return <LearnerController path={location.pathname} contracts={contracts} callbacks={callbacks} uiState={uiState} courseCompleted={courseCompleted} />;
+  const onHome = route.name === "home";
+  const retakeGranted = onHome ? retakeActivity === "granted" : contracts.assessment?.placementRetake?.status === "granted";
+  const acknowledgeRetake = () => {
+    setRetakeApprovalSeen(true);
+    try { if (retakeApprovalKey) window.sessionStorage.setItem(retakeApprovalKey, "1"); }
+    catch { /* In-memory acknowledgement also covers browsers with storage disabled. */ }
+  };
+  return <>
+    <LearnerController path={location.pathname} contracts={contracts} callbacks={callbacks} uiState={uiState} courseCompleted={courseCompleted} />
+    {retakeGranted && !retakeApprovalSeen ? <Modal
+      title="Đã duyệt thi lại"
+      description="Vận hành đã duyệt yêu cầu thi lại bài đầu vào. Sau khi bạn nộp bài, Vận hành sẽ xem cả hai bài thi và chốt mức học."
+      className="placement-retake-confirm"
+      onClose={acknowledgeRetake}
+      actions={<Button variant="primary" onClick={() => { acknowledgeRetake(); if (onHome) navigate("/test/placement"); }}>{onHome ? "Mở bài thi lại" : "Đã hiểu"}</Button>}
+    /> : null}
+  </>;
+}
+
+function isActivePlacementRetake(assessment: NonNullable<LearnerContractBundle["assessment"]>) {
+  const status = assessment.attempt?.status;
+  return assessment.placementRetake?.status === "granted"
+    || (assessment.definition.key === "placement-retake" && (status === "in_progress" || status === "pending_review" || status === "submitted"));
 }
 
 function mergeResponse(responses: AssessmentResponseView[], response: AssessmentResponseView) {

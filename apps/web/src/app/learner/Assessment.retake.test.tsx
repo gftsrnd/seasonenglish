@@ -41,14 +41,14 @@ describe("placement retake notice", () => {
     expect(actions.startAssessment).not.toHaveBeenCalled();
   });
 
-  it("says the operator will place the learner once the retake is used", () => {
+  it("reports a saved retake by definition key when the submit response omits the grant", () => {
     const view: AssessmentView = {
-      definition, screenState: "pending", attempt: submittedAttempt("retake-attempt", "pending_review"),
-      placementRetake: { status: "used", reason: "r", grantedAt, usedAt: grantedAt, retakeAttemptId: "retake-attempt" }
+      definition, screenState: "pending", attempt: submittedAttempt("retake-attempt", "pending_review")
     };
     render(<LearnerAssessment view={view} actions={actions} />);
-    expect(screen.getByRole("heading", { name: "Bài thi lại đã được nộp" })).toBeInTheDocument();
-    expect(screen.getByText(/Vận hành sẽ xem kết quả và chốt mức học của bạn/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bài thi lại đầu vào" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Đã nộp bài thi lại" })).toBeInTheDocument();
+    expect(screen.getByText("Vận hành sẽ xem cả hai bài thi và chốt mức học của bạn.")).toBeInTheDocument();
     expect(screen.queryByText(/không cần làm lại/i)).not.toBeInTheDocument();
   });
 
