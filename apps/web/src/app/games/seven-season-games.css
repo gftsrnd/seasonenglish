@@ -40,8 +40,17 @@
   display: block;
   translate: 0 6.25%;
 }
-.seasonal-catch .falling-item { width: 25%; }
-.seasonal-catch .falling-item .season-drop { width: clamp(35px, 8vw, 56px); height: clamp(35px, 8vw, 56px); }
+.seasonal-catch .falling-item {
+  --season-drop-size: clamp(35px, 8vw, 56px);
+  width: 25%;
+  /* The simulated point is the base of the drop. The label hangs below it. */
+  transform: translate(-50%, calc(-1 * var(--season-drop-size)));
+  transition: none;
+}
+.seasonal-catch .falling-item .season-drop {
+  width: var(--season-drop-size);
+  height: var(--season-drop-size);
+}
 .seasonal-catch .falling-item .season-drop-trail {
   position: absolute;
   top: 0;
@@ -62,7 +71,7 @@
   position: absolute;
   z-index: 3;
   width: clamp(55px, 15vw, 120px);
-  transform: translate(-50%, -60%);
+  transform: translate(-50%, -78%);
   pointer-events: none;
   animation: season-event-fade .65s ease-out both;
 }
@@ -133,7 +142,12 @@
   bottom: calc(var(--season-gate-pole) - 2px - var(--season-gate-chest) * .03125);
   width: var(--season-gate-chest);
 }
-.season-gate-burst { bottom: 62px; width: 112px; z-index: 3; animation: season-event-fade 1.15s ease-out both; }
+.season-gate-burst { bottom: 62px; width: 112px; z-index: 3; animation: season-event-fade 1.25s ease-out both; }
+:root:root:root .learner-root .game-page .season-gate-fireworks {
+  bottom: calc(var(--season-gate-pole) + var(--season-gate-chest) * .54);
+  width: clamp(142px, 26vw, 196px);
+  max-width: none;
+}
 
 .seasonal-rio .rio-boss {
   bottom: var(--season-stage-floor);
@@ -209,11 +223,30 @@
 :root:root:root .learner-root .game-page .rio-platform { object-fit: fill; }
 
 .seasonal-rio .rio-viewport { border-radius: var(--radius-sm); overflow: hidden; }
-.seasonal-rio .rio-flag { bottom: var(--season-stage-floor); }
+.seasonal-catch { --season-ground-height: clamp(24px, 3.5vw, 32px); }
+.seasonal-rio .rio-flag { bottom: calc(var(--season-stage-floor) - 3px); }
+.seasonal-rio .rio-flag img { display: block; width: 64px; height: auto; }
+.game-runner:has(.season-stage-ground) .game-feedback.is-error { color: #a32638; }
 .seasonal-rio .rio-quiz { place-items: start center; padding: 10px; background: linear-gradient(#2226, transparent 75%); }
 .seasonal-rio .rio-quiz > div { max-height: 100%; overflow: auto; transform: none; }
+.seasonal-rio .rio-quiz--boss {
+  place-items: center start;
+  padding: 12px;
+  background: linear-gradient(90deg, #2226, transparent 55%);
+}
+.seasonal-rio .rio-quiz--boss > div { width: min(420px, 48%); }
+@media (max-width: 1024px) {
+  .seasonal-rio .rio-quiz--boss {
+    position: relative;
+    inset: auto;
+    padding: 0;
+    margin-bottom: 10px;
+    background: none;
+  }
+  .seasonal-rio .rio-quiz--boss > div { width: 100%; padding: 10px; }
+  .seasonal-rio.is-boss-quiz :is(.rio-viewport, .rio-world) { height: clamp(182px, 28dvh, 270px); }
+  .seasonal-rio.is-boss-quiz .mario-controls { display: none; }
+}
 .seasonal-rio .mario-controls { background: transparent; margin-inline: 0; }
 
 .season-stage-result > img { display: block; width: 84px; height: 48px; object-fit: contain; margin: 0 auto 4px; }
-
-.seasonal-rio.rio-scene:has(.rio-quiz) .mario-controls { visibility: visible; }

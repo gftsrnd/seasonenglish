@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, type CSSProperties, type Ref } from "react";
 import { useExperience } from "../../features/experience/Experience.js";
 import { isExclusiveAudioActive } from "../../features/experience/audio-precedence.js";
 import { useTheme } from "../shared/ThemeProvider.js";
@@ -21,6 +21,10 @@ export function useGameSeason() {
   return seasons[useTheme().resolvedTheme];
 }
 
+export function seasonAssetUrl(season: Season, asset: string) {
+  return asset === "shared-jump" ? `${root}/effects/jump.svg` : `${root}/seasons/${season.id}/${asset}.svg`;
+}
+
 export function SeasonImage({ season, asset, className, style, alt = "" }: {
   season: Season;
   asset: string;
@@ -28,8 +32,7 @@ export function SeasonImage({ season, asset, className, style, alt = "" }: {
   style?: CSSProperties;
   alt?: string;
 }) {
-  const src = asset === "shared-jump" ? `${root}/effects/jump.svg` : `${root}/seasons/${season.id}/${asset}.svg`;
-  return <img src={src} alt={alt} className={className} style={style} draggable={false} />;
+  return <img src={seasonAssetUrl(season, asset)} alt={alt} className={className} style={style} draggable={false} />;
 }
 
 export function SeasonStageSky({ season }: { season: Season }) {
@@ -39,8 +42,8 @@ export function SeasonStageSky({ season }: { season: Season }) {
   </div>;
 }
 
-export function SeasonStageGround({ season }: { season: Season }) {
-  return <div className="season-stage-ground" aria-hidden="true"
+export function SeasonStageGround({ season, groundRef }: { season: Season; groundRef?: Ref<HTMLDivElement> }) {
+  return <div ref={groundRef} className="season-stage-ground" aria-hidden="true"
     style={{ backgroundImage: `url(${root}/seasons/${season.id}/ground.svg)` }} />;
 }
 

@@ -97,6 +97,7 @@ describe("learner game visual and interaction regressions", () => {
     expect(rioView.container.querySelector('.rio-platform[src$="/platform.svg"]')).toBeInTheDocument();
     expect(rioView.container.querySelector('.rio-boss img')).toHaveAttribute("alt", "Hạt dẻ");
     expect(rioView.container.querySelector('.rio-flag')).toHaveAttribute("aria-label", "Cột mốc về đích");
+    expect(screen.queryByText("Đích", { exact: true })).not.toBeInTheDocument();
     expect(rioView.container.querySelector('.rio-flag img')).toHaveAttribute("src", "/media/games/seven-seasons/seasons/thu/finish-flag.svg");
     expect(rioView.container.querySelector('.rio-hero img')).toHaveAttribute("alt", "Sóc");
     localStorage.removeItem("e4s:organisation-theme");

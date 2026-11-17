@@ -31,12 +31,15 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
   const [pose, setPose] = useState<CatchPose>("hero-stand");
   const [effects, setEffects] = useState<CatchEffect[]>([]);
   const effectId = useRef(0);
+  const effectTimer = useRef<number | undefined>(undefined);
+  const feedbackTimer = useRef<number | undefined>(undefined);
   const poseTimer = useRef<number | undefined>(undefined);
   const finishTimer = useRef<number | undefined>(undefined);
   const finished = useRef(false);
-  const basketInteracted = useRef(false);
   const pointerDown = useRef(false);
   const sceneRef = useRef<HTMLDivElement | null>(null);
+  const catcherRef = useRef<HTMLDivElement | null>(null);
+  const groundRef = useRef<HTMLDivElement | null>(null);
   const current = words[round];
 
   useEffect(() => {
@@ -48,6 +51,8 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
       window.clearTimeout(ready);
       window.clearTimeout(poseTimer.current);
       window.clearTimeout(finishTimer.current);
+      window.clearTimeout(feedbackTimer.current);
+      window.clearTimeout(effectTimer.current);
     };
   }, []);
 
@@ -56,12 +61,12 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
     const options = choices(words, current, 4, attemptSeed ^ round);
     falling.current = options.map((word, index) => ({ word, x: 12.5 + index * 25, y: -8 }));
     setItems(falling.current);
-    basketInteracted.current = false;
   }, [attemptSeed, current, round, words]);
 
   useEffect(() => {
     if (!current || busy) return;
     let previous = performance.now();
+    let frame = 0;
     const speed = (7 + round * .22) * speedByLevel[cefr];
     const react = (nextPose: CatchPose) => {
       window.clearTimeout(poseTimer.current);
@@ -81,21 +86,37 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
         ...(events.current.length ? { events: events.current } : {}),
       }), 850);
     };
-    const timer = window.setInterval(() => {
+    const showEffects = (nextEffects: CatchEffect[]) => {
+      setEffects(nextEffects);
+      window.clearTimeout(effectTimer.current);
+      effectTimer.current = window.setTimeout(() => setEffects([]), 660);
+    };
+    const step = (now: number) => {
       if (finished.current) return;
-      const now = performance.now();
+      frame = window.requestAnimationFrame(step);
       const delta = Math.min(45, now - previous) / 1000;
       previous = now;
       const next = falling.current.map(item => ({ ...item, y: item.y + speed * delta }));
-      const caught = basketInteracted.current
-        ? next.find(item => item.y >= 73 && item.y <= 88 && Math.abs(item.x - basketRef.current) < 10)
-        : undefined;
+      const arena = sceneRef.current?.getBoundingClientRect();
+      const sprite = catcherRef.current?.firstElementChild?.getBoundingClientRect();
+      const ground = groundRef.current?.getBoundingClientRect();
+      if (!arena?.height || !sprite || !ground) return;
+      const toPercent = (y: number) => (y - arena.top) * 100 / arena.height;
+      // The basket art is centered in the sprite. Its opening is near the top.
+      const rimY = toPercent(sprite.top + sprite.height * .11);
+      const surfaceY = toPercent(ground.top + 3);
+      const basketCenter = sprite.left + sprite.width / 2;
+      const caught = next.find((item, index) =>
+        falling.current[index]!.y < rimY && item.y >= rimY &&
+        Math.abs(arena.left + arena.width * item.x / 100 - basketCenter) <= sprite.width * .28);
       if (caught) {
+        window.clearTimeout(feedbackTimer.current);
+        feedbackTimer.current = window.setTimeout(() => setNotice(""), 850);
         const correct = caught.word.id === current.id;
         falling.current = next.filter(item => item !== caught);
         setItems(falling.current);
         const answer: GameAnswerInput = { wordId: current.id, answer: caught.word.english, attempts: 1, usedHint: false, combo: 1 };
-        setEffects([{ x: caught.x, y: caught.y, id: ++effectId.current, asset: correct ? "fx/catch-correct" : "fx/catch-wrong" }]);
+        showEffects([{ x: caught.x, y: rimY, id: ++effectId.current, asset: correct ? "fx/catch-correct" : "fx/catch-wrong" }]);
         if (correct) {
           playSound("catch-correct");
           answers.current.push(answer);
@@ -118,16 +139,17 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
         }
         return;
       }
-      const landed = next.filter(item => item.y >= 95);
+      const landed = next.filter(item => item.y >= surfaceY);
       if (landed.length) {
         playSound("drop");
         react("catch-miss");
-        setEffects(landed.map(item => ({ x: item.x, y: 93, id: ++effectId.current, asset: "fx/drop-land" })));
+        showEffects(landed.map(item => ({ x: item.x, y: surfaceY, id: ++effectId.current, asset: "fx/drop-land" })));
       }
-      falling.current = next.map(item => item.y >= 95 ? { ...item, y: -8 } : item);
+      falling.current = next.map(item => item.y >= surfaceY ? { ...item, y: -8 } : item);
       setItems(falling.current);
-    }, 50);
-    return () => window.clearInterval(timer);
+    };
+    frame = window.requestAnimationFrame(step);
+    return () => window.cancelAnimationFrame(frame);
   }, [busy, cefr, current, lives, onFinish, playSound, round, words.length]);
 
   const moveBasket = (next: number) => {
@@ -141,7 +163,6 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
       if (busy || !sceneRef.current?.contains(document.activeElement)) return;
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       event.preventDefault();
-      basketInteracted.current = true;
       moveBasket(basketRef.current + (event.key === "ArrowLeft" ? -5 : 5));
     };
     window.addEventListener("keydown", keydown);
@@ -153,7 +174,6 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
     if (busy) return;
     const bounds = element.getBoundingClientRect();
     if (!bounds.width) return;
-    basketInteracted.current = true;
     moveBasket(((clientX - bounds.left) / bounds.width) * 100);
   };
   const help = `Di chuyển rổ tới dưới ${season.drop.toLocaleLowerCase("vi")} đúng bằng kéo, chạm hoặc phím mũi tên.`;
@@ -170,7 +190,7 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
       onPointerUp={event => { pointerDown.current = false; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); }}
       onPointerCancel={() => { pointerDown.current = false; }} onLostPointerCapture={() => { pointerDown.current = false; }}>
       <SeasonStageSky season={season} />
-      <SeasonStageGround season={season} />
+      <SeasonStageGround season={season} groundRef={groundRef} />
       <p className="catch-prompt"><SeasonImage season={season} asset="drop" /><strong>{current.vietnamese}</strong>{current.definition !== current.vietnamese ? <small>{current.definition}</small> : null}</p>
       {items.map(item => <div data-testid="falling-item" className="falling-item" key={item.word.id} style={{ left: `${item.x}%`, top: `${item.y}%`, visibility: item.y < 0 ? "hidden" : "visible" }}>
         <SeasonImage season={season} asset="fx/drop-trail" className="season-drop-trail" />
@@ -178,7 +198,7 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
         <b>{item.word.english}</b>
       </div>)}
       {effects.map(effect => <SeasonImage season={season} key={effect.id} asset={effect.asset} className="season-catch-effect" style={{ left: `${effect.x}%`, top: `${effect.y}%` }} />)}
-      <div data-testid="catch-basket" className="catch-hero" style={{ left: `${basketX}%` }}>
+      <div ref={catcherRef} data-testid="catch-basket" className="catch-hero" style={{ left: `${basketX}%` }}>
         <SeasonImage season={season} asset={pose} alt={`${season.hero} cầm rổ`} className="season-catch-player" />
       </div>
       {ending ? <div className="season-stage-result" role="status">

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { GameAnswerInput } from "@e4s/contracts";
 import { seasonRioRoundPlan } from "@e4s/domain/engagement";
 import { choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
-import { SeasonHearts, SeasonImage, SeasonStageGround, SeasonStageSky, useGameSeason, useSeasonGameSound } from "./seven-season-art.js";
+import { SeasonHearts, SeasonImage, SeasonStageGround, SeasonStageSky, seasonAssetUrl, useGameSeason, useSeasonGameSound } from "./seven-season-art.js";
 import { GameFeedback } from "./GameFeedback.js";
 import { InfoTitle, useCompactUi } from "../shared/CompactUi.js";
 import "./seven-season-games.css";
@@ -63,6 +63,10 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   const [reaction, setReaction] = useState<RioReaction | null>(null);
   const [dust, setDust] = useState<{ id: number; x: number; y: number } | null>(null);
   const [motion, setMotion] = useState<"left" | "right" | null>(null);
+  const [heroReaction, setHeroReaction] = useState<"rio-joy" | "rio-shock" | null>(null);
+  const facingLeft = useRef(false);
+  const runDistance = useRef(0);
+  const heroReactionTimer = useRef<number | undefined>(undefined);
   const effectId = useRef(0);
   const reactionTimer = useRef<number | undefined>(undefined);
   const finishTimer = useRef<number | undefined>(undefined);
@@ -94,6 +98,13 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   }, [onFinish, playSound]);
 
   useEffect(() => {
+    for (const asset of ["rio-run-1", "rio-run-2", "boss-quiz", "boss-smug", "boss-recoil", "fx/chest-fireworks"]) {
+      const image = new Image();
+      image.src = seasonAssetUrl(season, asset);
+    }
+  }, [season]);
+
+  useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
     const resize = () => setViewportWidth(viewport.clientWidth || 900);
@@ -118,6 +129,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       window.clearTimeout(reactionTimer.current);
+      window.clearTimeout(heroReactionTimer.current);
       window.clearTimeout(finishTimer.current);
     };
   }, []);
@@ -201,6 +213,8 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
           else if (gate.tier > 0) setNotice(gate.tier === 60 ? "Đi lên bục để chạm hộp quà." : "Leo bậc thấp rồi lên bục cao để chạm hộp quà.");
         } else if (current.gateStates.every((gate) => gate !== "closed") && current.bossHealth > 0 && nextX >= bossX - 78) {
           nextX = bossX - 78;
+          nextY = 0;
+          velocityY.current = 0;
           const bossIndex = roundPlan.bossQuestions - current.bossHealth;
           const word = roundPlan.bossWords[bossIndex % Math.max(1, roundPlan.bossWords.length)];
           if (word) {
@@ -212,9 +226,16 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
             setNotice(`Boss ${season.boss}: trả lời đúng ${roundPlan.bossQuestions} câu trong 10 giây.`);
           }
         } else if (current.gateStates.every((gate) => gate !== "closed") && current.bossHealth <= 0 && nextX >= flagX - 30) {
-          nextX = flagX - 30; finish(current.answers, "won");
+          nextX = flagX - 30;
+          nextY = 0;
+          velocityY.current = 0;
+          finish(current.answers, "won");
         }
-        if (nextX !== current.heroX) setHeroX(nextX);
+        if (nextX !== current.heroX) {
+          facingLeft.current = nextX < current.heroX;
+          if (velocityY.current === 0) runDistance.current += Math.abs(nextX - current.heroX);
+          setHeroX(nextX);
+        }
         if (nextY !== current.heroY) setHeroY(nextY);
       }
       frame = requestAnimationFrame(step);
@@ -261,8 +282,11 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     nextAnswers[quiz.phase === "gate" ? quiz.index : roundPlan.gateCount + quiz.index] = answer;
     const feedback: RioReaction = { id: ++effectId.current, phase: quiz.phase, index: quiz.index, correct };
     setReaction(feedback);
+    setHeroReaction(correct ? "rio-joy" : "rio-shock");
+    window.clearTimeout(heroReactionTimer.current);
+    heroReactionTimer.current = window.setTimeout(() => setHeroReaction(null), 280);
     window.clearTimeout(reactionTimer.current);
-    reactionTimer.current = window.setTimeout(() => setReaction(null), 1180);
+    reactionTimer.current = window.setTimeout(() => setReaction(null), 1280);
     let nextLives = lives;
     if (correct) setScore((value) => value + 1);
     else { nextLives -= 1; setLives(nextLives); }
@@ -317,19 +341,29 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   };
+  const bossQuiz = quiz?.phase === "boss";
   const cameraLimit = Math.max(0, worldWidth - viewportWidth);
-  const camera = Math.min(cameraLimit, Math.max(0, heroX - viewportWidth * .4));
+  const cameraTarget = bossQuiz ? bossX - viewportWidth * (compactUi ? .63 : .76) : heroX - viewportWidth * .4;
+  const camera = Math.min(cameraLimit, Math.max(0, cameraTarget));
   const isMoving = motion !== null;
   const isAirborne = heroY > 0 && velocityY.current !== 0;
-  const heroPose = ending === "won" ? "rio-joy" : ending ? "rio-lose" : reaction ? (reaction.correct ? "rio-joy" : "rio-shock")
-    : isAirborne ? "rio-jump" : isMoving ? (Math.floor(heroX / 8) % 2 ? "rio-run-1" : "rio-run-2") : "rio-idle";
+  const heroPose = ending === "won" ? "rio-idle" : ending ? "rio-lose"
+    : isAirborne ? "rio-jump" : isMoving && !quiz ? (Math.floor(runDistance.current / 26) % 2 ? "rio-run-1" : "rio-run-2")
+    : heroReaction ?? "rio-idle";
   const bossPose = ending === "expired" ? "boss-expired" : bossHealth <= 0 ? "boss-cleared"
     : reaction?.phase === "boss" ? (reaction.correct ? "boss-recoil" : "boss-smug") : bossStarted ? "boss-quiz" : "boss-idle";
-  const bossEffect = ending === "expired" ? "fx/boss-timeout"
-    : reaction?.phase === "boss" ? (bossHealth === 0 ? "fx/boss-clear" : reaction.correct ? "fx/boss-hit" : "fx/boss-wrong")
-    : bossStarted && bossHealth === roundPlan.bossQuestions ? "fx/boss-ready" : null;
+  const bossEffect = !ending && reaction?.phase === "boss"
+    ? (bossHealth === 0 ? "fx/boss-clear" : reaction.correct ? "fx/boss-hit" : "fx/boss-wrong")
+    : null;
   const flagReady = gateStates.every(gate => gate !== "closed") && bossHealth <= 0;
   const help = "Chạy và nhảy tới hộp quà. Trả lời xong cổng mở, sai mất một tim. Vượt boss với 3 câu đúng trong 10 giây rồi chạm cờ.";
+  const quizPanel = quiz ? <div ref={quizDialogRef} className={`rio-quiz${bossQuiz ? " rio-quiz--boss" : ""}`} role="dialog" aria-modal="true" aria-label={quiz.phase === "gate" ? "Câu hỏi hộp quà" : "Câu hỏi Boss"} tabIndex={-1} onKeyDown={trapQuizFocus}>
+    <div>
+      <span className="eyebrow">{quiz.phase === "gate" ? `Hộp quà ${quiz.index + 1}/${roundPlan.gateCount}` : `Boss ${season.boss} · ${bossSeconds}s`}</span>
+      <h3>{quiz.word.vietnamese}</h3>{quiz.word.definition !== quiz.word.vietnamese ? <p>{quiz.word.definition}</p> : null}
+      <div>{choices(words, quiz.word, 4, attemptSeed ^ quiz.index).map(choice => <button type="button" disabled={busy} key={choice.id} onClick={() => answerQuiz(choice)}>{choice.english}</button>)}</div>
+    </div>
+  </div> : null;
   return <div className="game-runner" aria-busy={busy || undefined}>
     <div className="game-hud">
       {compactUi ? <InfoTitle as="h2" title="Season-rio" tip={help} label="Cách chơi Season-rio" /> : <h2>Season-rio</h2>}
@@ -340,9 +374,10 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
       </span>
       <SeasonHearts season={season} lives={lives} />
     </div>
-    <div ref={sceneRef} className="rio-scene seasonal-rio" role="application" aria-label="Màn chơi Season-rio" tabIndex={0}
+    <div ref={sceneRef} className={`rio-scene seasonal-rio${bossQuiz ? " is-boss-quiz" : ""}`} role="application" aria-label="Màn chơi Season-rio" tabIndex={0}
       onKeyDown={event => { if (["ArrowLeft", "ArrowRight", "ArrowUp", " ", "a", "d", "w"].includes(event.key)) event.preventDefault(); }}
       onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { keys.current = {}; setMotion(null); } }}>
+      {bossQuiz && compactUi ? quizPanel : null}
       <div ref={viewportRef} className="rio-viewport" onPointerDown={pressStage} onPointerUp={releaseStage} onPointerCancel={releaseStage} onLostPointerCapture={releaseStage} onContextMenu={event => event.preventDefault()}>
         <SeasonStageSky season={season} />
         <div className="rio-world" style={{ width: worldWidth, transform: `translateX(-${camera}px)` }}>
@@ -356,7 +391,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
             return <div data-testid="gift-gate" data-state={gateState} data-tier={gate.tier} className="gift-gate seasonal-rio-gate" style={{ left: gate.left, bottom: `calc(var(--season-stage-floor) + ${gate.tier}px - 2px)` }} key={gate.left}>
               <SeasonImage season={season} asset="gate-post" className="season-gate-post" />
               <SeasonImage season={season} asset={art.asset} alt={art.label} className="season-gate-chest" />
-              {reacting ? <SeasonImage key={reaction.id} season={season} asset={reaction.correct ? "fx/chest-fireworks" : "fx/gate-wrong"} className="season-gate-burst" /> : null}
+              {reacting ? <SeasonImage key={reaction.id} season={season} asset={reaction.correct ? "fx/chest-fireworks" : "fx/gate-wrong"} className={`season-gate-burst${reaction.correct ? " season-gate-fireworks" : ""}`} /> : null}
             </div>;
           })}
           <div data-testid="season-rio-boss" className="rio-boss" data-pose={bossPose} style={{ left: bossX }}>
@@ -364,24 +399,14 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
             {bossEffect ? <SeasonImage key={reaction?.id} season={season} asset={bossEffect} className="season-boss-burst" /> : null}
           </div>
           <div data-testid="season-rio-flag" className={`rio-flag ${flagReady ? "is-ready" : ""}`} style={{ left: flagX }} aria-label="Cột mốc về đích">
-            <SeasonImage season={season} asset="finish-flag" /><span>Đích</span>
+            <SeasonImage season={season} asset="finish-flag" />
           </div>
           {dust ? <SeasonImage key={dust.id} season={season} asset="shared-jump" className="season-rio-dust" style={{ left: dust.x, bottom: `calc(var(--season-stage-floor) + ${dust.y}px)` }} /> : null}
           <div data-testid="season-rio-hero" className={`rio-hero ${isAirborne ? "is-jumping" : isMoving ? "is-running" : ""}`} style={{ left: heroX, bottom: `calc(var(--season-stage-floor) + ${heroY}px)` }}>
-            <SeasonImage season={season} asset={heroPose} alt={season.hero} className={motion === "left" ? "is-facing-left" : ""} />
+            <SeasonImage season={season} asset={heroPose} alt={season.hero} className={facingLeft.current ? "is-facing-left" : ""} />
           </div>
         </div>
-        {quiz ? <div ref={quizDialogRef} className="rio-quiz" role="dialog" aria-modal="true" aria-label={quiz.phase === "gate" ? "Câu hỏi hộp quà" : "Câu hỏi Boss"} tabIndex={-1} onKeyDown={trapQuizFocus}>
-          <div>
-            <span className="eyebrow">{quiz.phase === "gate" ? `Hộp quà ${quiz.index + 1}/${roundPlan.gateCount}` : `Boss ${season.boss} · ${bossSeconds}s`}</span>
-            <h3>{quiz.word.vietnamese}</h3>{quiz.word.definition !== quiz.word.vietnamese ? <p>{quiz.word.definition}</p> : null}
-            <div>{choices(words, quiz.word, 4, attemptSeed ^ quiz.index).map(choice => <button type="button" disabled={busy} key={choice.id} onClick={() => answerQuiz(choice)}>{choice.english}</button>)}</div>
-          </div>
-        </div> : null}
-        {ending ? <div className="season-stage-result" role="status">
-          <SeasonImage season={season} asset={ending === "won" ? "fx/win" : ending === "expired" ? "fx/boss-timeout" : "fx/lose"} />
-          {ending === "won" ? "Đã về đích!" : ending === "expired" ? "Hết giờ!" : "Hết mạng!"}
-        </div> : null}
+        {(!bossQuiz || !compactUi) && quizPanel}
       </div>
       <div className="mario-controls" aria-label="Điều khiển Season-rio">
         <div>
