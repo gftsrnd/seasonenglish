@@ -160,15 +160,16 @@ export function LevelUpCelebration({
     if (event.currentTarget === event.target) void onClose();
   }}>
     <section className="dialog level-adjustment-dialog" role="dialog" aria-modal="true" aria-labelledby="level-adjustment-title" tabIndex={-1} onKeyDown={handleDialogKeyDown}>
-      <div className="level-adjustment-heading">
-        <h2 id="level-adjustment-title">Trình độ mới của bạn</h2>
-        <ModalCloseButton ref={closeRef} label="Đóng hộp thoại" onClick={() => void onClose()} />
+      <div className="level-adjustment-close">
+        <ModalCloseButton ref={closeRef} label="Đóng hộp thoại" iconOnly onClick={() => void onClose()} />
       </div>
-      <div className="row level-adjustment-result">
+      <div className="card flat level-adjustment-result">
+        <span className="level-adjustment-emblem"><Sprout className="celebration-icon" aria-hidden="true" /></span>
+        <h2 id="level-adjustment-title">Trình độ mới của bạn</h2>
         {announcement.level ? <span className="badge lvl">Mức {announcement.level}</span> : null}
         {!genuine ? <span className="badge">Mô phỏng</span> : null}
       </div>
-      {announcement.reason ? <p className="level-adjustment-reason"><b>Nhận xét của Vận hành</b><br />{announcement.reason}</p> : null}
+      {announcement.reason ? <div className="level-adjustment-reason"><Notice><b>Nhận xét của Vận hành</b><br />{announcement.reason}</Notice></div> : null}
       <p className="small muted level-adjustment-rule">{announcement.rule ?? "Lộ trình lên mức bắt đầu lại. Kết quả cũ vẫn có trong lịch sử."}</p>
       <div className="row modal-actions"><Button variant="primary" onClick={() => void onClose()}>Tiếp tục học</Button></div>
     </section>
