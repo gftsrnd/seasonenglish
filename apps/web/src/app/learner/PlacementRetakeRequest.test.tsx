@@ -25,6 +25,7 @@ describe("placement retake request: bell → support page → 'Xin thi lại' �
     expect(notificationContent(notification("appeal_received", "retake"))).toEqual(expect.objectContaining({ title: "Yêu cầu thi lại", path: "/op/review?tab=appeals" }));
     expect(notificationContent(notification("appeal_rejected", "retake")).title).toBe("Yêu cầu thi lại bị từ chối");
     expect(notificationContent(notification("retake_granted", "placement")).path).toBe("/test/placement");
+    expect(notificationContent(notification("assessment_submission_saved", "placement_retake"))).toMatchObject({ title: "Đã nộp bài thi lại", path: "/test/placement" });
     expect(notificationContent(notification("assessment_result", "placement_retake"))).toMatchObject({ title: "Đã xếp lớp sau bài thi lại", path: "/profile" });
   });
 
@@ -89,7 +90,7 @@ describe("placement retake request: bell → support page → 'Xin thi lại' �
     await user.click(screen.getByRole("button", { name: "Xin thi lại" }));
     await user.type(screen.getByRole("textbox", { name: /Lý do/ }), "Tôi muốn thử lại.");
     await user.click(screen.getByRole("button", { name: "Gửi yêu cầu" }));
-    expect(await screen.findAllByText("Yêu cầu thi lại", { exact: true })).toHaveLength(1);
+    expect(await screen.findAllByText("Thi lại đầu vào", { exact: true })).toHaveLength(1);
     expect(screen.queryByRole("heading", { name: "Test đầu vào" })).not.toBeInTheDocument();
     expect(screen.getByText("Chờ xử lý")).toHaveClass("warn");
     expect(screen.getByText(/Phản hồi bài đầu vào: Hãy luyện thêm kỹ năng nghe/)).toBeInTheDocument();
@@ -155,6 +156,24 @@ describe("placement retake request: bell → support page → 'Xin thi lại' �
       expect(within(value === "A" ? first : second).getByText("Bạn đã chọn", { exact: true })).toBeVisible();
       expect(dialog.queryByText(/Bạn đã chọn:/u)).not.toBeInTheDocument();
     }
+  });
+
+  it("shows one final state with both review actions and folds earlier request notes", async () => {
+    const user = userEvent.setup();
+    mockHistory(view({
+      original, retake: "used", request: { id: "r1", status: "accepted", reason: "Tôi muốn thử lại.", resolution: "Đã xem yêu cầu.", createdAt: "2026-11-16T03:00:00Z", resolvedAt: null },
+      completedRetake: { ...original, approvedLevel: "B1", feedback: "Xếp lớp sau thi lại.", definition: { ...original.definition, key: "placement-retake" } }
+    }));
+    const row = (await screen.findByText("Mức cuối: B1")).closest("tr")!;
+    expect(within(row).getByText("Thi lại đầu vào")).toBeVisible();
+    expect(within(row).getByText("Xếp lớp sau thi lại.")).toBeVisible();
+    expect(within(row).queryByText("Đã duyệt")).not.toBeInTheDocument();
+    expect(within(row).queryByText("Đã dùng lượt thi lại")).not.toBeInTheDocument();
+    expect(within(row).getByText(/Tôi muốn thử lại/)).not.toBeVisible();
+    await user.click(within(row).getByText("Chi tiết yêu cầu"));
+    expect(within(row).getByText(/Tôi muốn thử lại/)).toBeVisible();
+    expect(within(row).getByRole("button", { name: "Xem bài lần đầu" })).toBeVisible();
+    expect(within(row).getByRole("button", { name: "Xem bài thi lại" })).toBeVisible();
   });
 
   it("shows the review answer key and keeps an aggregate-only reading score without inventing skipped items", async () => {

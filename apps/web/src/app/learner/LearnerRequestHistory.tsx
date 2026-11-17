@@ -147,16 +147,30 @@ export function LearnerRequestHistory() {
   const original = retakeView?.original;
   const completedRetake = retakeView?.completedRetake;
   const selectedSubmission = submissionOpen === "original" ? original : submissionOpen === "completedRetake" ? completedRetake : undefined;
+  const acceptedRetake = retake?.status === "accepted";
+  const usedRetake = retakeView?.retake === "used";
+  const requestNotes = retake && (retake.reason || original?.feedback || retake.resolution) ? <>
+    {retake.reason ? <p>Lý do: {retake.reason}</p> : null}
+    {original?.feedback ? <p className="small">Phản hồi bài đầu vào: {original.feedback}</p> : null}
+    {retake.resolution ? <p className="small">Phản hồi yêu cầu: {retake.resolution}</p> : null}
+  </> : null;
   const retakeRows = retake && (filter === "all" || filter === "appeals") ? [{
     id: `support-request-${retake.id}`,
-    kind: "Yêu cầu thi lại",
+    kind: "Thi lại đầu vào",
     date: retake.createdAt,
-    content: <><b>Test đầu vào</b>{retake.reason ? <p>{retake.reason}</p> : null}{original?.feedback ? <p className="small">Phản hồi bài đầu vào: {original.feedback}</p> : null}{retake.resolution ? <p className="small">Phản hồi yêu cầu: {retake.resolution}</p> : null}{completedRetake ? <p className="small"><b>Mức cuối: {completedRetake.approvedLevel ?? "—"}</b>{completedRetake.feedback ? <> · {completedRetake.feedback}</> : null}</p> : null}</>,
-    status: <span className={`badge ${retake.status === "pending" ? "warn" : retake.status === "rejected" ? "danger" : "ok"}`}>{retake.status === "pending" ? "Chờ xử lý" : retake.status === "rejected" ? "Đã từ chối" : "Đã duyệt"}</span>,
+    content: <>
+      {completedRetake?.feedback ? <p className="small">{completedRetake.feedback}</p> : null}
+      {acceptedRetake && requestNotes ? <details><summary>Chi tiết yêu cầu</summary>{requestNotes}</details> : requestNotes}
+    </>,
+    status: completedRetake ? <span className="badge ok">Mức cuối: {completedRetake.approvedLevel ?? "—"}</span>
+      : <span className={`badge ${retake.status === "rejected" ? "danger" : retake.status === "pending" || usedRetake ? "warn" : "ok"}`}>{
+        retake.status === "pending" ? "Chờ xử lý" : retake.status === "rejected" ? "Đã từ chối"
+          : retakeView?.retakeActivity === "in_progress" ? "Đang thi lại" : retakeView?.retakeActivity === "pending_review" ? "Chờ chốt mức"
+            : usedRetake ? "Đã dùng lượt thi lại" : "Đã duyệt"
+      }</span>,
     action: <>
-      {retake.status === "accepted" && retakeView?.retake !== "used" ? <Link className="btn btn-sm" to="/test/placement">Mở bài thi lại</Link>
-        : retake.status === "accepted" && retakeView?.retakeActivity === "in_progress" ? <Link className="btn btn-sm" to="/test/placement">Tiếp tục bài thi lại</Link>
-          : retake.status === "accepted" && retakeView?.retake === "used" ? <span className="small muted">Đã dùng lượt thi lại</span> : null}
+      {acceptedRetake && !usedRetake ? <Link className="btn btn-sm" to="/test/placement">Mở bài thi lại</Link>
+        : acceptedRetake && retakeView?.retakeActivity === "in_progress" ? <Link className="btn btn-sm" to="/test/placement">Tiếp tục bài thi lại</Link> : null}
       {original ? <button className="btn btn-sm" type="button" onClick={() => setSubmissionOpen("original")}>{completedRetake ? "Xem bài lần đầu" : "Xem bài làm"}</button> : null}
       {completedRetake ? <button className="btn btn-sm" type="button" onClick={() => setSubmissionOpen("completedRetake")}>Xem bài thi lại</button> : null}
     </>

@@ -125,6 +125,7 @@ export function notificationContent(item: InboxNotificationView): NotificationCo
     case "assessment_manual_review":
       return { title: `Có ${exam} cần chấm tay`, description: "Chấm tự động chưa hoàn tất. Mở bài đã nộp để kiểm tra và chấm phần Viết, Nói.", path: `/op/tests?tab=${examTab}${examAttempt}`, action: "Mở bài cần chấm" };
     case "assessment_submission_saved":
+      if (item.context === "placement_retake") return { title: "Đã nộp bài thi lại", description: "Vận hành đang xem bài và sẽ chốt mức học.", path: "/test/placement", action: "Xem trạng thái" };
       return { title: `Đã nộp ${exam}`, description: "Bài làm đã được lưu. Vận hành sẽ kiểm tra và cập nhật kết quả.", path: item.context === "final" ? "/monthly" : item.context === "pass_course" ? "/test/pass-course" : "/profile", action: "Xem trạng thái" };
     case "assessment_grading_interrupted":
       return { title: `Chấm tự động ${exam} bị gián đoạn`, description: "Bài nộp đã được lưu. Vận hành có thể chấm tay phần Viết và Nói.", path: `/mgr/ops/tests?tab=${examTab}`, action: "Xem kết quả bài thi" };

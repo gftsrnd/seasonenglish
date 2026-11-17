@@ -13,11 +13,11 @@ export class InboxNotificationRepository {
       `with owned as not materialized (${inboxScope}),
        page as (
          select id, kind,
-                case when kind = 'assessment_result' and context = 'placement' and exists (
+                case when kind in ('assessment_result', 'assessment_submission_saved') and context = 'placement' and exists (
                   select 1 from assessment_retake_grants retake
                   where retake.learner_id = owned.recipient_id
                     and retake.kind = 'placement'
-                    and retake.retake_attempt_id = substring(owned.event_key from '^assessment:([0-9a-fA-F-]{36}):approved$')::uuid
+                    and retake.retake_attempt_id = substring(owned.event_key from '^assessment:([0-9a-fA-F-]{36}):(?:approved|saved)$')::uuid
                 ) then 'placement_retake' else context end as context,
                 created_at as "createdAt", read_at as "readAt",
                 substring(event_key from '^(?:complaint:|appeal:[a-z]+:|reopen:[a-z]+:|audit:|assessment:|topic:)([0-9a-fA-F-]{36}):') as "relatedId",
