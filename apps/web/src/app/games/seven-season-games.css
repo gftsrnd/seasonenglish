@@ -254,6 +254,17 @@
 :root:root:root .learner-root .game-page .rio-platform { object-fit: fill; }
 
 .seasonal-rio .rio-viewport { border-radius: var(--radius-sm); overflow: hidden; }
+.game-runner .seasonal-rio[role="application"]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.seasonal-rio:focus-visible .rio-viewport {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+@media (min-width: 1025px) {
+  .seasonal-rio :is(.rio-viewport, .rio-world) { height: clamp(360px, 43dvh, 480px); }
+}
 .seasonal-catch { --season-ground-height: clamp(24px, 3.5vw, 32px); }
 .seasonal-rio .rio-flag { bottom: calc(var(--season-stage-floor) - 3px); }
 .seasonal-rio .rio-flag img { display: block; width: 64px; height: auto; }
@@ -283,8 +294,18 @@
   }
   .seasonal-rio .rio-quiz--boss > div { width: 100%; padding: 10px; }
   .seasonal-rio.is-boss-quiz :is(.rio-viewport, .rio-world) { height: clamp(182px, 28dvh, 270px); }
-  .seasonal-rio.is-boss-quiz .mario-controls { display: none; }
+  .seasonal-rio.rio-scene:has(.rio-quiz) .mario-controls { visibility: visible; opacity: 1; }
+  .seasonal-rio.rio-scene { scroll-margin-block: 8px; }
 }
 .seasonal-rio .mario-controls { background: transparent; margin-inline: 0; }
 
 .season-stage-result > img { display: block; width: 84px; height: 48px; object-fit: contain; margin: 0 auto 4px; }
+
+@media (max-width: 720px) and (max-height: 740px) {
+  .seasonal-catch.catch-arena { height: clamp(188px, calc(100dvh - 362px), 390px); }
+  .seasonal-catch .catch-prompt { padding-block: 6px; }
+  .seasonal-catch .catch-prompt > img { width: 24px; height: 24px; }
+  .seasonal-rio :is(.rio-viewport, .rio-world) { height: clamp(215px, calc(100dvh - 345px), 300px); }
+  .seasonal-rio.is-boss-quiz :is(.rio-viewport, .rio-world) { height: clamp(150px, 28dvh, 210px); }
+  .seasonal-rio.is-boss-quiz .rio-boss { width: min(145px, 36vw); }
+}

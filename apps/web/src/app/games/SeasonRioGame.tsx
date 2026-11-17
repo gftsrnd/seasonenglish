@@ -63,7 +63,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   const [reaction, setReaction] = useState<RioReaction | null>(null);
   const [dust, setDust] = useState<{ id: number; x: number; y: number } | null>(null);
   const [motion, setMotion] = useState<"left" | "right" | null>(null);
-  const [heroReaction, setHeroReaction] = useState<"rio-joy" | "rio-shock" | null>(null);
+  const [heroReaction, setHeroReaction] = useState<"rio-joy" | "rio-lose" | null>(null);
   const facingLeft = useRef(false);
   const runDistance = useRef(0);
   const heroReactionTimer = useRef<number | undefined>(undefined);
@@ -220,10 +220,12 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
           if (word) {
             const nextQuiz = { phase: "boss" as const, index: bossIndex, word };
             state.current = { ...current, bossStarted: true, quiz: nextQuiz };
-            if (!current.bossStarted) bossDeadline.current = performance.now() + 10_000;
+            if (!current.bossStarted) {
+              bossDeadline.current = performance.now() + 10_000;
+              setNotice("");
+            }
             setBossStarted(true);
             setQuiz(nextQuiz);
-            setNotice(`Boss ${season.boss}: trả lời đúng ${roundPlan.bossQuestions} câu trong 10 giây.`);
           }
         } else if (current.gateStates.every((gate) => gate !== "closed") && current.bossHealth <= 0 && nextX >= flagX - 30) {
           nextX = flagX - 30;
@@ -242,7 +244,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     };
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  }, [activeGateLayout, bossX, busy, finish, flagX, platforms, playSound, roundPlan, season.boss]);
+  }, [activeGateLayout, bossX, busy, finish, flagX, platforms, playSound, roundPlan]);
 
   useEffect(() => {
     if (!bossStarted || bossHealth <= 0 || busy) return;
@@ -268,7 +270,10 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     // user sees a neutral question, and keyboard navigation starts only once
     // the learner explicitly tabs into the options.
     quizDialogRef.current?.focus({ preventScroll: true });
-  }, [quiz?.index, quiz?.phase]);
+    if (!compactUi) return;
+    const frame = window.requestAnimationFrame(() => sceneRef.current?.scrollIntoView?.({ block: "nearest" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [compactUi, quiz?.index, quiz?.phase]);
 
   const answerQuiz = (selected: GameWord) => {
     if (!quiz || busy || answeringQuiz.current) return;
@@ -282,9 +287,9 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     nextAnswers[quiz.phase === "gate" ? quiz.index : roundPlan.gateCount + quiz.index] = answer;
     const feedback: RioReaction = { id: ++effectId.current, phase: quiz.phase, index: quiz.index, correct };
     setReaction(feedback);
-    setHeroReaction(correct ? "rio-joy" : "rio-shock");
+    setHeroReaction(correct ? "rio-joy" : "rio-lose");
     window.clearTimeout(heroReactionTimer.current);
-    heroReactionTimer.current = window.setTimeout(() => setHeroReaction(null), 280);
+    heroReactionTimer.current = window.setTimeout(() => setHeroReaction(null), correct ? 280 : 420);
     window.clearTimeout(reactionTimer.current);
     reactionTimer.current = window.setTimeout(() => setReaction(null), 1280);
     let nextLives = lives;
@@ -347,7 +352,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   const camera = Math.min(cameraLimit, Math.max(0, cameraTarget));
   const isMoving = motion !== null;
   const isAirborne = heroY > 0 && velocityY.current !== 0;
-  const heroPose = ending === "won" ? "rio-idle" : ending ? "rio-lose"
+  const heroPose = ending === "won" ? "rio-idle" : ending || heroReaction === "rio-lose" ? "rio-lose"
     : isAirborne ? "rio-jump" : isMoving && !quiz ? (Math.floor(runDistance.current / 26) % 2 ? "rio-run-1" : "rio-run-2")
     : heroReaction ?? "rio-idle";
   const bossPose = ending === "expired" ? "boss-expired" : bossHealth <= 0 ? "boss-cleared"
@@ -369,9 +374,8 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
       {compactUi ? <InfoTitle as="h2" title="Season-rio" tip={help} label="Cách chơi Season-rio" /> : <h2>Season-rio</h2>}
       <span><SeasonImage season={season} asset="hud/score" className="season-hud-icon" /><strong>{score}/{roundPlan.total}</strong></span>
       <span><SeasonImage season={season} asset="hud/gifts" className="season-hud-icon" />Quà <strong>{gateStates.filter(gate => gate !== "closed").length}/{roundPlan.gateCount}</strong></span>
-      <span>Boss <strong>{bossHealth > 0 ? bossHealth : "xong"}</strong>
-        {bossStarted && bossHealth > 0 ? <><SeasonImage season={season} asset="hud/timer" className="season-hud-icon" />{bossSeconds}s</> : null}
-      </span>
+      {bossStarted ? <span className="rio-boss-status">{bossHealth > 0 ? <>Boss <SeasonImage season={season} asset="hud/timer" className="season-hud-icon" />{bossSeconds}s</>
+        : <strong>Đã vượt boss</strong>}</span> : null}
       <SeasonHearts season={season} lives={lives} />
     </div>
     <div ref={sceneRef} className={`rio-scene seasonal-rio${bossQuiz ? " is-boss-quiz" : ""}`} role="application" aria-label="Màn chơi Season-rio" tabIndex={0}
@@ -408,7 +412,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
         </div>
         {(!bossQuiz || !compactUi) && quizPanel}
       </div>
-      <div className="mario-controls" aria-label="Điều khiển Season-rio">
+      <div className="mario-controls" role="group" aria-label="Điều khiển Season-rio">
         <div>
           <RioControl label="Sang trái" disabled={busy || Boolean(quiz)} icon={<SeasonImage season={season} asset="hud/left" />} onPress={() => beginMove(-1)} onRelease={() => hold("ArrowLeft", false)} focusScene={() => sceneRef.current?.focus({ preventScroll: true })} />
           <RioControl label="Sang phải" disabled={busy || Boolean(quiz)} icon={<SeasonImage season={season} asset="hud/right" />} onPress={() => beginMove(1)} onRelease={() => hold("ArrowRight", false)} focusScene={() => sceneRef.current?.focus({ preventScroll: true })} />

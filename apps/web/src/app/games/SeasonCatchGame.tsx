@@ -120,6 +120,8 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
         setEnding(nextLives === 0 ? "lost" : "won");
         if (nextLives === 0) {
           setPose("catch-lose");
+          setEffects([]);
+          setNotice("Hết mạng!");
           soundLatest.current("game-over");
         }
         finishTimer.current = window.setTimeout(() => void finishLatest.current({
@@ -247,9 +249,9 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
       <div ref={catcherRef} data-testid="catch-basket" className="catch-hero" style={{ left: "50%" }}>
         <SeasonImage season={season} asset={pose} alt={`${season.hero} cầm rổ`} className="season-catch-player" />
       </div>
-      {ending ? <div className="season-stage-result" role="status">
-        <SeasonImage season={season} asset={ending === "won" ? "fx/win" : "fx/lose"} />
-        {ending === "won" ? "Hết lượt!" : "Hết mạng!"}
+      {ending === "won" ? <div className="season-stage-result" role="status">
+        <SeasonImage season={season} asset="fx/win" />
+        Hết lượt!
       </div> : null}
     </div>
     {compactUi ? <div className="season-catch-controls" role="group" aria-label="Điều khiển Season Catch">
@@ -271,6 +273,6 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
       </button>)}
     </div> : <p className="catch-help">{help}</p>}
     {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
-    <GameFeedback message={notice} tone={notice.startsWith("Đúng") ? "success" : notice.startsWith("Chưa") ? "error" : "info"} />
+    <GameFeedback message={notice} tone={notice.startsWith("Đúng") ? "success" : (ending === "lost" || notice.startsWith("Chưa")) ? "error" : "info"} />
   </div>;
 }

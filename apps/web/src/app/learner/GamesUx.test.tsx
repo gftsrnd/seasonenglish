@@ -101,6 +101,7 @@ describe("learner game visual and interaction regressions", () => {
     expect(rioView.container.querySelector('.rio-flag img')).toHaveAttribute("src", "/media/games/seven-seasons/seasons/thu/finish-flag.svg");
     expect(rioView.container.querySelector('.rio-hero img')).toHaveAttribute("alt", "Sóc");
     localStorage.removeItem("e4s:organisation-theme");
+    expect(rioView.container.querySelector(".rio-boss-status")).not.toBeInTheDocument();
     expect(screen.getAllByTestId("gift-gate")).toHaveLength(3);
     expect(screen.getAllByTestId("gift-gate").map((gate) => gate.dataset.state)).toEqual(["closed", "closed", "closed"]);
   });
