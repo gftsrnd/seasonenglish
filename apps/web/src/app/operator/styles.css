@@ -4668,10 +4668,10 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 
 /* Editor header: the title row stays one clean row (title left, Đóng and the guide's "?" right);
    the findings strip wraps onto its own full-width line below it, inside the same sticky header. */
-.operator-modal-scope .dialog > .operator-editor-sticky-header { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; }
+:root:root .operator-modal-scope .dialog > .operator-editor-sticky-header { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; }
 .operator-modal-scope .dialog > .operator-editor-sticky-header > .operator-editor-heading { flex: 1 1 0; min-width: 0; order: 0; }
 .operator-modal-scope .dialog > .operator-editor-sticky-header > .app-guide-popup-trigger { order: 1; }
-.operator-modal-scope .dialog > .operator-editor-sticky-header > .operator-editor-findings { flex: 1 0 100%; order: 2; }
+:root:root .operator-modal-scope .dialog > .operator-editor-sticky-header > .operator-editor-findings { display: block; flex: 0 1 100%; order: 2; }
 .operator-modal-scope .operator-editor-findings { min-width: 0; margin: 8px -22px -7px; padding: 6px 22px; border-top: 1px solid #ead19a; background: #fffaf0; font-size: .86rem; }
 .operator-modal-scope .operator-editor-findings.is-severe { background: #fff4f0; border-top-color: #f0c2b4; }
 .operator-modal-scope .operator-editor-findings-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -4689,7 +4689,7 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 .operator-modal-scope .operator-editor-findings.is-severe button.operator-editor-findings-toggle { border-color: #f0c2b4; }
 .operator-editor-findings-chevron { display: block; flex: none; width: 18px; height: 18px; transition: transform .15s ease; }
 .operator-modal-scope .operator-editor-findings-toggle[aria-expanded="true"] .operator-editor-findings-chevron { transform: rotate(180deg); }
-.operator-modal-scope .operator-editor-findings-list { display: grid; gap: 4px; max-height: min(26vh, 220px); margin: 6px 0 2px; padding: 0; overflow-y: auto; list-style: none; }
+.operator-modal-scope .operator-editor-findings-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; max-height: min(26vh, 220px); margin: 6px 0 2px; padding: 0; overflow-y: auto; list-style: none; }
 .operator-modal-scope .operator-editor-findings-list[hidden] { display: none; }
 .operator-modal-scope .operator-editor-findings-list > li { display: flex; align-items: baseline; gap: 8px; }
 .operator-modal-scope .operator-editor-finding-item .operator-monthly-finding-where { max-width: 100%; white-space: normal; }

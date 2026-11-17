@@ -7,6 +7,7 @@ const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 describe("findings layout CSS: the section label never wraps word by word (13/11)", () => {
   it("wraps long grammar finding links within the editor", () => {
     expect(css).toMatch(/\.operator-modal-scope \.operator-editor-findings-first\s*\{[^}]*flex:\s*1 1 0[^}]*min-width:\s*0[^}]*overflow-wrap:\s*anywhere/u);
+    expect(css).toMatch(/:root:root \.operator-modal-scope \.dialog > \.operator-editor-sticky-header > \.operator-editor-findings\s*\{[^}]*display:\s*block[^}]*flex:\s*0 1 100%/u);
     expect(css).toMatch(/\.operator-modal-scope \.operator-editor-finding-link\s*\{[^}]*white-space:\s*normal/u);
   });
 
