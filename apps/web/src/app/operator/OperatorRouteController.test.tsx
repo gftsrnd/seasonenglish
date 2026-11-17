@@ -363,8 +363,8 @@ describe("OperatorRouteController", () => {
 
     const navigation = await screen.findByRole("tablist", { name: "Loại bài kiểm tra" });
     expect(within(navigation).getByRole("tab", { name: "Đề đầu vào" })).toHaveAttribute("aria-selected", "true");
-    const retakeCard = await screen.findByRole("region", { name: "Đề thi lại (1 lần)" });
-    expect(within(retakeCard).getByRole("heading", { name: "Đề thi lại (1 lần)" })).toBeInTheDocument();
+    const retakeCard = await screen.findByRole("region", { name: "Đề thi lại" });
+    expect(within(retakeCard).getByRole("heading", { name: "Đề thi lại" })).toBeInTheDocument();
     expect(within(retakeCard).getByText("Chưa có đề")).toBeInTheDocument();
     expect(within(retakeCard).queryByRole("heading", { name: "B1" })).not.toBeInTheDocument();
     // Between the "Đề đầu vào" versions card and the learners' results.
@@ -376,7 +376,7 @@ describe("OperatorRouteController", () => {
     await waitFor(() => expect(within(retakeCard).getByRole("button", { name: "Sinh đề bằng AI" })).toBeEnabled());
     await user.click(within(retakeCard).getByRole("button", { name: "Sinh đề bằng AI" }));
     expect(generateAssessmentLevelForm).toHaveBeenCalledWith("placement-retake");
-    const refreshed = await screen.findByRole("region", { name: "Đề thi lại (1 lần)" });
+    const refreshed = await screen.findByRole("region", { name: "Đề thi lại" });
     expect(await within(refreshed).findByText("Đề thi lại nháp")).toBeInTheDocument();
     expect(within(refreshed).getByRole("button", { name: "Xem Đề thi lại nháp" })).toBeEnabled();
     expect(within(refreshed).getByRole("button", { name: "Sửa & phát hành" })).toBeEnabled();
@@ -385,7 +385,7 @@ describe("OperatorRouteController", () => {
     const levelCard = await screen.findByRole("region", { name: "Phiên bản đề lên mức" });
     expect(within(levelCard).getByRole("heading", { name: "B1" })).toBeInTheDocument();
     expect(levelCard).not.toHaveTextContent("Đề thi lại");
-    expect(screen.queryByRole("region", { name: "Đề thi lại (1 lần)" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Đề thi lại" })).not.toBeInTheDocument();
   });
 
 

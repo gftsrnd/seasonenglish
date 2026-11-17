@@ -42,15 +42,15 @@ export function PlacementRetakeRequest({ api = learnerApiClient, onSent }: { api
     {view.original ? <OriginalPlacementSubmission submission={view.original} /> : null}
     {request ? <div role="status">
       {request.status === "pending" ? <p><span className="badge warn">Chờ xử lý</span> Đã gửi yêu cầu thi lại. Vận hành sẽ duyệt hoặc từ chối.</p> : null}
-      {request.status === "accepted" ? <p><span className="badge ok">Đã duyệt</span> Yêu cầu thi lại đã được duyệt. Bạn được thi lại 1 lần; sau đó Vận hành sẽ xếp lớp cho bạn. <Link className="btn btn-sm" to="/test/placement">Mở bài thi lại</Link></p> : null}
+      {request.status === "accepted" ? <p><span className="badge ok">Đã duyệt thi lại</span> Vận hành sẽ xếp lớp sau khi bạn nộp bài. <Link className="btn btn-sm" to="/test/placement">Mở bài thi lại</Link></p> : null}
       {request.status === "rejected" ? <p><span className="badge danger">Đã từ chối</span> Yêu cầu thi lại bị từ chối.</p> : null}
       {request.resolution ? <p className="small">Phản hồi của Vận hành: {request.resolution}</p> : null}
     </div> : view.target ? <>
-      <p>Nếu chưa hài lòng với kết quả, bạn có thể xin thi lại bài đầu vào <b>một lần</b>{view.target.availableUntil ? <> trước <b>{dateTime.format(new Date(view.target.availableUntil))}</b></> : null}. Vận hành sẽ duyệt hoặc từ chối yêu cầu.</p>
+      <p>Bạn có thể xin thi lại bài đầu vào{view.target.availableUntil ? <> trước <b>{dateTime.format(new Date(view.target.availableUntil))}</b></> : null}.</p>
       <button type="button" className="btn-primary" onClick={() => setConfirming(true)}>Xin thi lại</button>
       {confirming ? <Modal
         title="Gửi yêu cầu thi lại?"
-        description="Bạn chỉ được xin thi lại bài đầu vào một lần. Nếu được duyệt, quyết định xếp lớp của Vận hành sau bài thi lại là quyết định cuối cùng."
+        description="Nếu yêu cầu được duyệt, Vận hành sẽ chốt xếp lớp sau khi bạn nộp bài thi lại."
         onClose={() => { if (!busy) setConfirming(false); }}
         actions={<><Button disabled={busy} onClick={() => setConfirming(false)}>Hủy</Button><Button variant="primary" disabled={busy} onClick={() => void send()}>{busy ? "Đang gửi…" : "Gửi yêu cầu"}</Button></>}
       >

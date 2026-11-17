@@ -730,15 +730,14 @@ function assessmentPendingCopy(view: AssessmentView): { title: string; detail: s
     return { title: "Bài thi lại đã được nộp", detail: "Bạn đã dùng lượt thi lại duy nhất. Vận hành sẽ xem kết quả và xếp lớp cho bạn; đây là quyết định cuối cùng, không có lượt thi lại thêm." };
   }
   if (status === "needs_retry") {
-    if (retake?.status === "granted") return { title: "Bạn được thi lại 1 lần", detail: "Đề thi lại đang được chuẩn bị. Khi đề sẵn sàng, bạn sẽ làm lại bài đầu vào trên trang này." };
-    return { title: "Test đầu vào chưa đủ để duyệt mức", detail: "Vận hành chưa duyệt mức từ bài này. Bạn có thể xin thi lại một lần ở Hỗ trợ học tập, hoặc Vận hành sẽ xếp lớp trực tiếp; bạn sẽ nhận thông báo." };
+    if (retake?.status === "granted") return { title: "Đã duyệt thi lại", detail: "Đề thi lại đang được chuẩn bị. Khi đề sẵn sàng, bạn sẽ làm lại bài đầu vào trên trang này." };
+    return { title: "Test đầu vào chưa đủ để duyệt mức", detail: "Vận hành chưa duyệt mức từ bài này. Bạn có thể xin thi lại ở Hỗ trợ học tập, hoặc Vận hành sẽ xếp lớp trực tiếp; bạn sẽ nhận thông báo." };
   }
   return { title: "Test đầu vào đã được nộp", detail: "Vận hành sẽ xem lại kết quả trước khi duyệt mức. Bạn không cần làm lại bài trong lúc chờ." };
 }
 
-/** "Bạn được thi lại 1 lần…": the one Operator-approved placement retake, on the published "Đề thi lại". */
 function PlacementRetakeNotice({ reason, pendingForm = false }: { reason: string; pendingForm?: boolean }) {
-  return <Notice><span role="status" className="assessment-retake-notice"><b>Bạn được thi lại 1 lần.</b> {pendingForm ? "Đề thi lại đang được chuẩn bị." : "Bài thi lại dùng đề thi lại do Vận hành duyệt, cùng cấu trúc và cách tính điểm với bài đầu vào."} Sau lượt thi lại, Vận hành sẽ xếp lớp cho bạn dựa trên kết quả; không có lượt thi lại thêm.{reason.trim() ? <> Lời nhắn của Vận hành: <i>{reason}</i></> : null}</span></Notice>;
+  return <Notice><span role="status" className="assessment-retake-notice"><b>Đã duyệt thi lại.</b> {pendingForm ? "Đề thi lại đang được chuẩn bị." : "Vận hành sẽ xếp lớp sau khi bạn nộp bài."}{reason.trim() ? <> Lời nhắn của Vận hành: <i>{reason}</i></> : null}</span></Notice>;
 }
 
 function assessmentTargetLevel(view: AssessmentView) {

@@ -32,7 +32,7 @@ describe("placement retake request: bell → support page → 'Xin thi lại' �
     renderRequest({ getPlacementRetakeRequest: async () => view({ target: { attemptId: "a1", title: "Test đầu vào", availableUntil: "2026-11-19T02:00:00.000Z" } }), createPlacementRetakeRequest });
     await user.click(await screen.findByRole("button", { name: "Xin thi lại" }));
     await user.type(screen.getByRole("textbox", { name: /Lý do/ }), "  Tôi muốn thử lại.  ");
-    expect(screen.getByRole("dialog")).toHaveTextContent(/quyết định cuối cùng/i);
+    expect(screen.getByRole("dialog")).toHaveTextContent(/chốt xếp lớp/i);
     await user.click(screen.getByRole("button", { name: "Hủy" }));
     expect(createPlacementRetakeRequest).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Xin thi lại" }));
@@ -52,7 +52,7 @@ describe("placement retake request: bell → support page → 'Xin thi lại' �
 
   it("shows the learner the Operator's decision", async () => {
     renderRequest({ getPlacementRetakeRequest: async () => view({ retake: "granted", request: { id: "r1", status: "accepted", resolution: "Cho thi lại một lần.", createdAt: "x", resolvedAt: "y" } }) });
-    expect(await screen.findByText(/Yêu cầu thi lại đã được duyệt/)).toBeInTheDocument();
+    expect(await screen.findByText(/Đã duyệt thi lại/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Mở bài thi lại" })).toHaveAttribute("href", "/test/placement");
     cleanup();
     renderRequest({ getPlacementRetakeRequest: async () => view({ request: { id: "r1", status: "rejected", resolution: "Kết quả phù hợp.", createdAt: "x", resolvedAt: "y" } }) });

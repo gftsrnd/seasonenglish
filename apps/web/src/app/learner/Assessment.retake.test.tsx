@@ -31,7 +31,7 @@ describe("placement retake notice", () => {
       placementRetake: { status: "granted", reason: "Kết quả phần Nói chưa phản ánh đúng.", grantedAt, usedAt: null, retakeAttemptId: null }
     };
     render(<LearnerAssessment view={view} actions={actions} />);
-    expect(screen.getByText(/Bạn được thi lại 1 lần\./)).toBeInTheDocument();
+    expect(screen.getByText(/Đã duyệt thi lại\./)).toBeInTheDocument();
     expect(screen.getByText(/Vận hành sẽ xếp lớp cho bạn/)).toBeInTheDocument();
     expect(screen.getByText("Kết quả phần Nói chưa phản ánh đúng.")).toBeInTheDocument();
   });

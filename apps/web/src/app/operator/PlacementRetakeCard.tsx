@@ -24,7 +24,6 @@ type PlacementRetakeCardProps = {
   actions: PlacementRetakeCardActions;
 };
 
-/** The single placement retake form ("Đề thi lại (1 lần)"), shown in the "Đề đầu vào" tab on its own card. */
 export function PlacementRetakeCard({ slot, aiConnected, generating, readOnly = false, unavailable = {}, actions }: PlacementRetakeCardProps) {
   const readOnlyReason = readOnly ? "Quản lý đang xem ở chế độ chỉ đọc" : undefined;
   const draft = slot?.draftForm ?? null;
@@ -33,11 +32,11 @@ export function PlacementRetakeCard({ slot, aiConnected, generating, readOnly = 
   const generateBlocked = unavailable.generate || readOnlyReason || (!aiConnected ? "AI hệ thống tạm chưa sẵn sàng" : undefined);
   const status = published ? <Badge tone="ok">Đã phát hành</Badge> : draft ? <Badge tone="warn">Bản nháp</Badge> : <Badge tone="warn">Chưa có đề</Badge>;
 
-  return <section className="card operator-assessment-form-list operator-placement-retake-card" aria-label="Đề thi lại (1 lần)">
+  return <section className="card operator-assessment-form-list operator-placement-retake-card" aria-label="Đề thi lại">
     <div className="row between operator-card-header">
       <div>
         <p className="xs muted">BÀI ĐẦU VÀO</p>
-        <h2>Đề thi lại (1 lần)<SectionTip text={OPERATOR_TIPS.retake} label="Đề thi lại là gì?" /></h2>
+        <h2>Đề thi lại<SectionTip text={OPERATOR_TIPS.retake} label="Đề thi lại là gì?" /></h2>
         <p className="xs muted operator-level-retake-note">Một đề thi lại duy nhất, cùng cấu trúc và cách tính điểm với đề đầu vào gốc (Nghe 15 câu · Đọc 40 · Viết 2 · Nói 4); độ khó trộn A1–C1, không lặp câu của đề gốc. Học viên chỉ làm khi Vận hành duyệt thi lại.</p>
       </div>
       <div className="row operator-level-form-actions">

@@ -67,8 +67,8 @@ function RequestPagination({ page, hasMore, link }: { page: number; hasMore: boo
   </nav>;
 }
 
-function LoadError({ children, retry }: { children: ReactNode; retry: () => void }) {
-  return <p className="banner danger operator-request-error" role="alert"><span>{children}</span><Button small onClick={retry}>Thử lại</Button></p>;
+function LoadError({ children, retry }: { children: ReactNode; retry?: (() => void) | undefined }) {
+  return <div className="banner danger operator-request-error" role="alert"><div>{children}</div>{retry ? <Button small onClick={retry}>Thử lại</Button> : null}</div>;
 }
 
 function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClient; id: string | undefined; status: AppealStatus; page: number }) {
@@ -138,7 +138,7 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
         }
       }
       const resolution = await modal.prompt({
-        title: item.requestKind === "retake" ? (accepted ? "Duyệt cho thi lại 1 lần" : "Từ chối yêu cầu thi lại") : accepted ? "Chấp nhận kháng nghị" : "Từ chối kháng nghị",
+        title: item.requestKind === "retake" ? (accepted ? "Duyệt cho thi lại" : "Từ chối yêu cầu thi lại") : accepted ? "Chấp nhận kháng nghị" : "Từ chối kháng nghị",
         label: "Nội dung xử lý / giải thích cho học viên", multiline: { minLength: 1, maxLength: 2_000 },
         confirmLabel: accepted ? "Chấp nhận" : "Từ chối", tone: accepted ? "primary" : "danger"
       });
@@ -150,7 +150,10 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
       reload();
     } catch (error) {
       if (error instanceof ApiError && error.code === "PLACEMENT_RETAKE_FORM_NOT_PUBLISHED") {
-        setActionError(<>Yêu cầu vẫn đang chờ xử lý. Hãy duyệt và phát hành <Link to="/op/tests?tab=placement">đề thi lại trong Kết quả bài thi</Link>, rồi quay lại duyệt yêu cầu.</>);
+        setActionError(<div className="operator-retake-publish-error">
+          <p>Hãy phát hành đề thi lại trước khi duyệt yêu cầu.</p>
+          <Link className="btn-sm" to="/op/tests?tab=placement">Mở đề thi lại</Link>
+        </div>);
       } else if (error instanceof ApiError && error.code === "PLACEMENT_RETAKE_ALREADY_GRANTED") {
         setActionError("Học viên đã được cấp lượt thi lại. Hãy kiểm tra hồ sơ học viên trước khi xử lý yêu cầu.");
       } else if (error instanceof ApiError && error.code === "PLACEMENT_RETAKE_NOT_AVAILABLE") {
@@ -214,7 +217,7 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
         <option value="handled">Đã xử lý</option>
       </select></label>
     </div>
-    {actionError && <LoadError retry={reload}>{actionError}</LoadError>}
+    {actionError && <LoadError retry={typeof actionError === "string" ? reload : undefined}>{actionError}</LoadError>}
     {!loading && id && !focused ? <p role="status" className="muted">Kháng nghị này không còn khả dụng.</p> : null}
     <RequestTable label="Danh sách kháng nghị"
       rows={loadFailed ? [] : data?.appeals.map(item => {
@@ -236,7 +239,7 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
           </>,
           detail: open ? <div className="operator-request-expanded" id={detailId}>
             {item.attemptId ? <Button small busy={assessmentBusy} onClick={() => void openAssessment(item.attemptId!)}>Xem bài làm</Button> : null}
-            <AppealReviewCard item={view} readOnly={false}
+            <AppealReviewCard item={view} readOnly={false} compactRetake
               busy={accepted => decisionId === item.id && decision === accepted} itemBusy={decision !== undefined}
               onDecision={accepted => void decide(item, accepted)} />
           </div> : null
