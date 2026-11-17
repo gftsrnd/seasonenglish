@@ -470,7 +470,9 @@ describe("operator granular lesson editor", () => {
       const user = userEvent.setup();
       const onSave = vi.fn();
       const base = reviewLesson();
-      const initial = { ...base, parts: base.parts.map(part => part.code !== "speaking" ? part : {
+      const initial = { ...base, parts: base.parts.map(part => part.code === "vocabulary"
+        ? { ...part, content: { items: [{ word: "report", meaning: "báo cáo", collocations: ["send a report", "read a report", "write a report"] }] } }
+        : part.code !== "speaking" ? part : {
         ...part,
         content: { items: [
           { id: "speaking-3", prompt: "Đọc to câu sau", passage: "The report is ready.", audioText: "The report is ready.",
@@ -482,7 +484,10 @@ describe("operator granular lesson editor", () => {
       expect(group.getByLabelText(/Câu đọc to/)).toHaveValue("The report is ready.");
       expect(group.queryAllByLabelText(/Lựa chọn|Đáp án đúng|Từ app đọc/)).toHaveLength(0);
       fireEvent.change(group.getByLabelText(/Âm cần chú ý/), { target: { value: "/iː/" } });
-      await saveLesson(user);
+      await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
+      const confirm = screen.getByRole("dialog", { name: "Kiểm tra và lưu bài?" });
+      expect(screen.queryByRole("button", { name: "Lưu dù còn thiếu" })).not.toBeInTheDocument();
+      await user.click(within(confirm).getByRole("button", { name: "Kiểm tra & lưu" }));
       const saved = onSave.mock.calls[0]![0] as Lesson;
       expect(saved.parts.find(part => part.code === "speaking")!.content.items).toEqual([
         { id: "speaking-3", prompt: "Đọc to câu sau", passage: "The report is ready.", focus: "/iː/", explanation: "Speak clearly." }
