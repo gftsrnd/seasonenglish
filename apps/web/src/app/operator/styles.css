@@ -4725,3 +4725,10 @@ body > .operator-modal-scope .operator-editor-section textarea.line-field { min-
   gap: 4px 8px;
   overflow-wrap: anywhere;
 }
+
+@media (min-width: 1025px) {
+  .operator-detail-modal > .dialog.learner-original-placement-dialog {
+    width: min(960px, calc(100vw - 32px));
+    max-width: 960px;
+  }
+}
