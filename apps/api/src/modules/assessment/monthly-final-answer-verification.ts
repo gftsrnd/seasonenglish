@@ -97,8 +97,12 @@ export async function verifyMonthlyFinalAnswers(runner: AiTaskRunner, cefr: stri
     const verdicts = Array.isArray(output?.items)
       ? output.items.filter((entry): entry is Verdict => Boolean(entry) && typeof entry === "object" && typeof (entry as Verdict).ref === "string" && Array.isArray((entry as Verdict).correctOptions))
       : [];
+    if (only && [...only].some(ref => verdicts.filter(entry => entry.ref === ref).length !== 1)) {
+      throw new Error("Missing independent recheck for a disputed monthly final item");
+    }
     return monthlyFinalVerificationFindings(items, verdicts);
-  } catch {
+  } catch (error) {
+    if (only) throw error;
     return [];
   }
 }

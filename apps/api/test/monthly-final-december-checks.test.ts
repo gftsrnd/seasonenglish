@@ -109,7 +109,13 @@ describe("independent answer check per form (GEN05 / GEN12)", () => {
     calls.length = 0;
     await verifyMonthlyFinalAnswers(runner as never, contract.cefr, blueprint, new Set([r01.ref]));
     expect(calls[0]!.input.items.map((item) => item.ref)).toEqual([r01.ref]);
-    expect(await verifyMonthlyFinalAnswers({ runTask: async () => { throw new Error("down"); } } as never, contract.cefr, blueprint)).toEqual([]);
+    const unavailable = { runTask: async () => { throw new Error("down"); } } as never;
+    expect(await verifyMonthlyFinalAnswers(unavailable, contract.cefr, blueprint)).toEqual([]);
+    await expect(verifyMonthlyFinalAnswers(unavailable, contract.cefr, blueprint, new Set([r01.ref]))).rejects.toThrow("down");
+    const incomplete = { runTask: async () => ({ output: { items: [] }, metadata: {} }) } as never;
+    await expect(verifyMonthlyFinalAnswers(incomplete, contract.cefr, blueprint, new Set([r01.ref]))).rejects.toThrow("Missing independent recheck");
+    const duplicate = { runTask: async () => ({ output: { items: [r01, r01].map(item => ({ ref: item.ref, correctOptions: [item.key] })) }, metadata: {} }) } as never;
+    await expect(verifyMonthlyFinalAnswers(duplicate, contract.cefr, blueprint, new Set([r01.ref]))).rejects.toThrow("Missing independent recheck");
   });
 });
 

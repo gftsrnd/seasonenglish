@@ -101,16 +101,14 @@ describe("monthly final v2.0 assembly and GEN checks", () => {
     expect(blueprint.monthlyExam!.pronunciation.flatMap((target) => target.positions)).toHaveLength(8);
   });
 
-  it("passes every program-checkable GEN rule and waits for human review and audio (NEEDS_REVIEW)", () => {
-    for (const cefr of ["A1", "A2", "B1", "C1"] as const) {
-      const { blueprint } = generated(cefr);
-      const failing = blueprint.monthlyExam!.checks.filter((item) => item.status === "fail");
-      expect(failing, `${cefr}: ${JSON.stringify(failing)}`).toEqual([]);
-      for (const code of ["GEN01", "GEN02", "GEN03", "GEN11", "GEN13", "GEN14", "GEN15", "GEN17", "GEN18", "GEN19", "GEN22", "GEN23"] as const) expect(check(blueprint, code).status, `${cefr} ${code}`).toBe("pass");
-      expect(check(blueprint, "GEN20").status).toBe("needs_review");
-      for (const code of MONTHLY_FINAL_MANUAL_RULES) expect(check(blueprint, code)).toMatchObject({ mode: "manual", status: "needs_review" });
-      expect(blueprint.monthlyExam!.status).toBe("NEEDS_REVIEW");
-    }
+  it.each(["A1", "A2", "B1", "B2", "C1"] as const)("%s passes every program-checkable GEN rule and waits for human review and audio", (cefr) => {
+    const { blueprint } = generated(cefr);
+    const failing = blueprint.monthlyExam!.checks.filter((item) => item.status === "fail");
+    expect(failing, `${cefr}: ${JSON.stringify(failing)}`).toEqual([]);
+    for (const code of ["GEN01", "GEN02", "GEN03", "GEN11", "GEN13", "GEN14", "GEN15", "GEN17", "GEN18", "GEN19", "GEN22", "GEN23"] as const) expect(check(blueprint, code).status, `${cefr} ${code}`).toBe("pass");
+    expect(check(blueprint, "GEN20").status).toBe("needs_review");
+    for (const code of MONTHLY_FINAL_MANUAL_RULES) expect(check(blueprint, code)).toMatchObject({ mode: "manual", status: "needs_review" });
+    expect(blueprint.monthlyExam!.status).toBe("NEEDS_REVIEW");
   });
 
   it("becomes READY only after audio is reviewed and every human-judgement rule is confirmed", () => {

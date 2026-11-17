@@ -27,11 +27,13 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("monthly final independent answe
   const definitionId = randomUUID();
   const calls: Array<{ taskId: string; repair: boolean; refs?: string[] }> = [];
   let cookie = "";
+  let recheckUnavailable = false;
   const metadata = (taskId: string) => ({ provider: "test", mode: "test", model: "fixture", traceId: randomUUID(), inputHash: "fixture", taskId, schemaValid: true, attempts: 1, latencyMs: 1, usage: {} });
   const runner = { runTask: async (taskId: string, raw: any, options?: { messages?: unknown[] }) => {
     if (taskId === "monthly_final_grammar_evidence_review") return { output: { items: raw.items.map((item: any) => ({ key: item.key, matches: true, reason: "Matches selected component." })) }, metadata: metadata(taskId) };
     calls.push({ taskId, repair: Boolean(options?.messages?.length), ...(taskId === "monthly_answer_verification" ? { refs: raw.items.map((item: any) => item.ref) } : {}) });
     if (taskId === "monthly_answer_verification") {
+      if (recheckUnavailable && raw.items.length === 1) throw new Error("Independent recheck unavailable");
       // The checker always accepts a second option for the first Reading item, so the repair does not resolve it.
       return { output: { items: raw.items.map((item: any) => ({ ref: item.ref, correctOptions: item.ref === firstReading.key ? item.options.slice(0, 2) : [keyByRef.get(item.ref) ?? item.options[0]], note: "checked" })) }, metadata: metadata(taskId) };
     }
@@ -60,7 +62,10 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("monthly final independent answe
   }, 30_000);
   afterAll(async () => { await app.close(); await pool.end(); });
 
-  it("checks the form once, repairs the disputed Reading item once, re-checks only it, then fails GEN05 keeping the draft", async () => {
+  it.each([false, true])("keeps the draft when a known GEN05 dispute remains (recheck unavailable: %s)", async (unavailable) => {
+    recheckUnavailable = unavailable;
+    calls.length = 0;
+    const failedBefore = await pool.query("select count(*)::int as count from ai_runs where request_key like 'monthly-final:%'");
     const response = await app.inject({ method: "POST", url: `/api/v1/month-frameworks/${frameworkRef.id}/monthly-final`, headers: { cookie } });
     expect(response.statusCode, response.body).toBe(422);
     expect(response.json()).toMatchObject({ code: "MONTHLY_FINAL_GENERATION_QUALITY_FAILED", report: { checks: [expect.objectContaining({ code: "GEN05", status: "fail", detail: expect.stringContaining(`${firstReading.key}: `) })] } });
@@ -72,6 +77,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("monthly final independent answe
     const versions = await pool.query("select id,status,blueprint from assessment_versions where definition_id=$1", [definitionId]);
     expect(versions.rows).toEqual([{ id: oldVersion, status: "draft", blueprint: good }]);
     const failed = await pool.query("select status,error_code from ai_runs where request_key like 'monthly-final:%'");
-    expect(failed.rows).toEqual([{ status: "failed", error_code: "MONTHLY_FINAL_GENERATION_QUALITY_FAILED" }]);
+    expect(failed.rows).toHaveLength(failedBefore.rows[0]!.count + 1);
+    expect(failed.rows.every(row => row.status === "failed" && row.error_code === "MONTHLY_FINAL_GENERATION_QUALITY_FAILED")).toBe(true);
   });
 });

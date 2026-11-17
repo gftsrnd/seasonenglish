@@ -227,6 +227,76 @@ it("repairs only the B1 learner prompts when generation returns Vietnamese", asy
  expect(result.output).toEqual(original);
 });
 
+it("repairs both A1 sections when a duplicate Writing opening would otherwise block recovery", async () => {
+ const input = buildMonthlyFinalGenerationInput(monthlyFinalContract("A1"), frameworkRef);
+ const candidate = fakeMonthlyFinalAiOutput(input).productive;
+ candidate.writing.task = 'Viết tin nhắn gửi Anna. Bắt đầu bằng câu gợi ý: "Hi Anna, here is a quick update."';
+ candidate.writing.requirements[0] = 'Gợi ý mở đầu: "Hi Anna, I need your help."';
+ candidate.writing.sample += " Further background is available on request.".repeat(5);
+ candidate.speakingA.text += " More information will follow tomorrow.".repeat(4);
+ const blocks = {
+  gaMain: "Could you extend the deadline?",
+  gaSecondary: "I have to wait for missing data.",
+  gbMain: "If HR sends it, I will propose a new schedule.",
+  gbSecondary: "If I had approval now, I would start."
+ };
+ const calls: string[] = [];
+ const readAloud = "Our client will attend to the tasks and desks. Hold the old list and check the cost.";
+ const runner = { runTask: async (id: string, raw: any) => {
+  if (id === "monthly_final_grammar_evidence_review") return { output: { items: raw.items.map((item: any) => ({ key: item.key, matches: true, reason: "Matches." })) }, metadata: {} };
+  calls.push(id);
+  if (id === "monthly_final_productive_generation") throw Object.assign(new Error("invalid"), {
+   code: "AI_OUTPUT_INVALID", details: { invalidOutput: JSON.stringify(candidate) }
+  });
+  if (id === "monthly_final_read_aloud_repair") return { output: { candidates: [readAloud] }, metadata: {} };
+  if (id === "monthly_final_writing_sample_repair") return { output: blocks, metadata: {} };
+  expect(id).toBe("monthly_final_writing_notes_repair");
+  return { output: { task: "Viết tin nhắn gửi Anna.", facts: "Bạn đang chờ số liệu.", requirements: ["Xin thêm thời gian.", "Nêu kế hoạch mới."] }, metadata: {} };
+ }} as unknown as AiTaskRunner;
+ const { output } = await generateMonthlyFinalProductive(runner, input, "Generate exam");
+ const result = output as typeof candidate;
+ expect(calls).toEqual(["monthly_final_productive_generation", "monthly_final_read_aloud_repair", "monthly_final_writing_sample_repair", "monthly_final_writing_notes_repair"]);
+ expect(result.writing.task).toBe('Viết tin nhắn gửi Anna.\nBắt đầu bằng câu gợi ý: "Hi Anna, here is a quick update."');
+ expect(result.writing.requirements).toHaveLength(2);
+ expect(result.speakingA.text).toBe(readAloud);
+ expect(result.speakingA.positions).toHaveLength(8);
+});
+
+it("pins compact exact B2 phrase pairs and rotates when the provider omits one", async () => {
+ const input = buildMonthlyFinalGenerationInput(monthlyFinalContract("B2"), frameworkRef);
+ const candidate = fakeMonthlyFinalAiOutput(input).productive;
+ const pools = [
+  ["set up a meeting", "check it out", "pick it up"],
+  ["go on", "the end", "we agreed"],
+  ["last week", "send me", "best practice"],
+  ["could you update the schedule", "did you finish", "meet your team", "last year's budget"]
+ ];
+ input.pronunciation.forEach((pool, index) => {
+  pool.taughtExamples = pools[index]!.map(word => ({ word, exampleId: `${pool.code}-${word}`, ipa: pool.ipa }));
+ });
+ const calls: string[][] = [];
+ const left = "Check it out, pick it up, and go on to the end.";
+ const right = "Send me last year's budget and meet your team to discuss best practice.";
+ const runner = { runTask: async (id: string, raw: any) => {
+  if (id === "monthly_final_grammar_evidence_review") return { output: { items: raw.items.map((item: any) => ({ key: item.key, matches: true, reason: "Matches." })) }, metadata: {} };
+  if (id === "monthly_final_productive_generation") throw Object.assign(new Error("invalid"), {
+   code: "AI_OUTPUT_INVALID", details: { invalidOutput: JSON.stringify(candidate) }
+  });
+  const words = raw.pools.flatMap((pool: any) => pool.examples.map((example: any) => example.word));
+  calls.push(words);
+  if (words.includes("did you finish")) throw Object.assign(new Error("provider omitted exact phrases"), { code: "AI_OUTPUT_INVALID" });
+  return { output: { candidates: [words.includes("check it out") ? left : right] }, metadata: {} };
+ }} as unknown as AiTaskRunner;
+ const { output } = await generateMonthlyFinalProductive(runner, input, "Generate exam");
+ expect(calls).toEqual([
+  ["check it out", "pick it up", "go on", "the end"],
+  ["last week", "send me", "did you finish", "meet your team"],
+  ["send me", "best practice", "meet your team", "last year's budget"]
+ ]);
+ expect((output as typeof candidate).speakingA.text).toBe(`${left} ${right}`);
+ expect((output as typeof candidate).speakingA.positions).toHaveLength(8);
+});
+
 it("does not send an already accepted grammar quote to the reviewer again, but re-reviews rejected ones",async()=>{
  let reviews=0;
  const base={runTask:async(_taskId:string,raw:any)=>{reviews++;return {output:{items:raw.items.map((item:any)=>({key:item.key,matches:item.quote.startsWith("Good"),reason:"r"}))},metadata:{}};}} as unknown as AiTaskRunner;

@@ -123,7 +123,7 @@ async function generateProductiveCandidate(runner:AiTaskRunner,input:MonthlyFina
     if (needsHint && !findings.some(issue => issue.path.startsWith("writing."))) {
       findings.push({path:"writing.sample",message:"Apply the A1 opening to the sample answer."});
     }
-    if(!findings.length || findings.some(issue=>issue.path==="writing.task"||!/^writing\.|^speakingA\.|^speakingB\./u.test(issue.path)))throw error;
+    if(!findings.length || findings.some(issue=>(issue.path==="writing.task" && input.cefr!=="A1")||!/^writing\.|^speakingA\.|^speakingB\./u.test(issue.path)))throw error;
     // Failed pronunciation positions are rebuilt from the taught pools and actual repaired text.
   }
   const draft=structuredClone(candidate);
@@ -204,6 +204,34 @@ async function repairReadAloud(runner:AiTaskRunner,input:MonthlyFinalGenerationI
       ? "Use one simple workplace clause about an ordinary team action. Use exactly spelled words without plural or verb endings. An imperative or modal lets you use a base verb. Use the chosen words as the subject, verb, object or modifier."
       : "";
     const systemPrompt=`Write THREE different complete, natural English sentences for a ${input.cefr} workplace read-aloud, as three alternatives in candidates. EVERY alternative must use TWO DIFFERENT exact taught words from EACH of these ${selectedPools.length} pools:\n${targets}\n${style}\nChoose the words that combine most naturally and compactly. Each alternative must independently cover every supplied pool. Aim for ${limit??goal} words per sentence, at most ${maxWords}; count the words before returning. Use the exact forms, letter for letter: no added plural, -s, -ed or -ing endings, so a pool word must appear exactly as listed. Do not split a sentence into tokens/fragments, write a word list, or continue one candidate in another.\n${shortening}`;
+    if (input.cefr === "B2") {
+      // Linked sounds are often entire phrases. Pin compact exact pairs before
+      // drafting so the provider can focus on one complete workplace sentence.
+      const ordered = selectedPools.map(pool => ({
+        ...pool, examples: [...pool.examples].sort((a, b) => monthlyFinalWordCount(a.word) - monthlyFinalWordCount(b.word))
+      }));
+      const pairOffsets = ordered.some(pool => pool.examples.length > 2) ? [0, 1] : [0];
+      for (const offset of pairOffsets) {
+        const pools = ordered.map(pool => {
+          const start = Math.min(offset, pool.examples.length - 2);
+          return { ...pool, examples: pool.examples.slice(start, start + 2) };
+        });
+        const pinned = { ...sentenceInput, pools };
+        try {
+          const exact = pools.flatMap(pool => pool.examples.map(example => JSON.stringify(example.word))).join(", ");
+          const result = await runner.runTask("monthly_final_read_aloud_repair", pinned, {
+            systemPrompt: `Write a complete, natural workplace sentence using every one of these exact phrases: ${exact}. Keep their forms unchanged. They can appear in any order. Aim for ${maxWords} words or fewer and never exceed ${acceptedWords}. Use one coherent workplace action and avoid extra words. Return up to two alternative complete sentences.`,
+            maxOutputTokens: 600, maxAttempts: 1, temperature: 0.2
+          });
+          const { candidates } = monthlyFinalReadAloudOutputSchema.parse(result.output);
+          const text = candidates.filter(text => monthlyFinalReadAloudIssues(text, pinned).length === 0)
+            .sort((a, b) => monthlyFinalWordCount(a) - monthlyFinalWordCount(b))[0];
+          if (text) return { ...result, text };
+        } catch (error) {
+          if (!error || typeof error !== "object" || !("code" in error) || error.code !== "AI_OUTPUT_INVALID") throw error;
+        }
+      }
+    }
     let result: AiRunResult;
     try {
       result=await runner.runTask("monthly_final_read_aloud_repair",sentenceInput,{systemPrompt,maxOutputTokens:1200,temperature:0.2,maxAttempts:2});
@@ -297,9 +325,10 @@ async function repairProductivePromptLanguage(runner: AiTaskRunner, input: Month
   if (input.cefr === "A1" || input.cefr === "A2") return candidate;
   const problems = (section: Pick<MonthlyFinalProductiveOutput["writing"], "task" | "facts" | "requirements">) =>
     monthlyFinalProductivePromptLanguageProblems([section.task, section.facts, ...section.requirements].join("\n"), "en");
-  await Promise.all((["writing", "speakingB"] as const).map(async kind => {
+  const affected = (["writing", "speakingB"] as const).filter(kind => problems(candidate[kind]).length);
+  if (!affected.length) return candidate;
+  await Promise.all(affected.map(async kind => {
     const section = candidate[kind];
-    if (!problems(section).length) return;
     const repairInput = productiveRepairInput(input, candidate, kind);
     let notes = { task: section.task, facts: section.facts, requirements: section.requirements };
     for (let attempt = 0; attempt < 2; attempt++) {
