@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AssessmentSectionView } from "@e4s/contracts";
 import { LearnerAssessment } from "./Assessment.js";
@@ -34,6 +34,11 @@ describe("placement retake notice", () => {
     expect(screen.getByText(/Đã duyệt thi lại\./)).toBeInTheDocument();
     expect(screen.getByText(/Vận hành sẽ xếp lớp sau khi bạn nộp bài/)).toBeInTheDocument();
     expect(screen.getByText("Kết quả phần Nói chưa phản ánh đúng.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Bắt đầu phần Nghe" }));
+    const confirm = screen.getByRole("dialog", { name: "Bắt đầu bài thi lại?" });
+    expect(within(confirm).getByText("Bạn chỉ được thi lại một lần. Kết quả thi lại là kết quả cuối cùng.")).toBeInTheDocument();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Hủy" }));
+    expect(actions.startAssessment).not.toHaveBeenCalled();
   });
 
   it("says the operator will place the learner once the retake is used", () => {

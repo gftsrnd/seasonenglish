@@ -49,7 +49,7 @@ export function PlacementRetakeRequest({ api = learnerApiClient, onSent, onViewC
     {view.original?.feedback ? <p className="small"><b>Phản hồi của Vận hành</b><br />{view.original.feedback}</p> : null}
     {view.original && originalOpen ? <OriginalPlacementModal submission={view.original} onClose={() => setOriginalOpen(false)} /> : null}
     {view.target ? <>
-      <p>Bạn có thể xin thi lại bài đầu vào{view.target.availableUntil ? <> trước <b>{dateTime.format(new Date(view.target.availableUntil))}</b></> : null}.</p>
+      <p>Bạn có thể xin thi lại bài đầu vào một lần{view.target.availableUntil ? <> trước <b>{dateTime.format(new Date(view.target.availableUntil))}</b></> : null}. Bạn sẽ làm đề khác và Vận hành sẽ chốt mức sau khi xem kết quả.</p>
       <button type="button" className="btn-primary" onClick={() => setConfirming(true)}>Xin thi lại</button>
       {confirming ? <Modal
         title="Gửi yêu cầu thi lại?"

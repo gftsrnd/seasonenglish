@@ -12,7 +12,7 @@ import type {
   MonthlyExamEligibilityView
 } from "@e4s/contracts";
 import { buildPronunciationAssets, microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
-import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerLearningAbsenceStreak, syncLearnerAbsenceNotice, syncLearnerUncountedMonthNotice, learnerMonthlyAccess, learnerMonthlyAttendanceDates, learnerMonthlyLessonDates, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
+import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerLearningAbsenceStreak, syncLearnerAbsenceNotice, syncLearnerUncountedMonthNotice, learnerMonthlyAccess, learnerMonthlyAttendanceDates, learnerMonthlyLessonDates, readPlacementRetakeActivity, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
 import { gradeLessonAnswer, SENSITIVE_NAME_MESSAGE_VI, sensitiveTextIssue, validateGeneratedFeedback } from "@e4s/domain/content";
 import { evaluateMonthlyExamEligibility, learnerMonthlySeasonTarget, monthlyAttendanceCountedDates, MONTHLY_EXAM_ENTRY_CUTOFF, monthlyExamEntryState } from "@e4s/domain/progression";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
@@ -174,7 +174,7 @@ export function registerLearningRoutes(
 
   app.get("/api/v1/learner/home", { preHandler: learnerOnly }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
-    const [profile, monthlyContext, progress, microLesson, runner, monthlyEligibility, monthlyAccess, absenceStreak, coachTarget, monthlyAttempt] = await Promise.all([
+    const [profile, monthlyContext, progress, microLesson, runner, monthlyEligibility, monthlyAccess, absenceStreak, coachTarget, monthlyAttempt, placementRetake] = await Promise.all([
       repositories.learning.getProfile(learnerId),
       repositories.learning.getActiveMonthlyContext(learnerId),
       repositories.learning.getProgressDashboard(learnerId),
@@ -184,7 +184,8 @@ export function registerLearningRoutes(
       learnerMonthlyAccess(pool, learnerId),
       learnerLearningAbsenceStreak(pool, learnerId),
       repositories.coach.dailyLimitForLearner(learnerId),
-      repositories.assessments.findMonthlyFinalAttempt(learnerId)
+      repositories.assessments.findMonthlyFinalAttempt(learnerId),
+      readPlacementRetakeActivity(pool, learnerId)
     ]);
     if (!progress) return reply.code(404).send({ code: "LEARNER_NOT_FOUND" });
     const inactiveDays = absenceStreak.days;
@@ -271,6 +272,7 @@ export function registerLearningRoutes(
     const points = monthlyContext ? progress.points : 0;
     const view: LearnerHomeView = {
       onboardingRequired,
+      ...(placementRetake ? { placementRetake } : {}),
       onboardingDraftAvailable: Boolean(profile?.draftAvailable),
       learner: { displayName: progress.learner.displayName, cefr: (monthlyContext?.cefr ?? progress.learner.cefr ?? null) as CefrLevel | null },
       program: null,

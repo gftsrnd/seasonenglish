@@ -254,6 +254,16 @@ export async function findPlacementRetakeGrant(db: Db, learnerId: string, option
   return result.rows[0] ? grantRecord(result.rows[0]) : null;
 }
 
+export async function readPlacementRetakeActivity(db: Db, learnerId: string): Promise<"granted" | "in_progress" | "pending_review" | null> {
+  const { rows } = await db.query<{ status: string }>(
+    `select case when grant_row.retake_attempt_id is null then 'granted' else attempt.status::text end as status
+     from assessment_retake_grants grant_row
+     left join assessment_attempts attempt on attempt.id = grant_row.retake_attempt_id and attempt.learner_id = grant_row.learner_id
+     where grant_row.learner_id = $1 and grant_row.kind = 'placement'`, [learnerId]);
+  const status = rows[0]?.status;
+  return status === "granted" || status === "in_progress" || status === "pending_review" ? status : null;
+}
+
 export interface PublishedPlacementRetakeForm {
   definitionId: string;
   versionId: string;

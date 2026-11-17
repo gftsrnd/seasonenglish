@@ -372,6 +372,7 @@ export interface LearnerAcademicAppealView extends RequestEvidenceView {
 }
 
 export interface LearnerHomeView {
+  placementRetake?: "granted" | "in_progress" | "pending_review";
   onboardingRequired: boolean;
   onboardingDraftAvailable?: boolean;
   learner: { displayName: string; cefr: CefrLevel | null };

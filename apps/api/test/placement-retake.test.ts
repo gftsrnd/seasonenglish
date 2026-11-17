@@ -30,6 +30,7 @@ const repositories = vi.hoisted(() => ({
 }));
 const retakeDb = vi.hoisted(() => ({
   findPlacementRetakeGrant: vi.fn(),
+  readPlacementRetakeActivity: vi.fn(),
   findPublishedPlacementRetakeForm: vi.fn(),
   grantPlacementRetake: vi.fn(),
   startPlacementRetakeAttempt: vi.fn(),
@@ -288,6 +289,7 @@ describe("learner retake request ('Xin thi lại') and the Operator's decision",
     retakeDb.findPlacementRetakeRequestState.mockResolvedValueOnce({
       original: { attemptId: OLD_ATTEMPT_ID, feedback: "Phản hồi ban đầu" }, target: null, request: null, retake: "used"
     });
+    retakeDb.readPlacementRetakeActivity.mockResolvedValueOnce("pending_review");
     const original = { ...attempt(OLD_ATTEMPT_ID, "approved", "original-version"), responses: [{ section: "writing", taskKey: "W1", value: "My submitted answer", evidenceType: "text", savedAt: new Date() }] };
     repositories.assessments.findAttempt.mockResolvedValueOnce(original);
     repositories.assessments.findPublishedByVersion.mockResolvedValueOnce({ ...retakeForm, assessmentKey: "placement-a", versionId: "original-version", blueprint: placementDefinition });

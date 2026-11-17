@@ -35,6 +35,17 @@ describe("monthly learner home", () => {
     expect(screen.queryByText(/kháng nghị/i)).not.toBeInTheDocument();
   });
 
+  it("shows retake activity alongside the current level and available lessons", () => {
+    const { rerender } = render(<LearnerHome view={view({ placementRetake: "in_progress" })} actions={actions} />);
+    expect(screen.getByRole("link", { name: "Tiếp tục bài thi lại" })).toHaveAttribute("href", "/test/placement");
+    expect(screen.getByText("Trình độ A2")).toBeInTheDocument();
+    rerender(<LearnerHome view={view({ placementRetake: "pending_review" })} actions={actions} />);
+    const state = screen.getByRole("region", { name: "Bài thi lại đầu vào" });
+    expect(within(state).getByRole("heading", { name: "Bài thi lại đã được nộp" })).toBeInTheDocument();
+    expect(within(state).queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Học ngay" })).toBeInTheDocument();
+  });
+
   it("offers the Pass Course entry only when the server says it is ready", () => {
     const learner = { displayName: "Học viên C1", cefr: "C1" as const };
     const { rerender } = render(<LearnerHome view={view({ learner })} actions={actions} />);

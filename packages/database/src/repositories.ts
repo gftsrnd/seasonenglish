@@ -7857,7 +7857,7 @@ class AssessmentRepository {
          join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
          left join learner_profiles lp on lp.user_id = learner.id
          left join lateral (
-           select aa.status as attempt_status,
+           select aa.status as attempt_status, ad.assessment_key as last_assessment_key,
                   coalesce(aa.submitted_at, aa.updated_at, aa.started_at) as last_attempt_at
            from assessment_attempts aa
            join assessment_versions av on av.id = aa.assessment_version_id
@@ -7867,14 +7867,17 @@ class AssessmentRepository {
            limit 1
          ) latest on true
          where learner.role = 'learner' and learner.status = 'active'
-           and not exists (
-             select 1 from assessment_attempts aa
-             join assessment_versions av on av.id = aa.assessment_version_id
-             join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'placement'
-             where aa.learner_id = learner.id and aa.status in ('pending_review', 'approved')
+           and (
+             (latest.attempt_status = 'in_progress' and latest.last_assessment_key = $2)
+             or not exists (
+               select 1 from assessment_attempts aa
+               join assessment_versions av on av.id = aa.assessment_version_id
+               join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'placement'
+               where aa.learner_id = learner.id and aa.status in ('pending_review', 'approved')
+             )
            )
          order by learner.display_name`,
-        [reviewerId]
+        [reviewerId, PLACEMENT_RETAKE_ASSESSMENT_KEY]
       ),
       this.listReviewFlow(reviewerId),
       this.pool.query<{ count: string }>(

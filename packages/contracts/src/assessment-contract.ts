@@ -192,6 +192,7 @@ export interface AssessmentPlacementRetakeRequestView {
   target: { attemptId: string; title: string; availableUntil: string | null } | null;
   request: { id: string; reason?: string; status: "pending" | "accepted" | "rejected"; resolution: string | null; createdAt: string; resolvedAt: string | null } | null;
   retake: AssessmentRetakeStatus;
+  retakeActivity?: "in_progress" | "pending_review";
 }
 
 export interface AssessmentPlacementRetakeGrantInput {

@@ -152,7 +152,9 @@ export function LearnerRequestHistory() {
     content: <><b>Test đầu vào</b>{retake.reason ? <p>{retake.reason}</p> : null}{original?.feedback ? <p className="small">Phản hồi bài đầu vào: {original.feedback}</p> : null}{retake.resolution ? <p className="small">Phản hồi yêu cầu: {retake.resolution}</p> : null}</>,
     status: <span className={`badge ${retake.status === "pending" ? "warn" : retake.status === "rejected" ? "danger" : "ok"}`}>{retake.status === "pending" ? "Chờ xử lý" : retake.status === "rejected" ? "Đã từ chối" : "Đã duyệt"}</span>,
     action: <>
-      {retake.status === "accepted" ? <Link className="btn btn-sm" to="/test/placement">Mở bài thi lại</Link> : null}
+      {retake.status === "accepted" && retakeView?.retake !== "used" ? <Link className="btn btn-sm" to="/test/placement">Mở bài thi lại</Link>
+        : retake.status === "accepted" && retakeView?.retakeActivity === "in_progress" ? <Link className="btn btn-sm" to="/test/placement">Tiếp tục bài thi lại</Link>
+          : retake.status === "accepted" && retakeView?.retake === "used" ? <span className="small muted">Đã dùng lượt thi lại</span> : null}
       {original ? <button className="btn btn-sm" type="button" onClick={() => setOriginalOpen(true)}>Xem bài làm</button> : null}
     </>
   }] : [];

@@ -206,7 +206,8 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
         <div className="row assessment-start-actions">{compact ? startButton : backLink}{compact ? backLink : startButton}</div>
         {startConfirmOpen ? <Modal
           className="assessment-start-dialog"
-          title={view.attempt ? "Tiếp tục bài test?" : "Bắt đầu bài test?"}
+          title={view.attempt ? "Tiếp tục bài test?" : definition.key === "placement-retake" ? "Bắt đầu bài thi lại?" : "Bắt đầu bài test?"}
+          description={!view.attempt && definition.key === "placement-retake" ? "Bạn chỉ được thi lại một lần. Kết quả thi lại là kết quả cuối cùng." : undefined}
           onClose={() => setStartConfirmOpen(false)}
           actions={<><Button onClick={() => setStartConfirmOpen(false)}>Hủy</Button><Button variant="primary" onClick={() => void start()}>Tôi đã sẵn sàng, bắt đầu</Button></>}
         >

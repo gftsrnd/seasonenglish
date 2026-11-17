@@ -38,7 +38,7 @@ import {
   normalizeLevelFormQuestionPrompts,
   PlacementRetakeError,
   PLACEMENT_RETAKE_ASSESSMENT_KEY,
-  placementRetakeStatus,
+  placementRetakeStatus, readPlacementRetakeActivity,
   startPlacementRetakeAttempt,
   publicAssessmentDefinition,
   sectionByCode,
@@ -863,6 +863,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
    */
   const placementRetakeRequestView = async (learnerId: string): Promise<AssessmentPlacementRetakeRequestView> => {
     const state = await findPlacementRetakeRequestState(pool, learnerId);
+    const activity = state.retake === "used" ? await readPlacementRetakeActivity(pool, learnerId) : null;
     const attempt = state.original ? await repositories.assessments.findAttempt(learnerId, state.original.attemptId) : null;
     const definition = attempt && attempt.learnerId === learnerId && attempt.status !== "in_progress"
       ? await definitionForAttempt(repositories.assessments, attempt)
@@ -881,7 +882,8 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       } : null,
       target: state.target ? { ...state.target, availableUntil: state.target.availableUntil?.toISOString() ?? null } : null,
       request: state.request ? { ...state.request, createdAt: state.request.createdAt.toISOString(), resolvedAt: state.request.resolvedAt?.toISOString() ?? null } : null,
-      retake: state.retake
+      retake: state.retake,
+      ...(activity === "in_progress" || activity === "pending_review" ? { retakeActivity: activity } : {})
     };
   };
 

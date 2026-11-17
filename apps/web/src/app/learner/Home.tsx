@@ -54,6 +54,13 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
         account lock stays on the page, as one compact line. */}
     {view.inactivityReminder && view.inactivityReminder.inactiveDays >= ABSENCE_LOCK_DAYS - 1 ? <p className="home-blocking-banner" role="alert"><b>Vắng thêm 1 ngày học sẽ bị khóa tài khoản.</b> Học bài hôm nay để giữ tài khoản.</p> : null}
     {!view.aiAvailable && view.aiAvailable !== undefined ? <Notice tone="warn">Bạn vẫn có thể học, làm bài thi và luyện với Season. Nhận xét AI đang tạm thời gián đoạn.</Notice> : null}
+    {view.placementRetake ? <section className="card learner-summary-card" aria-label="Bài thi lại đầu vào">
+      <div className="row between">
+        <div><h3>{view.placementRetake === "pending_review" ? "Bài thi lại đã được nộp" : view.placementRetake === "in_progress" ? "Bài thi lại đang làm dở" : "Đã duyệt thi lại"}</h3>
+          {view.placementRetake === "pending_review" ? <p className="small muted">Vận hành đang xem bài và sẽ chốt mức học.</p> : null}</div>
+        {view.placementRetake === "pending_review" ? null : <AppLink className="btn" href="/test/placement" navigate={actions.navigate}>{view.placementRetake === "in_progress" ? "Tiếp tục bài thi lại" : "Mở bài thi lại"}</AppLink>}
+      </div>
+    </section> : null}
     <PrimaryLesson view={view} next={next} actions={actions} />
     {view.learner.cefr === "C1" && !courseCompleted ? <section className="card learner-summary-card pass-course-home-card" aria-label="Bài thi đầu ra">
       <div className="row between">
