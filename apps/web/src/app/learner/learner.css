@@ -682,7 +682,7 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .level-adjustment-result { justify-content: center; margin-block: 4px 14px; }
 .level-adjustment-dialog > p { margin: 8px 0; overflow-wrap: anywhere; }
 .level-adjustment-dialog .level-adjustment-reason { text-align: left; }
-.level-adjustment-dialog .level-adjustment-rule { text-align: center; }
+.level-adjustment-dialog .level-adjustment-rule { text-align: center; text-wrap: balance; }
 .level-adjustment-dialog .modal-actions { justify-content: center; margin-top: 12px; }
 .placement-retake-confirm .modal-actions { flex-wrap: nowrap; gap: 8px; }
 .placement-retake-confirm .modal-actions button { height: 34px; min-height: 34px !important; white-space: nowrap; }
