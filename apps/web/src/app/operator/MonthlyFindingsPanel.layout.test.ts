@@ -5,6 +5,11 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 
 describe("findings layout CSS: the section label never wraps word by word (13/11)", () => {
+  it("wraps long grammar finding links within the editor", () => {
+    expect(css).toMatch(/\.operator-modal-scope \.operator-editor-findings-first\s*\{[^}]*flex:\s*1 1 0[^}]*min-width:\s*0[^}]*overflow-wrap:\s*anywhere/u);
+    expect(css).toMatch(/\.operator-modal-scope \.operator-editor-finding-link\s*\{[^}]*white-space:\s*normal/u);
+  });
+
   it("CSS keeps the label rigid and lets only the message wrap", () => {
     expect(css).toMatch(/\.operator-monthly-finding-label\s*\{[^}]*flex:\s*none[^}]*white-space:\s*nowrap/u);
     expect(css).toMatch(/\.operator-monthly-finding-where\s*\{[^}]*flex:\s*none[^}]*white-space:\s*nowrap/u);
