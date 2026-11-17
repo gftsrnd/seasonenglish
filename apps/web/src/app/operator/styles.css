@@ -4300,7 +4300,13 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 .operator-request-error { display: grid; justify-items: start; gap: 8px; margin: 0; }
 .operator-retake-publish-error { display: grid; justify-items: start; gap: 8px; }
 .operator-retake-publish-error p { margin: 0; }
-.operator-retake-publish-error a { display: inline-flex; align-items: center; min-height: 44px; }
+.app-operator .operator-retake-publish-error a {
+  --hci-touch-target: 44px;
+  --touch-min: 44px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
 .operator-request-expanded .operator-review-action-footer button { min-height: 40px; }
 .operator-request-pagination { flex-wrap: wrap; gap: 10px; }
 .operator-request-pagination a {
