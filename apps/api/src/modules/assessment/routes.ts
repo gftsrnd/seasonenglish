@@ -846,6 +846,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       original: attempt && definition ? {
         definition: publicAssessmentDefinition(definition.blueprint),
         attempt: attemptView(attempt),
+        submittedAt: attempt.submittedAt?.toISOString() ?? null,
         feedback: state.original?.feedback ?? null
       } : null,
       target: state.target ? { ...state.target, availableUntil: state.target.availableUntil?.toISOString() ?? null } : null,
@@ -861,7 +862,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
 
   app.post("/api/v1/learner/placement-retake-request", { preHandler: learnerOnly }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
-    const body = z.object({ reason: z.string().trim().max(2_000).optional() }).safeParse(request.body === undefined ? {} : request.body);
+    const body = z.object({ reason: z.string().trim().min(1).max(2_000) }).safeParse(request.body === undefined ? {} : request.body);
     if (!body.success) return reply.code(400).send({ code: "PLACEMENT_RETAKE_REQUEST_INVALID" });
     const created = await createPlacementRetakeRequest(pool, learnerId, body.data.reason);
     if (!created) return reply.code(409).send({ code: "PLACEMENT_RETAKE_REQUEST_NOT_AVAILABLE", message: "Đã hết thời hạn xin thi lại hoặc bạn đã gửi yêu cầu." });

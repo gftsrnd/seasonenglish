@@ -258,9 +258,9 @@ describe("learner retake request ('Xin thi lại') and the Operator's decision",
     const server = await app();
     const open = await server.inject({ method: "GET", url: "/api/v1/learner/placement-retake-request" });
     expect(open.json()).toEqual({ original: null, target: { attemptId: OLD_ATTEMPT_ID, title: "Test đầu vào", availableUntil: until.toISOString() }, request: null, retake: "not_granted" });
-    const sent = await server.inject({ method: "POST", url: "/api/v1/learner/placement-retake-request" });
+    const sent = await server.inject({ method: "POST", url: "/api/v1/learner/placement-retake-request", payload: { reason: "  Lý do  " } });
     expect(sent.statusCode, sent.body).toBe(201);
-    expect(retakeDb.createPlacementRetakeRequest).toHaveBeenLastCalledWith(expect.anything(), LEARNER_ID, undefined);
+    expect(retakeDb.createPlacementRetakeRequest).toHaveBeenLastCalledWith(expect.anything(), LEARNER_ID, "Lý do");
     expect(sent.json().request).toEqual(expect.objectContaining({ id: "r1", status: "pending" }));
     await server.close();
   });
@@ -273,8 +273,11 @@ describe("learner retake request ('Xin thi lại') and the Operator's decision",
     expect(trimmed.statusCode).toBe(409);
     expect(retakeDb.createPlacementRetakeRequest).toHaveBeenLastCalledWith(expect.anything(), LEARNER_ID, "Lý do");
     retakeDb.createPlacementRetakeRequest.mockClear();
-    const invalid = await server.inject({ method: "POST", url, payload: { reason: "x".repeat(2001) } });
-    expect(invalid.statusCode).toBe(400);
+    for (const payload of [undefined, {}, { reason: "   " }, { reason: "x".repeat(2001) }]) {
+      const invalid = await server.inject({ method: "POST", url, ...(payload === undefined ? {} : { payload }) });
+      expect(invalid.statusCode).toBe(400);
+      expect(invalid.json().code).toBe("PLACEMENT_RETAKE_REQUEST_INVALID");
+    }
     expect(retakeDb.createPlacementRetakeRequest).not.toHaveBeenCalled();
     await server.close();
   });
@@ -291,6 +294,8 @@ describe("learner retake request ('Xin thi lại') and the Operator's decision",
     expect(response.json().original).toMatchObject({
       definition: { key: "placement-a" }, attempt: { id: OLD_ATTEMPT_ID, responses: [{ value: "My submitted answer" }] }, feedback: "Phản hồi ban đầu"
     });
+    expect(response.json().original.definition.sections.map((section: { code: string }) => section.code)).toEqual(["listening", "reading", "writing", "speaking"]);
+    expect(JSON.stringify(response.json().original)).not.toContain("correctAnswer");
     expect(repositories.assessments.findAttempt).toHaveBeenCalledExactlyOnceWith(LEARNER_ID, OLD_ATTEMPT_ID);
     await server.close();
   });
@@ -298,7 +303,7 @@ describe("learner retake request ('Xin thi lại') and the Operator's decision",
   it("refuses the request once the window has expired", async () => {
     retakeDb.createPlacementRetakeRequest.mockResolvedValue(null);
     const server = await app();
-    const response = await server.inject({ method: "POST", url: "/api/v1/learner/placement-retake-request" });
+    const response = await server.inject({ method: "POST", url: "/api/v1/learner/placement-retake-request", payload: { reason: "Lý do" } });
     expect(response.statusCode).toBe(409);
     expect(response.json().code).toBe("PLACEMENT_RETAKE_REQUEST_NOT_AVAILABLE");
     await server.close();

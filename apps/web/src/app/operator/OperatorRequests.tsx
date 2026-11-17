@@ -1,3 +1,4 @@
+import { Eye, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import type { ContentReviewAssessmentDetailView, ContentReviewView, ReopenRequestView } from "@e4s/contracts";
@@ -234,12 +235,14 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
           action: <>
             <Link to={requestSearch("appeals", listStatus, open ? undefined : item.id, listPage)} className="btn-sm"
               aria-expanded={open} aria-controls={open ? detailId : undefined}>{open ? "Thu gọn" : item.status === "pending" ? "Xử lý" : "Chi tiết"}</Link>
-            {item.status !== "pending" ? <button className="btn-sm btn-danger" type="button" disabled={removingId !== undefined || decisionId !== undefined}
-              onClick={() => void remove(item)}>{removingId === item.id ? "Đang xóa…" : "Xóa"}</button> : null}
+            {item.status !== "pending" ? <button className="btn-sm btn-danger request-delete" type="button" title="Xóa" aria-label="Xóa" disabled={removingId !== undefined || decisionId !== undefined}
+              onClick={() => void remove(item)}><Trash2 size={15} aria-hidden="true" />{removingId === item.id ? "Đang xóa…" : <span>Xóa</span>}</button> : null}
           </>,
           detail: open ? <div className="operator-request-expanded" id={detailId}>
-            {item.attemptId ? <Button small busy={assessmentBusy} onClick={() => void openAssessment(item.attemptId!)}>Xem bài làm</Button> : null}
             <AppealReviewCard item={view} readOnly={false} compactRetake
+              reviewAction={item.attemptId ? <Button small busy={assessmentBusy} title="Xem bài làm" aria-label="Xem bài làm" className={item.status === "pending" ? "request-view-icon" : ""} onClick={() => void openAssessment(item.attemptId!)}>
+                <Eye size={15} aria-hidden="true" /><span>Xem bài làm</span>
+              </Button> : null}
               busy={accepted => decisionId === item.id && decision === accepted} itemBusy={decision !== undefined}
               onDecision={accepted => void decide(item, accepted)} />
           </div> : null

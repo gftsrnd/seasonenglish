@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
-import type { AssessmentAppealTargetView, LearnerAcademicAppealView, LearnerComplaintKind, LearnerComplaintView } from "@e4s/contracts";
+import type { AssessmentAppealTargetView, AssessmentPlacementRetakeRequestView, LearnerAcademicAppealView, LearnerComplaintKind, LearnerComplaintView } from "@e4s/contracts";
 import { learnerApiClient } from "../../api/learner.js";
 import { AssessmentAppealForm } from "./AssessmentAppealForm.js";
-import { PlacementRetakeRequest } from "./PlacementRetakeRequest.js";
+import { OriginalPlacementModal, PlacementRetakeRequest } from "./PlacementRetakeRequest.js";
 import { PageTitle } from "./ui.js";
 import { RequestEvidenceDetails, RequestEvidenceFields, requestEvidenceArgs, type RequestEvidenceDraft } from "../shared/RequestEvidence.js";
 import { RequestTable } from "../shared/RequestTable.js";
@@ -56,6 +56,8 @@ export function LearnerRequestHistory() {
   const fromProfile = params.get("from") === "profile";
   const [revision, setRevision] = useState(0);
   const [notice, setNotice] = useState("");
+  const [retakeView, setRetakeView] = useState<AssessmentPlacementRetakeRequestView>();
+  const [originalOpen, setOriginalOpen] = useState(false);
   const surveys = useLearnerMonthlySurveys();
   const refresh = () => setRevision(value => value + 1);
   const setComplaintFormOpen = (open: boolean) => {
@@ -104,7 +106,7 @@ export function LearnerRequestHistory() {
   const history = [
     ...(showComplaints ? data?.complaints ?? [] : []).map(item => ({ ...item, date: item.submittedAt, kindLabel: "Khiếu nại",
       title: complaintLabels[item.kind], evidenceKind: "complaint" as const })),
-    ...(showAppeals ? data?.appeals ?? [] : []).map(item => ({ ...item, date: item.createdAt, kindLabel: "Kháng nghị",
+    ...(showAppeals ? data?.appeals ?? [] : []).filter(item => item.requestKind !== "retake" && item.id !== retakeView?.request?.id).map(item => ({ ...item, date: item.createdAt, kindLabel: "Kháng nghị",
       title: `${appealLabels[item.kind]} · ${item.title}`, evidenceKind: evidenceKinds[item.kind],
       scope: item.scope ?? (item.partCode ? lessonPartNames[item.partCode] ?? null : null) }))
   ].map(item => {
@@ -141,7 +143,20 @@ export function LearnerRequestHistory() {
       </div> : null
     };
   });
-  const rows = [...history, ...feedbackRows].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+  const retake = retakeView?.request;
+  const original = retakeView?.original;
+  const retakeRows = retake && (filter === "all" || filter === "appeals") ? [{
+    id: `support-request-${retake.id}`,
+    kind: "Yêu cầu thi lại",
+    date: retake.createdAt,
+    content: <><b>Test đầu vào</b>{retake.reason ? <p>{retake.reason}</p> : null}{original?.feedback ? <p className="small">Phản hồi bài đầu vào: {original.feedback}</p> : null}{retake.resolution ? <p className="small">Phản hồi yêu cầu: {retake.resolution}</p> : null}</>,
+    status: <span className={`badge ${retake.status === "pending" ? "warn" : retake.status === "rejected" ? "danger" : "ok"}`}>{retake.status === "pending" ? "Chờ xử lý" : retake.status === "rejected" ? "Đã từ chối" : "Đã duyệt"}</span>,
+    action: <>
+      {retake.status === "accepted" ? <Link className="btn btn-sm" to="/test/placement">Mở bài thi lại</Link> : null}
+      {original ? <button className="btn btn-sm" type="button" onClick={() => setOriginalOpen(true)}>Xem bài làm</button> : null}
+    </>
+  }] : [];
+  const rows = [...history, ...retakeRows, ...feedbackRows].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
   const requestError = data && ((showComplaints && !data.complaints) || (showAppeals && !data.appeals) || (filter === "appeals" && (!appealsOpen || !data.results)) || (filter === "feedback" && !surveysOpen));
   const surveyError = showFeedback && surveys.loadError;
   const loading = !data || (showFeedback && !surveys.view && !surveys.loadError);
@@ -164,7 +179,7 @@ export function LearnerRequestHistory() {
     {notice ? <p role="status">{notice}</p> : null}
     {composing && data?.complaints ? <ComplaintForm lessonUnlock={lessonUnlock} complaints={data.complaints} learning={data.levelApproved === true}
       cancel={() => setComplaintFormOpen(false)} submitted={() => { setComplaintFormOpen(false); setNotice("Đã gửi khiếu nại cho Quản lý."); refresh(); }} /> : null}
-    {filter === "all" || filter === "appeals" ? <PlacementRetakeRequest onSent={() => { setNotice("Đã gửi yêu cầu thi lại cho Vận hành."); refresh(); }} /> : null}
+    {filter === "all" || filter === "appeals" ? <PlacementRetakeRequest onViewChange={setRetakeView} onSent={() => { setNotice("Đã gửi yêu cầu thi lại cho Vận hành."); refresh(); }} /> : null}
     {filter === "appeals" && appealsOpen && data?.results?.length ? <section className="card learner-support-action">
       <h2>Bài thi có thể kháng nghị</h2>
       <ul className="request-history-items">{data.results.map(result => <li key={result.attemptId}>
@@ -184,6 +199,7 @@ export function LearnerRequestHistory() {
       {requestError || (surveyError && filter !== "feedback") ? <p role="alert">Chưa tải được đầy đủ lịch sử. <button type="button" className="btn" onClick={() => { refresh(); surveys.retry(); }}>Thử lại</button></p> : null}
       <RequestTable label={listLabel} rows={rows} empty={loading ? <span role="status">Đang tải…</span> : "Chưa có mục nào."} />
     </section>
+    {original && originalOpen ? <OriginalPlacementModal submission={original} onClose={() => setOriginalOpen(false)} /> : null}
   </div>;
 }
 

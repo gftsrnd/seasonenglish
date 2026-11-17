@@ -17,7 +17,7 @@ export interface LearnerApiClient {
   getAppealableAssessments(): Promise<{ results: AssessmentAppealTargetView[] }>;
   /** Placement: the "Xin thi lại" request state (target while the window is open, the request and its decision). */
   getPlacementRetakeRequest?(): Promise<AssessmentPlacementRetakeRequestView>;
-  createPlacementRetakeRequest?(reason?: string): Promise<AssessmentPlacementRetakeRequestView>;
+  createPlacementRetakeRequest?(reason: string): Promise<AssessmentPlacementRetakeRequestView>;
   getLearnerAppeals(): Promise<{ appeals: LearnerAcademicAppealView[] }>;
   getLearnerComplaints(): Promise<{ complaints: LearnerComplaintView[] }>;
   submitLearnerComplaint(kind: LearnerComplaintKind, reason: string, evidence?: RequestEvidenceInput): Promise<{ complaint: LearnerComplaintView }>;

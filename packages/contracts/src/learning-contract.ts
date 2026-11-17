@@ -355,6 +355,7 @@ export interface MonthlyExamEligibilityView {
 }
 
 export interface LearnerAcademicAppealView extends RequestEvidenceView {
+  requestKind?: "appeal" | "retake" | null;
   readonly partCode?: LessonPartCode | null;
   readonly id: string;
   readonly kind: "lesson" | "assessment" | "practice";

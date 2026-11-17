@@ -8,7 +8,7 @@ import { buildApi } from "../src/app.js";
 const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 
-// B8-004: a placement appeal is only possible after the level is approved.
+// Academic appeals require an approved level; placement retakes have their own rules.
 describe("Appeals before the placement level is approved", () => {
   const pool = new Pool({ connectionString: databaseUrl });
   const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false });
@@ -81,17 +81,24 @@ describe("Appeals before the placement level is approved", () => {
     }
   });
 
-  it("opens the placement appeal once the level is approved", async () => {
+  it("shows the placement retake in history once the learner submits a reason", async () => {
     await setApproved(true);
     const headers = { cookie };
     const available = await app.inject({ method: "GET", url: "/api/v1/learner/appealable-assessments", headers });
     expect(available.statusCode, available.body).toBe(200);
-    expect(available.json().results).toEqual([expect.objectContaining({ attemptId: DEMO_IDS.placementAttempt })]);
+    expect(available.json().results).toEqual([]);
 
-    const created = await app.inject({ method: "POST", url: `/api/v1/assessment-attempts/${DEMO_IDS.placementAttempt}/appeals`, headers, payload: appealPayload });
+    const retakeUrl = "/api/v1/learner/placement-retake-request";
+    const invalid = await app.inject({ method: "POST", url: retakeUrl, headers, payload: { reason: "  " } });
+    expect(invalid.statusCode, invalid.body).toBe(400);
+    expect((await pool.query("select id from appeals where learner_id = $1", [DEMO_IDS.learner])).rowCount).toBe(0);
+
+    const reason = "Tôi muốn thử lại bài đầu vào.";
+    const created = await app.inject({ method: "POST", url: retakeUrl, headers, payload: { reason: `  ${reason}  ` } });
     expect(created.statusCode, created.body).toBe(201);
+    expect(created.json().request).toMatchObject({ reason, status: "pending" });
 
     const history = await app.inject({ method: "GET", url: "/api/v1/learner/appeals", headers });
-    expect(history.json().appeals).toEqual([expect.objectContaining({ kind: "assessment", status: "pending" })]);
+    expect(history.json().appeals).toEqual([expect.objectContaining({ kind: "assessment", requestKind: "retake", reason, status: "pending" })]);
   });
 });

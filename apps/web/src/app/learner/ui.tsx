@@ -81,7 +81,7 @@ export function Loading({ label = "Đang tải…", className, ...rest }: HTMLAt
   return <div {...rest} className={["loading-state", className].filter(Boolean).join(" ")} role="status" aria-live="polite" aria-busy="true"><span aria-hidden="true">…</span> {label}</div>;
 }
 
-export function Modal({ open = true, title, description, children, actions, onClose, className }: {
+export function Modal({ open = true, title, description, children, actions, onClose, className, dismissOnBackdrop = false }: {
   open?: boolean;
   title: string;
   description?: ReactNode;
@@ -89,6 +89,7 @@ export function Modal({ open = true, title, description, children, actions, onCl
   actions?: ReactNode;
   onClose?: (() => void) | undefined;
   className?: string | undefined;
+  dismissOnBackdrop?: boolean;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const titleId = useId();
@@ -113,7 +114,7 @@ export function Modal({ open = true, title, description, children, actions, onCl
       onClose?.();
     }
   };
-  return <div className="modal-backdrop" role="presentation"><section ref={dialogRef} className={["dialog", className].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} tabIndex={-1} onKeyDown={handleKeyDown}>
+  return <div className="modal-backdrop" role="presentation" onClick={(event) => { if (dismissOnBackdrop && event.target === event.currentTarget) onClose?.(); }}><section ref={dialogRef} className={["dialog", className].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} tabIndex={-1} onKeyDown={handleKeyDown}>
     <div className="row between"><h2 id={titleId}>{title}</h2>{onClose ? <ModalCloseButton label="Đóng hộp thoại" onClick={onClose} /> : null}</div>
     {description ? <p id={descriptionId} className="small">{description}</p> : null}
     {children}

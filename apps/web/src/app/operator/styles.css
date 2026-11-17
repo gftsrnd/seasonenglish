@@ -3043,6 +3043,15 @@ body:has(.app-operator) #modal > .dialog > .row {
   line-height: 1.35;
 }
 
+.operator-detail-modal > .learner-original-placement-dialog { max-height: 80dvh; }
+.learner-original-placement-dialog > .row:first-child {
+  position: sticky;
+  top: -16px;
+  z-index: 1;
+  background: var(--surface);
+  padding-block: 8px;
+}
+.learner-original-placement-dialog .operator-answer-section-summary { min-height: 40px; }
 .operator-assessment-dialog h4 { margin: 14px 0 8px; }
 .operator-assessment-dialog > .table-wrap { margin-top: 8px !important; }
 .operator-assessment-dialog > .table-wrap th,
@@ -4307,7 +4316,15 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
   align-items: center;
   min-height: 44px;
 }
-.operator-request-expanded .operator-review-action-footer button { min-height: 40px; }
+.operator-request-expanded .operator-review-action-footer { justify-content: flex-end; }
+.operator-request-expanded .operator-review-appeal-compact { padding: 0; border: 0; background: transparent; box-shadow: none; }
+.operator-request-expanded .operator-review-appeal-compact .operator-review-action-footer { flex-wrap: nowrap; gap: 6px; padding: 0; }
+.operator-request-expanded .request-view-icon { display: inline-flex; align-items: center; gap: 4px; }
+@media (max-width: 768px) {
+  .operator-request-expanded .operator-review-appeal-compact .operator-review-action-footer button { min-width: 0; padding-inline: 8px; font-size: 13px; white-space: nowrap; }
+  .operator-request-expanded .operator-review-appeal-compact .request-view-icon { width: 32px; justify-content: center; }
+  .operator-request-expanded .operator-review-appeal-compact .request-view-icon span:not(.spinner) { display: none; }
+}
 .operator-request-pagination { flex-wrap: wrap; gap: 10px; }
 .operator-request-pagination a {
   display: inline-flex;

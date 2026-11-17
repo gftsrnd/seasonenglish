@@ -161,20 +161,20 @@ export interface PlacementRetakeRequestState {
   /** The placement result the learner may ask a retake for, while the window is open. */
   target: { attemptId: string; title: string; availableUntil: Date | null } | null;
   /** The learner's retake request (appeals row with request_kind 'retake'), if any. */
-  request: { id: string; status: "pending" | "accepted" | "rejected"; resolution: string | null; createdAt: Date; resolvedAt: Date | null } | null;
+  request: { id: string; reason: string; status: "pending" | "accepted" | "rejected"; resolution: string | null; createdAt: Date; resolvedAt: Date | null } | null;
   retake: AssessmentRetakeStatus;
   original: { attemptId: string; feedback: string | null } | null;
 }
 
 export async function findPlacementRetakeRequestState(db: Db, learnerId: string, now: Date = new Date()): Promise<PlacementRetakeRequestState> {
   const grant = await findPlacementRetakeGrant(db, learnerId);
-  const requestRow = await db.query<{ id: string; status: "pending" | "accepted" | "rejected"; resolution: string | null; created_at: Date; resolved_at: Date | null }>(
-    `select id, status, resolution, created_at, resolved_at from appeals
+  const requestRow = await db.query<{ id: string; reason: string; status: "pending" | "accepted" | "rejected"; resolution: string | null; created_at: Date; resolved_at: Date | null }>(
+    `select id, reason, status, resolution, created_at, resolved_at from appeals
      where learner_id = $1 and request_kind = 'retake' order by created_at desc limit 1`,
     [learnerId]
   );
   const request = requestRow.rows[0] ? {
-    id: requestRow.rows[0].id, status: requestRow.rows[0].status, resolution: requestRow.rows[0].resolution,
+    id: requestRow.rows[0].id, reason: requestRow.rows[0].reason, status: requestRow.rows[0].status, resolution: requestRow.rows[0].resolution,
     createdAt: requestRow.rows[0].created_at, resolvedAt: requestRow.rows[0].resolved_at
   } : null;
   let target: PlacementRetakeRequestState["target"] = null;

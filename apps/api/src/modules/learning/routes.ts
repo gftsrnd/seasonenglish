@@ -363,15 +363,15 @@ export function registerLearningRoutes(
     if (!await repositories.assessments.hasApprovedLevel(request.e4sSession!.user.id)) return { appeals: [] };
     const result = await pool.query<Omit<LearnerAcademicAppealView, "createdAt"> & { createdAt: Date }>(`
       select p.id, 'lesson' as kind, l.title, p.reason, p.status, p.resolution, p.created_at as "createdAt",
-             p.request_scope as scope, p.screenshot is not null as "hasEvidence", p.part_code as "partCode"
+             p.request_scope as scope, p.screenshot is not null as "hasEvidence", p.part_code as "partCode", null as "requestKind"
         from lesson_part_appeals p join lessons l on l.id = p.lesson_id where p.learner_id = $1
       union all
-      select p.id, 'assessment', d.title, p.reason, p.status, p.resolution, p.created_at, p.request_scope, p.screenshot is not null, null
+      select p.id, 'assessment', d.title, p.reason, p.status, p.resolution, p.created_at, p.request_scope, p.screenshot is not null, null, p.request_kind
         from appeals p join assessment_attempts a on a.id = p.attempt_id and a.learner_id = p.learner_id
         join assessment_versions v on v.id = a.assessment_version_id
         join assessment_definitions d on d.id = v.definition_id where p.learner_id = $1
       union all
-      select p.id, 'practice', 'Bài thực hành', p.reason, p.status, p.resolution, p.created_at, p.request_scope, p.screenshot is not null, null
+      select p.id, 'practice', 'Bài thực hành', p.reason, p.status, p.resolution, p.created_at, p.request_scope, p.screenshot is not null, null, null
         from practice_appeals p where p.learner_id = $1
       order by "createdAt" desc
     `, [request.e4sSession!.user.id]);

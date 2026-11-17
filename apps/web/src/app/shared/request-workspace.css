@@ -157,6 +157,12 @@
   gap: 8px;
 }
 
+.request-workspace .request-state .badge.warn { color: #704d00; background: #fff4d9; box-shadow: inset 0 0 0 1px #efd69b; }
+.request-workspace .request-state .badge.ok { color: #245a32; background: #e8f4e7; box-shadow: inset 0 0 0 1px #bbd9bd; }
+.request-workspace .request-state .badge.danger,
+.request-workspace .request-actions .request-delete { color: #a32323; background: #fff0ee; box-shadow: inset 0 0 0 1px #eebdb7; }
+.request-workspace .request-actions .request-delete:hover:not(:disabled) { color: #8d1717; background: #ffe1dd; }
+.request-workspace .request-actions .request-delete { display: inline-flex; gap: 4px; align-items: center; }
 .request-actions a { display: inline-flex; align-items: center; white-space: nowrap; text-decoration: none; }
 .request-workspace { container-type: inline-size; }
 
