@@ -707,7 +707,7 @@
      width, centred, with the dimmed backdrop visible (tap it to close). */
   :root:root:root .modal-backdrop { display: grid; place-items: center; padding: 11dvh 4vw; }
   :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) {
-    width: min(92vw, 720px) !important;
+    width: min(92vw, var(--compact-dialog-width, 720px)) !important;
     max-width: 92vw !important;
     max-height: 78dvh !important;
     margin: 0 !important;
