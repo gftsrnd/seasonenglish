@@ -125,6 +125,10 @@ describe.skipIf(!databaseUrl)("placement retake persistence", () => {
       .rejects.toEqual(new PlacementRetakeError("PLACEMENT_RETAKE_FINAL"));
     const placed = await repositories.assessments.decide({ attemptId: attemptId!, reviewerId: DEMO_IDS.operator, status: "approved", approvedLevel: "B1", reason: "Xếp lớp sau thi lại" });
     expect(placed?.approvedLevel).toBe("B1");
+    await expect(repositories.assessments.decide({ attemptId: attemptId!, reviewerId: DEMO_IDS.operator, status: "approved", approvedLevel: "A1", reason: "Quyết định cũ trên tab khác" }))
+      .rejects.toEqual(new PlacementRetakeError("PLACEMENT_RETAKE_DECIDED"));
+    await expect(repositories.assessments.decide({ attemptId: attemptId!, reviewerId: DEMO_IDS.operator, status: "approved", approvedLevel: "B1", reason: "Xếp lớp sau thi lại" }))
+      .resolves.toEqual(placed);
     const inbox = await new InboxNotificationRepository(pool).list(DEMO_IDS.learner, 20, false);
     expect(inbox.items).toContainEqual(expect.objectContaining({ relatedId: attemptId, kind: "assessment_result", context: "placement_retake" }));
   });

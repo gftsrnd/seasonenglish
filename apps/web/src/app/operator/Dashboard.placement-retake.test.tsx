@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AssessmentRetakeStatus, AssessmentReviewOverviewView } from "@e4s/contracts";
+import type { AssessmentRetakeStatus, AssessmentReviewLearnerView, AssessmentReviewOverviewView } from "@e4s/contracts";
 import { OperatorDashboard } from "./Dashboard.js";
 import { adaptAssessmentOverview } from "./adapters.js";
 import type { OperatorDashboardActions } from "./types.js";
@@ -51,6 +51,24 @@ describe("Operator placement retake status", () => {
     render(<OperatorDashboard view={adaptAssessmentOverview(overview("used"), { aiConnected: true, openAppeals: 0 })} actions={actions()} />);
     expect(screen.getByTestId("retake-learner-1")).toHaveTextContent("Đã dùng lượt thi lại");
     expect(screen.getByRole("button", { name: "Xếp lớp" })).toBeInTheDocument();
+  });
+
+  it("compares the retake with the linked original and opens either attempt", async () => {
+    const state = adaptAssessmentOverview(overview("used", { isPlacementRetake: true, placementRetake: "used" }), { aiConnected: true, openAppeals: 0 });
+    const original = { id: "original", kind: "placement", sectionScores: { listening: 10 } };
+    const retake = { id: "attempt-9", kind: "placement", originalPlacementAttemptId: "original", sectionScores: { listening: 15 } };
+    const profile = { learner: { currentLevel: "A2" }, profile: {}, attempts: [retake, original] } as AssessmentReviewLearnerView;
+    const open = vi.fn();
+    render(<OperatorDashboard view={{ ...state, pendingProfiles: { "attempt-9": profile } }} actions={actions({ onViewTest: open })} />);
+    const user = userEvent.setup();
+    const row = screen.getByLabelText("Chờ duyệt Minh");
+    await user.click(row.querySelector("summary")!);
+    const comparison = within(row).getByRole("region", { name: "So sánh bài đầu vào và bài thi lại" });
+    expect(within(comparison).getByText("10/20 · 50%")).toBeInTheDocument();
+    expect(within(comparison).getByText("15/20 · 75%")).toBeInTheDocument();
+    await user.click(within(comparison).getByRole("button", { name: "Xem bài lần đầu" }));
+    await user.click(within(comparison).getByRole("button", { name: "Xem bài thi lại" }));
+    expect(open.mock.calls).toEqual([["original"], ["attempt-9"]]);
   });
 
   it("lets the operator send a pending placement back with the one retake, and marks the retake attempt as the final placement", async () => {

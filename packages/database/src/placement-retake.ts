@@ -25,7 +25,7 @@ export type PlacementRetakeRefusal =
   | "PLACEMENT_RETAKE_FORM_NOT_PUBLISHED";
 
 export class PlacementRetakeError extends Error {
-  constructor(readonly code: PlacementRetakeRefusal | "PLACEMENT_RETAKE_FINAL") {
+  constructor(readonly code: PlacementRetakeRefusal | "PLACEMENT_RETAKE_FINAL" | "PLACEMENT_RETAKE_DECIDED") {
     super(code);
   }
 }

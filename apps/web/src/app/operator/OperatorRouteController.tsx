@@ -793,7 +793,11 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
       const trialNote = trial?.levels.includes(cefr)
         ? ` Học viên có thể học thử tháng ${trial.month.slice(5, 7)}. Tiến độ, điểm danh, điều kiện dự thi và xét lên mức bắt đầu tính từ ${trial.countsFrom.slice(8, 10)}/${trial.countsFrom.slice(5, 7)}.`
         : "";
-      void modal.prompt({ title: "Duyệt mức đầu vào", message: `Mức được duyệt: ${cefr}.${trialNote} Hãy ghi rõ lý do để lưu quyết định.`, label: "Lý do", confirmLabel: "Duyệt mức" })
+      void modal.prompt({
+        title: pendingAssessment?.isPlacementRetake ? "Chốt mức sau bài thi lại" : "Duyệt mức đầu vào",
+        message: `Mức được duyệt: ${cefr}.${trialNote} ${pendingAssessment?.isPlacementRetake ? "Đây là quyết định xếp lớp cuối cùng. " : ""}Hãy ghi rõ lý do để lưu quyết định.`,
+        label: "Lý do", confirmLabel: "Duyệt mức"
+      })
         .then(reason => {
           // null = Huỷ / Esc / backdrop: just close, no error toast.
           if (reason === null) return;
@@ -907,7 +911,8 @@ function OperatorProfileEvidence({ detail }: { detail: AssessmentReviewLearnerVi
     <h4>Lịch sử đổi mức</h4>
     {detail.levelHistory.length ? <div className="list">{detail.levelHistory.map((item, index) => <div className="item small" key={`${item.changedAt}-${index}`}><b>{item.from ?? "—"} → {item.to}</b> · {item.mode} · {item.reason}<div className="xs muted">{item.changedAt} · bằng chứng: {item.evidence || "—"}</div></div>)}</div> : <p className="small muted">Chưa có lịch sử đổi mức.</p>}
     <h4>Bài test</h4>
-    {detail.attempts.length ? <div className="list">{detail.attempts.map(item => <div className="item small" key={item.id}><b>{item.title}</b> · {item.kind} · {item.status} · tổng {item.totalScore == null ? "—" : formatScoreOutOf(item.totalScore, 100)}<div className="xs muted">Nộp: {item.submittedAt ?? "—"} · mức gợi ý: {item.suggestedLevel ?? "—"}</div></div>)}</div> : <p className="small muted">Chưa có bài test.</p>}
+    {detail.attempts.length ? <div className="list">{detail.attempts.map(item => <div className="item small" key={item.id}><b>{item.title}</b> · {item.kind} · {item.status} · tổng {item.totalScore == null ? "—" : formatScoreOutOf(item.totalScore, 100)}<div className="xs muted">Nộp: {item.submittedAt ?? "—"} · mức gợi ý: {item.suggestedLevel ?? "—"}</div>
+      {item.placementDecision ? <div className="xs"><b>{item.originalPlacementAttemptId ? "Mức cuối" : "Mức lần đầu"}</b> {item.approvedLevel ?? "—"} · {item.placementDecision.decidedBy ?? "Vận hành"} · {new Date(item.placementDecision.decidedAt).toLocaleString("vi-VN")}<p className="small">{item.placementDecision.reason}</p></div> : null}</div>)}</div> : <p className="small muted">Chưa có bài test.</p>}
     {detail.deletionRequests.length > 0 && <><h4>Yêu cầu xoá</h4><div className="list">{detail.deletionRequests.map(item => <div className="item small" key={item.id}><b>{item.status}</b> · {item.reason}<div className="xs muted">Gửi lúc {item.requestedAt}</div></div>)}</div></>}
   </>;
 }
@@ -1694,6 +1699,7 @@ function PromptsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
 }
 
 const operatorErrorMessages: Record<string, string> = {
+  PLACEMENT_RETAKE_DECIDED: "Bài thi lại đã được xử lý. Quyết định đã lưu không thay đổi.",
   MONTHLY_DAY_DRAFT_NOT_FOUND: "Không tìm thấy bản nháp. Hãy tải lại lịch tháng.",
   MONTHLY_DAY_QUALITY_BLOCKED: "Bài chưa thể duyệt. Hãy mở bản nháp và sửa các mục chất lượng trước khi duyệt lại.",
   MONTHLY_DAY_QUALITY_ACK_REQUIRED: "Hãy kiểm tra và xác nhận từng cảnh báo trước khi duyệt.",

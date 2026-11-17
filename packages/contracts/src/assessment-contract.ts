@@ -464,6 +464,9 @@ export interface AssessmentReviewAttemptSummaryView {
   sectionScores: Partial<Record<AssessmentSectionCode, number>>;
   suggestedLevel: CefrLevel | null;
   approvedLevel: CefrLevel | null;
+  /** Placement retake only, tied to the original attempt that granted it. */
+  originalPlacementAttemptId?: string;
+  placementDecision?: { reason: string; decidedAt: string; decidedBy: string | null };
 }
 
 export interface AssessmentReviewLearnerView {

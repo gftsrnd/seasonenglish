@@ -8,6 +8,32 @@ import { Badge, Button, LevelChip, OperatorPage, PageTitle } from "./primitives.
 import type { Cefr, DashboardActionKey, LevelSignalPerson, OperatorDashboardActions, OperatorDashboardView, PlacementRetakeState } from "./types.js";
 import { formatPercent, formatScoreOutOf } from "../shared/format-score.js";
 
+const placementRetakeSkills = [
+  { key: "listening", label: "Nghe", max: 20 },
+  { key: "reading", label: "Đọc", max: 40 },
+  { key: "writing", label: "Viết", max: 20 },
+  { key: "speaking", label: "Nói", max: 20 }
+] as const;
+
+function PlacementRetakeComparison({ original, retake, currentLevel, onView }: {
+  original: AssessmentReviewLearnerView["attempts"][number];
+  retake: AssessmentReviewLearnerView["attempts"][number];
+  currentLevel: Cefr | null;
+  onView?: ((id: string) => void) | undefined;
+}) {
+  const score = (attempt: typeof original, key: typeof placementRetakeSkills[number]["key"], max: number) => {
+    const value = attempt.sectionScores[key];
+    return value == null ? "Chờ chấm" : `${formatScoreOutOf(value, max)} · ${formatPercent(value / max * 100)}`;
+  };
+  return <section className="operator-retake-comparison" aria-label="So sánh bài đầu vào và bài thi lại">
+    <p className="small">Mức hiện tại <b>{currentLevel ?? "—"}</b></p>
+    <table><thead><tr><th scope="col">Kỹ năng</th><th scope="col">Lần đầu</th><th scope="col">Thi lại</th></tr></thead>
+      <tbody>{placementRetakeSkills.map(({ key, label, max }) => <tr key={key}><th scope="row">{label}</th><td>{score(original, key, max)}</td><td>{score(retake, key, max)}</td></tr>)}</tbody>
+    </table>
+    {onView ? <div className="row"><Button small onClick={() => onView(original.id)}>Xem bài lần đầu</Button><Button small onClick={() => onView(retake.id)}>Xem bài thi lại</Button></div> : null}
+  </section>;
+}
+
 /** One placement retake per learner: shown on every placement row so the Operator sees what is left. */
 export const placementRetakeLabels: Record<PlacementRetakeState, string> = {
   not_granted: "Chưa cho thi lại",
@@ -71,16 +97,21 @@ export function OperatorDashboard({ view, actions, readOnly = false, unavailable
       const profileOpen = Boolean(view.expandedPendingProfiles?.[item.id]);
       const profileDetail = view.pendingProfiles?.[item.id];
       const profileSummary = profileDetail ? inlineProfileSummary(profileDetail) : item.profileSummary;
+      const retakeAttempt = item.isPlacementRetake ? profileDetail?.attempts.find(attempt => attempt.id === item.id) : undefined;
+      const originalAttempt = retakeAttempt?.originalPlacementAttemptId
+        ? profileDetail?.attempts.find(attempt => attempt.id === retakeAttempt.originalPlacementAttemptId) : undefined;
       return <details className="card operator-pending-review" key={item.id} aria-label={`Chờ duyệt ${item.name}`}>
       <summary className="row between operator-card-header operator-pending-review-summary"><div><b className="name" style={{ fontFamily: "var(--font-display)", fontSize: "1.05rem" }}>{item.name}</b> <span className="xs muted">nộp {item.submittedAt} · tổng {item.total == null ? "—" : formatScoreOutOf(item.total, 100)}</span></div><div className="row"><Badge>Điểm thô: <b>&nbsp;{item.rawLevel ?? "—"}</b></Badge>{item.humanScored ? <Badge tone="primary">Đã chấm tay</Badge> : null}{item.aiScoringStatus === "failed" ? <Badge tone="warn">AI chấm lỗi — có thể thử lại</Badge> : item.aiScoringStatus === "queued" || item.aiScoringStatus === "running" ? <Badge tone="warn">AI đang chấm</Badge> : item.aiScored ? <Badge tone="primary">AI chấm</Badge> : <Badge tone="warn">Chưa chấm AI</Badge>}{item.aiSuggestedCefr ? <Badge>AI gợi ý: <b>&nbsp;{item.aiSuggestedCefr}</b></Badge> : null}</div></summary>
       <div className="operator-pending-review-body">
       {item.reviewFlags?.length ? <div className="row operator-review-flags" aria-label="Cờ cần xem" style={{ marginTop: 10 }}>{item.reviewFlags.map(flag => <Badge key={flag} tone="warn">{{ pending_score: "Chờ chấm", incomplete: "Bài chưa đủ", typed_speaking: "Nói bằng chữ", borderline: "Sát ranh giới", skill_gap: "Lệch kỹ năng lớn" }[flag]}</Badge>)}</div> : null}
-      <div className="grid cols-2" style={{ marginTop: 10 }}><div className="stack" style={{ gap: 4 }}>{item.sectionScores.map(score => <div className="row" key={score.label}><span className="xs muted" style={{ width: 70 }}>{score.label}</span><div className="progress" style={{ flex: 1 }}><i style={{ width: `${score.percent ?? 0}%` }} /></div><span className="xs" style={{ minWidth: 42, textAlign: "right" }}>{score.percent == null ? "Chờ chấm" : <>{formatPercent(score.percent)}{score.heuristic && <span className="muted" title="Điểm ước lượng theo độ dài, chưa chấm AI">*</span>}</>}</span></div>)}</div>{(item.rationale || item.monthlyGoal) && <div className="small">{item.rationale && <p style={{ margin: 0 }}><b>Nhận xét AI:</b> {item.rationale}</p>}{item.monthlyGoal && <p style={{ margin: item.rationale ? "4px 0 0" : 0 }}><b>Mục tiêu gợi ý:</b> {item.monthlyGoal}</p>}</div>}</div>
+      {originalAttempt && retakeAttempt ? <PlacementRetakeComparison original={originalAttempt} retake={retakeAttempt}
+        currentLevel={profileDetail?.learner.currentLevel ?? null} onView={blocked("viewTest") ? undefined : actions.onViewTest} /> : null}
+      <div className={`grid${originalAttempt ? "" : " cols-2"}`} style={{ marginTop: 10 }}>{originalAttempt ? null : <div className="stack" style={{ gap: 4 }}>{item.sectionScores.map(score => <div className="row" key={score.label}><span className="xs muted" style={{ width: 70 }}>{score.label}</span><div className="progress" style={{ flex: 1 }}><i style={{ width: `${score.percent ?? 0}%` }} /></div><span className="xs" style={{ minWidth: 42, textAlign: "right" }}>{score.percent == null ? "Chờ chấm" : <>{formatPercent(score.percent)}{score.heuristic && <span className="muted" title="Điểm ước lượng theo độ dài, chưa chấm AI">*</span>}</>}</span></div>)}</div>}{(item.rationale || item.monthlyGoal) && <div className="small">{item.rationale && <p style={{ margin: 0 }}><b>Nhận xét AI:</b> {item.rationale}</p>}{item.monthlyGoal && <p style={{ margin: item.rationale ? "4px 0 0" : 0 }}><b>Mục tiêu gợi ý:</b> {item.monthlyGoal}</p>}</div>}</div>
       <button className="operator-profile-disclosure" type="button" aria-expanded={profileOpen} disabled={Boolean(blocked("viewProfile"))} onClick={() => { if (actions.onTogglePendingProfile) actions.onTogglePendingProfile(item.id); else actions.onViewProfile(item.id); }}><span className="ui-chevron ui-chevron--right" aria-hidden="true" /> Hồ sơ: {profileDetail ? profileSummary || "—" : profileSummary || "Chưa điền hồ sơ cá nhân."}</button>
       {profileOpen && profileDetail && <OperatorInlineProfile detail={profileDetail} />}{!item.rationale && !compactUi ? <p className="xs muted" style={{ margin: "6px 0 0" }}>Không có nhận xét AI. Xem bài làm để quyết định.</p> : null}
       {item.kind === "placement" && item.isPlacementRetake ? <p className="small operator-retake-final" role="note" style={{ margin: "10px 0 0" }}><Badge tone="warn">Bài thi lại</Badge> Học viên đã dùng lượt thi lại duy nhất. Chọn mức để xếp lớp — đây là quyết định cuối cùng.</p> : item.kind === "placement" && item.placementRetake && item.placementRetake !== "not_granted" ? <p className="xs muted" style={{ margin: "10px 0 0" }}>{placementRetakeLabels[item.placementRetake]}</p> : null}
       <div className="row" style={{ marginTop: 12 }}>{item.kind === "placement" && <select aria-label={`Mức duyệt cho ${item.name}`} style={{ width: "auto" }} value={selected[item.id] ?? ""} onChange={event => setSelected(value => ({ ...value, [item.id]: event.target.value as Cefr }))} disabled={readOnly}><option value="" disabled>Chọn mức</option>{item.levels.map(level => <option value={level} key={level}>{level} – {cefrLabels[level]}</option>)}</select>}
-        <Button primary disabled={readOnly || (item.kind === "placement" && !selected[item.id]) || Boolean(blocked("approvePlacement"))} onClick={() => item.kind === "placement" ? selected[item.id] && actions.onApprovePlacement(item.id, selected[item.id]!) : actions.onApprovePlacement(item.id)}>{item.kind === "final" ? "Duyệt bài thi tháng" : item.kind === "pass-course" ? "Cấp chứng chỉ" : "Duyệt mức"}</Button>{item.kind === "placement" && !item.isPlacementRetake && item.placementRetake === "not_granted" && actions.onRetryPlacementOnce ? <Button title="Vận hành sẽ xếp lớp sau bài thi lại" disabled={readOnly || Boolean(blocked("placementRetake"))} onClick={() => actions.onRetryPlacementOnce?.(item.id)}>Cho thi lại</Button> : null}<Button disabled={Boolean(blocked("viewTest"))} onClick={() => actions.onViewTest(item.id)}>Xem bài làm</Button>{item.canRescore !== false && <Button title={blocked("rescore") ?? "Chấm lại Viết và Nói bằng AI"} disabled={readOnly || Boolean(blocked("rescore")) || item.rescoreBusy} aria-busy={item.rescoreBusy || undefined} onClick={() => actions.onRescore(item.id)}>{item.rescoreBusy ? "Đang chấm lại…" : "Chấm lại bằng AI"}</Button>}<Button small danger={!item.deletionPending} disabled={readOnly || Boolean(blocked("deleteLearner")) || item.deletionPending} onClick={() => actions.onDeleteLearner(item.id)} style={{ marginLeft: "auto" }}>{item.deletionPending ? "Chờ Quản lý duyệt xoá" : "Xoá học viên"}</Button></div>
+        <Button primary disabled={readOnly || (item.kind === "placement" && !selected[item.id]) || Boolean(blocked("approvePlacement"))} onClick={() => item.kind === "placement" ? selected[item.id] && actions.onApprovePlacement(item.id, selected[item.id]!) : actions.onApprovePlacement(item.id)}>{item.kind === "final" ? "Duyệt bài thi tháng" : item.kind === "pass-course" ? "Cấp chứng chỉ" : "Duyệt mức"}</Button>{item.kind === "placement" && !item.isPlacementRetake && item.placementRetake === "not_granted" && actions.onRetryPlacementOnce ? <Button title="Vận hành sẽ xếp lớp sau bài thi lại" disabled={readOnly || Boolean(blocked("placementRetake"))} onClick={() => actions.onRetryPlacementOnce?.(item.id)}>Cho thi lại</Button> : null}{originalAttempt ? null : <Button disabled={Boolean(blocked("viewTest"))} onClick={() => actions.onViewTest(item.id)}>Xem bài làm</Button>}{item.canRescore !== false && <Button title={blocked("rescore") ?? "Chấm lại Viết và Nói bằng AI"} disabled={readOnly || Boolean(blocked("rescore")) || item.rescoreBusy} aria-busy={item.rescoreBusy || undefined} onClick={() => actions.onRescore(item.id)}>{item.rescoreBusy ? "Đang chấm lại…" : "Chấm lại bằng AI"}</Button>}<Button small danger={!item.deletionPending} disabled={readOnly || Boolean(blocked("deleteLearner")) || item.deletionPending} onClick={() => actions.onDeleteLearner(item.id)} style={{ marginLeft: "auto" }}>{item.deletionPending ? "Chờ Quản lý duyệt xoá" : "Xoá học viên"}</Button></div>
       </div>
     </details>;
     })}</div> : <div className="card"><p className="muted" style={{ margin: 0 }}>Không có ai chờ duyệt.</p></div>}<Pager {...pendingPaged} label="bài chờ duyệt" /></section>

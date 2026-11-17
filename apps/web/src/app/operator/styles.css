@@ -4746,3 +4746,9 @@ body > .operator-modal-scope .operator-editor-section textarea.line-field { min-
     max-width: 960px;
   }
 }
+
+.operator-retake-comparison { margin-top: 10px; min-width: 0; }
+.operator-retake-comparison p { margin: 0 0 6px; }
+.operator-retake-comparison table { width: 100%; margin-bottom: 8px; font-size: .875rem; }
+.operator-retake-comparison th, .operator-retake-comparison td { padding: 4px; text-align: left; }
+.operator-retake-comparison .row { flex-wrap: wrap; gap: 6px; }

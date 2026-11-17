@@ -6780,8 +6780,12 @@ class AssessmentRepository {
       status: AssessmentReviewAttemptSummaryView["status"];
       started_at: Date; submitted_at: Date | null; section_scores: unknown;
       total_score: string | null; suggested_level: CefrLevel | null; approved_level: CefrLevel | null;
+      original_placement_attempt_id: string | null; decision_reason: string | null;
+      decided_at: Date | null; decision_actor: string | null;
     }>(
       `select aa.id, ad.kind, ad.title, aa.status, aa.started_at, aa.submitted_at,
+              retake.source_attempt_id as original_placement_attempt_id,
+              decision.reason as decision_reason, decision.decided_at, actor.display_name as decision_actor,
               coalesce(jsonb_object_agg(sc.section, sc.score) filter (where sc.section is not null), '{}'::jsonb) as section_scores,
               sum(sc.score)::text as total_score, decision.suggested_level, decision.approved_level
        from assessment_attempts aa
@@ -6792,8 +6796,11 @@ class AssessmentRepository {
          and learner.status = 'active'
        left join assessment_scores sc on sc.attempt_id = aa.id
        left join assessment_decisions decision on decision.attempt_id = aa.id
+       left join users actor on actor.id = decision.decided_by and actor.organization_id = learner.organization_id
+       left join assessment_retake_grants retake on retake.retake_attempt_id = aa.id and retake.learner_id = learner.id and retake.kind = 'placement'
        where aa.learner_id = $2 and ad.kind in ('placement', 'level_up')
-       group by aa.id, ad.kind, ad.title, decision.suggested_level, decision.approved_level
+       group by aa.id, ad.kind, ad.title, decision.suggested_level, decision.approved_level,
+                retake.source_attempt_id, decision.reason, decision.decided_at, actor.display_name
        order by aa.started_at desc`,
       [reviewerId, learnerId]
     );
@@ -6839,7 +6846,11 @@ class AssessmentRepository {
         totalScore: attempt.total_score === null ? null : Number(attempt.total_score),
         sectionScores: Object.fromEntries(Object.entries((attempt.section_scores && typeof attempt.section_scores === "object") ? attempt.section_scores as Record<string, unknown> : {}).map(([key, value]) => [key, Number(value)])),
         suggestedLevel: attempt.suggested_level,
-        approvedLevel: attempt.approved_level
+        approvedLevel: attempt.approved_level,
+        ...(attempt.original_placement_attempt_id ? { originalPlacementAttemptId: attempt.original_placement_attempt_id } : {}),
+        ...(attempt.decided_at && attempt.kind === "placement" ? {
+          placementDecision: { reason: attempt.decision_reason ?? "", decidedAt: attempt.decided_at.toISOString(), decidedBy: attempt.decision_actor }
+        } : {})
       })),
       deletionRequests: deletionResult.rows.map((request) => ({
         id: request.id,
@@ -8413,6 +8424,7 @@ class AssessmentRepository {
         organization_id: string;
         status: AssessmentAttemptRecord["status"];
         kind: "placement" | "level_up" | "final" | "pass_course";
+        assessment_key: string;
         current_level: CefrLevel | null;
         pass_course_ready: boolean | null;
         challenge_passed: boolean | null;
@@ -8420,7 +8432,7 @@ class AssessmentRepository {
         challenge_average: string | null;
         challenge_off_topic: number | null;
       }>(
-        `select aa.learner_id, learner.organization_id, aa.status, definition.kind,
+        `select aa.learner_id, learner.organization_id, aa.status, definition.kind, definition.assessment_key,
                 enrollment.cefr as current_level, readiness.cefr_ready as pass_course_ready, challenge.passed as challenge_passed,
                 challenge.completed_turns as challenge_turns, challenge.average::text as challenge_average,
                 challenge.off_topic as challenge_off_topic
@@ -8509,6 +8521,10 @@ class AssessmentRepository {
       );
       const previous = existing.rows[0];
       if (attempt.status !== "pending_review" && previous) {
+        if (attempt.assessment_key === PLACEMENT_RETAKE_ASSESSMENT_KEY
+            && (input.status !== "approved" || input.approvedLevel !== previous.approved_level || input.reason !== previous.reason)) {
+          throw new PlacementRetakeError("PLACEMENT_RETAKE_DECIDED");
+        }
         if (input.grantRetake) {
           if (previous.status !== "retry") { await client.query("rollback"); return null; }
           await grantPlacementRetakeInTransaction(client, { learnerId: attempt.learner_id, reviewerId: input.reviewerId, reason: input.reason });
