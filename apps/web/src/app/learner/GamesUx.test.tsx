@@ -675,6 +675,21 @@ describe("learner game visual and interaction regressions", () => {
     expect(basket.querySelector(".season-catch-player")).toBeInTheDocument();
   });
 
+  it("gives Season Catch rounded touch controls and accepts A/D on the keyboard", () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({
+      matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    })));
+    render(<SeasonCatchGame words={wordSet.words} cefr="A2" onFinish={vi.fn()} />);
+    const scene = screen.getByRole("application", { name: "Màn chơi Season catch" });
+    const basket = screen.getByTestId("catch-basket");
+    fireEvent.keyDown(scene, { key: "d" });
+    expect(basket).toHaveStyle({ left: "55%" });
+    fireEvent.keyUp(scene, { key: "d" });
+    fireEvent.click(screen.getByRole("button", { name: "Sang trái" }), { detail: 0 });
+    expect(basket).toHaveStyle({ left: "50%" });
+    expect(screen.getByRole("button", { name: "Sang phải" })).toBeInTheDocument();
+  });
+
   it("shows a recoverable error when removing the active vocabulary set fails", async () => {
     const deleteGameSet = vi.fn().mockRejectedValue(new Error("network"));
     render(<LearnerGames view={hubView} actions={{ ...actions, deleteGameSet } as unknown as LearnerCallbacks} />, { wrapper: ModalProvider });
