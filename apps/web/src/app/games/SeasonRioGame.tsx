@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { GameAnswerInput } from "@e4s/contracts";
 import { seasonRioRoundPlan } from "@e4s/domain/engagement";
 import { choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
-import { SeasonHearts, SeasonImage, SeasonStageSky, useGameSeason, useSeasonGameSound } from "./seven-season-art.js";
+import { SeasonHearts, SeasonImage, SeasonStageGround, SeasonStageSky, useGameSeason, useSeasonGameSound } from "./seven-season-art.js";
 import { GameFeedback } from "./GameFeedback.js";
 import { InfoTitle, useCompactUi } from "../shared/CompactUi.js";
 import "./seven-season-games.css";
@@ -12,7 +12,11 @@ type GateState = "closed" | "correct" | "wrong";
 type Ending = "lost" | "expired" | "won";
 type RioReaction = { id: number; phase: Quiz["phase"]; index: number; correct: boolean };
 const tierOrder = [0, 60, 0, 110, 60, 0, 110, 60] as const;
-const floor = 36;
+const gateArtwork = {
+  closed: { asset: "chest", label: "Cổng đang chờ" },
+  correct: { asset: "chest-open", label: "Trả lời đúng" },
+  wrong: { asset: "chest-wrong", label: "Trả lời sai" },
+} as const;
 
 export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { words: GameWord[]; onFinish: FinishGame; attemptSeed?: number }) {
   const compactUi = useCompactUi();
@@ -24,8 +28,8 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     // The opening staircase uses the proportions supplied for this season.
     const [positions, widths, tiers, gateIndex] = season.layout;
     const opening = positions.map((position, index) => {
-      const center = Math.round(position * 3.2);
-      const width = Math.round(widths[index]! * 1.08);
+      const center = Math.round(position * 3.65);
+      const width = Math.round(widths[index]! * 1.23);
       return { left: center - width / 2, center, width, height: Math.round(tiers[index]! * .56) };
     });
     const first = opening[gateIndex]!;
@@ -43,7 +47,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   const bossX = (activeGateLayout.at(-1)?.left ?? 285) + 390;
   const flagX = bossX + 220;
   const worldWidth = flagX + 200;
-  const [heroX, setHeroX] = useState(40);
+  const [heroX, setHeroX] = useState(54);
   const [heroY, setHeroY] = useState(0);
   const [gateStates, setGateStates] = useState<GateState[]>(() => Array.from({ length: roundPlan.gateCount }, () => "closed"));
   const [quiz, setQuiz] = useState<Quiz | null>(null);
@@ -163,7 +167,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
           if (landing) { nextY = landing.height; velocityY.current = 0; }
         }
         if (nextY === 0 && velocityY.current < 0) velocityY.current = 0;
-        nextX = Math.max(18, Math.min(flagX + 40, nextX));
+        nextX = Math.max(36, Math.min(flagX + 40, nextX));
         // Platforms are physical steps, not decoration. A runner on the ground
         // cannot phase through their side; they have to jump and land on top.
         const movingRight = nextX > current.heroX;
@@ -342,16 +346,16 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
       <div ref={viewportRef} className="rio-viewport" onPointerDown={pressStage} onPointerUp={releaseStage} onPointerCancel={releaseStage} onLostPointerCapture={releaseStage} onContextMenu={event => event.preventDefault()}>
         <SeasonStageSky season={season} />
         <div className="rio-world" style={{ width: worldWidth, transform: `translateX(-${camera}px)` }}>
-          <SeasonImage season={season} asset="ground" className="season-stage-ground" />
+          <SeasonStageGround season={season} />
           {platforms.map(platform => <img key={platform.left} data-testid="rio-platform" className="rio-platform" src={`/media/games/seven-seasons/seasons/${season.id}/platform.svg`} alt="" draggable={false}
-            style={{ left: platform.left, width: platform.width, height: platform.height }} />)}
+            style={{ left: platform.left, width: platform.width, height: `calc(${platform.height}px + 5px)` }} />)}
           {activeGateLayout.map((gate, index) => {
             const gateState = gateStates[index] ?? "closed";
+            const art = gateArtwork[gateState];
             const reacting = reaction?.phase === "gate" && reaction.index === index;
-            return <div data-testid="gift-gate" data-state={gateState} data-tier={gate.tier} className="gift-gate seasonal-rio-gate" style={{ left: gate.left, bottom: floor + gate.tier }} key={gate.left}>
+            return <div data-testid="gift-gate" data-state={gateState} data-tier={gate.tier} className="gift-gate seasonal-rio-gate" style={{ left: gate.left, bottom: `calc(var(--season-stage-floor) + ${gate.tier}px - 2px)` }} key={gate.left}>
               <SeasonImage season={season} asset="gate-post" className="season-gate-post" />
-              <SeasonImage season={season} asset={gateState === "correct" ? "chest-open" : gateState === "wrong" && reacting ? "chest-wrong" : "chest"} className="season-gate-chest" />
-              <span className="season-gate-mark" aria-label={gateState === "closed" ? "Cổng đang chờ" : gateState === "correct" ? "Trả lời đúng" : "Trả lời sai"}>{gateState === "closed" ? "?" : gateState === "correct" ? "✓" : "×"}</span>
+              <SeasonImage season={season} asset={art.asset} alt={art.label} className="season-gate-chest" />
               {reacting ? <SeasonImage key={reaction.id} season={season} asset={reaction.correct ? "fx/chest-fireworks" : "fx/gate-wrong"} className="season-gate-burst" /> : null}
             </div>;
           })}
@@ -362,8 +366,8 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
           <div data-testid="season-rio-flag" className={`rio-flag ${flagReady ? "is-ready" : ""}`} style={{ left: flagX }} aria-label="Cột mốc về đích">
             <SeasonImage season={season} asset="finish-flag" /><span>Đích</span>
           </div>
-          {dust ? <SeasonImage key={dust.id} season={season} asset="shared-jump" className="season-rio-dust" style={{ left: dust.x, bottom: floor + dust.y }} /> : null}
-          <div data-testid="season-rio-hero" className={`rio-hero ${isAirborne ? "is-jumping" : isMoving ? "is-running" : ""}`} style={{ left: heroX, bottom: floor + heroY }}>
+          {dust ? <SeasonImage key={dust.id} season={season} asset="shared-jump" className="season-rio-dust" style={{ left: dust.x, bottom: `calc(var(--season-stage-floor) + ${dust.y}px)` }} /> : null}
+          <div data-testid="season-rio-hero" className={`rio-hero ${isAirborne ? "is-jumping" : isMoving ? "is-running" : ""}`} style={{ left: heroX, bottom: `calc(var(--season-stage-floor) + ${heroY}px)` }}>
             <SeasonImage season={season} asset={heroPose} alt={season.hero} className={motion === "left" ? "is-facing-left" : ""} />
           </div>
         </div>

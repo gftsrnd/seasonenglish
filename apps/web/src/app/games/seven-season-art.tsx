@@ -39,6 +39,11 @@ export function SeasonStageSky({ season }: { season: Season }) {
   </div>;
 }
 
+export function SeasonStageGround({ season }: { season: Season }) {
+  return <div className="season-stage-ground" aria-hidden="true"
+    style={{ backgroundImage: `url(${root}/seasons/${season.id}/ground.svg)` }} />;
+}
+
 export function SeasonHearts({ season, lives }: { season: Season; lives: number }) {
   return <span className="game-lives" aria-label={`${lives} mạng còn lại`}>
     {[0, 1, 2].map(index => <SeasonImage key={index} season={season} asset={index < lives ? "hud/heart" : "hud/heart-lost"} />)}

@@ -92,6 +92,7 @@ describe("learner game visual and interaction regressions", () => {
     localStorage.setItem("e4s:organisation-theme", "autumn");
     const rioView = render(<ThemeProvider><SeasonRioGame words={wordSet.words} onFinish={vi.fn()} /></ThemeProvider>);
     expect(rioView.container.querySelector('.gift-gate img[src$="/chest.svg"]')).toBeInTheDocument();
+    expect(within(screen.getAllByTestId("gift-gate")[0]!).queryByText("?")).not.toBeInTheDocument();
     expect(rioView.container.querySelector('.gift-gate img[src$="/gate-post.svg"]')).toBeInTheDocument();
     expect(rioView.container.querySelector('.rio-platform[src$="/platform.svg"]')).toBeInTheDocument();
     expect(rioView.container.querySelector('.rio-boss img')).toHaveAttribute("alt", "Hạt dẻ");

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameAnswerInput, GameEvidenceEventInput, GameWordSetView } from "@e4s/contracts";
 import { CATCH_ROUND_SIZE, choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
-import { SeasonHearts, SeasonImage, SeasonStageSky, useGameSeason, useSeasonGameSound } from "./seven-season-art.js";
+import { SeasonHearts, SeasonImage, SeasonStageGround, SeasonStageSky, useGameSeason, useSeasonGameSound } from "./seven-season-art.js";
 import { GameFeedback } from "./GameFeedback.js";
 import { InfoTitle, useCompactUi } from "../shared/CompactUi.js";
 import "./seven-season-games.css";
@@ -170,7 +170,7 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
       onPointerUp={event => { pointerDown.current = false; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); }}
       onPointerCancel={() => { pointerDown.current = false; }} onLostPointerCapture={() => { pointerDown.current = false; }}>
       <SeasonStageSky season={season} />
-      <SeasonImage season={season} asset="ground" className="season-stage-ground" />
+      <SeasonStageGround season={season} />
       <p className="catch-prompt"><SeasonImage season={season} asset="drop" /><strong>{current.vietnamese}</strong>{current.definition !== current.vietnamese ? <small>{current.definition}</small> : null}</p>
       {items.map(item => <div data-testid="falling-item" className="falling-item" key={item.word.id} style={{ left: `${item.x}%`, top: `${item.y}%`, visibility: item.y < 0 ? "hidden" : "visible" }}>
         <SeasonImage season={season} asset="fx/drop-trail" className="season-drop-trail" />
