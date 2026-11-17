@@ -445,7 +445,7 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     const evidenceLabel = answer?.evidenceType === "typed_proxy" ? "Câu trả lời văn bản thay thế"
       : answer?.evidenceType === "transcript" ? "Bản chép lời từ hệ thống"
         : answer?.evidenceType === "audio" ? "Bản ghi âm" : null;
-    const points = task.maxScore == null ? "" : ` (${formatScore(task.maxScore)}đ)`;
+    const points = task.maxScore == null || (learnerView && !answerValue) ? "" : ` (${learnerView ? "tối đa " : ""}${formatScore(task.maxScore)}đ)`;
     return <article className="operator-answer-row" key={audioKey}>
       {objective ? <p className="operator-answer-question"><b>{itemLabel}{normalizeBlankPrompt(task.prompt)}</b><span className="muted">{points}</span></p> : <>{showTitle && task.title ? <p className="operator-answer-task-title"><b>{task.title}</b></p> : null}{task.prompt ? <p className="operator-answer-question"><b>{itemLabel}{normalizeBlankPrompt(task.prompt)}</b></p> : null}</>}
       {objective && learnerView ? <>

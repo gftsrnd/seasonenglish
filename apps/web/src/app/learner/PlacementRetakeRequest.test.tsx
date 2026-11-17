@@ -127,6 +127,7 @@ describe("placement retake request: bell → support page → 'Xin thi lại' �
     const section = dialog.getByText("Đọc · 16/40").closest("details")!;
     expect(within(section).queryByText("Chưa trả lời")).not.toBeInTheDocument();
     expect(within(section).queryByText(/Bạn đã chọn/)).not.toBeInTheDocument();
+    expect(within(section).queryByText(/20đ/u)).not.toBeInTheDocument();
   });
 
   it.each([["accepted","Đã duyệt","ok"],["rejected","Đã từ chối","danger"]] as const)("shows a %s request only in history", async (status, label, tone) => {
