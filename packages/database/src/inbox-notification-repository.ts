@@ -12,7 +12,14 @@ export class InboxNotificationRepository {
     const { rows } = await this.pool.query<{ items: InboxNotificationView[]; unreadCount: number }>(
       `with owned as not materialized (${inboxScope}),
        page as (
-         select id, kind, context, created_at as "createdAt", read_at as "readAt",
+         select id, kind,
+                case when kind = 'assessment_result' and context = 'placement' and exists (
+                  select 1 from assessment_retake_grants retake
+                  where retake.learner_id = owned.recipient_id
+                    and retake.kind = 'placement'
+                    and retake.retake_attempt_id = substring(owned.event_key from '^assessment:([0-9a-fA-F-]{36}):approved$')::uuid
+                ) then 'placement_retake' else context end as context,
+                created_at as "createdAt", read_at as "readAt",
                 substring(event_key from '^(?:complaint:|appeal:[a-z]+:|reopen:[a-z]+:|audit:|assessment:|topic:)([0-9a-fA-F-]{36}):') as "relatedId",
                 case when kind = 'security_report' then (
                   select jsonb_build_object('subjectName', subject.display_name, 'note', report.note)

@@ -136,6 +136,7 @@ export function notificationContent(item: InboxNotificationView): NotificationCo
       return { title: "Nhận xét Season bị gián đoạn", description: "Tiến độ lượt luyện hợp lệ vẫn được ghi nhận. Bạn có thể kiểm tra kết nối AI trong Cài đặt.", path: "/settings", action: "Mở Cài đặt" };
     case "assessment_result":
     case "assessment_retry":
+      if (item.context === "placement_retake") return { title: "Đã xếp lớp sau bài thi lại", description: "Vận hành đã chốt mức học sau bài thi lại đầu vào. Xem mức học trong hồ sơ của bạn.", path: "/profile", action: "Xem hồ sơ" };
       // Placement: the result opens Hỗ trợ học tập, where the learner may ask "Xin thi lại" once.
       if (item.context === "placement") return { title: item.kind === "assessment_retry" ? "Test đầu vào chưa được duyệt mức" : "Có kết quả Test đầu vào", description: item.kind === "assessment_retry" ? "Xem kết quả. Bạn có thể xin thi lại một lần tại Hỗ trợ học tập." : "Xem kết quả. Nếu chưa hài lòng, bạn có thể xin thi lại một lần trong 72 giờ tại Hỗ trợ học tập.", path: "/support?tab=appeals", action: "Xem kết quả" };
       return { title: item.kind === "assessment_retry" ? `Có hướng dẫn thi lại ${exam}` : `Có kết quả ${exam}`, description: "Mở trang học để xem kết quả và bước tiếp theo.", path: item.context === "pass_course" ? item.kind === "assessment_result" ? "/reward/course" : "/support?tab=appeals" : item.context === "final" ? "/monthly" : "/profile", action: "Xem kết quả" };

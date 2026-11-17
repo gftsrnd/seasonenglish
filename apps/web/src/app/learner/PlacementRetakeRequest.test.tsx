@@ -23,6 +23,7 @@ describe("placement retake request: bell → support page → 'Xin thi lại' �
     expect(notificationContent(notification("appeal_received", "retake"))).toEqual(expect.objectContaining({ title: "Yêu cầu thi lại", path: "/op/review?tab=appeals" }));
     expect(notificationContent(notification("appeal_rejected", "retake")).title).toBe("Yêu cầu thi lại bị từ chối");
     expect(notificationContent(notification("retake_granted", "placement")).path).toBe("/test/placement");
+    expect(notificationContent(notification("assessment_result", "placement_retake"))).toMatchObject({ title: "Đã xếp lớp sau bài thi lại", path: "/profile" });
   });
 
   it("sends the optional reason only after confirmation", async () => {

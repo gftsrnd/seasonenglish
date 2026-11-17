@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { placementDefinition, type StoredAssessmentDefinition } from "../src/assessment-blueprints.js";
+import { InboxNotificationRepository } from "../src/inbox-notification-repository.js";
 import { migrateDatabase, resetPublicSchema } from "../src/migrate.js";
 import {
   createPlacementRetakeRequest, findPlacementRetakeGrant, findPlacementRetakeRequestState, grantPlacementRetake,
@@ -124,5 +125,7 @@ describe.skipIf(!databaseUrl)("placement retake persistence", () => {
       .rejects.toEqual(new PlacementRetakeError("PLACEMENT_RETAKE_FINAL"));
     const placed = await repositories.assessments.decide({ attemptId: attemptId!, reviewerId: DEMO_IDS.operator, status: "approved", approvedLevel: "B1", reason: "Xếp lớp sau thi lại" });
     expect(placed?.approvedLevel).toBe("B1");
+    const inbox = await new InboxNotificationRepository(pool).list(DEMO_IDS.learner, 20, false);
+    expect(inbox.items).toContainEqual(expect.objectContaining({ relatedId: attemptId, kind: "assessment_result", context: "placement_retake" }));
   });
 });
