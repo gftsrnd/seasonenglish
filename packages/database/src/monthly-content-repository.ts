@@ -13,14 +13,17 @@ import {
   validateMonthlyCurriculum,
   validateMonthlyGrammarObjectives,
   monthlyGatedLightFindings,
+  monthlyExerciseTranslationsForLevel,
   type MonthlyResourcePoolContract,
   type MonthlyResourcePoolCoreTerm,
   type MonthlyResourcePoolSupportTerm,
   type MonthlyCurriculumContract,
   type MonthlyDaySpec
 } from "@e4s/domain";
+import { ENGLISH_ONLY_LESSON_SECTION_MESSAGE, validateLessonPublication } from "@e4s/domain/content";
 import type {
   CefrLevel,
+  LessonPart,
   MonthlyPublicationPreviewView,
   MonthlyRepublicationPreviewView,
   MonthlyRepublicationResultView,
@@ -218,6 +221,31 @@ const RETIRED_MONTHLY_FINDING_CODES = new Set(["MONTHLY_ANSWER_LONGEST_OPTION"])
 function activeQualityReport<T extends { severe: MonthlyQualityFindingView[]; light: MonthlyQualityFindingView[] }>(report: T): T {
   const keep = (findings: MonthlyQualityFindingView[]) => findings.filter((finding) => !RETIRED_MONTHLY_FINDING_CODES.has(finding.code));
   return report && Array.isArray(report.light) && Array.isArray(report.severe) ? { ...report, severe: keep(report.severe), light: keep(report.light) } : report;
+}
+
+/** Display legacy language reports under the current policy. The normal save gate
+ * rechecks the full lesson before an old draft or AI candidate can be approved. */
+function displayedLessonQuality<T extends { severe: MonthlyQualityFindingView[]; light: MonthlyQualityFindingView[] }>(
+  report: T, cefr: CefrLevel, dayNumber: number, content: MonthLessonRow["content"] | null
+): T {
+  const active = activeQualityReport(report);
+  if (!Array.isArray(active?.severe) || monthlyExerciseTranslationsForLevel(cefr)) return active;
+  const oldLanguageFinding = (finding: MonthlyQualityFindingView) =>
+    finding.code === "MONTHLY_CONTENT_INVALID" && finding.message === ENGLISH_ONLY_LESSON_SECTION_MESSAGE;
+  const parts = content?.parts;
+  const currentLanguageIssues = parts?.length && active.severe.some(oldLanguageFinding) ? validateLessonPublication([{
+    title: content?.title ?? "",
+    dayNumber,
+    durationMinutes: 15,
+    parts: parts.map((part) => ({ ...part, title: part.title ?? "" })) as LessonPart[]
+  }], undefined, cefr).issues : undefined;
+  const severe = active.severe.filter((finding) => {
+    if (finding.code === "MONTHLY_EXERCISE_TRANSLATION") return false;
+    if (!oldLanguageFinding(finding) || !parts || !currentLanguageIssues) return true;
+    return !parts.some((part) => part.code === finding.component)
+      || currentLanguageIssues.some((issue) => issue.code === finding.component && issue.message === finding.message);
+  });
+  return { ...active, severe };
 }
 
 /** generation_error also holds a manual save's severe report; only an AI failure payload is shown as a failed generation. */
@@ -1714,10 +1742,10 @@ export class MonthlyContentRepository {
       // The saved title lives on lessons.title, not in the version content: without it the editor reopens with the
       // calendar default title and a later save reverts the Operator's title fix.
       ...(lesson.content ? { content: { ...lesson.content, ...(!lesson.content.title && lesson.lesson_title ? { title: lesson.lesson_title } : {}) } } : {}),
-      quality: { ...activeQualityReport(lesson.quality_report), ...(lesson.quality_acknowledgement ? { acknowledged: lesson.quality_acknowledgement } : {}) },
+      quality: { ...displayedLessonQuality(lesson.quality_report, framework.cefr, lesson.lesson_number, lesson.content), ...(lesson.quality_acknowledgement ? { acknowledged: lesson.quality_acknowledgement } : {}) },
       ...(lesson.status !== "approved" && isGenerationFailure(lesson.generation_error) ? { generationFailure: {
         failedAt: lesson.generation_error.failedAt, attempts: lesson.generation_error.attempts,
-        report: activeQualityReport({ severe: lesson.generation_error.report.severe, light: lesson.generation_error.report.light }),
+        report: displayedLessonQuality(lesson.generation_error.report, framework.cefr, lesson.lesson_number, lesson.generation_error.candidate),
         candidate: lesson.generation_error.candidate
       } } : {})
     }));

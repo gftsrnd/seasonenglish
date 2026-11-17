@@ -39,7 +39,7 @@ type VocabularyRow = {
   audioUrl: string;
 };
 type EditorState = {
-  title: string; objective: string; instructionSteps: string; instructionAudioUrl: string;
+  title: string; objective: string; instructionText: string; instructionSteps: string; instructionAudioUrl: string;
   grammar: string; grammarUsage: string; grammarExamples: string; grammarExampleList: string[]; grammarExampleAudioUrls: string[]; grammarAudioUrl: string; grammarAudioEnabled: boolean; grammarUnavailable: boolean; vocabulary: VocabularyRow[];
   pronunciationFocus: string; pronunciationWords: string; pronunciationWordAudioUrls: string[]; pronunciationTip: string;
   /** Monthly: grammar and pronunciation as the lesson view renders them (one block per point / per sound). */
@@ -274,7 +274,14 @@ export function LessonFormEditor({
     <p id="lesson-editor-description" className="xs muted operator-editor-description">{kind === "review" ? `Bài ôn tuần: ôn ${vocabularyCount} từ cốt lõi của tuần, ngữ pháp và các âm đã học, kèm 6 phần bài tập ôn (mỗi câu có bản làm lại khi học viên làm sai). Không thêm tài nguyên mới.` : `Mỗi bài cần ${vocabularyCount} từ (mỗi từ 3 cụm), ngữ pháp, phát âm (1 âm + 3 từ) và 6 bài tập Nghe/Đọc/Viết/Từ loại/Dùng từ/Nói.`} Câu trắc nghiệm: 4 lựa chọn tiếng Anh, chỉ một đáp án đúng. {cefr === "A1" || cefr === "A2" ? "A1–A2: giải thích tiếng Việt." : "B1+: dùng tiếng Anh."}{monthly ? " Ảnh minh họa lấy từ bộ ảnh của tháng; audio từ, cụm từ và câu ví dụ được tạo tự động." : ""}</p>
     <div className="operator-lesson-editor-form">
       {section("general", "Chung", <EditorSection title="Chung" disabled={busy}><Field label="Tiêu đề bài" hint={monthly ? (cefr === "B1" || cefr === "B2" || cefr === "C1" ? "Tên học viên thấy, bằng tiếng Anh (B1+). VD: Lesson 7, Week 2 review." : "Tên hiển thị theo lịch tháng. VD: Bài 7, Bài ôn tuần 2.") : "Tên ngắn của mẫu câu, bằng tiếng Anh. VD: I work as…"}><LineField aria-label="Tiêu đề bài" value={state.title} onChange={event => set("title", event.target.value)} /></Field><Field label="Mục tiêu bài học" hint="Mỗi mục tiêu một dòng. Hệ thống tự bỏ phần mở đầu bị lặp khi hiển thị."><textarea aria-label="Mục tiêu bài học" value={state.objective} onChange={event => set("objective", event.target.value)} /></Field></EditorSection>)}
-      {section("instruction", "Hướng dẫn", <EditorSection title="Hướng dẫn" disabled={busy}><Field label="Các bước hướng dẫn" hint="Mỗi bước một dòng hoặc cách nhau bằng dấu ;"><textarea aria-label="Các bước hướng dẫn" value={state.instructionSteps} onChange={event => set("instructionSteps", event.target.value)} /></Field></EditorSection>)}
+      {section("instruction", "Hướng dẫn", <EditorSection title="Hướng dẫn" disabled={busy}>
+        <Field label="Đoạn hướng dẫn" hint={translatedLevel(cefr) ? "Viết bằng tiếng Việt." : "Viết bằng tiếng Anh."}>
+          <textarea aria-label="Đoạn hướng dẫn" value={state.instructionText} onChange={event => set("instructionText", event.target.value)} />
+        </Field>
+        <Field label="Các bước hướng dẫn" hint="Mỗi bước một dòng hoặc cách nhau bằng dấu ;">
+          <textarea aria-label="Các bước hướng dẫn" value={state.instructionSteps} onChange={event => set("instructionSteps", event.target.value)} />
+        </Field>
+      </EditorSection>)}
       {section("vocabulary", kind === "review" ? `Từ vựng ôn tập (${vocabularyCount})` : `Từ vựng (${vocabularyCount})`, <EditorSection title={kind === "review" ? `Từ vựng ôn tập (${vocabularyCount} từ của tuần)` : `Từ vựng (${vocabularyCount} từ)`} disabled={busy}>
         <div className="operator-vocabulary-grid">{state.vocabulary.map((row, index) => <div className="operator-vocabulary-row" aria-label={`Từ vựng ${index + 1}`} key={index}>
           <div className="operator-vocabulary-base"><LineField aria-label={`Từ ${index + 1}`} value={row.word} onChange={event => setVocabulary(index, "word", event.target.value)} placeholder={`Từ ${index + 1}`} /><LineField aria-label={`Từ loại từ ${index + 1}`} value={row.type} onChange={event => setVocabulary(index, "type", event.target.value)} placeholder="Từ loại" /><LineField aria-label={`Phiên âm từ ${index + 1}`} value={row.pronunciation} onChange={event => setVocabulary(index, "pronunciation", event.target.value)} placeholder="Phiên âm /…/" /><LineField aria-label={`Nghĩa từ ${index + 1}`} value={row.meaning} onChange={event => setVocabulary(index, "meaning", event.target.value)} placeholder="Nghĩa tiếng Việt" /><LineField aria-label={`Cụm từ ${index + 1}`} value={row.examples} onChange={event => setVocabulary(index, "examples", event.target.value)} placeholder="3 cụm từ, cách nhau bằng ;" /></div>
@@ -370,6 +377,7 @@ function readLesson(lesson: ContentLessonDraftInput, vocabularyCount = 3, gramma
   return {
     title: lesson.title,
     objective: objectiveItems.length ? objectiveItems.join("\n") : stringValue(objective.text),
+    instructionText: stringValue(instruction.text),
     instructionSteps: listValue(instruction.steps).join("; "),
     instructionAudioUrl: stringValue(instruction.audioUrl),
     grammar: stringValue(grammar.formula || grammar.text),
@@ -502,9 +510,15 @@ function buildLesson(initial: ContentLessonDraftInput, state: EditorState, optio
   const grammarExamples = options.monthly ? monthlyExamples.map(example => example.value) : splitValues(state.grammarExamples, /[;\n]/);
   const grammarExampleAudioUrls = options.monthly ? monthlyExamples.map(example => example.audioUrl) : alignAudioUrls(grammarExamples, state.grammarExampleAudioUrls);
   const { phonemeAudioId: _legacyPhonemeAudioId, phonemeAudioUrl: _legacyPhonemeAudioUrl, ...priorPronunciation } = prior("pronunciation");
+  const { text: _priorInstructionText, ...priorInstruction } = prior("instruction");
+  const instructionText = state.instructionText.trim();
+  const instructionSteps = splitValues(state.instructionSteps, /[;\n]/);
+  const defaultInstructionSteps = options.translations
+    ? ["Học nội dung", "Làm lần lượt các bài tập", "Xem phản hồi và làm lại"]
+    : ["Study the lesson content.", "Complete the exercises in order.", "Review your feedback and try again."];
   const known: ContentLessonDraftInput["parts"] = [
     { code: "objective", title: "Mục tiêu bài học", content: buildObjectiveContent(prior("objective"), state.objective) },
-    { code: "instruction", title: "Hướng dẫn làm bài", content: { ...prior("instruction"), steps: splitValues(state.instructionSteps, /[;\n]/).length ? splitValues(state.instructionSteps, /[;\n]/) : ["Học nội dung", "Làm lần lượt các bài tập", "Xem phản hồi và làm lại"], audioUrl: "" } },
+    { code: "instruction", title: "Hướng dẫn làm bài", content: { ...priorInstruction, ...(instructionText ? { text: instructionText } : {}), steps: instructionSteps.length ? instructionSteps : defaultInstructionSteps, audioUrl: "" } },
     { code: "vocabulary", title: "Từ vựng", content: { ...priorVocabulary, items: state.vocabulary.map((row, index) => ({ ...record(priorVocabularyItems[index]), word: row.word.trim(), type: row.type.trim(), pronunciation: row.pronunciation.trim(), meaning: row.meaning.trim(), collocations: splitValues(row.examples, /[;\n]/), examples: splitValues(row.examples, /[;\n]/), collocationAudioUrls: alignedAudioUrls(row.examples, row.exampleAudioUrls), exampleAudioUrls: alignedAudioUrls(row.examples, row.exampleAudioUrls), family: parseStructuredEntries(row.family, ["type", "meaning"], row.familyAudioUrls), synonyms: parseStructuredEntries(row.synonyms, ["level", "note"], row.synonymAudioUrls), antonyms: parseStructuredEntries(row.antonyms, ["level", "note"], row.antonymAudioUrls), umbrella: buildUmbrella(row), imageUrl: row.imageUrl.trim(), audioUrl: row.audioUrl.trim(), ...(row.imageUrl.trim() && row.imageUrl.trim() !== stringValue(record(priorVocabularyItems[index]).imageUrl).trim() ? { imageAttribution: { creator: "Người vận hành", licence: "Nội dung nội bộ", licenceUrl: "", sourceUrl: row.imageUrl.trim() } } : {}) })) } },
     { code: "grammar", title: "Ngữ pháp", content: state.grammarUnavailable
       ? { status: "unavailable", hidden: true, reason: "no_suitable_content" }
@@ -541,7 +555,11 @@ function buildLesson(initial: ContentLessonDraftInput, state: EditorState, optio
   return { dayNumber: initial.dayNumber, title: state.title.trim(), durationMinutes: initial.durationMinutes || 10, parts: [...withTranslations, ...initial.parts.filter(part => !lessonPartOrder.includes(part.code as typeof lessonPartOrder[number]))] };
 }
 
-function normalizeWritingType(value: string): EditorState["writingType"] { if (value === "choice" || value === "mcq") return "mcq"; if (value === "free" || value === "write") return "write"; return "fill"; }
+function normalizeWritingType(value: string): EditorState["writingType"] {
+  if (value === "choice" || value === "mcq") return "mcq";
+  if (value === "free" || value === "write" || value === "sentence") return "write";
+  return "fill";
+}
 function splitValues(value: string, separator: RegExp): string[] { return value.split(separator).map(item => item.trim()).filter(Boolean); }
 function structuredWords(value: string): string[] { return splitValues(value, /[;\n]/).map(segment => segment.split("|")[0]?.trim() ?? "").filter(Boolean); }
 function replaceAt(values: string[], index: number, value: string): string[] { const next = [...values]; while (next.length <= index) next.push(""); next[index] = value; return next; }

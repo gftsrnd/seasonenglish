@@ -78,6 +78,19 @@ describe("Operator monthly day: failed AI generation (December 2026 N3)", () => 
     expect(onEdit).toHaveBeenLastCalledWith("MONTHLY_REVIEW_VARIANT_MISSING-1-0");
   });
 
+  it("offers a fresh check for a preserved candidate with no active findings", () => {
+    const onEdit = vi.fn();
+    render(<MonthlyLessonPreview date="2026-12-23" cefr="B2" onClose={vi.fn()} onEdit={onEdit} lesson={{
+      lessonNumber: 17, lessonDate: "2026-12-23", kind: "new", status: "pending", scopeHash: "scope", locked: false, correctionCount: 0,
+      quality: { severe: [], light: [] }, generationFailure: { ...failure, report: { severe: [], light: [] } }
+    }} />);
+    expect(screen.getByText(/Chưa lưu thành bản nháp/)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Bản AI đã lưu" })).toBeInTheDocument();
+    expect(screen.queryByText("Không duyệt được")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sửa tay" }));
+    expect(onEdit).toHaveBeenCalled();
+  });
+
   it("lists a saved draft's own quality findings with the next step", () => {
     render(<MonthlyLessonPreview date="2026-12-03" cefr="A2" onClose={vi.fn()} onEdit={vi.fn()} lesson={{
       lessonNumber: 3, lessonDate: "2026-12-03", kind: "new", status: "failed", scopeHash: "scope", locked: false, correctionCount: 0,

@@ -55,6 +55,8 @@ export interface ContentValidationIssue {
   rule?: "vietnamese_instructions";
 }
 
+export const ENGLISH_ONLY_LESSON_SECTION_MESSAGE = "B1+ requires all learner-facing content in this section to be in English; only vocabulary meanings may be Vietnamese.";
+
 /** Opt-in rules for monthly lessons. Defaults keep weekly-lesson validation unchanged. */
 export interface LessonPublicationOptions {
   /**
@@ -183,7 +185,7 @@ export function validateLessonPublication(
       if (containsVietnameseLearnerText(lesson.title)) add(lesson, "title", "B1+ requires the learner-facing lesson title to be in English.");
       for (const part of lesson.parts) {
         if ((containsVietnameseLearnerText(part.title) && !STANDARD_SECTION_TITLES.has(part.title.trim())) || learnerFacingPartContainsVietnamese(part, options.lockedPlanValues?.[part.code])) {
-          add(lesson, part.code, "B1+ requires all learner-facing content in this section to be in English; only vocabulary meanings may be Vietnamese.");
+          add(lesson, part.code, ENGLISH_ONLY_LESSON_SECTION_MESSAGE);
         }
       }
     }

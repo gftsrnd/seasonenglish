@@ -41,6 +41,40 @@ describe("operator granular lesson editor", () => {
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ dayNumber: 1, title: "Emails and rescheduling", parts: expect.any(Array) }));
   });
 
+  it.each([["A2", "Học nội dung", "Đọc ví dụ trước."], ["B2", "Study the lesson content.", "Read the example first."]])(
+    "uses level-appropriate instructions on a blank %s draft", async (cefr, firstStep, instructionText) => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      render(<ModalProvider><LessonFormEditor weekNumber={1} cefr={cefr} initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
+
+      await user.type(screen.getByLabelText("Đoạn hướng dẫn"), instructionText);
+      await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
+      await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+      await user.click(screen.getByRole("button", { name: "Lưu tạm" }));
+
+      const saved = onSave.mock.calls[0]?.[0];
+      expect(saved.parts.find((part: { code: string }) => part.code === "instruction")?.content)
+        .toMatchObject({ text: instructionText, steps: [firstStep, expect.any(String), expect.any(String)] });
+    });
+
+  it("keeps stored sentence-writing tasks as free writing when reopened", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    const initial = emptyLesson(1);
+    initial.parts = initial.parts.map(part => part.code === "writing" ? {
+      ...part, content: { type: "sentence", prompt: "Write two sentences about the review.", answer: "We reviewed the proposal." }
+    } : part);
+    render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="B2" initial={initial} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
+
+    expect(screen.getByRole("option", { name: "Tự viết" })).toHaveProperty("selected", true);
+    await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu tạm" }));
+
+    expect(onSave.mock.calls[0]?.[0].parts.find((part: { code: string }) => part.code === "writing")?.content)
+      .toMatchObject({ type: "write", prompt: "Write two sentences about the review." });
+  });
+
   it("keeps the form keyboard-safe while pending and supports modal close controls", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
