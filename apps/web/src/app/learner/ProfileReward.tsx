@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Cloud, Droplets, Flower2, Leaf, Snowflake, Star, Sun, type LucideIcon } from "lucide-react";
-import type { LearnerAvatarData, RewardView, SurveyView } from "@e4s/contracts";
+import type { AssessmentPlacementRetakeRequestView, LearnerAvatarData, RewardView, SurveyView } from "@e4s/contracts";
 import type { LearnerCallbacks, ProfileView } from "./contracts.js";
 import { ProductArt } from "../shared/media/ProductArt.js";
 import { ErrorText, Notice, PageTitle, AppLink, LearnerSupportCard } from "./ui.js";
 import { BadgeCertificate, CertificateActions } from "./CertificateDocument.js";
+import { learnerApiClient } from "../../api/learner.js";
+import { OriginalPlacementModal } from "./PlacementRetakeRequest.js";
 import { CourseAssessmentResult } from "./CourseCompletion.js";
 import { SeasonProgressCard } from "../shared/SeasonProgressCard.js";
 import { useCompactUi } from "../shared/CompactUi.js";
@@ -79,7 +81,7 @@ export function LearnerProfile({ view, actions, courseCompleted = false }: { vie
         {view.badgeCertificateAvailable ? "Xem chứng nhận huy hiệu" : "Xem trước chứng nhận"}
       </AppLink>
     } /> : null}
-    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá" style={{ background: "var(--mint)" }}><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Kết quả đánh giá</h2></div></div><div className={`profile-assessment-grid${courseCompleted || view.assessments.passCourse ? " grid cols-2" : ""}`}><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} />{courseCompleted ? <CourseAssessmentResult /> : view.assessments.passCourse ? <AssessmentResult label="Điểm đầu ra" result={view.assessments.passCourse} /> : null}</div>{view.surveyAvailable && !view.monthlyProgress && !view.monthlyPreparation ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
+    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá" style={{ background: "var(--mint)" }}><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Kết quả đánh giá</h2></div></div><div className={`profile-assessment-grid${courseCompleted || view.assessments.passCourse ? " grid cols-2" : ""}`}><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} action={view.assessments.placement ? <PlacementSubmissionReview /> : null} />{courseCompleted ? <CourseAssessmentResult /> : view.assessments.passCourse ? <AssessmentResult label="Điểm đầu ra" result={view.assessments.passCourse} /> : null}</div>{view.surveyAvailable && !view.monthlyProgress && !view.monthlyPreparation ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
     {avatarOpen ? <AvatarDialog initial={view.learner.profile.avatar} name={view.learner.displayName} onClose={closeAvatar} onSave={async (avatar) => { await actions.saveAvatar(avatar); closeAvatar(); }} /> : null}
   </div>;
 }
@@ -127,7 +129,34 @@ function AssessmentResult({ label, result, action }: { label: string; result: Pr
       const percent = Math.max(0, Math.min(100, max ? score / max * 100 : score));
       return <div className="profile-assessment-skill" key={section}><span>{SECTION_LABELS[section]}</span><i aria-hidden="true"><b style={{ width: `${percent}%` }} /></i><small>{max ? formatScoreOutOf(score, max) : formatPercent(percent)}</small></div>;
     })}</div>
+    {action}
   </div>;
+}
+
+function PlacementSubmissionReview() {
+  const [submission, setSubmission] = useState<AssessmentPlacementRetakeRequestView["original"]>();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  async function open() {
+    setLoading(true);
+    setError(false);
+    try {
+      const view = await learnerApiClient.getPlacementRetakeRequest?.();
+      if (view?.original) setSubmission(view.original);
+      else setError(true);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return <>
+    <button type="button" className="btn" disabled={loading} onClick={() => void open()}>Xem lại bài làm</button>
+    {error ? <ErrorText message="Chưa mở được bài làm. Vui lòng thử lại." /> : null}
+    {submission ? <OriginalPlacementModal submission={submission} onClose={() => setSubmission(undefined)} /> : null}
+  </>;
 }
 function Avatar({ avatar, name, size = 88 }: { avatar: Partial<LearnerAvatarData> | undefined; name: string; size?: number }) { const acc = avatar?.acc ?? "none"; const color = avatar?.color ?? "olive"; const bg = avatar?.bg ?? 0; const dimension = `var(--profile-avatar-size, ${size}px)`; return <span className="app-avatar" style={{ width: dimension, height: dimension, minWidth: dimension, minHeight: dimension, boxSizing: "border-box", background: AVATAR_BG[bg], color: AVATAR_COLOR_HEX[color] }} aria-label={`Avatar của ${name}`}>{acc !== "none" ? <AvatarMark acc={acc} size={Math.round(size * .58)} /> : name.split(/\s+/).slice(-2).map((word) => word[0]).join("").toUpperCase()}</span>; }
 export function AvatarMark({ acc, size = 32 }: { acc: Exclude<LearnerAvatarData["acc"], "none">; size?: number }) { const icons: Record<typeof acc, LucideIcon> = { leaf: Leaf, sun: Sun, flower: Flower2, cloud: Cloud, star: Star, drop: Droplets, snow: Snowflake }; const Icon = icons[acc]; return <Icon size={size} strokeWidth={1.7} aria-hidden="true" />; }
