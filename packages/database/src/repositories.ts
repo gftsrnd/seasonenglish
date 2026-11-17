@@ -1168,7 +1168,7 @@ class LearningRepository {
     monthlyGoal: string | null;
     rewardAnnouncement: RewardAnnouncementView;
   } | null> {
-    const [identity, profileResult, levelup, seasonMilestone] = await Promise.all([
+    const [identity, profileResult, levelup, seasonMilestone, placement] = await Promise.all([
       this.pool.query<{ cefr: CefrLevel | null; cefr_approved: boolean }>(
         `select e.cefr, e.cefr_approved from enrollments e
          join programs p on p.id = e.program_id and p.status = 'active'
@@ -1208,6 +1208,16 @@ class LearningRepository {
          from learner_season_milestones m
          where m.learner_id = $1 and m.celebrated_at is null and m.cefr = learner_current_cefr(m.learner_id)
          order by m.season_level desc limit 1`, [learnerId]
+      ),
+      this.pool.query<{ attempt_id: string; assessment_key: string; approved_level: CefrLevel; decided_at: Date }>(
+        `select attempt.id as attempt_id, definition.assessment_key, decision.approved_level, decision.decided_at
+         from assessment_decisions decision
+         join assessment_attempts attempt on attempt.id = decision.attempt_id
+         join assessment_versions version on version.id = attempt.assessment_version_id
+         join assessment_definitions definition on definition.id = version.definition_id and definition.kind = 'placement'
+         where attempt.learner_id = $1 and attempt.status = 'approved' and decision.status = 'approved'
+           and decision.decided_at > now() - interval '72 hours'
+         order by decision.decided_at desc limit 1`, [learnerId]
       )
     ]);
     const profile = profileObject(profileResult.rows[0]?.profile);
@@ -1242,9 +1252,13 @@ class LearningRepository {
     const newLevel = Boolean(latestChangedAt && latestLevel === enrollment?.cefr
       && latest?.from !== latestLevel && Date.now() - latestChangedAt.getTime() < 30 * 24 * 60 * 60 * 1000);
     const raised = Boolean(latest?.from && cefrIndex(latest.from) < cefrIndex(latestLevel));
-    const candidateKind = enrollment?.cefr === "C1" ? "top-level-redirect"
+    const initialPlacement = placement.rows[0];
+    const newlyPlaced = initialPlacement?.assessment_key === "placement-a" && enrollment?.cefr_approved
+      && initialPlacement.approved_level === enrollment.cefr && (!latestChangedAt || latestChangedAt <= initialPlacement.decided_at);
+    const candidateKind = newlyPlaced ? "placement-approved" : enrollment?.cefr === "C1" ? "top-level-redirect"
       : newLevel ? raised ? "new-level-announcement" : "level-adjustment" : "normal";
-    const candidateId = candidateKind === "top-level-redirect"
+    const candidateId = newlyPlaced ? `placement-approved:${initialPlacement.attempt_id}:${initialPlacement.decided_at.toISOString()}`
+      : candidateKind === "top-level-redirect"
       ? `top-level:${enrollment?.cefr ?? "C1"}:${latestChangedAt?.toISOString() ?? "current"}`
       : newLevel && latestLevel && latestChangedAt
         ? `level-up:${latestLevel}:${latestChangedAt.toISOString()}` : undefined;
@@ -1286,6 +1300,7 @@ class LearningRepository {
         ...(announcementKind === "normal" ? {} : {
           ...(candidateId ? { announcementId: candidateId } : {}),
           source: "genuine" as const,
+          ...(newLevel && !newlyPlaced && latest?.reason?.trim() ? { reason: latest.reason.trim() } : {}),
           rule: announcementKind === "top-level-redirect"
             ? "Mức C1 là mức cao nhất của lộ trình hiện tại."
             : announcementKind === "level-adjustment"

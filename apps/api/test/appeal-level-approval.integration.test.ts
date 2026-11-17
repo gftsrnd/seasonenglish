@@ -1,6 +1,6 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
+import { createRepositories, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
@@ -84,6 +84,15 @@ describe("Appeals before the placement level is approved", () => {
   it("shows the placement retake in history once the learner submits a reason", async () => {
     await setApproved(true);
     const headers = { cookie };
+    const initialHome = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers });
+    expect(initialHome.statusCode, initialHome.body).toBe(200);
+    const welcome = initialHome.json().rewardAnnouncement;
+    expect(welcome).toMatchObject({ kind: "placement-approved", level: "A2", announcementId: expect.stringContaining(DEMO_IDS.placementAttempt) });
+    const acknowledged = await app.inject({ method: "POST", url: "/api/v1/learner/reward-announcement/acknowledge", headers, payload: { announcementId: welcome.announcementId } });
+    expect(acknowledged.statusCode, acknowledged.body).toBe(200);
+    const reopenedHome = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers });
+    expect(reopenedHome.json().rewardAnnouncement.kind).not.toBe("placement-approved");
+
     const available = await app.inject({ method: "GET", url: "/api/v1/learner/appealable-assessments", headers });
     expect(available.statusCode, available.body).toBe(200);
     expect(available.json().results).toEqual([]);
@@ -100,5 +109,21 @@ describe("Appeals before the placement level is approved", () => {
 
     const history = await app.inject({ method: "GET", url: "/api/v1/learner/appeals", headers });
     expect(history.json().appeals).toEqual([expect.objectContaining({ kind: "assessment", requestKind: "retake", reason, status: "pending" })]);
+  });
+
+  it("shows the Operator's level adjustment reason on Home and in the learner's inbox", async () => {
+    const reason = "Cần củng cố kỹ năng nghe ở trình độ A1.";
+    await createRepositories(pool).assessments.changeLearnerLevel(DEMO_IDS.operator, DEMO_IDS.learner, { mode: "direct", targetLevel: "A1", reason, evidence: "QA" });
+    const headers = { cookie };
+    const home = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers });
+    expect(home.statusCode, home.body).toBe(200);
+    expect(home.json().rewardAnnouncement).toMatchObject({ kind: "level-adjustment", level: "A1", reason });
+    const inbox = await app.inject({ method: "GET", url: "/api/v1/me/notifications", headers });
+    expect(inbox.statusCode, inbox.body).toBe(200);
+    const notice = inbox.json().items.find((item: { kind: string }) => item.kind === "level_changed");
+    expect(notice).toMatchObject({ context: "lower:A1", levelChangeReason: reason, readAt: null });
+    const read = await app.inject({ method: "PATCH", url: "/api/v1/me/notifications/read", headers, payload: { ids: [notice.id] } });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json().unreadCount).toBe(inbox.json().unreadCount - 1);
   });
 });

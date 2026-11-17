@@ -19,7 +19,7 @@ export type PilotPhase = "before_pilot" | "in_pilot" | "after_pilot";
 export type LevelUpPhase = "none" | "eligible" | "testing" | "ungraded" | "challenge" | "requested" | "approved" | "failed";
 
 export interface RewardAnnouncementView {
-  kind: "normal" | "new-level-announcement" | "level-adjustment" | "top-level-redirect" | "season-up";
+  kind: "normal" | "placement-approved" | "new-level-announcement" | "level-adjustment" | "top-level-redirect" | "season-up";
   points: number;
   nextPoints: number | null;
   seasonName: string;
@@ -30,6 +30,7 @@ export interface RewardAnnouncementView {
   announcementId?: string;
   source?: "genuine" | "simulated";
   rule?: string;
+  reason?: string;
 }
 
 export interface LearnerAvatarData {

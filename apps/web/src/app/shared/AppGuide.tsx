@@ -5,6 +5,8 @@ import "./app-guide.css";
 
 import { guideDefinitions, guidePopupDefinitions, type GuideRole, type GuideStep } from "./app-guide-steps.js";
 
+export const OPEN_LEARNER_HOME_GUIDE = "e4s:open-learner-home-guide";
+
 const SCROLL_KEYS = new Set([" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home", "End"]);
 
 type ActiveStep = { selector: string; target: HTMLElement; title: string; text: string; prioritize?: true };
@@ -136,6 +138,23 @@ export function AppGuide({ role, pathname, compact }: { role: GuideRole; pathnam
       if (frame !== undefined) window.cancelAnimationFrame(frame);
     };
   }, [definitions, compact, path, role]);
+
+  useEffect(() => {
+    if (!definitions || role !== "learner" || path !== "/home") return;
+    let frame = 0;
+    const openHomeGuide = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const next = currentContext(role, path, definitions);
+        if (!next.popup && !next.inboxOpen && next.steps.length) setState({ ...next, isOpen: true, index: 0 });
+      });
+    };
+    window.addEventListener(OPEN_LEARNER_HOME_GUIDE, openHomeGuide);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener(OPEN_LEARNER_HOME_GUIDE, openHomeGuide);
+    };
+  }, [definitions, path, role]);
 
   const close = () => {
     setState(current => ({ ...current, isOpen: false, index: 0 }));

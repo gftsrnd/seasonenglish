@@ -2,11 +2,12 @@ import { RequestEvidenceFields, requestEvidenceArgs, type RequestEvidenceDraft }
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { BookOpen, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MessageCircle, Play, Sprout } from "lucide-react";
 import type { LearnerHomeView, LearnerCallbacks } from "./contracts.js";
-import { Notice, PageTitle, Progress, AppLink, learnerLessonLabel, learnerLessonPhrase } from "./ui.js";
+import { Button, Modal, Notice, PageTitle, Progress, AppLink, learnerLessonLabel, learnerLessonPhrase } from "./ui.js";
 import { buildMonthlyTeachingCalendar } from "@e4s/domain/monthly";
 import { LevelReadinessCard } from "./LevelReadiness.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { InfoTitle, useCompactUi } from "../shared/CompactUi.js";
+import { OPEN_LEARNER_HOME_GUIDE } from "../shared/AppGuide.js";
 import type { LearnerComplaintView } from "@e4s/contracts";
 
 export function LearnerHome({ view, actions, courseCompleted = false }: { view: LearnerHomeView; actions: LearnerCallbacks; courseCompleted?: boolean }) {
@@ -29,6 +30,18 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
     return () => window.clearTimeout(timer);
   }, []);
   if (view.onboardingRequired || view.learner.cefr === null) return <OnboardingHome view={view} actions={actions} />;
+  const acknowledgeCelebration = async () => {
+    if (celebration?.announcementId) await actions.acknowledgeRewardAnnouncement?.(celebration.announcementId);
+    setCelebration(null);
+  };
+  const finishPlacementWelcome = async (seeResult: boolean) => {
+    try { await acknowledgeCelebration(); } catch { /* The read action can retry on the next visit. */ }
+    finally {
+      setCelebration(null);
+      if (seeResult) actions.navigate("/support?tab=appeals");
+      else window.dispatchEvent(new Event(OPEN_LEARNER_HOME_GUIDE));
+    }
+  };
   const next = view.nextLesson;
   const monthly = view.month ?? null;
   const monthlyPreparation = view.monthlyPreparation === true;
@@ -76,7 +89,14 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
         </div>
       </div>
     </section>
-    {celebration ? <LevelUpCelebration announcement={celebration} displayName={view.learner.displayName} onClose={async () => { if (celebration.announcementId) await actions.acknowledgeRewardAnnouncement?.(celebration.announcementId); setCelebration(null); }} /> : null}
+    {celebration?.kind === "placement-approved" ? <Modal
+      className="placement-retake-confirm"
+      title={`Bạn đã được xếp mức ${celebration.level ?? view.learner.cefr}`}
+      description="Xem bài đầu vào, phản hồi của Vận hành và cách xin thi lại trong Hỗ trợ học tập."
+      onClose={() => void finishPlacementWelcome(false)}
+      dismissOnBackdrop
+      actions={<><Button onClick={() => void finishPlacementWelcome(true)}>Xem kết quả</Button><Button variant="primary" onClick={() => void finishPlacementWelcome(false)}>Xem hướng dẫn</Button></>}
+    /> : celebration ? <LevelUpCelebration announcement={celebration} displayName={view.learner.displayName} onClose={acknowledgeCelebration} /> : null}
     {assessmentCelebration ? <AssessmentCelebration /> : null}
   </div>;
 }
@@ -138,6 +158,7 @@ export function LevelUpCelebration({
       <div className="row between"><span className={`badge ${genuine ? "ok" : ""}`}>{genuine ? "Thông báo thật" : "Mô phỏng"}</span><button ref={closeRef} type="button" aria-label="Đóng" onClick={() => void onClose()}>Đóng</button></div>
       <div className="card flat" style={{ marginTop: 12, textAlign: "center" }}><div className="eyebrow">{announcement.seasonName}</div>{adjusted ? null : <Sprout className="celebration-icon" aria-hidden="true" />}<h2>{adjusted ? "Trình độ đã được cập nhật" : isTopLevel ? "Bạn đã đạt mức cao nhất" : `Chúc mừng ${displayName}!`}</h2>{seasonUp ? <p className="badge lvl">Mùa học {announcement.seasonLevel ?? "—"}/4{announcement.level ? ` · ${announcement.level}` : ""}</p> : announcement.level ? <p className="badge lvl">Mức {announcement.level}</p> : null}</div>
       <p>{adjusted ? "Bài học và điều kiện thi lên mức áp dụng theo trình độ hiện tại của bạn." : isTopLevel ? "Bạn đã hoàn thành chặng CEFR cao nhất trong lộ trình hiện tại." : seasonUp ? `Bạn vừa lên ${announcement.seasonName}. Huy hiệu đã nhận được giữ mãi; điểm trong trình độ này tiếp tục được cộng cho Season tiếp theo.` : "Bạn vừa mở một cột mốc mới trong hành trình học tiếng Anh."}</p>
+      {announcement.reason ? <p><b>Lý do của Vận hành</b><br />{announcement.reason}</p> : null}
       <Notice tone="info"><b>Quy tắc công nhận:</b> {announcement.rule ?? (isTopLevel ? "Mức cao nhất được giữ lại trong hồ sơ của bạn." : "Mức mới chỉ hiển thị sau khi người vận hành duyệt bằng chứng học tập.")}</Notice>
       <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}><button type="button" onClick={() => void onClose()}>Đóng</button><button className="btn-primary" type="button" onClick={() => void onClose()}>Tiếp tục học</button></div>
     </section>

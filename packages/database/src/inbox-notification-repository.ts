@@ -21,6 +21,13 @@ export class InboxNotificationRepository {
                 ) then 'placement_retake' else context end as context,
                 created_at as "createdAt", read_at as "readAt",
                 substring(event_key from '^(?:complaint:|appeal:[a-z]+:|reopen:[a-z]+:|audit:|assessment:|topic:)([0-9a-fA-F-]{36}):') as "relatedId",
+                case when kind = 'level_changed' and recipient_role = 'learner' then (
+                  select nullif(btrim(event.payload->>'reason'), '')
+                  from audit_events event
+                  where event.id = substring(owned.event_key from '^audit:([0-9a-fA-F-]{36})$')::uuid
+                    and event.action = 'assessment.learner.level_changed'
+                    and event.entity_id = owned.recipient_id and event.organization_id = owned.organization_id
+                ) end as "levelChangeReason",
                 case when kind = 'security_report' then (
                   select jsonb_build_object('subjectName', subject.display_name, 'note', report.note)
                   from manager_pin_reports report join users subject on subject.id = report.subject_user_id

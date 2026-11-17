@@ -159,8 +159,9 @@ export function notificationContent(item: InboxNotificationView): NotificationCo
       return { title: item.context === "approved" ? "Yêu cầu xóa tài khoản đã được duyệt" : "Yêu cầu xóa tài khoản đã bị từ chối", description: "Quản lý đã xử lý yêu cầu của bạn.", path: `/op/review?tab=sent${focus}`, action: "Xem yêu cầu" };
     case "level_changed": {
       const [direction, level] = (item.context ?? "").split(":");
-      if (level === "C1" && direction !== "lower") return { title: "Bạn đã đạt mức cao nhất C1", description: "C1 là trình độ cao nhất. Trang chủ hiển thị trạng thái Bài thi đầu ra.", path: "/home", action: "Về Trang chủ" };
-      return { title: direction === "lower" ? `Mức học được điều chỉnh xuống ${level}` : `Mức ${level} đã có hiệu lực`, description: "Xem mức hiện tại và lộ trình học trong hồ sơ.", path: "/profile", action: "Xem hồ sơ" };
+      const reason = item.levelChangeReason ? `Lý do của Vận hành: ${item.levelChangeReason}` : null;
+      if (level === "C1" && direction !== "lower") return { title: "Bạn đã đạt mức cao nhất C1", description: reason ?? "C1 là trình độ cao nhất. Trang chủ hiển thị trạng thái Bài thi đầu ra.", path: "/home", action: "Về Trang chủ" };
+      return { title: direction === "lower" ? `Mức học được điều chỉnh xuống ${level}` : `Mức ${level} đã có hiệu lực`, description: reason ?? "Xem mức hiện tại và lộ trình học trong hồ sơ.", path: "/profile", action: "Xem hồ sơ" };
     }
     case "credential_changed":
       return { title: "Thông tin đăng nhập đã được đặt lại", description: "Các phiên đăng nhập cũ đã hết hiệu lực.", path: "/", action: "Về trang chính" };

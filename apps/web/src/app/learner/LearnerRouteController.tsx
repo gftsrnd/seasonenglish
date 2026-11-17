@@ -299,6 +299,30 @@ function LearnerContent({ courseCompleted }: { courseCompleted: boolean }) {
     };
   }, [navigate, route]);
 
+  useEffect(() => {
+    if (route.name !== "home" || !uiState.home?.approvalPending) return;
+    let live = true;
+    let refreshing = false;
+    const refreshApproval = () => {
+      if (document.hidden || refreshing) return;
+      refreshing = true;
+      void apiClient.getHome().then(home => {
+        if (!live || home.onboardingRequired || !home.learner.cefr) return;
+        setContracts(current => ({ ...current, home }));
+        setUiState(current => ({ ...current, home: { ...current.home, approvalPending: false } }));
+      }).catch(() => undefined).finally(() => { refreshing = false; });
+    };
+    const timer = window.setInterval(refreshApproval, 30_000);
+    window.addEventListener("focus", refreshApproval);
+    document.addEventListener("visibilitychange", refreshApproval);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshApproval);
+      document.removeEventListener("visibilitychange", refreshApproval);
+    };
+  }, [route.name, uiState.home?.approvalPending]);
+
   const saveProfileRecord = async (profile: LearnerProfileData, leave: boolean) => {
     if (!profileRecord) throw new Error("PROFILE_NOT_LOADED");
     setUiState((current) => ({ ...current, onboard: { ...current.onboard, saving: true } }));

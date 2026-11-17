@@ -47,6 +47,7 @@ export interface InboxNotificationView {
   readonly kind: InboxNotificationKind;
   readonly context: string;
   readonly relatedId?: string | null;
+  readonly levelChangeReason?: string | null;
   /** PIN/password activity behind a `security_report` notification; context holds the repeat count. */
   readonly securityReport?: { readonly subjectName: string; readonly note: string } | null;
   /** Mini game topic report behind a `topic_report_received` notification; Operators resolve it from the bell. */
