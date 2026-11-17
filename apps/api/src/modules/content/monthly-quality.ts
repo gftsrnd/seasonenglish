@@ -6,7 +6,7 @@ import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIE
 import { monthlyAnswerKeyFindings } from "./monthly-answer-checks.js";
 import { monthlyWordFormScopeFindings } from "./monthly-word-form-scope.js";
 import { monthlyObjectiveFixHint, monthlyObjectiveIssues } from "./monthly-objective-quality.js";
-import { checkMonthlyGrammarStep, monthlyGrammarFormulaRows } from "@e4s/domain/monthly";
+import { hasMonthlyPresentProgressive, isMonthlyPresentProgressiveRow, monthlyGrammarFormulaRows, readMonthlyGrammarRow } from "@e4s/domain/monthly";
 
 const REQUIRED_COMPONENTS = [
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",
@@ -138,10 +138,10 @@ export function evaluateMonthlyLessonQuality(
     for (const block of blocks) {
       const lockedFormula = asString(block.formula);
       const rows = monthlyGrammarFormulaRows(lockedFormula);
-      if (!rows.length || !rows.every((row) => /\bam\s*\/\s*is\s*\/\s*are\s*\+\s*(?:V|verb)-ing\b/iu.test(row))) continue;
-      const examples = Array.isArray(block.examples) ? block.examples.map(asString) : [];
-      const unmatched = checkMonthlyGrammarStep(lockedFormula, examples).examplesWithoutRow;
-      if (unmatched.length) severe.push(finding("MONTHLY_CONTINUOUS_EXAMPLE_MISMATCH", `Examples need am/is/are + a verb ending in -ing: ${unmatched.join(" / ")}. Replace examples that only use be + adjective.`, dayNumber, "grammar"));
+      if (!rows.length || !rows.every((row) => isMonthlyPresentProgressiveRow(readMonthlyGrammarRow(row)))) continue;
+      const examples = Array.isArray(block.examples) ? block.examples.map(asString).filter((example) => example.trim()) : [];
+      const unmatched = examples.filter((example) => !hasMonthlyPresentProgressive(example));
+      if (unmatched.length) severe.push(finding("MONTHLY_CONTINUOUS_EXAMPLE_MISMATCH", `Each example must demonstrate am/is/are + a verb ending in -ing. Rewrite these examples: ${unmatched.join(" / ")}`, dayNumber, "grammar"));
     }
   }
 

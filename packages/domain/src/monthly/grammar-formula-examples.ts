@@ -29,6 +29,8 @@ export function monthlyGatedLightFindings<T extends { code: string }>(light: rea
 
 const ADVERBS = new Set(["not", "never", "just", "already", "always", "usually", "often", "ever", "also", "still", "sometimes", "really", "now", "currently", "constantly"]);
 const SUBJECT_PRONOUNS = new Set(["i", "you", "we", "they", "he", "she", "it"]);
+const PRESENT_BE = new Set(["am", "is", "are", "'s"]);
+const NOUN_DETERMINERS = new Set(["a", "an", "the", "this", "that", "these", "those", "our", "your", "their", "my", "his", "her", "its"]);
 const S_CLITIC_HOSTS = new Set(["it", "he", "she", "that", "there", "what", "who", "here", "where", "how"]);
 const BE_FORMS = new Set(["am", "is", "are", "was", "were", "be", "been", "being", "'s", "'m", "'re"]);
 
@@ -376,6 +378,14 @@ export function readMonthlyGrammarRow(row: string): MonthlyGrammarRow {
   return { text: row, requirements, wrong };
 }
 
+export function isMonthlyPresentProgressiveRow(row: MonthlyGrammarRow): boolean {
+  const alternatives = row.requirements.flatMap((requirement) => requirement.alternatives);
+  const named = alternatives.some((alternative) => alternative.tense?.verb === "ing" && alternative.tense.aux.every((aux) => PRESENT_BE.has(aux)));
+  return named || (alternatives.some((alternative) => alternative.form === "ing")
+    && alternatives.some((alternative) => alternative.phrase?.some((token) => PRESENT_BE.has(token)))
+    && alternatives.every((alternative) => alternative.form === "ing" || alternative.phrase?.every((token) => PRESENT_BE.has(token) || ADVERBS.has(token))));
+}
+
 function phraseAt(phrase: readonly string[], tokens: readonly string[]): boolean {
   // Each next word within three tokens of the previous one ("has already been", "were we to", "what the client wants is").
   const from = (start: number, offset: number): boolean => {
@@ -419,6 +429,26 @@ function examplePair(example: string): { wrong: string; right: string } | undefi
   const wrong = (wrongFirst?.[1] ?? rightFirst?.[2])?.trim();
   const right = (wrongFirst?.[2] ?? rightFirst?.[1])?.trim();
   return wrong && right ? { wrong, right } : undefined;
+}
+
+/** Recognises progressive be in a statement or a short question, independently of example marks. */
+export function hasMonthlyPresentProgressive(example: string): boolean {
+  const sentence = examplePair(example)?.right ?? example;
+  const tokens = grammarTokens(sentence);
+  const question = /\?\s*$/u.test(sentence);
+  return tokens.some((aux, index) => {
+    if (!PRESENT_BE.has(aux)) return false;
+    const invertedPronoun = question && SUBJECT_PRONOUNS.has(tokens[index + 1] ?? "");
+    const allowSubjectPhrase = question && !invertedPronoun;
+    const limit = allowSubjectPhrase ? Math.min(tokens.length, index + 6) : tokens.length;
+    for (let next = index + (invertedPronoun ? 2 : 1); next < limit; next += 1) {
+      const token = tokens[next]!;
+      if (ADVERBS.has(token)) continue;
+      if (!NOUN_DETERMINERS.has(tokens[next - 1]!) && formAt("ing", tokens, next)) return true;
+      if (!allowSubjectPhrase || PRESENT_BE.has(token) || token === "to") break;
+    }
+    return false;
+  });
 }
 
 /** Whether an example uses a row; a "Wrong: … Right: …" example counts for the rule it corrects. */

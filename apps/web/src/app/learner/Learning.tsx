@@ -969,8 +969,11 @@ function pronunciationRuleCopy(cefr: string, focus: string, catalogId: unknown, 
 function PronunciationTargetBlock({ focus, words, audioUrls, language, speak, onListened, separateSymbol = false, showMouth = false, guidance, rule }: { rule?: MonthlyPronunciationRuleCopy | undefined; guidance?: string | undefined; separateSymbol?: boolean; showMouth?: boolean; focus: string; words: Array<{ word: string; ipa?: string }>; audioUrls: string[]; language: LearnerLessonLanguage; speak: (text: string) => void; onListened?: ((word: string) => void | Promise<void>) | undefined }) {
   const sound = pronunciationTarget(focus);
   const firstWord = words[0]?.word;
-  const showsAmericanFlap = /(?:^|[\s/])t(?:$|[\s/])/u.test(sound)
-    && words.some(({ word }) => word.toLowerCase() === "meeting");
+  // In many American accents, intervocalic t after a stressed vowel and
+  // before a weak syllable can be a flap. The supplied IPA is British.
+  const flappedWords = /^(?:\/t\/|t)$/u.test(sound)
+    ? words.filter(({ ipa }) => /ˈ[^ˈˌ/]*[iɪeæɑɒɔoʊuʌəɜaɛɐɚɝ](?:ː)?\.?t\.?[iɪəɚʊ]/u.test(ipa ?? "")).map(({ word }) => `“${word}”`).join(", ")
+    : "";
   return <section className="lesson-pronunciation-target">
     <div className="lesson-pronunciation-target-head"><p className="lesson-study-focus"><strong>{separateSymbol ? <>{language === "en" ? "Sound " : "Âm "}<span className="lesson-pronunciation-symbol">{sound}</span>{firstWord ? (language === "en" ? ` as in “${firstWord}”` : ` như trong “${firstWord}”`) : ""}</> : language === "en" ? `Sound ${sound}${firstWord ? ` as in “${firstWord}”` : ""}` : `Âm ${sound}${firstWord ? ` như trong “${firstWord}”` : ""}`}</strong></p></div>
     {rule ? <div className="lesson-pronunciation-rule">
@@ -980,9 +983,9 @@ function PronunciationTargetBlock({ focus, words, audioUrls, language, speak, on
     </div> : guidance ? <p className="lesson-study-explanation">{guidance}</p> : null}
     {rule?.core ? <div className="lesson-study-formula-box lesson-pronunciation-formula"><p className="lesson-study-focus"><strong>{rule.core.pattern} → <span className="lesson-study-mark">{rule.core.result}</span></strong></p></div> : null}
     {showMouth ? <PronunciationMouthPanel target={sound} language={language} /> : null}
-    {showsAmericanFlap ? <p className="lesson-study-explanation">{language === "en"
-      ? "In American English, the t in “meeting” may sound like a quick d. The British pronunciation uses a clear /t/."
-      : "Trong giọng Mỹ, t trong “meeting” có thể nghe gần giống d nhẹ. Giọng Anh phát âm rõ /t/."}</p> : null}
+    {flappedWords ? <p className="lesson-study-explanation">{language === "en"
+      ? `In American English, the t in ${flappedWords} may sound like a quick d. The IPA shown here uses British /t/.`
+      : `Trong giọng Mỹ, t trong ${flappedWords} có thể nghe gần giống d nhẹ. IPA ở đây dùng âm /t/ theo giọng Anh.`}</p> : null}
     <div className="lesson-pronunciation-words" aria-label={language === "en" ? "Pronunciation practice words" : "Luyện từ phát âm"}>{words.map((item, index) => { const marked = pronunciationEndingSegments(item.word, item.ipa, rule?.core); const ipaMarked = marked.ipa.some((segment) => segment.mark) ? marked.ipa : pronunciationTargetSegments(item.ipa, sound); return <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound lesson-pronunciation-word-chip" type="button" aria-label={language === "en" ? `Listen to pronunciation word: ${item.word}` : `Nghe từ phát âm: ${item.word}`} onClick={() => playLessonText(item.word, audioUrls[index], speak, () => { void onListened?.(item.word); }, 0.65)} key={item.word}><Volume2 size={14} aria-hidden="true" /><strong><Highlighted segments={marked.word} /></strong>{item.ipa ? <>{" "}<Highlighted segments={ipaMarked} /></> : null}</button>; })}</div>
   </section>;
 }

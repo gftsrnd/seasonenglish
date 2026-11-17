@@ -210,6 +210,19 @@ describe("umbrella deny-list", () => {
     const verb = prefilterMonthlySupportCandidatesForAudit({ word: "send", type: "verb" }, [support("sending", "word_family"), support("sender", "word_family"), support("deliver", "umbrella", "core-a", "verb")]);
     expect(verb.kept.map((term) => term.word)).toEqual(["sender", "deliver"]);
   });
+
+  it("pre-filters incompatible synonym forms while preserving valid candidates for the sense audit", () => {
+    const core = { word: "start", type: "verb", meaning: "bắt đầu" };
+    const result = prefilterMonthlySupportCandidatesForAudit(core, [
+      support("opening", "synonym", "core-a", "noun"),
+      support("not finish", "synonym", "core-a", "verb"),
+      support("begin", "synonym", "core-a", "verb"),
+      support("set out", "synonym", "core-a", "verb")
+    ]);
+    expect(result.kept.map((term) => term.word)).toEqual(["begin", "set out"]);
+    const reading = prefilterMonthlySupportCandidatesForAudit({ word: "read", type: "verb", meaning: "đọc tài liệu" }, [support("study", "synonym", "core-a", "verb")]);
+    expect(reading.kept).toEqual([]);
+  });
 });
 
 describe("quality rule B: no synonym pairs among cores", () => {

@@ -159,6 +159,7 @@ export async function runMonthlyCorePhase(input: {
     candidates: audited,
     coreId: candidate.id,
     coreWord: candidate.word,
+    coreMeaning: candidate.meaning,
     coreType: candidate.type,
     coreWords,
     sameCoreWords: new Set(),

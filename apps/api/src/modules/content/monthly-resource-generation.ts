@@ -254,6 +254,7 @@ export function selectMonthlySupportCandidates(input: {
   candidates: MonthlyResourcePlanTaskOutput["expandedTerms"];
   coreId: string;
   coreWord: string;
+  coreMeaning?: string;
   coreType: string;
   coreWords: ReadonlySet<string>;
   sameCoreWords: ReadonlySet<string>;
@@ -302,7 +303,7 @@ export function selectMonthlySupportCandidates(input: {
     if (candidate.relatesToCoreId !== input.coreId) reason = "incorrect core relation";
     else if ((relationCounts.get(candidate.relation) ?? 0) >= 3) reason = "exceeds the three-support limit for this semantic relation";
     else if (candidate.relation === "umbrella" && isGenericMonthlyUmbrella(input.coreType, candidate.word)) reason = "is a generic placeholder, not a genuine umbrella for this core";
-    else if ((reason = monthlySupportQualityIssue({ word: input.coreWord, type: input.coreType, ...(input.cefr ? { cefr: input.cefr } : {}) }, candidate, existingCounts.get(word) ?? 0) ?? "")) { /* reason set */ }
+    else if ((reason = monthlySupportQualityIssue({ word: input.coreWord, type: input.coreType, ...(input.coreMeaning ? { meaning: input.coreMeaning } : {}), ...(input.cefr ? { cefr: input.cefr } : {}) }, candidate, existingCounts.get(word) ?? 0) ?? "")) { /* reason set */ }
     else if (input.cefr && !isMonthlySupportLevelAllowed(input.cefr, candidate)) reason = candidate.relation === "word_family"
       ? `CEFR ${candidate.cefr} is above ${maxMonthlyWordFamilyLevel(input.cefr)}, the highest word-family level for ${input.cefr}`
       : `CEFR ${candidate.cefr} is more than one level from ${input.cefr}`;
@@ -1134,7 +1135,7 @@ export function collocationContainsCoreWord(coreWord: string, collocation: strin
  * wrong word-family items and topic-only collocations never cost an audit call.
  */
 export function prefilterMonthlySupportCandidatesForAudit(
-  core: { word: string; type?: string },
+  core: { word: string; type?: string; meaning?: string },
   candidates: readonly MonthlyResourcePlanTaskOutput["expandedTerms"][number][]
 ): { kept: MonthlyResourcePlanTaskOutput["expandedTerms"]; rejected: string[] } {
   const kept: MonthlyResourcePlanTaskOutput["expandedTerms"] = [];
@@ -1142,8 +1143,11 @@ export function prefilterMonthlySupportCandidatesForAudit(
   const coreType = core.type ?? "";
   for (const candidate of candidates) {
     const familyIssue = candidate.relation === "word_family" ? monthlyWordFamilyInflectionIssue({ word: core.word, type: coreType }, candidate) : undefined;
+    const synonymIssue = coreType ? monthlySynonymShapeIssue({ ...core, type: coreType }, candidate) : undefined;
     if (candidate.relation === "word_family" && !isGenuineWordFamily(core.word, candidate.word)) rejected.push(`${candidate.word} (not a genuine word family of ${core.word})`);
     else if (familyIssue) rejected.push(`${candidate.word} (${familyIssue})`);
+    else if (synonymIssue) rejected.push(`${candidate.word} (${synonymIssue})`);
+    else if (candidate.relation === "synonym" && coreType && !hasCompatiblePartOfSpeech(coreType, candidate.type, "synonym")) rejected.push(`${candidate.word} (synonym part of speech does not fit a ${coreType} core)`);
     else if (candidate.relation === "umbrella" && isGenericMonthlyUmbrella(coreType, candidate.word)) rejected.push(`${candidate.word} (generic placeholder umbrella)`);
     else if (candidate.relation === "umbrella" && coreType && !hasCompatiblePartOfSpeech(coreType, candidate.type, "umbrella")) rejected.push(`${candidate.word} (umbrella part of speech does not fit a ${coreType} core)`);
     else if (candidate.relation === "collocation" && !collocationContainsCoreWord(core.word, candidate.word)) rejected.push(`${candidate.word} (collocation without ${core.word})`);
@@ -1161,7 +1165,7 @@ export function prefilterMonthlySupportCandidatesForAudit(
  * survives. Offending supports are dropped one by one; the rest stay.
  */
 export function screenCachedMonthlyCoreSupports(
-  core: { id: string; word: string; type: string },
+  core: { id: string; word: string; type: string; meaning?: string },
   supports: readonly MonthlyResourcePlanTaskOutput["expandedTerms"][number][],
   coreWords: ReadonlySet<string>
 ): MonthlyResourcePlanTaskOutput["expandedTerms"] {
@@ -1171,6 +1175,7 @@ export function screenCachedMonthlyCoreSupports(
     if (kept.length >= MONTHLY_MAX_SUPPORTS_PER_CORE) break;
     const word = normalizeMonthlyResourceWord(term.word);
     if (term.relatesToCoreId !== core.id || coreWords.has(word) || keptWords.has(word)) continue;
+    if (term.relation === "synonym" && (monthlySynonymShapeIssue(core, term) || !hasCompatiblePartOfSpeech(core.type, term.type, "synonym"))) continue;
     if (term.relation === "collocation" && !collocationContainsCoreWord(core.word, term.word)) continue;
     if (term.relation === "umbrella" && !isMonthlyUmbrellaShapeAllowed(core.type, term)) continue;
     if (term.relation === "word_family" && (!isGenuineWordFamily(core.word, term.word) || monthlyWordFamilyInflectionIssue(core, term))) continue;

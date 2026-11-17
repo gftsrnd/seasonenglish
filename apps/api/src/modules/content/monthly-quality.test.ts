@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MonthlyCurriculumContract } from "@e4s/domain";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { evaluateMonthlyReviewSections, isVietnameseReviewText, monthlyReviewVietnameseStrings } from "./monthly-review-quality.js";
+import { collectMonthlyVerifiableItems, monthlyAnswerVerificationFindings } from "./monthly-answer-checks.js";
 
 const requiredCodes = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"];
 
@@ -29,8 +30,39 @@ describe("monthly lesson quality", () => {
     item.variants = [{ prompt: "We will ____ the plan next week.", options: ["start", "starts", "starting", "started"], answer: "start" }];
     const mismatches = () => evaluateMonthlyLessonQuality(plan, 2, candidate).severe.filter((finding) => finding.code === "MONTHLY_REVIEW_GRAMMAR_SCOPE");
     expect(mismatches()[0]?.message).toContain("grammar item 1 variant 1");
+    item.variants = [{ prompt: "Will the sales team ____ at noon?", options: ["meet", "meets", "meeting", "met"], answer: "meet" }];
+    expect(mismatches()[0]?.message).toContain("grammar item 1 variant 1");
+    item.variants = [{ prompt: "The director will call you when the meeting ____.", options: ["ends", "end", "ended", "ending"], answer: "ends" }];
+    expect(mismatches()).toEqual([]);
     item.variants = [{ prompt: "We ____ the plan together every week.", options: ["start", "starts", "starting", "started"], answer: "start" }];
     expect(mismatches()).toEqual([]);
+  });
+  it("catches plain be or noun examples under a named present progressive pattern", () => {
+    const plan = contract();
+    const candidate = lesson();
+    const formula = "Present progressive";
+    plan.grammarTopics[0]!.steps[0]!.formula = formula;
+    const grammar = candidate.parts.find((part) => part.code === "grammar")!.content;
+    grammar.formula = formula;
+    grammar.examples = ["The reception is quiet.", "It is a planning meeting.", "Is it helpful to start reading?", "The staff are choosing a venue."];
+    const mismatch = () => evaluateMonthlyLessonQuality(plan, 1, candidate).severe.find((item) => item.code === "MONTHLY_CONTINUOUS_EXAMPLE_MISMATCH");
+    expect(mismatch()?.message).toContain("The reception is quiet. / It is a planning meeting. / Is it helpful to start reading?");
+    grammar.examples = ["The staff are choosing a venue.", "Is your manager checking messages?", "She's still working on the budget.", "The director is meeting clients."];
+    expect(mismatch()).toBeUndefined();
+  });
+  it("checks a retry against the same review milestone and leaves a correctly scoped retry alone", () => {
+    const plan = contract();
+    const step = plan.grammarTopics[0]!.steps[0]!;
+    step.focus = "Routines in the present simple";
+    step.formula = "Subject + V/V-s";
+    const choice = { prompt: "The clerk ____ the receipts at opening.", answer: "checks", options: ["checks", "check", "checking", "checked"] };
+    const retry = { prompt: "The courier has ____ the parcel.", answer: "delivered", options: ["deliver", "delivers", "delivering", "delivered"] };
+    const items = collectMonthlyVerifiableItems(plan, plan.daySpecs[1]!, [{ code: "grammar", content: { items: [{ ...choice, variants: [retry] }] } }]);
+    expect(items.map((item) => item.mustTest)).toEqual(["Routines in the present simple — Subject + V/V-s", "Routines in the present simple — Subject + V/V-s"]);
+    const verdict = [{ ref: items[0]!.ref, correctOptions: [choice.answer], testsLabelledPoint: true }, { ref: items[1]!.ref, correctOptions: [retry.answer], testsLabelledPoint: false }];
+    const findings = monthlyAnswerVerificationFindings(items, verdict, 2);
+    expect(findings.map((item) => item.code)).toEqual(["MONTHLY_REVIEW_GRAMMAR_SCOPE"]);
+    expect(findings[0]!.message).toContain("grammar item 1 variant 1");
   });
   it("gates the Vietnamese question/answer translation of every exercise, daily and review (12/11)", () => {
     const untranslate = (content: Record<string, unknown>): Record<string, unknown> => JSON.parse(JSON.stringify(content, (key, value) => key === "questionTranslation" || key === "answerTranslation" ? undefined : value));

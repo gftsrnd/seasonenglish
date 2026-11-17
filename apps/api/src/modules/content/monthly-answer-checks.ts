@@ -105,9 +105,10 @@ function agrees(subject: SubjectNumber, value: string): boolean {
   return accepted.some((form) => key === form || key.startsWith(`${form} `) || first === form);
 }
 
-const POSSESSIVE_DETERMINERS: Readonly<Record<string, string>> = { my: "mine", your: "yours", her: "hers", our: "ours", their: "theirs" };
+// "Her" can stand alone as an object or a predicative personal pronoun.
+// The contextual verifier decides between it and "hers".
+const POSSESSIVE_DETERMINERS: Readonly<Record<string, string>> = { my: "mine", your: "yours", our: "ours", their: "theirs" };
 const POSSESSIVE_PRONOUNS: Readonly<Record<string, string>> = { mine: "my", yours: "your", hers: "her", ours: "our", theirs: "their" };
-const BEFORE_OBJECT_PRONOUN = /\b(?:to|for|with|from|about|at|by|of|beside|behind|near|between)\s*$/iu;
 /** Words that cannot follow a possessive determiner (my ____ for / my today): prepositions, conjunctions, adverbs. */
 const NOT_A_NOUN_AFTER = new Set(["for", "to", "at", "in", "on", "with", "from", "by", "about", "and", "but", "or", "so", "because", "now", "today", "tomorrow", "too", "again", "yet", "already", "here", "there", "then", "this", "next", "last", "is", "are", "was", "were", "will", "can", "not", "if", "when", "after", "before", "until", "since"]);
 /** Function words that can follow a possessive pronoun in the same clause (mine is / mine and…). */
@@ -156,8 +157,7 @@ export function monthlyAnswerKeyIssues(choice: MonthlyChoice): string[] {
     const next = words(sentence.after)[0];
     const nextIsEnd = !next || /^\s*[.!?,;:)]/u.test(sentence.after);
     const pronoun = POSSESSIVE_DETERMINERS[key];
-    const canBeObject = key === "her" && BEFORE_OBJECT_PRONOUN.test(sentence.before);
-    if (pronoun && !canBeObject && (nextIsEnd || NOT_A_NOUN_AFTER.has(next!)) && choice.options.some((option) => normalized(option) === pronoun)) {
+    if (pronoun && (nextIsEnd || NOT_A_NOUN_AFTER.has(next!)) && choice.options.some((option) => normalized(option) === pronoun)) {
       issues.push(`${choice.label}: "${answer}" needs a noun after it, but the blank is followed by ${next && !nextIsEnd ? `"${next}"` : "the end of the sentence"}; the possessive pronoun "${pronoun}" is the correct option. Fix the answer key and explanation, or rewrite the sentence`);
     }
     const determiner = POSSESSIVE_PRONOUNS[key];
@@ -236,7 +236,7 @@ const GRAMMAR_MARKERS = new Set([
   "may", "might", "must", "mustn't", "need", "used", "going", "me", "my", "mine", "him", "his", "her", "hers", "us",
   "our", "ours", "them", "their", "theirs", "your", "yours", "its", "this", "that", "these", "those", "some", "any",
   "much", "many", "few", "little", "there", "if", "unless", "when", "while", "before", "after", "because", "so", "but",
-  "since", "ago", "already", "yet", "just", "ever", "never", "still", "wish", "only", "not", "than", "more", "most",
+  "since", "ago", "already", "yet", "just", "ever", "always", "usually", "often", "sometimes", "rarely", "never", "still", "wish", "only", "not", "than", "more", "most",
   "less", "least", "whose", "who", "which", "what", "where", "why", "how", "about", "due", "bound", "likely", "point", "let's"
 ]);
 /** Meta words of formulas and subject pronouns (the subject slot), never markers of a structure. */
@@ -302,6 +302,7 @@ export interface MonthlyVerifiableItem {
   /** Recall items: the grammar point the item is labelled with. */
   mustTest?: string;
   milestoneId?: string;
+  review?: boolean;
 }
 
 const VERIFIED_SECTIONS = ["grammar", "word_class", "word_use", "reading", "listening"] as const;
@@ -320,17 +321,18 @@ export function collectMonthlyVerifiableItems(contract: MonthlyCurriculumContrac
   const result: MonthlyVerifiableItem[] = [];
   const steps = new Map(contract.grammarTopics.flatMap((topic) => topic.steps).map((step) => [step.id, step]));
   const recallIds = new Set(day.kind === "new" ? day.grammarPlan?.recallMilestoneIds ?? [] : []);
-  const add = (component: string, label: string, raw: Content, context?: string) => {
+  const reviewIds = day.kind === "review" ? day.reviewGrammarStepIds ?? [] : [];
+  const add = (component: string, label: string, raw: Content, context?: string, reviewStepId?: string) => {
     const options = stringList(raw.options);
     const answer = text(raw.answer);
     const prompt = text(raw.prompt) || text(raw.question);
     if (options.length < 3 || !answer || !prompt) return;
-    const milestoneId = text(raw.milestoneId);
-    const step = recallIds.has(milestoneId) ? steps.get(milestoneId) : undefined;
+    const milestoneId = reviewStepId ?? text(raw.milestoneId);
+    const step = reviewStepId || recallIds.has(milestoneId) ? steps.get(milestoneId) : undefined;
     result.push({
       ref: `${component}:${result.length + 1}`, component, label, prompt, options, answer,
       ...(context ? { context } : {}),
-      ...(step ? { mustTest: `${step.focus} — ${step.formula}`, milestoneId } : {})
+      ...(step ? { mustTest: `${step.focus} — ${step.formula}`, milestoneId, ...(reviewStepId ? { review: true } : {}) } : {})
     });
   };
   for (const part of parts) {
@@ -342,8 +344,10 @@ export function collectMonthlyVerifiableItems(contract: MonthlyCurriculumContrac
     if (!list.length) add(part.code, part.code, content, context || undefined);
     list.forEach((item, index) => {
       const itemContext = part.code === "reading" ? text(item.passage) || context : context;
-      add(part.code, `${part.code} item ${index + 1}`, item, itemContext || undefined);
-      (Array.isArray(item.variants) ? item.variants.filter(isRecord) : []).forEach((variant, variantIndex) => add(part.code, `${part.code} item ${index + 1} variant ${variantIndex + 1}`, variant, part.code === "reading" ? text(variant.passage) || itemContext || undefined : itemContext || undefined));
+      // The review exercise contract orders the first questions by locked step.
+      const reviewStepId = part.code === "grammar" ? reviewIds[index] : undefined;
+      add(part.code, `${part.code} item ${index + 1}`, item, itemContext || undefined, reviewStepId);
+      (Array.isArray(item.variants) ? item.variants.filter(isRecord) : []).forEach((variant, variantIndex) => add(part.code, `${part.code} item ${index + 1} variant ${variantIndex + 1}`, variant, part.code === "reading" ? text(variant.passage) || itemContext || undefined : itemContext || undefined, reviewStepId));
     });
   }
   return result;
@@ -368,7 +372,10 @@ export function monthlyAnswerKeyFindings(contract: MonthlyCurriculumContract, da
     if (item.component === "listening" || item.component === "reading") continue;
     if (simplePresentReview && item.component === "grammar") {
       const sentence = blankSentence(item.prompt);
-      if (sentence && (/\b(?:will|will not|won't)\s*$/u.test(normalized(sentence.before)) || /^(?:will|won't)\b/u.test(normalized(item.answer)))) {
+      const before = normalized(sentence?.before ?? "");
+      const futureBeforeBlank = /\b(?:will|will not|won't|[a-z]+'ll)$/u.test(before)
+        || /^(?:will|won't)\s+\S+/u.test(before) && !/\b(?:if|unless|when|before|after|once|until|as soon as)\b/u.test(before);
+      if (sentence && (futureBeforeBlank || /^(?:will|won't)\b/u.test(normalized(item.answer)))) {
         findings.push(finding("MONTHLY_REVIEW_GRAMMAR_SCOPE", `${item.label}: the blank tests will + verb, outside the locked present simple review. Rewrite it as a present simple question or retry.`, dayNumber, "grammar"));
       }
     }
@@ -405,7 +412,7 @@ export const MONTHLY_ANSWER_VERIFICATION_PROMPT = [
   "correctOptions = EVERY option, copied exactly, that you would mark fully correct: grammatical British English, natural, the right tense, voice and agreement (The slides aren't ready; The reports have been read), and the meaning fits the sentence or is stated in the context. If two options are both acceptable, list both. If none is acceptable, return an empty list. Do not list an option only because it is the most likely intended answer.",
   "For a reading or listening question, an option is correct only when the context states it; an option that is only partly supported or mixes two details is not correct.",
   "Distinguish an object pronoun (Please give the file to her after the meeting) from a possessive pronoun (The file is hers). Use the role in the whole sentence.",
-  "For an item with mustTest, also set testsLabelledPoint: true only when choosing the correct option requires the grammar point named in mustTest (not today's other topic or a vocabulary choice).",
+  "For an item with mustTest, also set testsLabelledPoint: true only when choosing the correct option requires the grammar point named in mustTest. Check the slot the learner answers and what distinguishes the key from its distractors. A different tense or a vocabulary choice fails, even if the named grammar appears elsewhere in the sentence.",
   "note: one short English sentence. Return one entry per input item with its ref unchanged."
 ].join("\n");
 
@@ -436,12 +443,14 @@ export function monthlyAnswerVerificationFindings(items: readonly MonthlyVerifia
       add("MONTHLY_ANSWER_NOT_UNIQUE", item.component, `${item.label}: "${correct.join("\" and \"")}" are all correct${note}`);
     }
     if (item.mustTest && verdict.testsLabelledPoint === false) {
-      add("MONTHLY_DAILY_GRAMMAR_RECALL_OFF_TOPIC", item.component, `${item.label} is labelled as the topic A recall (${item.milestoneId}: ${item.mustTest}) but does not test it${note}`);
+      if (item.review) add("MONTHLY_REVIEW_GRAMMAR_SCOPE", item.component, `${item.label} does not test its review step (${item.milestoneId}: ${item.mustTest})${note}`);
+      else add("MONTHLY_DAILY_GRAMMAR_RECALL_OFF_TOPIC", item.component, `${item.label} is labelled as the topic A recall (${item.milestoneId}: ${item.mustTest}) but does not test it${note}`);
     }
   }
   const hints: Record<string, string> = {
     MONTHLY_ANSWER_KEY_DISPUTED: "The answer key must be the one correct option; fix the key and explanation or rewrite the item",
     MONTHLY_ANSWER_NOT_UNIQUE: "Every item must have exactly one correct option; rewrite the sentence or replace the distractors that are also correct",
+    MONTHLY_REVIEW_GRAMMAR_SCOPE: "Each review question and its retry must test the same assigned grammar step",
     MONTHLY_DAILY_GRAMMAR_RECALL_OFF_TOPIC: "The recall question must test the locked topic A step it is labelled with; rewrite it with a topic A sentence and options"
   };
   return [...grouped.values()].map((slot) => finding(slot.code, `${hints[slot.code]}: ${slot.messages.join("; ")}`, dayNumber, slot.component));

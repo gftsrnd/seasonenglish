@@ -10,6 +10,13 @@ describe("attachMonthlyExpandedTerms", () => {
       "A1"
     );
     expect(item!.synonyms).toEqual([]);
+    const [otherSense] = attachMonthlyExpandedTerms(
+      [{ word: "read", meaning: "đọc lại để rà soát", synonyms: [{ word: "review", note: "xem lại" }] }],
+      [{ id: "read", word: "read", meaning: "đọc lại để rà soát" }],
+      [],
+      "A1"
+    );
+    expect(otherSense!.synonyms).toEqual([{ word: "review", note: "xem lại" }]);
   });
   const cores = [{ id: "c1", word: "client", type: "noun", ipa: "/ˈklaɪənt/" }];
   const supports = [

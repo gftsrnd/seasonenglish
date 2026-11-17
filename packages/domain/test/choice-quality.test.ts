@@ -94,6 +94,8 @@ describe("minimal pair heuristic (AI quality round 2, 11/11)", () => {
       expect(isPlausibleMinimalPair(a!, b!), `${a}/${b}`).toBe(true);
     }
     expect(isPlausibleMinimalPair("ship", "sheep", { first: "/ʃɪp/", second: "/ʃiːp/" })).toBe(true);
+    expect(isPlausibleMinimalPair("peace", "peas", { first: "/piːs/", second: "/piːz/" })).toBe(true);
+    expect(isPlausibleMinimalPair("peace", "piece", { first: "/piːs/", second: "/piːs/" })).toBe(false);
   });
 
   it("rejects the invalid pairs seen in the 11/11 remeasure (event/segment, bat/box, sheet/shift, bomb/bond, correct/count)", async () => {

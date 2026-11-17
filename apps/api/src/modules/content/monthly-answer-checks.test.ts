@@ -43,6 +43,19 @@ describe("December 2026 wrong answer keys (deterministic)", () => {
       answer: "her"
     })).toEqual([]);
   });
+  it("tells direct-object her from a possessive predicative answer", () => {
+    const check = (prompt: string, answer: string) => monthlyAnswerKeyIssues({ label: "grammar", prompt, options: ["she", "her", "hers", "herself"], answer });
+    expect(check("The supervisor called ____ today.", "her")).toEqual([]);
+    expect(check("Talk about the schedule with ____ before lunch.", "her")).toEqual([]);
+    expect(check("The person at reception is ____.", "her")).toEqual([]);
+    expect(check("The blue folder is ____.", "hers")).toEqual([]);
+    expect(check("The folder contains ____ invoices.", "hers")[0]).toContain('"her" is the correct option');
+  });
+  it("accepts a real topic A recall of frequency adverbs and detects an off-topic key", () => {
+    const step = { id: "topic-a-frequency", focus: "Vị trí của trạng từ tần suất", formula: "Subject + usually/often/never + V" };
+    expect(monthlyRecallItemIssue(step, { prompt: "The warehouse ____ closes at eight.", answer: "usually" }, "recall")).toBeUndefined();
+    expect(monthlyRecallItemIssue(step, { prompt: "They ____ taking a break.", answer: "are" }, "recall")).toContain("does not use that step's structure");
+  });
   it("flags B1 L16 g3: used to + verb next to its simple past", () => {
     const issues = monthlyAnswerKeyIssues(item("B1-L16", "k1-3"));
     expect(issues.join(" ")).toContain('both "used to assess" and "assessed" are correct');

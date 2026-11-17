@@ -407,6 +407,11 @@ describe("learner lesson study content", () => {
     expect(usage.compareDocumentPosition(formula) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText(/Trong giọng Mỹ, t trong “meeting”/u)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: meeting" })).toBeEnabled();
+    const pronunciation = lesson.content.parts.find((part: { code: string }) => part.code === "pronunciation");
+    pronunciation.content.words = [{ word: "city", ipa: "/ˈsɪt.i/" }, { word: "team", ipa: "/tiːm/" }];
+    const next = render(<LearnerLesson key="varied" view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+    expect(within(next.container).getByText(/Trong giọng Mỹ, t trong “city”/u)).toBeInTheDocument();
+    expect(within(next.container).queryByText(/Trong giọng Mỹ, t trong “team”/u)).not.toBeInTheDocument();
   });
 
   it("hides the IPA-only control and keeps pronunciation word examples audible", () => {
