@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="64" viewBox="0 0 160 64">
+  <title>Bụi và mảnh lá bật lên khi vật chạm đất · Mùa Thu</title>
+  <g fill="none" stroke-linecap="round">
+    <ellipse cx="80" cy="55" rx="34" ry="4" stroke="#e6af6b" stroke-width="3.5" opacity=".85">
+      <animate attributeName="rx" values="12;61;66" dur=".48s" fill="freeze"/>
+      <animate attributeName="opacity" values=".92;.55;0" dur=".48s" fill="freeze"/>
+    </ellipse>
+    <path d="M69 52Q52 36 37 35M94 52Q111 34 128 37" stroke="#ffd496" stroke-width="3.4">
+      <animate attributeName="opacity" values=".95;.86;0" dur=".42s" fill="freeze"/>
+    </path>
+  </g>
+  <g fill="#d18142" stroke="#944524" stroke-width="1.25">
+    <path d="M20 34l7-3 7 3-8 5zM53 26l6-5 5 7-8 3zM102 22l7 6-7 5-3-5zM127 36l7-3 8 3-8 5z"/>
+    <animateTransform attributeName="transform" type="translate" values="0 20;0 -8;0 15" keyTimes="0;.42;1" dur=".50s" fill="freeze"/>
+    <animate attributeName="opacity" values=".45;1;0" dur=".50s" fill="freeze"/>
+  </g>
+</svg>

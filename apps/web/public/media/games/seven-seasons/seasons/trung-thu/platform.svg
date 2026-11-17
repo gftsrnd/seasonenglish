@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -1.5 100 83" width="100" height="83" preserveAspectRatio="none">
+  <title>Bục gỗ sơn tím viền trăng</title>
+  <path d="M3 11L8 2H92L97 11V72L92 79H8L3 72Z" fill="#715280" stroke="#463356" stroke-width="2" />
+  <path d="M4 12L8 2H92L96 12L88 18H12Z" fill="#d5abb6" />
+
+    <path d="M8 25H92V46H8Z" fill="#95719f" /><path d="M8 50H92V67H8Z" fill="#805d8b" />
+    <path d="M9 47H91M9 68H91" stroke="#59456d" stroke-width="2" />
+    <path d="M18 29Q27 32 36 30M64 58Q76 54 84 57" stroke="#c395b6" stroke-width="1.5" fill="none" />
+    <path d="M9 20H91L88 70H12Z" fill="none" stroke="#e4bd82" stroke-width="1.7" />
+    <path d="M55 30C46 28 41 33 41 41C41 52 52 57 61 48C51 50 46 40 55 30Z" fill="#f0d496" />
+    <path d="M60 34l2 4 4 1-4 2-1 4-2-4-4-1 4-2z" fill="#f4d08b" />
+  <path d="M8 1H92" stroke="#d5abb6" stroke-width="2" stroke-linecap="round" />
+</svg>

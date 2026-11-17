@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 80" width="960" height="80" preserveAspectRatio="none"><title>Mặt đất · Hạ</title>
+<defs><pattern id="tiles" x="0" y="0" width="180" height="80" patternUnits="userSpaceOnUse" viewBox="0 0 100 80" preserveAspectRatio="none">
+  <path fill="#b6753f" d="M0 9H100V80H0Z"/><g stroke="#6c4734" stroke-width="2.4" stroke-linecap="round"><path d="M0 25Q22 36 47 25T100 25M0 40Q22 49 47 40T100 40M0 56Q22 65 47 56T100 56M0 72Q22 80 47 72T100 72" fill="none" opacity=".6"/><path d="M11 27l7 2m15 4 7-1m-17 16 8 0m48 14 9-3m-22-26 7-2" stroke="#f4cf87"/></g>
+  <path d="M0 5Q17 1 29 5T61 5T84 5T100 5V16Q82 13 66 20T30 16T0 20Z" fill="#e8bb68"/><path d="M0 8H100" stroke="#fff3b6" stroke-width="2" opacity=".67"/>
+</pattern></defs><rect width="960" height="80" rx="0" fill="url(#tiles)"/></svg>

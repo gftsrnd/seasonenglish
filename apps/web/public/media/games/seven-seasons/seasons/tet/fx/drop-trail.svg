@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 106"><title>Vệt rơi · Mảnh giấy đỏ và nhũ vàng từ lì xì</title><defs><g id="fragment"><path d="M-5-3L4-4L6 2L-2 5Z" fill="#d74943" stroke="#8d3836"/><path d="M8-4L12-2L9 2L6 0Z" fill="#f3c367" stroke="#ad7741"/></g></defs><g>
+        <path d="M59 67V31M83 91V18M110 74V44" fill="none" stroke="#b26743" opacity=".68" stroke-width="4.4" stroke-linecap="round"/>
+        <path d="M59 65V32M83 89V19M110 72V45" fill="none" stroke="#f4bf65" stroke-width="2.4" stroke-linecap="round"/>
+        <use href="#fragment" transform="translate(44 56) rotate(-21)"/><use href="#fragment" transform="translate(121 46) rotate(16)"/><use href="#fragment" transform="translate(96 26) rotate(-9)"/>
+        <animateTransform attributeName="transform" type="translate" values="0 10;0 -7;0 -13" dur=".7s" fill="freeze"/>
+        <animate attributeName="opacity" values=".5;1;.75" dur=".7s" fill="freeze"/></g></svg>

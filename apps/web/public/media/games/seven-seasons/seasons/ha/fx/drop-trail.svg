@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 106"><title>Vệt rơi · Giọt kem dâu và vụn ốc quế</title><defs><g id="fragment"><path d="M0-6Q8 1 4 5Q0 9-4 5Q-7 0 0-6Z" fill="#f39fac" stroke="#b96b77"/><path d="M7 3l5 2-3 4-4-2z" fill="#d5a15e" stroke="#9e713e"/></g></defs><g>
+        <path d="M59 67V31M83 91V18M110 74V44" fill="none" stroke="#ac5e5c" opacity=".68" stroke-width="4.4" stroke-linecap="round"/>
+        <path d="M59 65V32M83 89V19M110 72V45" fill="none" stroke="#ef9ca9" stroke-width="2.4" stroke-linecap="round"/>
+        <use href="#fragment" transform="translate(44 56) rotate(-21)"/><use href="#fragment" transform="translate(121 46) rotate(16)"/><use href="#fragment" transform="translate(96 26) rotate(-9)"/>
+        <animateTransform attributeName="transform" type="translate" values="0 10;0 -7;0 -13" dur=".7s" fill="freeze"/>
+        <animate attributeName="opacity" values=".5;1;.75" dur=".7s" fill="freeze"/></g></svg>

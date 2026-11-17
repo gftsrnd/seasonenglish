@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -1.5 100 83" width="100" height="83" preserveAspectRatio="none">
+  <title>Bục gỗ bạch dương phủ tuyết</title>
+  <path d="M3 11L8 2H92L97 11V72L92 79H8L3 72Z" fill="#c6a17c" stroke="#796355" stroke-width="2" />
+  <path d="M4 12L8 2H92L96 12L88 18H12Z" fill="#f5faff" />
+
+    <path d="M8 26H92V69H8Z" fill="#e1c5a3" />
+    <path d="M8 42H92M8 58H92M32 29V42M66 43V57M39 58V71" fill="none" stroke="#ad9076" stroke-width="2" />
+    <path d="M15 32l6 2m24 16 8-2m25 18 6-3m-67 4 9 1m50-35 5 2" fill="none" stroke="#8c7260" stroke-width="1.75" stroke-linecap="round" />
+    <path d="M4 13L8 3H92L96 13Q94 25 86 22Q79 28 72 22Q63 18 56 24Q49 29 44 22Q38 19 32 25Q24 27 20 22Q10 26 4 13Z" fill="#f1f8ff" stroke="#a2bfe0" stroke-width="1.2" />
+  <path d="M8 1H92" stroke="#f5faff" stroke-width="2" stroke-linecap="round" />
+</svg>

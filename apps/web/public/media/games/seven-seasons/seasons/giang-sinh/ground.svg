@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 80" width="960" height="80" preserveAspectRatio="none"><title>Mặt đất · Giáng sinh – Năm mới</title>
+<defs><pattern id="tiles" x="0" y="0" width="180" height="80" patternUnits="userSpaceOnUse" viewBox="0 0 100 80" preserveAspectRatio="none">
+  <path fill="#345965" d="M0 9H100V80H0Z"/><g stroke="#23404c" stroke-width="2.4" stroke-linecap="round"><path d="M0 32H100M0 53H100M0 73H100M19 20V32M72 20V32M44 32V53M19 53V73M72 53V73" fill="none"/><path d="M9 44h19m28 20h21m3-21h13" stroke="#81a7a2"/></g>
+  <path d="M0 3Q10 0 22 4Q38 0 51 3Q65 0 77 4Q90 0 100 4V17Q95 25 90 17Q81 27 75 17Q69 26 63 16Q51 24 44 17Q34 26 27 17Q22 24 16 16Q6 24 0 17Z" fill="#f1faf6"/><path d="M0 8H100" stroke="#f1faf6" stroke-width="2" opacity=".67"/>
+</pattern></defs><rect width="960" height="80" rx="0" fill="url(#tiles)"/></svg>

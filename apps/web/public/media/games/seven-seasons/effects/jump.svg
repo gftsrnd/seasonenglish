@@ -1,0 +1,14 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <title>Hiệu ứng chuyển động</title>
+  <g>
+    <g opacity="1">
+      <animate attributeName="opacity" values=".65;1;.94;0" keyTimes="0;.14;.55;1" dur=".63s" />
+      <circle cx="64" cy="64" r="26" fill="none" stroke="#d9f1ff" stroke-width="5">
+        <animate attributeName="r" values="16;28;54" dur=".63s" />
+        <animate attributeName="opacity" values="1;.85;0" dur=".63s" />
+      </circle>
+      <path d="M42 77q11-17 22 0 10-12 22 0" fill="none" stroke="#d9f1ff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+  </g>
+</svg>

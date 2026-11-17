@@ -4,6 +4,7 @@ import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within }
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GameDescriptor, GameHubView, GameWordSetView } from "@e4s/contracts";
 import { CrosswordGame } from "../games/CrosswordGame.js";
+import { ThemeProvider } from "../shared/ThemeProvider.js";
 import { SeasonCatchGame } from "../games/SeasonCatchGame.js";
 import { SeasonRioGame } from "../games/SeasonRioGame.js";
 import { TypingRaceGame } from "../games/TypingRaceGame.js";
@@ -72,20 +73,21 @@ describe("learner game visual and interaction regressions", () => {
     expect(screen.queryByRole("group", { name: "Nhóm từ loại" })).not.toBeInTheDocument();
   });
 
-  it("keeps the original game artwork and scene objects without changing initial mechanics", () => {
+  it("uses the current season's supplied Catch scene and keeps the four-item cap", () => {
+    localStorage.setItem("e4s:organisation-theme", "autumn");
+    const catchView = render(<ThemeProvider><SeasonCatchGame words={wordSet.words} cefr="A2" onFinish={vi.fn()} /></ThemeProvider>);
+    expect(catchView.container.querySelector('.season-stage-background')).toHaveAttribute("src", "/media/games/seven-seasons/seasons/thu/background.svg");
+    expect(catchView.container.querySelector('.falling-item img[src$="/drop.svg"]')).toBeInTheDocument();
+    expect(catchView.container.querySelector('.catch-hero img')).toHaveAttribute("alt", "Sóc cầm rổ");
+    expect(catchView.container.querySelectorAll('.game-lives img[src$="/heart.svg"]')).toHaveLength(3);
+    expect(screen.getAllByTestId("falling-item")).toHaveLength(3);
+    localStorage.removeItem("e4s:organisation-theme");
+  });
+
+  it("keeps Rio's existing gate layout", () => {
     document.documentElement.dataset.theme = "autumn";
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
-
-    const catchView = render(<SeasonCatchGame words={wordSet.words} cefr="A2" onFinish={vi.fn()} />);
-    expect(catchView.container.querySelector('.catch-prompt img[src^="data:image/svg+xml"]')).toBeInTheDocument();
-    expect(catchView.container.querySelector('.falling-item img[src^="data:image/svg+xml"]')).toBeInTheDocument();
-    expect(catchView.container.querySelector('.season-animal[src^="data:image/svg+xml"]')).toHaveAttribute("alt", "Sóc mùa thu");
-    expect(catchView.container.querySelector(".basket .lucide-shopping-basket")).toBeInTheDocument();
-    expect(catchView.container.querySelectorAll(".game-lives .lucide-heart")).toHaveLength(3);
-    expect(catchView.container.querySelector(".game-lives")).not.toHaveTextContent(/[❤️🖤]/);
-    expect(screen.getAllByTestId("falling-item")).toHaveLength(3);
-    catchView.unmount();
 
     const rioView = render(<SeasonRioGame words={wordSet.words} onFinish={vi.fn()} />);
     expect(rioView.container.querySelector('.gift-gate > span img[src^="data:image/svg+xml"]')).toBeInTheDocument();
@@ -663,7 +665,7 @@ describe("learner game visual and interaction regressions", () => {
     scene.focus();
     fireEvent.keyDown(scene, { key: "ArrowRight" });
     expect(basket).toHaveStyle({ left: "55%" });
-    expect(basket.querySelector(".basket svg")).toBeInTheDocument();
+    expect(basket.querySelector(".season-catch-player")).toBeInTheDocument();
   });
 
   it("shows a recoverable error when removing the active vocabulary set fails", async () => {

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 106"><title>Vệt rơi · Dải ruy băng của hộp quà</title><defs><g id="fragment"><path d="M-7 3Q-4-7 2-2Q3 0 0 2Q-3 3-2 4Q3 9 8 1" fill="none" stroke="#d66c73" stroke-width="2.2" stroke-linecap="round"/><path d="M7-5l3 2-3 3-2-2z" fill="#f3d990"/></g></defs><g>
+        <path d="M59 67V31M83 91V18M110 74V44" fill="none" stroke="#715b62" opacity=".68" stroke-width="4.4" stroke-linecap="round"/>
+        <path d="M59 65V32M83 89V19M110 72V45" fill="none" stroke="#e9a5a2" stroke-width="2.4" stroke-linecap="round"/>
+        <use href="#fragment" transform="translate(44 56) rotate(-21)"/><use href="#fragment" transform="translate(121 46) rotate(16)"/><use href="#fragment" transform="translate(96 26) rotate(-9)"/>
+        <animateTransform attributeName="transform" type="translate" values="0 10;0 -7;0 -13" dur=".7s" fill="freeze"/>
+        <animate attributeName="opacity" values=".5;1;.75" dur=".7s" fill="freeze"/></g></svg>

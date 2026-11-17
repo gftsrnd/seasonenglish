@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 216 96">
+      <title>Pháo hoa mở rương</title>
+      <style>
+        @media (prefers-reduced-motion: no-preference) {
+          .burst { animation: bloom .72s cubic-bezier(.19,.74,.28,1) var(--wait) both; }
+          .trail { animation: launch .48s ease-out .03s both; }
+          @keyframes bloom {
+            0% { transform: scale(.12); opacity: 0; }
+            20% { opacity: 1; }
+            72% { opacity: 1; }
+            100% { transform: scale(1); opacity: .88; }
+          }
+          @keyframes launch {
+            0% { stroke-dashoffset: 1; opacity: 0; }
+            23% { opacity: 1; }
+            73% { opacity: .8; }
+            100% { stroke-dashoffset: 0; opacity: .35; }
+          }
+        }
+      </style>
+      <g class="trail" fill="none" stroke="#fff4c0" stroke-width="2.4" stroke-linecap="round"
+         stroke-dasharray="1" opacity=".52">
+        <path pathLength="1" d="M106 93Q89 83 61 63M109 92Q116 74 110 54M112 93Q137 84 158 63"/>
+      </g>
+      <g transform="translate(47 46) scale(0.84)" style="--wait:120ms;color:#ffa490">
+          <g class="burst" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none">
+            <g class="rays"><g transform="rotate(-12)"><path d="M0-5 Q1-10 0-16"/><circle cy="-20" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(28)"><path d="M0-5 Q1-10 0-19"/><circle cy="-23" r="1.35" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(68)"><path d="M0-5 Q1-10 0-14"/><circle cy="-18" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(108)"><path d="M0-5 Q1-10 0-21"/><circle cy="-25" r="1.35" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(148)"><path d="M0-5 Q1-10 0-17"/><circle cy="-21" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(188)"><path d="M0-5 Q1-10 0-20"/><circle cy="-24" r="1.35" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(228)"><path d="M0-5 Q1-10 0-15"/><circle cy="-19" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(268)"><path d="M0-5 Q1-10 0-19"/><circle cy="-23" r="1.35" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(308)"><path d="M0-5 Q1-10 0-16"/><circle cy="-20" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g></g>
+            <path d="M0-4L1-1L4 0L1 1L0 4L-1 1L-4 0L-1-1Z" fill="#fff5d0" stroke-width=".7"/>
+          </g>
+        </g><g transform="translate(110 29) scale(1.08)" style="--wait:235ms;color:#ffe68c">
+          <g class="burst" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none">
+            <g class="rays"><g transform="rotate(8)"><path d="M0-5 Q1-10 0-16"/><circle cy="-20" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(48)"><path d="M0-5 Q1-10 0-19"/><circle cy="-23" r="1.35" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(88)"><path d="M0-5 Q1-10 0-14"/><circle cy="-18" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(128)"><path d="M0-5 Q1-10 0-21"/><circle cy="-25" r="1.35" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(168)"><path d="M0-5 Q1-10 0-17"/><circle cy="-21" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(208)"><path d="M0-5 Q1-10 0-20"/><circle cy="-24" r="1.35" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(248)"><path d="M0-5 Q1-10 0-15"/><circle cy="-19" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(288)"><path d="M0-5 Q1-10 0-19"/><circle cy="-23" r="1.35" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(328)"><path d="M0-5 Q1-10 0-16"/><circle cy="-20" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g></g>
+            <path d="M0-4L1-1L4 0L1 1L0 4L-1 1L-4 0L-1-1Z" fill="#fff5d0" stroke-width=".7"/>
+          </g>
+        </g><g transform="translate(171 43) scale(0.85)" style="--wait:170ms;color:#84e3b0">
+          <g class="burst" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none">
+            <g class="rays"><g transform="rotate(19)"><path d="M0-5 Q1-10 0-16"/><circle cy="-20" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(59)"><path d="M0-5 Q1-10 0-19"/><circle cy="-23" r="1.35" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(99)"><path d="M0-5 Q1-10 0-14"/><circle cy="-18" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(139)"><path d="M0-5 Q1-10 0-21"/><circle cy="-25" r="1.35" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(179)"><path d="M0-5 Q1-10 0-17"/><circle cy="-21" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(219)"><path d="M0-5 Q1-10 0-20"/><circle cy="-24" r="1.35" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(259)"><path d="M0-5 Q1-10 0-15"/><circle cy="-19" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(299)"><path d="M0-5 Q1-10 0-19"/><circle cy="-23" r="1.35" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g><g transform="rotate(339)"><path d="M0-5 Q1-10 0-16"/><circle cy="-20" r="1.7" fill="currentColor" stroke="#6e4b4f" stroke-width=".65"/></g></g>
+            <path d="M0-4L1-1L4 0L1 1L0 4L-1 1L-4 0L-1-1Z" fill="#fff5d0" stroke-width=".7"/>
+          </g>
+        </g>
+    </svg>

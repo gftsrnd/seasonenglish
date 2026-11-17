@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 80" width="960" height="80" preserveAspectRatio="none"><title>Mặt đất · Đông</title>
+<defs><pattern id="tiles" x="0" y="0" width="180" height="80" patternUnits="userSpaceOnUse" viewBox="0 0 100 80" preserveAspectRatio="none">
+  <path fill="#4281bc" d="M0 9H100V80H0Z"/><g stroke="#2b507c" stroke-width="2.4" stroke-linecap="round"><path d="M0 25 21 20 43 39 37 62 0 71ZM43 39 63 23 77 47 69 80 37 62Z" fill="#b5e9ff" opacity=".51"/><path d="M77 47 99 27 100 78 69 80Z" fill="#76cbf6"/><path d="M19 33 13 51 23 59m40-27-9 14 5 10" stroke="#e5f8ff" fill="none"/></g>
+  <path d="M0 5Q13 1 28 5Q56 -1 68 4Q84 1 100 5V15L93 18L90 26L83 18L67 20L61 27L54 17L42 19L39 24L30 17L18 21L14 16L0 19Z" fill="#f0fbff"/><path d="M0 8H100" stroke="#f0fbff" stroke-width="2" opacity=".67"/>
+</pattern></defs><rect width="960" height="80" rx="0" fill="url(#tiles)"/></svg>

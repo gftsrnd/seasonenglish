@@ -1,0 +1,62 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="112" viewBox="0 0 192 112">
+  <title>Hạt chuyển động theo mùa</title>
+  <g>
+    <g transform="translate(16 16)" opacity=".52">
+      <g transform="scale(.34)">
+        <path d="M0-8V8M-7-4 7 4M-7 4 7-4" fill="none" stroke="#325a91" stroke-width="1.35" />
+      </g>
+      <animateTransform attributeName="transform" type="translate" values="16 16;24 62" dur="1.80s" begin="0.00s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0;.8;.5;0" dur="1.80s" begin="0.00s" repeatCount="indefinite" />
+    </g>
+    <g transform="translate(44 55)" opacity=".52">
+      <g transform="scale(.34)">
+        <path d="M0-8V8M-7-4 7 4M-7 4 7-4" fill="none" stroke="#325a91" stroke-width="1.35" />
+      </g>
+      <animateTransform attributeName="transform" type="translate" values="44 55;52 101" dur="1.93s" begin="0.10s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0;.8;.5;0" dur="1.93s" begin="0.10s" repeatCount="indefinite" />
+    </g>
+    <g transform="translate(78 29)" opacity=".52">
+      <g transform="scale(.34)">
+        <path d="M0-8V8M-7-4 7 4M-7 4 7-4" fill="none" stroke="#325a91" stroke-width="1.35" />
+      </g>
+      <animateTransform attributeName="transform" type="translate" values="78 29;86 75" dur="2.06s" begin="0.20s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0;.8;.5;0" dur="2.06s" begin="0.20s" repeatCount="indefinite" />
+    </g>
+    <g transform="translate(108 74)" opacity=".52">
+      <g transform="scale(.34)">
+        <path d="M0-8V8M-7-4 7 4M-7 4 7-4" fill="none" stroke="#325a91" stroke-width="1.35" />
+      </g>
+      <animateTransform attributeName="transform" type="translate" values="108 74;116 120" dur="2.19s" begin="0.30s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0;.8;.5;0" dur="2.19s" begin="0.30s" repeatCount="indefinite" />
+    </g>
+    <g transform="translate(154 15)" opacity=".52">
+      <g transform="scale(.34)">
+        <path d="M0-8V8M-7-4 7 4M-7 4 7-4" fill="none" stroke="#325a91" stroke-width="1.35" />
+      </g>
+      <animateTransform attributeName="transform" type="translate" values="154 15;162 61" dur="2.32s" begin="0.40s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0;.8;.5;0" dur="2.32s" begin="0.40s" repeatCount="indefinite" />
+    </g>
+    <g transform="translate(143 53)" opacity=".52">
+      <g transform="scale(.34)">
+        <path d="M0-8V8M-7-4 7 4M-7 4 7-4" fill="none" stroke="#325a91" stroke-width="1.35" />
+      </g>
+      <animateTransform attributeName="transform" type="translate" values="143 53;151 99" dur="2.45s" begin="0.50s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0;.8;.5;0" dur="2.45s" begin="0.50s" repeatCount="indefinite" />
+    </g>
+    <g transform="translate(178 39)" opacity=".52">
+      <g transform="scale(.34)">
+        <path d="M0-8V8M-7-4 7 4M-7 4 7-4" fill="none" stroke="#325a91" stroke-width="1.35" />
+      </g>
+      <animateTransform attributeName="transform" type="translate" values="178 39;186 85" dur="2.58s" begin="0.60s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0;.8;.5;0" dur="2.58s" begin="0.60s" repeatCount="indefinite" />
+    </g>
+    <g transform="translate(53 15)" opacity=".52">
+      <g transform="scale(.34)">
+        <path d="M0-8V8M-7-4 7 4M-7 4 7-4" fill="none" stroke="#325a91" stroke-width="1.35" />
+      </g>
+      <animateTransform attributeName="transform" type="translate" values="53 15;61 61" dur="2.71s" begin="0.70s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0;.8;.5;0" dur="2.71s" begin="0.70s" repeatCount="indefinite" />
+    </g>
+  </g>
+</svg>

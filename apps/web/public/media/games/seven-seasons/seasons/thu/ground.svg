@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 80" width="960" height="80" preserveAspectRatio="none"><title>Mặt đất · Thu</title>
+<defs><pattern id="tiles" x="0" y="0" width="180" height="80" patternUnits="userSpaceOnUse" viewBox="0 0 100 80" preserveAspectRatio="none">
+  <path fill="#854423" d="M0 9H100V80H0Z"/><g stroke="#522e29" stroke-width="2.4" stroke-linecap="round"><path d="M0 29Q30 24 61 30T100 29M0 47Q16 45 39 50T100 45M0 65Q12 53 29 60T100 62M15 25v48m70-48v48" fill="none" stroke="#5f332c"/><path d="M34 36q13-6 24 0-11 7-24 0Z" fill="#c57948"/></g>
+  <path d="M0 4H100V15L90 19L74 13L63 19L46 16L38 20L26 13L14 18L0 13Z" fill="#c98039"/><path d="M0 8H100" stroke="#f6c173" stroke-width="2" opacity=".67"/>
+</pattern></defs><rect width="960" height="80" rx="0" fill="url(#tiles)"/></svg>

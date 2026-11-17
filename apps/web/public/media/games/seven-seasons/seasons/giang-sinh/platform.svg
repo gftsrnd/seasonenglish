@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -1.5 100 83" width="100" height="83" preserveAspectRatio="none">
+  <title>Bục ván thông xanh phủ tuyết</title>
+  <path d="M3 11L8 2H92L97 11V72L92 79H8L3 72Z" fill="#4f8063" stroke="#2e5147" stroke-width="2" />
+  <path d="M4 12L8 2H92L96 12L88 18H12Z" fill="#f8fdf3" />
+
+    <path d="M8 29H92V46H8Z" fill="#6b9d7d" /><path d="M8 49H92V68H8Z" fill="#629070" />
+    <path d="M8 47H92M8 69H92M32 32V46M66 49V67" stroke="#426951" stroke-width="2" />
+    <path d="M13 36q9-4 15 0m14 5q12 4 23-2m8 19 13 2M17 61l12-3" fill="none" stroke="#a1bea1" stroke-width="1.6" stroke-linecap="round" />
+    <path d="M4 13L8 3H92L96 13Q94 24 87 20Q78 27 72 21Q64 20 60 22Q55 27 50 21Q41 18 36 21Q29 27 23 20Q17 20 12 23Q6 23 4 13Z" fill="#f2faf0" stroke="#abc9c1" stroke-width="1.2" />
+    <path d="M14 17q4-8 11-8-1 8-9 9m61-1q4-8 10-8-1 8-8 9" fill="#528867" stroke="#3a6952" stroke-width=".8" />
+    <circle cx="16" cy="18" r="2" fill="#c15b62" /><circle cx="80" cy="18" r="2" fill="#c15b62" />
+  <path d="M8 1H92" stroke="#f8fdf3" stroke-width="2" stroke-linecap="round" />
+</svg>

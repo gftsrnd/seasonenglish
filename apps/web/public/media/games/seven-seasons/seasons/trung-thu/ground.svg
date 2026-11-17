@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 80" width="960" height="80" preserveAspectRatio="none"><title>Mặt đất · Trung thu</title>
+<defs><pattern id="tiles" x="0" y="0" width="180" height="80" patternUnits="userSpaceOnUse" viewBox="0 0 100 80" preserveAspectRatio="none">
+  <path fill="#565180" d="M0 9H100V80H0Z"/><g stroke="#342d58" stroke-width="2.4" stroke-linecap="round"><path d="M0 30q14-8 29 0h11m12 21q14-8 21 0h19M17 66h25q11-8 18 0" stroke="#b5a5de" fill="none"/></g>
+  <path d="M0 3H100V15Q96 18 88 15Q89 26 77 22Q67 29 62 21Q55 20 52 16Q46 23 37 19Q31 27 22 21Q11 21 9 16L0 15Z" fill="#8679b6"/><path d="M0 8H100" stroke="#fce2a1" stroke-width="2" opacity=".67"/>
+</pattern></defs><rect width="960" height="80" rx="0" fill="url(#tiles)"/></svg>

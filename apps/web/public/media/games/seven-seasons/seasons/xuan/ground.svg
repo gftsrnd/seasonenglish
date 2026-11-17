@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 80" width="960" height="80" preserveAspectRatio="none"><title>Mặt đất · Xuân</title>
+<defs><pattern id="tiles" x="0" y="0" width="180" height="80" patternUnits="userSpaceOnUse" viewBox="0 0 100 80" preserveAspectRatio="none">
+  <path fill="#9a583f" d="M0 9H100V80H0Z"/><g stroke="#563b36" stroke-width="2.4" stroke-linecap="round"><path d="M9 28l15-6 13 8-3 12-18 3zM52 52l14-9 17 3 7 12-12 11-20-5z" fill="#db926e" opacity=".62"/><path d="M4 58l11-7 18 2m17-22 13-8 22 2" fill="none"/></g>
+  <path d="M0 4 Q8 -1 17 4 Q28 1 36 4 L100 4V17 Q93 13 87 19T74 18T60 19T43 16T30 19T14 16T0 18Z" fill="#71a948"/><path d="M0 8H100" stroke="#f7b7c6" stroke-width="2" opacity=".67"/>
+</pattern></defs><rect width="960" height="80" rx="0" fill="url(#tiles)"/></svg>

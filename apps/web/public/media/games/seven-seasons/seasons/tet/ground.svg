@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 80" width="960" height="80" preserveAspectRatio="none"><title>Mặt đất · Tết Nguyên đán</title>
+<defs><pattern id="tiles" x="0" y="0" width="180" height="80" patternUnits="userSpaceOnUse" viewBox="0 0 100 80" preserveAspectRatio="none">
+  <path fill="#b24e43" d="M0 9H100V80H0Z"/><g stroke="#622838" stroke-width="2.4" stroke-linecap="round"><path d="M0 27H100M0 47H100M0 67H100M28 27V47M70 27V47M13 47V67M54 47V67M89 47V67M34 67V80M74 67V80" fill="none" stroke="#ffc27d" opacity=".65"/><path d="M0 19H100" stroke="#893238" stroke-width="4"/></g>
+  <path d="M0 2H100V16H0Z" fill="#e6b361"/><path d="M0 8H100" stroke="#ffe29b" stroke-width="2" opacity=".67"/>
+</pattern></defs><rect width="960" height="80" rx="0" fill="url(#tiles)"/></svg>
