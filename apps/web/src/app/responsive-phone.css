@@ -583,7 +583,7 @@
 @media (max-width: 480px) {
   /* Chờ duyệt (expanded): the "Hồ sơ: …" disclosure ends with "…" instead of
      being cut; the level select matches the 30px buttons next to it. */
-  :root:root:root .operator-profile-disclosure { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
+  :root:root:root .operator-profile-disclosure { display: block; width: 100%; padding-inline: 0 !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
   :root:root .operator-profile-disclosure > .ui-chevron { display: inline-block; vertical-align: middle; margin-inline-end: 4px; }
   :root:root:root .operator-pending-review-body > .row > select { flex: 1 1 130px; height: var(--phone-btn-h); padding: 0 8px; border-radius: 9px; font-size: 13px; line-height: calc(var(--phone-btn-h) - 2px); }
   :root:root .operator-pending-review-body > .row { align-items: center; }
