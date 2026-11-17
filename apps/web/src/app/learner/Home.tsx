@@ -1,12 +1,13 @@
 import { RequestEvidenceFields, requestEvidenceArgs, type RequestEvidenceDraft } from "../shared/RequestEvidence.js";
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { BookOpen, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MessageCircle, Play, Sprout } from "lucide-react";
+import { useEffect, useState, type CSSProperties } from "react";
+import { BookOpen, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MessageCircle, Play } from "lucide-react";
 import type { LearnerHomeView, LearnerCallbacks } from "./contracts.js";
 import { Button, Modal, Notice, PageTitle, Progress, AppLink, learnerLessonLabel, learnerLessonPhrase } from "./ui.js";
 import { buildMonthlyTeachingCalendar } from "@e4s/domain/monthly";
 import { LevelReadinessCard } from "./LevelReadiness.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
-import { InfoTitle, ModalCloseButton, useCompactUi } from "../shared/CompactUi.js";
+import { InfoTitle, useCompactUi } from "../shared/CompactUi.js";
+import { RewardAnnouncementDialog } from "./RewardAnnouncementDialog.js";
 import { OPEN_LEARNER_HOME_GUIDE } from "../shared/AppGuide.js";
 import type { LearnerComplaintView } from "@e4s/contracts";
 
@@ -106,7 +107,7 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
       onClose={() => void finishPlacementWelcome(false)}
       dismissOnBackdrop
       actions={<><Button onClick={() => void finishPlacementWelcome(true)}>Kháng nghị đầu vào</Button><Button variant="primary" onClick={() => void finishPlacementWelcome(false)}>Xem hướng dẫn</Button></>}
-    /> : celebration ? <LevelUpCelebration announcement={celebration} displayName={view.learner.displayName} onClose={acknowledgeCelebration} /> : null}
+    /> : celebration ? <RewardAnnouncementDialog announcement={celebration} onClose={acknowledgeCelebration} /> : null}
     {assessmentCelebration ? <AssessmentCelebration /> : null}
   </div>;
 }
@@ -118,91 +119,6 @@ function AssessmentCelebration() {
     return <i key={index} style={{ "--burst": burst, "--angle": `${angle}deg`, "--delay": `${(index % 6) * 70}ms` } as CSSProperties} />;
   });
   return <div className="assessment-celebration-fireworks" data-testid="assessment-celebration-fireworks" role="status" aria-label="Chúc mừng bạn đã hoàn thành bài kiểm tra">{particles}<span className="sr-only">Chúc mừng bạn đã hoàn thành bài kiểm tra.</span></div>;
-}
-
-export function LevelUpCelebration({
-  announcement,
-  displayName,
-  onClose
-}: {
-  announcement: NonNullable<LearnerHomeView["rewardAnnouncement"]>;
-  displayName: string;
-  onClose: () => void | Promise<void>;
-}) {
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-  const genuine = announcement.source !== "simulated";
-  const isTopLevel = announcement.kind === "top-level-redirect";
-  const adjusted = announcement.kind === "level-adjustment";
-  const seasonUp = announcement.kind === "season-up";
-  const levelUp = announcement.kind === "new-level-announcement";
-  useEffect(() => {
-    if (levelUp) return;
-    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeRef.current?.focus();
-    return () => previousFocusRef.current?.focus();
-  }, [levelUp]);
-  const handleDialogKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      void onClose();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])"));
-    if (!focusable.length) {
-      event.preventDefault();
-      event.currentTarget.focus();
-      return;
-    }
-    const first = focusable[0]!;
-    const last = focusable[focusable.length - 1]!;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
-  if (levelUp) return <Modal
-    className="level-adjustment-dialog"
-    title={announcement.level ? `Bạn đã lên mức ${announcement.level}` : "Bạn đã lên mức"}
-    onClose={() => void onClose()}
-    dismissOnBackdrop
-    actions={<Button variant="primary" onClick={() => void onClose()}>Tiếp tục học</Button>}
-  >
-    {!genuine ? <span className="badge">Mô phỏng</span> : null}
-    {announcement.reason ? <p className="small"><b>Lý do của Vận hành</b><br />{announcement.reason}</p> : null}
-  </Modal>;
-  if (adjusted) return <div className="modal-backdrop" role="presentation" onClick={(event) => {
-    if (event.currentTarget === event.target) void onClose();
-  }}>
-    <section className="dialog level-adjustment-dialog" role="dialog" aria-modal="true" aria-label="Trình độ đã được cập nhật" tabIndex={-1} onKeyDown={handleDialogKeyDown}>
-      <div className="row between">
-        <h2>Trình độ đã được cập nhật</h2>
-        <ModalCloseButton ref={closeRef} label="Đóng hộp thoại" onClick={() => void onClose()} />
-      </div>
-      <div className="row">
-        {announcement.level ? <span className="badge lvl">Mức {announcement.level}</span> : null}
-        {!genuine ? <span className="badge">Mô phỏng</span> : null}
-      </div>
-      {announcement.reason ? <p><b>Lý do của Vận hành</b><br />{announcement.reason}</p> : null}
-      <p className="small muted">{announcement.rule ?? "Đường lên mức bắt đầu lại theo trình độ mới. Kết quả cũ vẫn được lưu."}</p>
-      <div className="row modal-actions"><Button variant="primary" onClick={() => void onClose()}>Tiếp tục học</Button></div>
-    </section>
-  </div>;
-
-  return <div className="modal-backdrop" role="presentation">
-    <section className="dialog wide" role="dialog" aria-modal="true" aria-label={seasonUp ? "Chúc mừng lên Season mới" : "Chúc mừng lên mức"} data-testid="modal.level-up-celebration" data-modal={seasonUp ? "season-up-celebration" : "level-up-celebration"} tabIndex={-1} onKeyDown={handleDialogKeyDown}>
-      <div className="row between"><span className={`badge ${genuine ? "ok" : ""}`}>{genuine ? "Thông báo thật" : "Mô phỏng"}</span><button ref={closeRef} type="button" aria-label="Đóng" onClick={() => void onClose()}>Đóng</button></div>
-      <div className="card flat" style={{ marginTop: 12, textAlign: "center" }}><div className="eyebrow">{announcement.seasonName}</div><Sprout className="celebration-icon" aria-hidden="true" /><h2>{isTopLevel ? "Bạn đã đạt mức cao nhất" : `Chúc mừng ${displayName}!`}</h2>{seasonUp ? <p className="badge lvl">Mùa học {announcement.seasonLevel ?? "—"}/4{announcement.level ? ` · ${announcement.level}` : ""}</p> : announcement.level ? <p className="badge lvl">Mức {announcement.level}</p> : null}</div>
-      <p>{isTopLevel ? "Bạn đã hoàn thành chặng CEFR cao nhất trong lộ trình hiện tại." : seasonUp ? `Bạn vừa lên ${announcement.seasonName}. Huy hiệu đã nhận được giữ mãi; điểm trong trình độ này tiếp tục được cộng cho Season tiếp theo.` : "Bạn vừa mở một cột mốc mới trong hành trình học tiếng Anh."}</p>
-      {announcement.reason ? <p><b>Lý do của Vận hành</b><br />{announcement.reason}</p> : null}
-      <Notice tone="info"><b>Quy tắc công nhận:</b> {announcement.rule ?? (isTopLevel ? "Mức cao nhất được giữ lại trong hồ sơ của bạn." : "Mức mới chỉ hiển thị sau khi người vận hành duyệt bằng chứng học tập.")}</Notice>
-      <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}><button type="button" onClick={() => void onClose()}>Đóng</button><button className="btn-primary" type="button" onClick={() => void onClose()}>Tiếp tục học</button></div>
-    </section>
-  </div>;
 }
 
 /** Waiting/info card: title + paragraph on desktop; on phones/tablets the paragraph moves into an ⓘ next to the title. */

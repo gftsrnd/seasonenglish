@@ -5,7 +5,7 @@ import { userEvent } from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearnerProfile } from "./ProfileReward.js";
-import { LevelUpCelebration } from "./Home.js";
+import { RewardAnnouncementDialog } from "./RewardAnnouncementDialog.js";
 import { ManagerRewards } from "../manager/Rewards.js";
 import { REWARD_POINT_RULES } from "../shared/SeasonProgressCard.js";
 import type { LearnerCallbacks, ProfileView } from "./contracts.js";
@@ -104,13 +104,14 @@ describe("badge certificate link", () => {
 describe("Level adjustment modal", () => {
   it.each(["genuine", "simulated"] as const)("shows the decision and identifies simulation for %s", async (source) => {
     const onClose = vi.fn();
-    render(<LevelUpCelebration displayName="Minh Anh" onClose={onClose} announcement={{
+    render(<RewardAnnouncementDialog onClose={onClose} announcement={{
       kind: "level-adjustment", points: 0, nextPoints: 5000, seasonName: "Mùa xuân", level: "A1",
       source, reason: "Cần củng cố kỹ năng nghe."
     }} />);
     const dialog = screen.getByRole("dialog", { name: "Trình độ đã được cập nhật" });
     const close = within(dialog).getByRole("button", { name: "Đóng hộp thoại" });
-    expect(close).toHaveFocus();
+    expect(close).toBeInTheDocument();
+    expect(dialog).toHaveFocus();
     expect(within(dialog).getByText("Mức A1")).toBeInTheDocument();
     expect(within(dialog).getByText("Cần củng cố kỹ năng nghe.")).toBeInTheDocument();
     expect(within(dialog).queryByText("Thông báo thật")).toBeNull();
@@ -124,7 +125,7 @@ describe("Level adjustment modal", () => {
 it("shows a compact level-up notice with one close control and the operator's reason", async () => {
   const onClose = vi.fn();
   const user = userEvent.setup();
-  render(<LevelUpCelebration displayName="Minh Anh" onClose={onClose} announcement={{
+  render(<RewardAnnouncementDialog onClose={onClose} announcement={{
     kind: "new-level-announcement", points: 0, nextPoints: 5000, seasonName: "Mùa thu", level: "B2",
     source: "genuine", reason: "Đạt yêu cầu bài thi lên mức."
   }} />);
@@ -140,15 +141,16 @@ it("shows a compact level-up notice with one close control and the operator's re
 describe("Season congratulation modal", () => {
   it("congratulates the learner on the new Season and closes once", async () => {
     const onClose = vi.fn();
-    render(<LevelUpCelebration displayName="Minh Anh" onClose={onClose} announcement={{
+    render(<RewardAnnouncementDialog onClose={onClose} announcement={{
       kind: "season-up", points: 2100, nextPoints: 5000, seasonName: "Mùa thu · B1", seasonLevel: 3, level: "B1",
       announcementId: "season-up:B1:3", source: "genuine", rule: "Lên Season khi đủ điểm và mọi huy hiệu của Season đó; đi lần lượt, không nhảy cấp."
     }} />);
-    const dialog = screen.getByRole("dialog", { name: "Chúc mừng lên Season mới" });
-    expect(dialog).toHaveAttribute("data-modal", "season-up-celebration");
-    expect(within(dialog).getByText("Chúc mừng Minh Anh!")).toBeInTheDocument();
-    expect(within(dialog).getByText("Mùa học 3/4 · B1")).toBeInTheDocument();
-    expect(within(dialog).getByText(/Bạn vừa lên Mùa thu · B1\. Huy hiệu đã nhận được giữ mãi/)).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Bạn đã lên cấp Mùa 3" });
+    expect(dialog).toHaveClass("learner-reward-dialog");
+    expect(within(dialog).getByRole("button", { name: "Đóng hộp thoại" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Mùa thu · B1")).toBeInTheDocument();
+    expect(dialog).toHaveTextContent("Huy hiệu đã nhận vẫn được giữ.");
+    expect(dialog).not.toHaveTextContent(/Thông báo thật|Quy tắc công nhận/);
     await userEvent.setup().click(within(dialog).getByRole("button", { name: "Tiếp tục học" }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });

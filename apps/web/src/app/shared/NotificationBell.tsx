@@ -446,8 +446,6 @@ export function NotificationBell({ deferArrival = false }: { deferArrival?: bool
   };
   const arrivalItem = arrival?.count === 1 ? arrival.item : undefined;
   const arrivalContent = arrivalItem ? notificationContent(arrivalItem) : undefined;
-  const placementArrival = arrivalItem?.context === "placement" || arrivalItem?.context === "placement_retake";
-  const arrivalPreview = placementArrival ? null : arrivalContent?.description.split(/(?<=[.!?])\s/, 1)[0];
 
   return <>
     <button ref={trigger} className="btn-sm btn-ghost inbox-trigger" type="button" aria-label={count ? `Thông báo · ${count} chưa đọc` : "Thông báo"} title="Thông báo" aria-haspopup="dialog" aria-expanded={open} onClick={show}>
@@ -458,7 +456,7 @@ export function NotificationBell({ deferArrival = false }: { deferArrival?: bool
       <section ref={dialog} className="dialog inbox-dialog" style={loadingHeight ? { minHeight: `min(${loadingHeight}px, calc(100dvh - 32px))` } : undefined} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
         <header className="inbox-heading">
           <h3 id={titleId}>Thông báo</h3>
-          <ModalCloseButton label="Đóng thông báo" onClick={close} />
+          <ModalCloseButton iconOnly label="Đóng thông báo" onClick={close} />
         </header>
         <div className="inbox-controls">
           <button type="button" className={unreadOnly ? "btn-sm" : "btn-sm btn-primary"} aria-pressed={!unreadOnly} disabled={pending} onClick={() => changeFilter(false)}>Tất cả</button>
@@ -494,7 +492,6 @@ export function NotificationBell({ deferArrival = false }: { deferArrival?: bool
         <strong>{arrivalContent ? arrivalContent.title : arrival.count > 1 ? `${arrival.count} thông báo mới` : "Có thông báo mới"}</strong>
       </button>
       <button type="button" className="inbox-arrival-close" aria-label="Ẩn thông báo mới" onClick={() => announce(null)}><X size={16} aria-hidden="true" /></button>
-      {arrivalPreview ? <span className="inbox-arrival-preview">{arrivalPreview}</span> : null}
     </div>, document.body) : null}
   </>;
 }

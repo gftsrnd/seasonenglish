@@ -73,22 +73,6 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
-.manager-modal-backdrop .reward-celebration {
-  width: min(100%, 400px);
-  padding: 14px 18px 18px;
-  text-align: center;
-}
-.reward-celebration-header { display: flex; justify-content: space-between; align-items: center; }
-.reward-celebration-header > button { min-width: 44px; min-height: 44px; }
-.reward-celebration-body { display: grid; justify-items: center; gap: 6px; }
-.reward-celebration-body .profile-season-figure { max-width: 68px; max-height: 68px; margin-bottom: 4px; }
-.reward-celebration-body .profile-season-figure-emoji {
-  font: 2rem/1 "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-}
-.reward-celebration-body h2 { margin: 0; font-size: 1.2rem; }
-.reward-celebration-body p { margin: 0; }
-.reward-celebration-action { margin-top: 14px; min-height: 44px; }
-
 @media (min-width: 721px) {
   /* Trình độ and Tình huống mẫu side by side (each with its own label), toggle at the end of the row. */
   .manager-reward-controls {

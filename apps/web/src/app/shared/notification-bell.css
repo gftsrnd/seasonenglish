@@ -127,16 +127,6 @@
 .inbox-arrival-open:hover, .inbox-arrival-open:focus-visible { background: var(--primary-soft); }
 .inbox-arrival-open > svg { flex: none; color: var(--primary-dark); }
 .inbox-arrival-open > strong { font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.inbox-arrival-preview {
-  grid-column: 1 / -1;
-  min-width: 0;
-  padding: 0 5px 3px 27px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: color-mix(in srgb, var(--text) 78%, white);
-  font-size: .8rem;
-}
 .inbox-arrival-close {
   --hci-touch-target: 32px;
   display: grid;

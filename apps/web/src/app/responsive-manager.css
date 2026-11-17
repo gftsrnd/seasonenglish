@@ -282,8 +282,6 @@
   :root:root:root .manager-root .manager-reward-preview-actions { display: flex; flex-wrap: nowrap; gap: 6px; }
   :root:root:root .manager-root .manager-reward-preview-actions > button { width: auto !important; white-space: nowrap; }
   :root:root:root .manager-root .manager-reward-result-pane > :not(header):not(.reward-screen-reader) { border: 0; box-shadow: none; padding: 0; background: transparent; }
-  :root:root:root .manager-root .reward-celebration { max-height: 75dvh; overflow: auto; }
-  :root:root:root .manager-root .reward-celebration-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; min-height: calc(var(--icon-btn, 36px) + 16px); margin: 0 -12px 8px; padding: 10px calc(var(--icon-btn, 36px) + 16px) 10px 12px; background: var(--surface); }
 
   /* ── Cài đặt › Người dùng (manager accounts) ── */
   :root:root:root .manager-root .manager-account-create { padding: 12px; }
@@ -489,13 +487,7 @@
   :root:root:root .manager-root .manager-reward-custom .manager-reward-badge-group { grid-template-columns: none !important; }
 
   /* Small notification / confirm dialogs: compact centred card, close × in the shared corner. */
-  :root:root:root .manager-root :is(.reward-celebration, .manager-reminder-confirm-dialog, .manager-purge-dialog) { width: min(380px, calc(100vw - 32px)) !important; max-width: 380px !important; margin-inline: auto; position: relative; }
-  :root:root:root .manager-root .reward-celebration-header { position: static !important; margin: 0 -12px 4px !important; }
-  :root:root:root .manager-root .reward-celebration .profile-season-figure { transform: scale(1.15); margin: 6px 0; }
-  :root:root:root .manager-root .reward-celebration-body h2 { font-size: 21px !important; }
-  :root:root:root .manager-root .reward-celebration-body p { font-size: 14px; }
-  :root:root:root .manager-root .reward-celebration-action { min-height: 36px !important; width: auto !important; padding: 0 20px !important; justify-self: center; margin-inline: auto; display: block; }
-  :root:root:root .manager-root .reward-celebration .modal-close:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+  :root:root:root .manager-root :is(.manager-reminder-confirm-dialog, .manager-purge-dialog) { width: min(380px, calc(100vw - 32px)) !important; max-width: 380px !important; margin-inline: auto; position: relative; }
 }
 @media (max-width: 600px) {
   /* Phone: drop the low-value placement score from the "…" list. */

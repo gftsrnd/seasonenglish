@@ -1,13 +1,13 @@
-import { useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Link } from "react-router";
-import { Award, ChevronRight, X } from "lucide-react";
+import { Award, ChevronRight } from "lucide-react";
 import { ManagerTitle, PageTitle } from "./shared.js";
-import { ActionLabel, Description, ModalCloseButton, useCompactUi } from "../shared/CompactUi.js";
+import { ActionLabel, Description, useCompactUi } from "../shared/CompactUi.js";
 import type { BadgeRoadmapItem, CefrLevel, SeasonLevelView } from "@e4s/contracts";
 import { REWARD_SEASONS, rewardBadgeThreshold, rewardSeasonLabel, type RewardBadgeKey } from "@e4s/domain/engagement";
-import { REWARD_POINT_RULES, REWARD_SEASON_RULES, SeasonFigure, SeasonProgressCard } from "../shared/SeasonProgressCard.js";
+import { REWARD_POINT_RULES, REWARD_SEASON_RULES, SeasonProgressCard } from "../shared/SeasonProgressCard.js";
 import { rewardBadgeIcon } from "../shared/reward-badge-icons.js";
-import { useDialog } from "../shared/ModalProvider.js";
+import { RewardAnnouncementDialog } from "../learner/RewardAnnouncementDialog.js";
 import { rewardBadgeCatalogAt } from "./reward-catalog.js";
 import "./rewards.css";
 
@@ -37,9 +37,6 @@ export function ManagerRewards() {
   // Phones/tablets: "Kết quả" and "Tùy chỉnh" are two tabs instead of one long page.
   const [pane, setPane] = useState<"result" | "custom">("result");
   const customId = useId();
-  const previewCloseRef = useRef<HTMLButtonElement>(null);
-  const previewTriggerRef = useRef<HTMLButtonElement>(null);
-  const previewDialogRef = useRef<HTMLElement>(null);
   const points = Number(pointsInput);
   const level = useMemo(() => rewardLevel(points, earned), [points, earned]);
   const next = levels[level.index + 1] ?? null;
@@ -64,11 +61,6 @@ export function ManagerRewards() {
   const previewLevel = preview === null ? undefined : levels[preview];
   const selectedCase = cases.findIndex(([, casePoints, caseBadges]) => points === casePoints && equalSets(earned, caseBadges));
   const certificatePath = level.level === 4 ? `/reward/preview?points=${points}&level=${cefr}` : `/reward/preview?level=${cefr}`;
-  const closePreview = () => {
-    setPreview(null);
-    queueMicrotask(() => previewTriggerRef.current?.focus());
-  };
-  useDialog(preview !== null, previewDialogRef, closePreview, previewCloseRef);
   return <div className="manager-page manager-rewards-page">
     <PageTitle><Link to="/mgr" className="manager-page-back small">← Tiến độ nhóm</Link><ManagerTitle as="h1" title="Giả lập phần thưởng" tip="Xem phần thưởng theo tình huống mẫu. Mỗi trình độ có 4 Season, tính bằng điểm kiếm được trong trình độ; huy hiệu được giữ mãi." /><Description className="muted" text="Xem phần thưởng theo tình huống mẫu. Mỗi trình độ có 4 Season, tính bằng điểm kiếm được trong trình độ; huy hiệu được giữ mãi." /></PageTitle>
     <div className="manager-reward-workspace">
@@ -128,10 +120,7 @@ export function ManagerRewards() {
         <header className="row between manager-section-heading manager-reward-preview-heading">
           <ManagerTitle as="h2" title={compactUi ? "Học viên thấy" : "Học viên sẽ thấy"} label="Cách tính điểm và lên Season" tip={<>{REWARD_POINT_RULES.map(([label, value]) => `${label}: ${value}`).join(" · ")}. {REWARD_SEASON_RULES.join(" ")}</>} />
           <div className="manager-reward-preview-actions" role="group" aria-label="Xem thông báo lên cấp">
-            {[2, 3].map((tier) => <button className="btn-sm" type="button" key={tier} onClick={(event) => {
-              previewTriggerRef.current = event.currentTarget;
-              setPreview(tier - 1);
-            }} aria-label={`Xem lên cấp ${tier}`}>{compactUi ? `Cấp ${tier}` : `Xem lên cấp ${tier}`}</button>)}
+            {[2, 3].map((tier) => <button className="btn-sm" type="button" key={tier} onClick={() => setPreview(tier - 1)} aria-label={`Xem lên cấp ${tier}`}>{compactUi ? `Cấp ${tier}` : `Xem lên cấp ${tier}`}</button>)}
             {compactUi ? <Link className="btn btn-sm" to={certificatePath} aria-label="Xem trước chứng nhận" title="Xem trước chứng nhận"><ActionLabel icon={Award} label="Xem trước chứng nhận" /></Link> : null}
           </div>
         </header>
@@ -141,23 +130,13 @@ export function ManagerRewards() {
         } />
       </section>
     </div>
-    {previewLevel && <div className="modal-backdrop manager-modal-backdrop" role="presentation" onClick={(event) => {
-      if (event.target === event.currentTarget) closePreview();
-    }}>
-      <section ref={previewDialogRef} className="dialog reward-celebration" role="dialog" aria-modal="true" aria-label="Màn chúc mừng lên cấp" tabIndex={-1}>
-        <div className="reward-celebration-header">
-          <span className="badge">Giả lập</span>
-          {compactUi ? <ModalCloseButton ref={previewCloseRef} label="Đóng màn chúc mừng" onClick={closePreview} /> : <button ref={previewCloseRef} className="btn btn-ghost" type="button" aria-label="Đóng màn chúc mừng" onClick={closePreview}><X size={18} aria-hidden="true" /></button>}
-        </div>
-        <div className="reward-celebration-body">
-          <SeasonFigure level={previewLevel.level} />
-          <div className="eyebrow">Lên cấp {previewLevel.level}/4 · {cefr}</div>
-          <h2>{rewardSeasonLabel(previewLevel, cefr)}</h2>
-          <p className="small">{previewLevel.name} · {previewLevel.pointsRequired.toLocaleString("vi-VN")} điểm trong {cefr} · {previewLevel.required.length} huy hiệu</p>
-        </div>
-        <button className="btn-primary reward-celebration-action" type="button" onClick={closePreview}>Tiếp tục</button>
-      </section>
-    </div>}
+    {previewLevel ? <RewardAnnouncementDialog
+      announcement={{
+        kind: "season-up", source: "simulated", points, nextPoints: levels[previewLevel.level]?.pointsRequired ?? null,
+        level: cefr, seasonLevel: previewLevel.level, seasonName: rewardSeasonLabel(previewLevel, cefr)
+      }}
+      onClose={() => setPreview(null)}
+    /> : null}
   </div>;
 }
 

@@ -1,6 +1,7 @@
+import { useDialog } from "../shared/ModalProvider.js";
 import { ChevronRight } from "lucide-react";
 import { InfoTitle, ModalCloseButton, useCompactUi } from "../shared/CompactUi.js";
-import { useEffect, useId, useRef, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type CSSProperties, type HTMLAttributes, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useLayoutEffect, useId, useRef, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type CSSProperties, type HTMLAttributes, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
 /** "Bài 5" / "Ôn tuần 2" at A1–A2; `english` (B1+ learners, who see no Vietnamese) gives "Lesson 5" / "Week 2 review". */
 export function learnerLessonLabel(lesson: { dayNumber: number; newLessonNumber?: number; teachingLabel?: string; kind?: "new" | "review" }, english = false) {
@@ -95,27 +96,17 @@ export function Modal({ open = true, title, description, children, actions, onCl
   const titleId = useId();
   const descriptionId = useId();
 
-  useEffect(() => {
-    if (!open) return;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const initialFocusRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
     const dialog = dialogRef.current;
-    // Focus lands on the dialog itself (no ring on the × or an action), unless a field asks for it; Tab moves into the controls.
-    const initial = dialog?.querySelector<HTMLElement>("[data-modal-initial-focus]") ?? dialog?.querySelector<HTMLElement>("input, select, textarea");
-    (initial ?? dialog)?.focus();
-    return () => {
-      if (previous?.isConnected) previous.focus();
-    };
+    initialFocusRef.current = dialog?.querySelector<HTMLElement>("[data-modal-initial-focus]")
+      ?? dialog?.querySelector<HTMLElement>("input, select, textarea") ?? dialog;
   }, [open]);
+  useDialog(open, dialogRef, () => onClose?.(), initialFocusRef);
 
   if (!open) return null;
-  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onClose?.();
-    }
-  };
-  return <div className="modal-backdrop" role="presentation" onClick={(event) => { if (dismissOnBackdrop && event.target === event.currentTarget) onClose?.(); }}><section ref={dialogRef} className={["dialog", className].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} tabIndex={-1} onKeyDown={handleKeyDown}>
-    <div className="row between"><h2 id={titleId}>{title}</h2>{onClose ? <ModalCloseButton label="Đóng hộp thoại" onClick={onClose} /> : null}</div>
+  return <div className="modal-backdrop" role="presentation" onClick={(event) => { if (dismissOnBackdrop && event.target === event.currentTarget) onClose?.(); }}><section ref={dialogRef} className={["dialog", className].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} tabIndex={-1}>
+    <div className="row between"><h2 id={titleId}>{title}</h2>{onClose ? <ModalCloseButton iconOnly label="Đóng hộp thoại" onClick={onClose} /> : null}</div>
     {description ? <p id={descriptionId} className="small">{description}</p> : null}
     {children}
     {actions ? <div className="row modal-actions" style={{ justifyContent: "flex-end", marginTop: 12 }}>{actions}</div> : null}

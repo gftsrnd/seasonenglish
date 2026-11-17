@@ -667,18 +667,14 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .test-page .prep-checks{flex:1;min-width:240px;gap:6px}
 .placement-retake-heading { gap: 8px; }
 .placement-retake-heading h2 { margin: 0; }
-.modal-backdrop > .dialog.level-adjustment-dialog,
 .modal-backdrop > .dialog.placement-retake-confirm { --compact-dialog-width: 380px; box-sizing: border-box; width: min(380px, calc(100vw - 24px)); max-width: 380px; max-height: 80dvh; }
-.level-adjustment-dialog > .row:first-child,
 .placement-retake-confirm > .row:first-child { position: sticky; top: 0; background: var(--surface); z-index: 1; }
 .placement-retake-confirm > .row:first-child h2 { font-weight: 700 !important; }
+.placement-retake-confirm:focus-visible { outline: none; }
 .placement-retake-reason { display: grid; gap: 6px; }
 .placement-retake-reason label { font-size: 14px; line-height: 1.35; margin: 0; }
 .placement-retake-reason textarea { width: 100%; min-height: 56px; field-sizing: content; }
 .placement-retake-reason textarea:focus { box-shadow: inset 0 0 0 2px var(--primary); }
-.level-adjustment-dialog > .row:first-child { flex-wrap: nowrap; margin-bottom: 8px; }
-.level-adjustment-dialog > p { margin: 8px 0; overflow-wrap: anywhere; }
-.level-adjustment-dialog .modal-actions { justify-content: flex-end; margin-top: 12px; }
 .placement-retake-confirm .modal-actions { flex-wrap: nowrap; gap: 8px; }
 .placement-retake-confirm .modal-actions button { height: 34px; min-height: 34px !important; white-space: nowrap; }
 .test-page .prep-check{gap:8px;min-height:32px}

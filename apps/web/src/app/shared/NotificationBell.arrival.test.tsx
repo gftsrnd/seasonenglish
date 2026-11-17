@@ -71,7 +71,7 @@ describe("NotificationBell new-notification card", () => {
     await poll();
     const card = await screen.findByTestId("inbox-arrival");
     expect(within(card).getByText("Khiếu nại về điều kiện dự thi")).toBeInTheDocument();
-    expect(within(card).getByText(/Học viên đã gửi đơn/)).toBeInTheDocument();
+    expect(within(card).queryByText(/Học viên đã gửi đơn/)).not.toBeInTheDocument();
     // Same count on the next poll: no second card.
     await user.click(within(card).getByRole("button", { name: "Ẩn thông báo mới" }));
     await poll();

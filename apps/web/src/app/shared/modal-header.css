@@ -21,6 +21,25 @@
 .operator-editor-sticky-header > .operator-editor-heading > :not(:first-child) { flex: none; display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; margin: 0; }
 .modal-close { order: 99; flex: none; margin-inline-start: auto; }
 .modal-close.modal-close { border: 1px solid var(--line); background: var(--surface); color: var(--text); box-shadow: none; }
+.modal-close.modal-close--icon { width: 36px; min-width: 36px; padding-inline: 0; justify-content: center; }
 .modal-close.modal-close:focus:not(:focus-visible) { outline: none; box-shadow: none; }
 .modal-close.modal-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .dialog[role="dialog"]:focus:not(:focus-visible) { outline: none; }
+
+.modal-backdrop > .dialog.learner-reward-dialog {
+  --compact-dialog-width: 380px;
+  box-sizing: border-box;
+  width: min(380px, calc(100vw - 32px));
+  max-width: 380px;
+  max-height: 80dvh;
+}
+.learner-reward-dialog > .row:first-child {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin-bottom: 8px;
+  background: var(--surface);
+}
+.learner-reward-dialog > .row:first-child h2 { font-weight: 700 !important; }
+.learner-reward-dialog:focus-visible { outline: none; }
+.learner-reward-dialog > p { margin: 8px 0; overflow-wrap: anywhere; }

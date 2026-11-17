@@ -357,21 +357,23 @@ describe("new Manager app branch", () => {
     const trigger = screen.getByRole("button", { name: "Xem lên cấp 2" });
     await user.click(trigger);
 
-    const dialog = screen.getByRole("dialog", { name: "Màn chúc mừng lên cấp" });
+    const dialog = screen.getByRole("dialog", { name: "Bạn đã lên cấp Mùa 2" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(document.body).toHaveClass("app-modal-open");
-    expect(dialog).toHaveTextContent("Mùa hạ – đón nắng · 500 điểm trong A1 · 2 huy hiệu");
-    expect(within(dialog).getByRole("heading", { name: "Mùa hạ · A1" })).toBeVisible();
-    expect(within(dialog).getByRole("button", { name: "Đóng màn chúc mừng" })).toHaveFocus();
+    expect(dialog).toHaveTextContent("Mô phỏng");
+    expect(dialog).toHaveTextContent("Mùa hạ · A1");
+    expect(within(dialog).getByRole("heading", { name: "Bạn đã lên cấp Mùa 2" })).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "Đóng hộp thoại" })).toBeVisible();
+    expect(dialog).toHaveFocus();
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("dialog", { name: "Màn chúc mừng lên cấp" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Bạn đã lên cấp Mùa 2" })).not.toBeInTheDocument();
     expect(document.body).not.toHaveClass("app-modal-open");
     expect(trigger).toHaveFocus();
 
     await user.click(trigger);
-    const backdrop = screen.getByRole("dialog", { name: "Màn chúc mừng lên cấp" }).parentElement!;
+    const backdrop = screen.getByRole("dialog", { name: "Bạn đã lên cấp Mùa 2" }).parentElement!;
     await user.click(backdrop);
-    expect(screen.queryByRole("dialog", { name: "Màn chúc mừng lên cấp" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Bạn đã lên cấp Mùa 2" })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
   });
 
