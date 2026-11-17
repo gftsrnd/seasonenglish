@@ -3052,6 +3052,7 @@ body:has(.app-operator) #modal > .dialog > .row {
   padding-block: 8px;
 }
 .learner-original-placement-dialog .operator-answer-section-summary { min-height: 40px; }
+.learner-original-placement-dialog audio.operator-stimulus { display: block; width: min(300px, 100%); }
 .operator-assessment-dialog h4 { margin: 14px 0 8px; }
 .operator-assessment-dialog > .table-wrap { margin-top: 8px !important; }
 .operator-assessment-dialog > .table-wrap th,
