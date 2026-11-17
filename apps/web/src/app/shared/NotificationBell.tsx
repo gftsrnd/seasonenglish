@@ -237,10 +237,7 @@ export function notificationContent(item: InboxNotificationView): NotificationCo
 /** A new-notification card: one item, or several collapsed into "N thông báo mới". */
 type Arrival = { count: number; item?: InboxNotificationView };
 const ARRIVAL_MS = 6_000;
-const ARRIVAL_WIDTH = 320;
-const ARRIVAL_GUTTER = 8;
-
-export function NotificationBell() {
+export function NotificationBell({ deferArrival = false, arrivalBottom }: { deferArrival?: boolean; arrivalBottom?: number | undefined } = {}) {
   const navigate = useNavigate();
   const dialog = useRef<HTMLElement>(null);
   const feed = useRef<HTMLDivElement>(null);
@@ -266,7 +263,6 @@ export function NotificationBell() {
   const [arrival, setArrival] = useState<Arrival | null>(null);
   const arrivalRef = useRef<Arrival | null>(null);
   const [arrivalHeld, setArrivalHeld] = useState(false);
-  const [arrivalPosition, setArrivalPosition] = useState<{ top: number; left: number; width: number }>();
   const close = () => setOpen(false);
   // Focus the popup itself on open (no focus ring parked on the close button).
   useDialog(open, dialog, close, dialog);
@@ -299,29 +295,14 @@ export function NotificationBell() {
   };
 
   useEffect(() => {
-    if (!arrival || arrivalHeld) return;
+    if (!arrival || deferArrival || arrivalHeld) return;
     const timer = window.setTimeout(() => announce(null), ARRIVAL_MS);
     return () => window.clearTimeout(timer);
-  }, [arrival, arrivalHeld]);
+  }, [arrival, arrivalHeld, deferArrival]);
 
-  // The card sits right under the bell, clamped inside the viewport (phones included).
-  useLayoutEffect(() => {
-    if (!arrival) return;
-    const place = () => {
-      const rect = trigger.current?.getBoundingClientRect();
-      const viewport = document.documentElement.clientWidth || window.innerWidth;
-      const width = Math.min(ARRIVAL_WIDTH, Math.max(0, viewport - 2 * ARRIVAL_GUTTER));
-      const left = Math.min((rect?.right ?? viewport) - width, viewport - ARRIVAL_GUTTER - width);
-      setArrivalPosition({ top: (rect?.bottom ?? 0) + 8, left: Math.max(ARRIVAL_GUTTER, left), width });
-    };
-    place();
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
-    return () => {
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
-    };
-  }, [arrival]);
+  useEffect(() => {
+    if (deferArrival) setArrivalHeld(false);
+  }, [deferArrival]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -436,7 +417,10 @@ export function NotificationBell() {
     if (notificationContent(item).path) void read(item);
     else show();
   };
-  const arrivalContent = arrival?.item && arrival.count === 1 ? notificationContent(arrival.item) : undefined;
+  const arrivalItem = arrival?.count === 1 ? arrival.item : undefined;
+  const arrivalContent = arrivalItem ? notificationContent(arrivalItem) : undefined;
+  const placementArrival = arrivalItem?.context === "placement" || arrivalItem?.context === "placement_retake";
+  const arrivalPreview = placementArrival ? null : arrivalContent?.description.split(/(?<=[.!?])\s/, 1)[0];
 
   return <>
     <button ref={trigger} className="btn-sm btn-ghost inbox-trigger" type="button" aria-label={count ? `Thông báo · ${count} chưa đọc` : "Thông báo"} title="Thông báo" aria-haspopup="dialog" aria-expanded={open} onClick={show}>
@@ -475,15 +459,15 @@ export function NotificationBell() {
         <Pager {...feedPaged} label="thông báo" />
       </section>
     </div>, document.body) : null}
-    {arrival && !open ? createPortal(<div className="inbox-arrival" role="status" aria-live="polite" data-testid="inbox-arrival"
-      style={arrivalPosition}
+    {arrival && !open && !deferArrival ? createPortal(<div className="inbox-arrival" role="status" aria-live="polite" data-testid="inbox-arrival" data-guide-ignore
+      style={arrivalBottom ? { insetBlockEnd: arrivalBottom } : undefined}
       onPointerEnter={() => setArrivalHeld(true)} onPointerLeave={() => setArrivalHeld(false)}
       onFocus={() => setArrivalHeld(true)} onBlur={() => setArrivalHeld(false)}>
       <button type="button" className="inbox-arrival-open" onClick={openArrival}>
         <Bell size={16} strokeWidth={1.8} aria-hidden="true" />
         <span className="inbox-arrival-text">
           <strong>{arrivalContent ? arrivalContent.title : arrival.count > 1 ? `${arrival.count} thông báo mới` : "Có thông báo mới"}</strong>
-          <span>{arrivalContent ? arrivalContent.description : "Mở chuông thông báo để xem."}</span>
+          {arrivalPreview ? <span>{arrivalPreview}</span> : null}
         </span>
       </button>
       <button type="button" className="inbox-arrival-close" aria-label="Ẩn thông báo mới" onClick={() => announce(null)}><X size={16} aria-hidden="true" /></button>

@@ -114,7 +114,7 @@ body:has(.app-guide-panel) .app-scroll-jump {
   z-index: 180;
 }
 
-.app-guide-header,
+.app-guide-header-controls,
 .app-guide-actions {
   display: flex;
   align-items: center;
@@ -122,9 +122,18 @@ body:has(.app-guide-panel) .app-scroll-jump {
 }
 
 .app-guide-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding-block-end: 4px;
+  border-block-end: 1px solid var(--line);
   font-weight: 600;
   font-size: .875rem;
 }
+
+.app-guide-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-guide-header-controls { justify-content: flex-end; }
 
 .app-guide-count {
   color: var(--muted);
@@ -138,17 +147,13 @@ body:has(.app-guide-panel) .app-scroll-jump {
   min-inline-size: 44px;
   min-block-size: 44px;
   padding: 0;
-  margin-inline-start: auto;
+  margin-inline-start: 0;
 }
 
 .app-guide-copy {
-  overflow: visible;
-}
-
-@media (max-height: 430px) {
-  .app-guide-copy {
-    overflow: auto;
-  }
+  min-block-size: 0;
+  overflow: auto;
+  padding-block-start: 4px;
 }
 
 .app-guide-copy h2 {

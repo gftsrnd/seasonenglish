@@ -15,7 +15,7 @@ type GuideContext = { popup: HTMLElement | null; steps: ActiveStep[]; inboxOpen?
 type GuideState = GuideContext & { isOpen: boolean; index: number };
 
 function isVisible(node: HTMLElement) {
-  if (node.closest("[hidden], [inert]") || !node.getClientRects().length || getComputedStyle(node).visibility !== "visible") return false;
+  if (node.closest("[hidden], [inert], [data-guide-ignore], [data-toast-id], #toast") || !node.getClientRects().length || getComputedStyle(node).visibility !== "visible") return false;
   for (let parent = node.parentElement?.closest("details:not([open])"); parent; parent = parent.parentElement?.closest("details:not([open])")) {
     if (!parent.querySelector(":scope > summary")?.contains(node)) return false;
   }
@@ -96,7 +96,7 @@ function getSpotlight(target: HTMLElement): Spotlight | null {
   return width > 0 && height > 0 ? { left, top, width, height } : null;
 }
 
-export function AppGuide({ role, pathname, compact }: { role: GuideRole; pathname: string; compact: boolean }) {
+export function AppGuide({ role, pathname, compact, onOpenChange }: { role: GuideRole; pathname: string; compact: boolean; onOpenChange?: (open: boolean) => void }) {
   const dialogId = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -110,6 +110,11 @@ export function AppGuide({ role, pathname, compact }: { role: GuideRole; pathnam
   const active = isOpen ? steps[index] : undefined;
   const path = pathname.replace(/\/+$/, "");
   const definitions = guideDefinitions(role, path);
+
+  useLayoutEffect(() => {
+    onOpenChange?.(isOpen);
+    return () => { if (isOpen) onOpenChange?.(false); };
+  }, [isOpen, onOpenChange]);
 
   useEffect(() => {
     if (!definitions) return;
@@ -373,13 +378,15 @@ export function AppGuide({ role, pathname, compact }: { role: GuideRole; pathnam
       {active && spotlight && <div className="app-guide-spotlight" style={spotlight} aria-hidden="true" />}
       <section id={dialogId} role="dialog" aria-labelledby={`${dialogId}-label`} className="app-guide-panel"
         data-compact={compact || undefined} data-popup={Boolean(popup) || undefined}>
-        <header className="app-guide-header">
-          <span id={`${dialogId}-label`}>Hướng dẫn sử dụng</span>
-          {steps.length > 0 && <span className="app-guide-count" aria-label={`Bước ${index + 1} trên ${steps.length}`}>{index + 1} / {steps.length}</span>}
-          <button ref={closeButton} className="btn-sm btn-ghost app-guide-close" type="button" aria-label="Đóng hướng dẫn" onClick={close}>
-            <X size={19} aria-hidden="true" />
-          </button>
-        </header>
+        <div className="app-guide-header">
+          <span id={`${dialogId}-label`} className="app-guide-title">Hướng dẫn sử dụng</span>
+          <div className="app-guide-header-controls">
+            {steps.length > 0 && <span className="app-guide-count" aria-label={`Bước ${index + 1} trên ${steps.length}`}>{index + 1} / {steps.length}</span>}
+            <button ref={closeButton} className="btn-sm btn-ghost app-guide-close" type="button" aria-label="Đóng hướng dẫn" onClick={close}>
+              <X size={19} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
         <div className="app-guide-copy" aria-live="polite" aria-atomic="true">
           {active && <><h2>{active.title}</h2><p>{guideText(active.text)}</p></>}
         </div>

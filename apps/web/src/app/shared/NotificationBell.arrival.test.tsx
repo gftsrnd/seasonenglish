@@ -4,6 +4,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { userEvent } from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
+import { AppGuide } from "./AppGuide.js";
 import { NotificationBell } from "./NotificationBell.js";
 
 const api = vi.hoisted(() => ({ getNotificationInbox: vi.fn(), markInboxRead: vi.fn(), resolveTopicReport: vi.fn() }));
@@ -122,16 +124,44 @@ describe("NotificationBell new-notification card", () => {
     expect(screen.queryByTestId("inbox-arrival")).not.toBeInTheDocument();
   });
 
-  it("anchors the card under the bell and keeps it inside a phone viewport", async () => {
+  it("places the compact arrival above the bottom navigation and keeps placement details in the bell", async () => {
     const server = inbox([]);
-    renderBell();
-    const bell = await screen.findByRole("button", { name: "Thông báo" });
-    vi.spyOn(bell, "getBoundingClientRect").mockReturnValue({ top: 12, bottom: 52, left: 250, right: 290, width: 40, height: 40, x: 250, y: 12, toJSON: () => ({}) });
-    vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(300);
-    server.arrive(item("a", "lesson_published"));
+    const user = userEvent.setup();
+    render(<MemoryRouter><NotificationBell arrivalBottom={76} /></MemoryRouter>);
+    await screen.findByRole("button", { name: "Thông báo" });
+    server.arrive(item("approved", "assessment_result", "placement"));
     await poll();
     const card = await screen.findByTestId("inbox-arrival");
-    expect(card).toHaveStyle({ top: "60px", left: "8px", width: "284px" });
+    expect(card).toHaveStyle({ insetBlockEnd: "76px" });
+    expect(card).toHaveTextContent("Có kết quả Test đầu vào");
+    expect(card).not.toHaveTextContent(/xin thi lại/);
+    expect(within(card).getByRole("button", { name: "Ẩn thông báo mới" })).toHaveTextContent(/^$/);
+    await user.click(screen.getByRole("button", { name: /Thông báo · 1 chưa đọc/ }));
+    expect(await within(screen.getByRole("dialog", { name: "Thông báo" })).findByText(/xin thi lại trong 72 giờ/)).toBeInTheDocument();
+    expect(api.markInboxRead).not.toHaveBeenCalled();
+  });
+
+  it("defers the arrival until the guide closes without marking it read", async () => {
+    const server = inbox([]);
+    const visible = vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([{}] as unknown as DOMRectList);
+    const Fixture = () => {
+      const [guideOpen, setGuideOpen] = useState(false);
+      return <><AppGuide role="learner" pathname="/home" compact onOpenChange={setGuideOpen} />
+        <NotificationBell deferArrival={guideOpen} />
+        <div className="home-page" data-monthly-preparation="true"><section data-home-block="primary">Học bài</section></div></>;
+    };
+    render(<MemoryRouter><Fixture /></MemoryRouter>);
+    await screen.findByRole("button", { name: "Thông báo" });
+    fireEvent.click(await screen.findByRole("button", { name: "Hướng dẫn sử dụng" }));
+    expect(screen.getByRole("dialog", { name: "Hướng dẫn sử dụng" })).toBeInTheDocument();
+    server.arrive(item("approved", "assessment_result", "placement"));
+    await poll();
+    expect(await screen.findByRole("button", { name: /1 chưa đọc/ })).toBeInTheDocument();
+    expect(screen.queryByTestId("inbox-arrival")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Đóng hướng dẫn" }));
+    expect(await screen.findByTestId("inbox-arrival")).toHaveTextContent("Có kết quả Test đầu vào");
+    expect(api.markInboxRead).not.toHaveBeenCalled();
+    visible.mockRestore();
   });
 
   it("does not pop up while the bell is open", async () => {

@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
-import { AppGuide } from "./AppGuide.js";
+import { AppGuide, findSteps } from "./AppGuide.js";
 import { allGuideSteps } from "./app-guide-steps.js";
 
 beforeEach(() => {
@@ -34,6 +34,20 @@ describe("AppGuide", () => {
       ];
     }));
     expect(problems).toEqual([]);
+  });
+
+  it("excludes transient overlays and groups the count with Close", () => {
+    render(<><AppGuide role="learner" pathname="/home" compact />
+      <div data-guide-ignore><section className="guide-layout-target">Transient notification</section></div>
+      <div data-toast-id="toast"><section className="guide-layout-target">Toast</section></div>
+      <div className="home-page" data-monthly-preparation="true"><section data-home-block="primary" className="guide-layout-target">Home content</section></div>
+    </>);
+    expect(findSteps([[".guide-layout-target", "Title", "Copy"]], document)[0]?.target.textContent).toBe("Home content");
+    fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
+    const dialog = screen.getByRole("dialog", { name: "Hướng dẫn sử dụng" });
+    const close = within(dialog).getByRole("button", { name: "Đóng hướng dẫn" });
+    expect(close.parentElement?.classList.contains("app-guide-header-controls")).toBe(true);
+    expect(close.previousElementSibling?.getAttribute("aria-label")).toBe("Bước 1 trên 1");
   });
 
   it("renders bold markers as bold text", () => {
