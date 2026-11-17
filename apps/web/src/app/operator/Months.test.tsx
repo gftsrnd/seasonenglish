@@ -395,13 +395,22 @@ describe("Operator monthly planner", () => {
     const calendar = buildMonthlyCalendar("2026-11");
     const firstReview = calendar.effectiveDays.findIndex((_date, index) => monthlyDayKind(index + 1, calendar) === "review") + 1;
     const afterReview = firstReview + 1;
-    const renderCalendar = (onComposeDay = vi.fn()) => {
+    const renderCalendar = (onComposeDay = vi.fn(), publishedOn: string | null = null, readOnly = false) => {
       const overviewCalendar = calendar.effectiveDays.map((date, index) => ({ date, kind: monthlyDayKind(index + 1, calendar), lessonNumber: index + 1, ...(monthlyDayKind(index + 1, calendar) === "review" ? { reviewWeekNumber: 1 } : {}) }));
-      const view = render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="B1" busy={false}
-        overview={{ systemDate: "2026-11-03", monthWindow, brief: { month: "2026-11", title: "Updates", brief: "Project updates", context: "Office", communicationGoal: "Report", version: 1, status: "approved" }, calendar: overviewCalendar, frameworks: [{ ...approvedFramework, publication: { ready: false, publishedOn: null } }] } as never}
+      const view = render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="B1" busy={false} readOnly={readOnly}
+        overview={{ systemDate: "2026-11-03", monthWindow, brief: { month: "2026-11", title: "Updates", brief: "Project updates", context: "Office", communicationGoal: "Report", version: 1, status: "approved" }, calendar: overviewCalendar, frameworks: [{ ...approvedFramework, publication: { ready: !publishedOn, publishedOn } }] } as never}
         actions={monthActions({ onComposeDay }) as never} /></ToastProvider>);
       return { ...view, onComposeDay };
     };
+
+    it.each([false, true])("keeps only Operator editing available for future slots in a published month (readOnly=%s)", (readOnly) => {
+      const { container } = renderCalendar(vi.fn(), "2026-11-02", readOnly);
+      const futureCell = container.querySelector<HTMLElement>(`#monthly-day-${calendar.effectiveDays[afterReview - 1]}`)!;
+      const compose = within(futureCell).getByRole("button", { name: /Soạn tay bài/ });
+      expect(screen.queryByRole("button", { name: "Công bố tháng" })).not.toBeInTheDocument();
+      if (readOnly) expect(compose).toBeDisabled();
+      else expect(compose).toBeEnabled();
+    });
 
     it("gives every day cell a unique id based on its date", () => {
       const { container } = renderCalendar();

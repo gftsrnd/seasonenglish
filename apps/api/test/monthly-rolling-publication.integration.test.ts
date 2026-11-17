@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
+import { createRepositories, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { DEMO_IDS } from "@e4s/test-support";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 describe("rolling monthly publication window", () => {
   const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
   const frameworkId = randomUUID();
+  const repositories = createRepositories(pool);
   const month = "2026-11";
   const dates = ["2026-11-05", "2026-11-06", "2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12"];
 
@@ -86,5 +87,34 @@ describe("rolling monthly publication window", () => {
     expect(await ready()).toBe(true);
     await approve([6], "draft");
     expect(await ready()).toBe(false);
+  });
+  it("delivers a later draft only after Operator approval, without republishing the month", async () => {
+    const learnerId = randomUUID();
+    await pool.query("insert into users (id, organization_id, role, display_name, email) values ($1, $2, 'learner', 'Rolling learner', $3)", [learnerId, DEMO_IDS.organization, `${learnerId}@e4s.local`]);
+    await pool.query("insert into enrollments (id, program_id, learner_id, cefr, cefr_approved, cefr_started_on) values (gen_random_uuid(), $1, $2, 'A1', true, '2026-11-05')", [DEMO_IDS.program, learnerId]);
+    await setSystemDate("2026-11-05");
+    await approve([1, 2, 3]);
+    await approve([4, 5, 6], "draft");
+    await expect(repositories.monthlyContent.publishMonth(DEMO_IDS.operator, frameworkId, "2026-11-05"))
+      .resolves.toEqual({ publishedOn: "2026-11-05" });
+    const later = { id: randomUUID(), versionId: randomUUID() };
+    await pool.query(`insert into lesson_set_versions (id, lesson_set_id, version, status)
+      select $1, id, 100, 'draft' from lesson_sets where month_framework_id = $2`, [later.versionId, frameworkId]);
+    await pool.query("insert into lessons (id, lesson_set_version_id, day_number, title) values ($1, $2, 4, 'Later lesson')", [later.id, later.versionId]);
+    await pool.query("insert into lesson_versions (id, lesson_id, version, status, content) values ($1, $2, 1, 'draft', '{}'::jsonb)", [randomUUID(), later.id]);
+    await pool.query("update month_lessons set lesson_id = $2 where framework_id = $1 and lesson_number = 4", [frameworkId, later.id]);
+
+    await setSystemDate("2026-11-10");
+    const list = () => repositories.learning.listMonthlyLessons(learnerId, month);
+    expect((await list()).map((lesson) => lesson.dayNumber)).toEqual([1, 2, 3]);
+    expect(await repositories.learning.findLesson(learnerId, later.id)).toBeNull();
+    await expect(repositories.monthlyContent.approveMonthlyDay(learnerId, frameworkId, 4)).rejects.toThrow();
+    await repositories.monthlyContent.approveMonthlyDay(DEMO_IDS.operator, frameworkId, 4);
+    await approve([5]);
+    await pool.query("update month_lessons set scope_hash = 'stale' where framework_id = $1 and lesson_number = 5", [frameworkId]);
+    expect((await list()).map((lesson) => lesson.dayNumber)).toEqual([1, 2, 3, 4]);
+    expect(await repositories.learning.findLesson(learnerId, later.id)).toMatchObject({ id: later.id });
+    const { rows: [framework] } = await pool.query("select published_on::text from month_frameworks where id = $1", [frameworkId]);
+    expect(framework?.published_on).toBe("2026-11-05");
   });
 });
