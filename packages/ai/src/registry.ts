@@ -46,7 +46,7 @@ import {
   monthlyFinalReceptiveOutputJsonSchema, monthlyFinalReceptiveOutputSchema,
   monthlyFinalListeningOutputJsonSchema, monthlyFinalListeningOutputSchema, validateMonthlyFinalListeningOutput,
   monthlyFinalListeningMessageInputSchema,monthlyFinalListeningMessageOutputSchema,monthlyFinalListeningMessageOutputJsonSchema,
-  monthlyFinalWritingNotesSchema, monthlyFinalWritingNotesJsonSchema, monthlyFinalWritingOpening, monthlyFinalSpeakingSampleRepairSchema,
+  monthlyFinalWritingNotesSchema, monthlyFinalWritingNotesJsonSchema, monthlyFinalWritingOpening, monthlyFinalOpeningHintCount, monthlyFinalSpeakingSampleRepairSchema,
   monthlyFinalReadingOutputJsonSchema, monthlyFinalReadingOutputSchema, validateMonthlyFinalReadingOutput,
   validateMonthlyFinalProductiveOutput, validateMonthlyFinalReceptiveOutput
 } from "./monthly-final-schemas.js";
@@ -190,9 +190,10 @@ export const AI_TASKS = new AiTaskRegistry([
     id: "monthly_final_writing_notes_repair", promptKey: "monthly_final_generation", inputSchema: monthlyFinalSampleRepairInputSchema,
     outputSchema: monthlyFinalWritingNotesSchema, outputJsonSchema: monthlyFinalWritingNotesJsonSchema,
     validateOutput(output) {
-      const {task} = monthlyFinalWritingNotesSchema.parse(output);
-      const extraHint = monthlyFinalWritingOpening(task) || /gợi ý câu mở đầu|câu mở đầu gợi ý|mở đầu bằng câu|suggested opening/iu.test(task);
-      return extraHint ? [{path:"task",message:"Leave out all opening hints and translations. The application appends the single English opening."}] : [];
+      const {task,facts,requirements} = monthlyFinalWritingNotesSchema.parse(output);
+      const fields = [["task",task],["facts",facts],...requirements.map((text,index) => [`requirements.${index}`,text])] as Array<[string,string]>;
+      return fields.filter(([,text]) => monthlyFinalWritingOpening(text) || monthlyFinalOpeningHintCount(text) > 0)
+        .map(([path]) => ({path,message:"Leave out all opening hints and translations. The application appends the single English opening where required."}));
     }
   },
   {

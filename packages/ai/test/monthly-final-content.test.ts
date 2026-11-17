@@ -11,7 +11,10 @@ it("rejects a translated opening hint in learner notes because the English hint 
     requirements: ["Cập nhật tiến độ.", "Đề xuất bước tiếp theo."]
   };
   expect(task.validateOutput?.(notes, {})).toEqual([expect.objectContaining({path:"task"})]);
-  expect(task.validateOutput?.({...notes,task:"Viết tin nhắn cho đồng nghiệp."}, {})).toEqual([]);
+  const clear = {...notes,task:"Viết tin nhắn cho đồng nghiệp."};
+  expect(task.validateOutput?.(clear, {})).toEqual([]);
+  expect(task.validateOutput?.({...clear,facts:'Gợi ý mở đầu: "Here is an update."'}, {})).toEqual([expect.objectContaining({path:"facts"})]);
+  expect(task.validateOutput?.({...clear,requirements:['Mở đầu bằng lời chào.', ...clear.requirements]}, {})).toEqual([expect.objectContaining({path:"requirements.0"})]);
 });
 
 function fixture() {
