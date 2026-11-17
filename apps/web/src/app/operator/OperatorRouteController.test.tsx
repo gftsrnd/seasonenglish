@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { Link, MemoryRouter, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ContentLessonMatrixView, ContentLessonSetVersionView, ContentReviewAssessmentDetailView, ContentReviewView, SessionView } from "@e4s/contracts";
 import { ApiError } from "../../api/runtime.js";
@@ -348,7 +348,8 @@ describe("OperatorRouteController", () => {
 
   it("shows the placement retake form as its own card in Đề đầu vào, between the versions and the results, and not under Đề lên mức", async () => {
     const user = userEvent.setup();
-    const generateAssessmentLevelForm = vi.fn().mockResolvedValue({});
+    const generateAssessmentLevelForm = vi.fn();
+    let finishGeneration: () => void = () => { throw new Error("Generation did not start"); };
     const retakeDraft = { definitionId: "retake-def", versionId: "retake-v1", title: "Đề thi lại nháp", version: 1, publishedAt: null, listeningTaskCount: 15, readingTaskCount: 40, attemptCount: 0, status: "draft" as const, publicationReady: true };
     let retakeSlot: { targetLevel: "placement-retake"; publishedForm: null; draftForm: typeof retakeDraft | null } = { targetLevel: "placement-retake", publishedForm: null, draftForm: null };
     const client = {
@@ -356,10 +357,17 @@ describe("OperatorRouteController", () => {
       getAssessmentFormPreviews: vi.fn().mockImplementation(async (kind) => ({ kind, forms: [] })),
       getAssessmentLevelForms: vi.fn().mockImplementation(async () => [{ targetLevel: "B1", publishedForm: null, draftForm: null }, retakeSlot]),
       getAssessmentLevelForm: vi.fn(),
-      generateAssessmentLevelForm: generateAssessmentLevelForm.mockImplementation(async () => { retakeSlot = { ...retakeSlot, draftForm: retakeDraft }; return {}; }),
+      generateAssessmentLevelForm: generateAssessmentLevelForm.mockImplementation(() => new Promise<void>(resolve => {
+        finishGeneration = () => { retakeSlot = { ...retakeSlot, draftForm: retakeDraft }; resolve(); };
+      })),
       getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true })
     };
-    render(<ToastProvider><MemoryRouter initialEntries={["/op/tests"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
+    function TestNavigation() {
+      const { pathname } = useLocation();
+      return pathname === "/settings" ? <Link to="/op/tests">Quay lại bài thi QA</Link>
+        : <><Link to="/settings">Cài đặt QA</Link><OperatorRouteController session={operator} client={client as any} /></>;
+    }
+    render(<ToastProvider><MemoryRouter initialEntries={["/op/tests"]}><TestNavigation /></MemoryRouter></ToastProvider>);
 
     const navigation = await screen.findByRole("tablist", { name: "Loại bài kiểm tra" });
     expect(within(navigation).getByRole("tab", { name: "Đề đầu vào" })).toHaveAttribute("aria-selected", "true");
@@ -376,12 +384,23 @@ describe("OperatorRouteController", () => {
     await waitFor(() => expect(within(retakeCard).getByRole("button", { name: "Sinh đề bằng AI" })).toBeEnabled());
     await user.click(within(retakeCard).getByRole("button", { name: "Sinh đề bằng AI" }));
     expect(generateAssessmentLevelForm).toHaveBeenCalledWith("placement-retake");
+    await user.click(within(navigation).getByRole("tab", { name: "Bài thi tháng" }));
+    await user.click(within(navigation).getByRole("tab", { name: "Đề đầu vào" }));
+    const generatingCard = await screen.findByRole("region", { name: "Đề thi lại" });
+    const pending = within(generatingCard).getByRole("button", { name: "Đang sinh…" });
+    expect(pending).toBeDisabled();
+    await user.click(pending);
+    expect(generateAssessmentLevelForm).toHaveBeenCalledTimes(1);
+    await user.click(within(navigation).getByRole("tab", { name: "Bài thi tháng" }));
+    await user.click(screen.getByRole("link", { name: "Cài đặt QA" }));
+    finishGeneration();
+    await user.click(screen.getByRole("link", { name: "Quay lại bài thi QA" }));
     const refreshed = await screen.findByRole("region", { name: "Đề thi lại" });
     expect(await within(refreshed).findByText("Đề thi lại nháp")).toBeInTheDocument();
     expect(within(refreshed).getByRole("button", { name: "Xem Đề thi lại nháp" })).toBeEnabled();
     expect(within(refreshed).getByRole("button", { name: "Sửa & phát hành" })).toBeEnabled();
 
-    await user.click(within(navigation).getByRole("tab", { name: "Đề lên mức" }));
+    await user.click(screen.getByRole("tab", { name: "Đề lên mức" }));
     const levelCard = await screen.findByRole("region", { name: "Phiên bản đề lên mức" });
     expect(within(levelCard).getByRole("heading", { name: "B1" })).toBeInTheDocument();
     expect(levelCard).not.toHaveTextContent("Đề thi lại");

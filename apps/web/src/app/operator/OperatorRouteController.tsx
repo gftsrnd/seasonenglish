@@ -116,8 +116,56 @@ export function OperationsRouteController({ session, client = apiClient, basePat
 // Kept as the Operator-facing name so existing Operator imports and tests do not change.
 export const OperatorRouteController = OperationsRouteController;
 
+const idleRetakeGeneration: { pending: boolean; revision: number; failure?: string } = { pending: false, revision: 0 };
+const retakeGenerationByUser = new Map<string, typeof idleRetakeGeneration>();
+const retakeGenerationListeners = new Set<() => void>();
+
+function subscribeRetakeGeneration(listener: () => void) {
+  retakeGenerationListeners.add(listener);
+  return () => { retakeGenerationListeners.delete(listener); };
+}
+
+function readRetakeGeneration(userId: string) {
+  return retakeGenerationByUser.get(userId) ?? idleRetakeGeneration;
+}
+
+function setRetakeGeneration(userId: string, state: typeof idleRetakeGeneration) {
+  retakeGenerationByUser.set(userId, state);
+  retakeGenerationListeners.forEach(listener => listener());
+}
+
+function useRetakeGeneration(client: OperatorApiClient, userId: string) {
+  const state = useSyncExternalStore(subscribeRetakeGeneration, () => readRetakeGeneration(userId), () => idleRetakeGeneration);
+  const { notify } = useOperatorNotify();
+
+  const start = async () => {
+    const current = readRetakeGeneration(userId);
+    if (current.pending) return undefined;
+    setRetakeGeneration(userId, { pending: true, revision: current.revision });
+    try {
+      const result = await client.generateAssessmentLevelForm("placement-retake");
+      setRetakeGeneration(userId, { pending: false, revision: current.revision + 1 });
+      notify("Đã sinh bản nháp đề thi lại.");
+      return result;
+    } catch (reason) {
+      const failure = errorMessage(reason, {
+        LEVEL_FORM_GENERATION_FAILED: "Không sinh được đề thi lại. Hãy thử lại hoặc soạn tay.",
+        AI_OUTPUT_INVALID: "Nội dung AI sinh chưa đạt yêu cầu. Hãy thử lại hoặc soạn tay.",
+        AI_TIMEOUT: "AI phản hồi quá lâu khi sinh đề thi lại. Hãy thử lại hoặc soạn tay."
+      }, "Không sinh được đề thi lại. Hãy thử lại hoặc soạn tay.");
+      setRetakeGeneration(userId, { pending: false, revision: current.revision, failure });
+      notify(failure, "danger");
+      return undefined;
+    }
+  };
+  return { ...state, start };
+}
+
+type RetakeGeneration = ReturnType<typeof useRetakeGeneration>;
+
 function OperatorRouteControllerContent({ session, client, paths }: { session: SessionView; client: OperatorApiClient; paths: OperatorRoutePaths }) {
   const location = useLocation();
+  const retakeGeneration = useRetakeGeneration(client, session.user.id);
   if (session.role !== "operator" && session.role !== "manager") return <Status tone="error">Tài khoản này không có quyền mở khu vực học thuật.</Status>;
   const readOnly = session.role === "manager";
   const query = new URLSearchParams(location.search);
@@ -133,8 +181,8 @@ function OperatorRouteControllerContent({ session, client, paths }: { session: S
   const content = detail ? <LessonSetRoute {...props} week={Number(detail[1])} cefr={detail[2] as Cefr} />
     : location.pathname === paths.root ? <DashboardRoute {...props} />
       : location.pathname === paths.weeks ? <WeeksRoute {...props} />
-      : location.pathname === paths.tests ? <TestsRoute key={paths.tests} {...props} initialTab="placement" />
-        : location.pathname === paths.levelForms ? <TestsRoute key={paths.levelForms} {...props} initialTab="promotion" />
+      : location.pathname === paths.tests ? <TestsRoute key={paths.tests} {...props} retakeGeneration={retakeGeneration} initialTab="placement" />
+        : location.pathname === paths.levelForms ? <TestsRoute key={paths.levelForms} {...props} retakeGeneration={retakeGeneration} initialTab="promotion" />
         : monthlyLesson ? <MonthsRoute {...props} preview={{ frameworkId: monthlyLesson[1]!, dayNumber: Number(monthlyLesson[2]) }} />
         : location.pathname === paths.months ? <MonthsRoute {...props} />
           : location.pathname === paths.lessons ? <LessonsRoute {...props} />
@@ -1093,7 +1141,7 @@ function AssessmentPreviewDialog({
   </section></div>;
 }
 
-function TestsRoute({ client, readOnly, initialTab }: { client: OperatorApiClient; readOnly: boolean; initialTab: "placement" | "promotion" }) {
+function TestsRoute({ client, readOnly, initialTab, retakeGeneration }: { client: OperatorApiClient; readOnly: boolean; retakeGeneration: RetakeGeneration; initialTab: "placement" | "promotion" }) {
   const location = useLocation();
   const navigate = useNavigate();
   const requestedTab = new URLSearchParams(location.search).get("tab");
@@ -1110,9 +1158,9 @@ function TestsRoute({ client, readOnly, initialTab }: { client: OperatorApiClien
       <button type="button" role="tab" aria-selected={activeTab === "promotion"} className={activeTab === "promotion" ? "active" : ""} onClick={() => setActiveTab("promotion")}>Đề lên mức</button>
       <button type="button" role="tab" aria-selected={activeTab === "exit"} className={activeTab === "exit" ? "active" : ""} onClick={() => setActiveTab("exit")}>Đề đầu ra</button>
     </div>
-    {activeTab === "promotion" ? <LevelFormsRoute client={client} readOnly={readOnly} embedded slots="promotion" /> : <AssessmentPreviewControl key={activeTab} client={client} kind={resultPreviewKind[activeTab]} readOnly={readOnly} />}
+    {activeTab === "promotion" ? <LevelFormsRoute client={client} readOnly={readOnly} embedded slots="promotion" retakeGeneration={retakeGeneration} /> : <AssessmentPreviewControl key={activeTab} client={client} kind={resultPreviewKind[activeTab]} readOnly={readOnly} />}
     {/* The placement retake form is a placement form: its own card sits under the "Đề đầu vào" versions, above the results table. */}
-    {activeTab === "placement" ? <LevelFormsRoute client={client} readOnly={readOnly} embedded slots="placement-retake" /> : null}
+    {activeTab === "placement" ? <LevelFormsRoute client={client} readOnly={readOnly} embedded slots="placement-retake" retakeGeneration={retakeGeneration} /> : null}
     <ReviewRoute client={client} readOnly={readOnly} canEditWeeklyPractice={false} assessmentOnly embedded assessmentKinds={kinds[activeTab]} />
   </OperatorPage>;
 }
@@ -1132,7 +1180,7 @@ function promotionPreview(detail: AssessmentLevelFormDetailView): AssessmentForm
 }
 
 /** `slots` picks what to show: the level-up targets list, or the placement retake form's own card. Both share the API calls and dialogs. */
-function LevelFormsRoute({ client, readOnly, embedded = false, slots }: { client: OperatorApiClient; readOnly: boolean; embedded?: boolean; slots: "promotion" | "placement-retake" }) {
+function LevelFormsRoute({ client, readOnly, embedded = false, slots, retakeGeneration }: { client: OperatorApiClient; readOnly: boolean; embedded?: boolean; retakeGeneration: RetakeGeneration; slots: "promotion" | "placement-retake" }) {
   const modal = useModal();
   const navigate = useNavigate();
   const paths = useOperatorRoutePaths();
@@ -1144,11 +1192,20 @@ function LevelFormsRoute({ client, readOnly, embedded = false, slots }: { client
   const capabilities = useCapabilities(client);
   const { notify, notifyError } = useOperatorNotify();
   const fetchData = () => client.getAssessmentLevelForms().then(setData);
-  // Only a failed page load replaces the page; a failed action is one toast and the list stays.
-  const load = () => fetchData().catch(reason => setError(message(reason)));
   const reload = () => reloadQuietly(fetchData);
   const retakeOnly = slots === "placement-retake";
-  useEffect(() => { if (!retakeOnly || typeof client.getAssessmentLevelForms === "function") void load(); }, [client]);
+  const generationRevision = retakeOnly ? retakeGeneration.revision : 0;
+  useEffect(() => {
+    let active = true;
+    if (typeof client.getAssessmentLevelForms === "function") {
+      void client.getAssessmentLevelForms().then(forms => {
+        if (active) { setData(forms); setError(undefined); }
+      }, reason => {
+        if (active) setError(message(reason));
+      });
+    }
+    return () => { active = false; };
+  }, [client, generationRevision]);
   if (retakeOnly && typeof client.getAssessmentLevelForms !== "function") return null;
   if (error) return <Status tone="error">{retakeOnly ? "Không tải được đề thi lại" : "Không tải được đề thi lên mức"}: {error}</Status>;
   if (!data) return <Status>{retakeOnly ? "Đang tải đề thi lại…" : "Đang tải đề thi lên mức…"}</Status>;
@@ -1161,7 +1218,15 @@ function LevelFormsRoute({ client, readOnly, embedded = false, slots }: { client
     if (typeof client.getAssessmentLevelForm !== "function") return;
     void client.getAssessmentLevelForm(versionId).then(detail => setDialog({ detail, editing })).catch(notifyError);
   };
-  const onGenerate = (target: LevelFormTarget) => { if (readOnly) return; setGenerating(target); refresh(client.generateAssessmentLevelForm(target), target === "placement-retake" ? "Đã sinh bản nháp đề thi lại bài đầu vào." : `Đã sinh bản nháp đề thi lên mức ${target}.`); };
+  const onGenerate = (target: LevelFormTarget) => {
+    if (readOnly) return;
+    if (target === "placement-retake") {
+      void retakeGeneration.start();
+      return;
+    }
+    setGenerating(target);
+    refresh(client.generateAssessmentLevelForm(target), `Đã sinh bản nháp đề thi lên mức ${target}.`);
+  };
   const onCreateManual = (target: LevelFormTarget) => {
     if (readOnly) return;
     setGenerating(target);
@@ -1199,10 +1264,11 @@ function LevelFormsRoute({ client, readOnly, embedded = false, slots }: { client
         message: "Khi sinh thành công, bản nháp mới sẽ thay bản đang sửa. Các thay đổi chưa lưu sẽ mất.",
         confirmLabel: "Sinh lại", cancelLabel: "Quay lại"
       })) {
-        const form = await client.generateAssessmentLevelForm("placement-retake");
+        const form = await retakeGeneration.start();
+        if (!form) return;
         const detail = await client.getAssessmentLevelForm(form.versionId);
         setDialog({ detail, editing: true });
-        notify("Đã sinh bản nháp đề thi lại mới.");
+
         await reload();
       }
     } catch (reason) { notifyError(reason); }
@@ -1212,7 +1278,9 @@ function LevelFormsRoute({ client, readOnly, embedded = false, slots }: { client
   return <>{retakeOnly ? <PlacementRetakeCard
     slot={data.find(slot => slot.targetLevel === "placement-retake") ?? null}
     aiConnected={capabilities?.ai ?? false}
-    generating={generating === "placement-retake"}
+    generating={retakeGeneration.pending}
+    creating={generating === "placement-retake"}
+    failure={retakeGeneration.failure}
     readOnly={readOnly}
     unavailable={missing}
     actions={{ onGenerate: () => onGenerate("placement-retake"), onCreateManual: () => onCreateManual("placement-retake"), onView: id => show(id), onEdit, onDelete }}
@@ -1231,10 +1299,10 @@ function LevelFormsRoute({ client, readOnly, embedded = false, slots }: { client
       editing={!readOnly && dialog.detail.status === "draft"}
       readOnly={readOnly || dialog.detail.status !== "draft"}
       publicationReady={dialog.detail.publicationReady === true}
-      draftMaintenanceBusy={maintainingDraft !== null}
+      draftMaintenanceBusy={maintainingDraft !== null || (retakeOnly && retakeGeneration.pending)}
       draftMaintenance={retakeOnly && !readOnly && dialog.detail.status === "draft" ? <div className="row operator-level-form-actions">
-        <Button small disabled={!capabilities?.ai || maintainingDraft !== null} title={capabilities?.ai ? undefined : "AI hệ thống tạm chưa sẵn sàng"} onClick={() => void maintainRetakeDraft("generate", dialog.detail.versionId)}>{maintainingDraft === "generate" ? "Đang sinh…" : "Sinh lại bằng AI"}</Button>
-        <Button small danger disabled={!dialog.detail.deletable || maintainingDraft !== null || Boolean(missing.delete)} title={dialog.detail.deleteReason ?? missing.delete} onClick={() => void maintainRetakeDraft("delete", dialog.detail.versionId)}>{maintainingDraft === "delete" ? "Đang xoá…" : "Xoá bản nháp"}</Button>
+        <Button small disabled={!capabilities?.ai || retakeGeneration.pending || maintainingDraft !== null} title={capabilities?.ai ? undefined : "AI hệ thống tạm chưa sẵn sàng"} onClick={() => void maintainRetakeDraft("generate", dialog.detail.versionId)}>{maintainingDraft === "generate" ? "Đang sinh…" : "Sinh lại bằng AI"}</Button>
+        <Button small danger disabled={!dialog.detail.deletable || retakeGeneration.pending || maintainingDraft !== null || Boolean(missing.delete)} title={dialog.detail.deleteReason ?? missing.delete} onClick={() => void maintainRetakeDraft("delete", dialog.detail.versionId)}>{maintainingDraft === "delete" ? "Đang xoá…" : "Xoá bản nháp"}</Button>
       </div> : null}
       synthesizeEdgeTts={input => client.synthesizeAssessmentEdgeTts(input)}
       uploadAudio={(file, filename) => client.uploadContentMedia("audio", file, filename)}

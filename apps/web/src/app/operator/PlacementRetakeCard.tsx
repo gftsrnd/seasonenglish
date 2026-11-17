@@ -19,15 +19,18 @@ type PlacementRetakeCardProps = {
   slot: AssessmentLevelFormSlotView | null;
   aiConnected: boolean;
   generating: boolean;
+  creating?: boolean;
+  failure?: string | undefined;
   readOnly?: boolean;
   unavailable?: Partial<Record<LevelFormActionKey, string>>;
   actions: PlacementRetakeCardActions;
 };
 
-export function PlacementRetakeCard({ slot, aiConnected, generating, readOnly = false, unavailable = {}, actions }: PlacementRetakeCardProps) {
+export function PlacementRetakeCard({ slot, aiConnected, generating, creating = false, failure, readOnly = false, unavailable = {}, actions }: PlacementRetakeCardProps) {
   const readOnlyReason = readOnly ? "Quản lý đang xem ở chế độ chỉ đọc" : undefined;
   const draft = slot?.draftForm ?? null;
   const published = slot?.publishedForm ?? null;
+  const busy = generating || creating;
   const versions = [draft, published].filter((form): form is AssessmentLevelFormView => Boolean(form));
   const generateBlocked = unavailable.generate || readOnlyReason || (!aiConnected ? "AI hệ thống tạm chưa sẵn sàng" : undefined);
   const status = published ? <Badge tone="ok">Đã phát hành</Badge> : draft ? <Badge tone="warn">Bản nháp</Badge> : <Badge tone="warn">Chưa có đề</Badge>;
@@ -40,13 +43,15 @@ export function PlacementRetakeCard({ slot, aiConnected, generating, readOnly = 
         <p className="xs muted operator-level-retake-note">Một đề thi lại duy nhất, cùng cấu trúc và cách tính điểm với đề đầu vào gốc (Nghe 15 câu · Đọc 40 · Viết 2 · Nói 4); độ khó trộn A1–C1, không lặp câu của đề gốc. Học viên chỉ làm khi Vận hành duyệt thi lại.</p>
       </div>
       <div className="row operator-level-form-actions">
-        {status}
+        {generating ? <Badge tone="warn">Đang sinh đề…</Badge> : status}
         {!versions.length ? <>
-          <Button small disabled={Boolean(readOnlyReason) || generating || !actions.onCreateManual} title={readOnlyReason} onClick={() => actions.onCreateManual?.()}>Soạn tay</Button>
-          <Button small primary busy={generating} disabled={Boolean(generateBlocked) || generating} title={generateBlocked || (generating ? "Đang sinh đề" : undefined)} onClick={actions.onGenerate}>{generating ? "Đang sinh…" : "Sinh đề bằng AI"}</Button>
+          <Button small disabled={Boolean(readOnlyReason) || busy || !actions.onCreateManual} title={readOnlyReason} onClick={() => actions.onCreateManual?.()}>Soạn tay</Button>
+          <Button small primary busy={generating} disabled={Boolean(generateBlocked) || busy} title={generateBlocked || (generating ? "Đang sinh đề" : undefined)} onClick={actions.onGenerate}>{generating ? "Đang sinh…" : "Sinh đề bằng AI"}</Button>
         </> : null}
       </div>
     </div>
+    {generating ? <p className="small muted" role="status">Đề đang được sinh. Bạn có thể chuyển sang tab khác.</p> : null}
+    {failure && !busy ? <p className="small form-error" role="alert">{failure}</p> : null}
     {!aiConnected && !versions.length ? <p className="xs muted">AI hệ thống tạm chưa sẵn sàng; chưa thể sinh đề thi lại.</p> : null}
     {versions.length ? <div className="stack">{versions.map(form => {
       const isPublished = form.status === "published";
@@ -60,9 +65,9 @@ export function PlacementRetakeCard({ slot, aiConnected, generating, readOnly = 
           {!isPublished && form.publicationReady === false ? <p className="xs muted">Chờ hoàn thiện {form.publicationBlockerCount ?? "các"} mục trước khi phát hành.</p> : null}
         </div>
         <div className="row operator-level-form-actions">
-          <Button small disabled={Boolean(unavailable.view) || generating} aria-label={`Xem ${form.title}`} onClick={() => actions.onView(form.versionId)}>Xem</Button>
-          <Button small primary={!isPublished} disabled={!actions.onEdit || Boolean(editReason) || generating} title={editReason} onClick={() => actions.onEdit?.(form.versionId, isPublished)}>{isPublished ? "Chỉnh sửa" : "Sửa & phát hành"}</Button>
-          {!isPublished ? <Button small danger disabled={Boolean(deleteReason) || generating} title={deleteReason} onClick={() => actions.onDelete(form.versionId)}>Xoá</Button> : null}
+          <Button small disabled={Boolean(unavailable.view) || busy} aria-label={`Xem ${form.title}`} onClick={() => actions.onView(form.versionId)}>Xem</Button>
+          <Button small primary={!isPublished} disabled={!actions.onEdit || Boolean(editReason) || busy} title={editReason} onClick={() => actions.onEdit?.(form.versionId, isPublished)}>{isPublished ? "Chỉnh sửa" : "Sửa & phát hành"}</Button>
+          {!isPublished ? <Button small danger disabled={Boolean(deleteReason) || busy} title={deleteReason} onClick={() => actions.onDelete(form.versionId)}>Xoá</Button> : null}
         </div>
       </article>;
     })}</div> : <p className="small muted operator-level-empty">Chưa có đề thi lại. Soạn tay hoặc sinh bằng AI để tạo bản nháp; chỉ bản nháp hoàn chỉnh mới phát hành được.</p>}

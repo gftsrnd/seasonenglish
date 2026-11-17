@@ -30,7 +30,7 @@ const actions = (onToggleLevelUpOverride = vi.fn()): OperatorDashboardActions =>
 const granted = { targetLevel: "B1" as const, reason: "Kiểm thử", grantedBy: "Hà", grantedAt: "2026-11-12T08:00:00.000Z" };
 
 describe("Operator approved learner: level-up exception", () => {
-  it.each([false, true])("keeps the goal action without a goal display in the approved list, compact %s", async (compact) => {
+  it.each([false, true])("shows the monthly goal beside the edit action in the approved list, compact %s", async (compact) => {
     vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: compact, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
     const user = userEvent.setup();
     const callbacks = actions();
@@ -39,8 +39,8 @@ describe("Operator approved learner: level-up exception", () => {
     render(<OperatorDashboard view={adaptAssessmentOverview(source, { aiConnected: true, openAppeals: 0 })} actions={callbacks} />);
     const row = within(screen.getByTestId("approved-learner-1"));
     if (compact) await user.click(row.getByText("Thao tác", { exact: true }));
-    expect(screen.queryByRole("columnheader", { name: "Mục tiêu tháng" })).not.toBeInTheDocument();
-    expect(row.queryByText("Luyện họp nhóm")).not.toBeInTheDocument();
+    if (!compact) expect(screen.getByRole("columnheader", { name: "Mục tiêu tháng" })).toBeInTheDocument();
+    expect(row.getByText("Luyện họp nhóm")).toBeVisible();
     await user.click(row.getByRole("button", { name: /^Mục tiêu$/u }));
     expect(callbacks.onEditGoal).toHaveBeenCalledWith("learner-1");
     expect(row.getByRole("button", { name: "Hồ sơ" })).toBeVisible();

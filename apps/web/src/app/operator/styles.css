@@ -1983,8 +1983,15 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
   width: 41%;
 }
 
-.app-operator .operator-approved-panel .operator-action-table :is(th, td):last-child {
-  width: 59%;
+.operator-approved-goal {
+  overflow-wrap: anywhere;
+}
+
+p.operator-approved-goal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  margin: 8px 0 0;
 }
 
 .app-operator .operator-action-table td {

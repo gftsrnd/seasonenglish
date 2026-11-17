@@ -690,7 +690,9 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
         request.log.warn({ issues: error.issues }, "Level form generation failed the content gate");
         return reply.code(502).send({ code: "LEVEL_FORM_GENERATION_FAILED", issues: error.issues });
       }
-      request.log.warn({ error }, "Level form generation failed");
+      const code = assessmentErrorCode(error, "LEVEL_FORM_GENERATION_FAILED");
+      request.log.warn({ errorCode: code }, "Level form generation failed");
+      if (placementRetake && (code === "AI_TIMEOUT" || code === "AI_OUTPUT_INVALID")) return reply.code(502).send({ code });
       return reply.code(502).send({ code: "LEVEL_FORM_GENERATION_FAILED" });
     }
   });

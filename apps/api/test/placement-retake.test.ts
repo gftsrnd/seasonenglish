@@ -160,6 +160,15 @@ describe("placement retake form generation (level-up generator, placement mode)"
     await server.close();
   });
 
+  it.each(["AI_TIMEOUT", "AI_OUTPUT_INVALID"])("reports safe retake generation failure %s without replacing a draft", async code => {
+    const server = await app({ runTask: vi.fn().mockRejectedValue(new Error(code)) } as unknown as AiTaskRunner);
+    const response = await server.inject({ method: "POST", url: "/api/v1/assessment-level-forms/placement-retake/generate" });
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({ code });
+    expect(repositories.assessments.createLevelFormDraft).not.toHaveBeenCalled();
+    await server.close();
+  });
+
   it("lists the placement-retake slot next to the level-up slots", async () => {
     const server = await app();
     const response = await server.inject({ method: "GET", url: "/api/v1/assessment-level-forms" });
