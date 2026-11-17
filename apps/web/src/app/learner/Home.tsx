@@ -135,11 +135,13 @@ export function LevelUpCelebration({
   const isTopLevel = announcement.kind === "top-level-redirect";
   const adjusted = announcement.kind === "level-adjustment";
   const seasonUp = announcement.kind === "season-up";
+  const levelUp = announcement.kind === "new-level-announcement";
   useEffect(() => {
+    if (levelUp) return;
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus();
     return () => previousFocusRef.current?.focus();
-  }, []);
+  }, [levelUp]);
   const handleDialogKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -163,6 +165,16 @@ export function LevelUpCelebration({
       first.focus();
     }
   };
+  if (levelUp) return <Modal
+    className="level-adjustment-dialog"
+    title={announcement.level ? `Bạn đã lên mức ${announcement.level}` : "Bạn đã lên mức"}
+    onClose={() => void onClose()}
+    dismissOnBackdrop
+    actions={<Button variant="primary" onClick={() => void onClose()}>Tiếp tục học</Button>}
+  >
+    {!genuine ? <span className="badge">Mô phỏng</span> : null}
+    {announcement.reason ? <p className="small"><b>Lý do của Vận hành</b><br />{announcement.reason}</p> : null}
+  </Modal>;
   if (adjusted) return <div className="modal-backdrop" role="presentation" onClick={(event) => {
     if (event.currentTarget === event.target) void onClose();
   }}>

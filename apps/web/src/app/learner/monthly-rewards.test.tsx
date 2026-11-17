@@ -121,6 +121,22 @@ describe("Level adjustment modal", () => {
   });
 });
 
+it("shows a compact level-up notice with one close control and the operator's reason", async () => {
+  const onClose = vi.fn();
+  const user = userEvent.setup();
+  render(<LevelUpCelebration displayName="Minh Anh" onClose={onClose} announcement={{
+    kind: "new-level-announcement", points: 0, nextPoints: 5000, seasonName: "Mùa thu", level: "B2",
+    source: "genuine", reason: "Đạt yêu cầu bài thi lên mức."
+  }} />);
+  const dialog = screen.getByRole("dialog", { name: "Bạn đã lên mức B2" });
+  expect(within(dialog).getByText("Đạt yêu cầu bài thi lên mức.")).toBeInTheDocument();
+  expect(dialog).not.toHaveTextContent(/Thông báo thật|Quy tắc công nhận/);
+  expect(within(dialog).getAllByRole("button").map(button => button.getAttribute("aria-label") ?? button.textContent))
+    .toEqual(["Đóng hộp thoại", "Tiếp tục học"]);
+  await user.click(within(dialog).getByRole("button", { name: "Tiếp tục học" }));
+  expect(onClose).toHaveBeenCalledTimes(1);
+});
+
 describe("Season congratulation modal", () => {
   it("congratulates the learner on the new Season and closes once", async () => {
     const onClose = vi.fn();
