@@ -387,8 +387,9 @@ function MonthlyEligibilitySummary({ eligibility, actions }: { eligibility: NonN
   const appealRequired = eligibility.accessState === "appeal_required";
   const compactUi = useCompactUi();
   // Phones/tablets: the rules list lives in the ⓘ next to "Điều kiện dự thi" instead of a fold under the metrics.
-  const rules = <ul><li>Bài thi tháng cố định dành cho mọi học viên cùng trình độ, kể cả khi chưa hoàn thành hết bài học.</li><li>Hoàn thành ít nhất một bài trong ngày để được tính một lần điểm danh; học bù nhiều bài cùng ngày vẫn chỉ tính một lần.</li><li>Ngày học hiệu lực là Thứ Hai–Thứ Sáu, không tính ngày thi; được vắng tối đa {eligibility.maxAbsences} ngày.</li><li>Đề mở trong cửa sổ hệ thống sau khi form được phát hành; chỉ số bài học và Season dùng để theo dõi tiến độ.</li>{appealRequired ? <li>Gửi khiếu nại tới Quản lý để được xem xét điều kiện dự thi.</li> : null}</ul>;
+  const rules = <ul><li>Bài thi tháng cố định dành cho mọi học viên cùng trình độ, kể cả khi chưa hoàn thành hết bài học.</li><li>Hoàn thành ít nhất một bài trong ngày để được tính một lần điểm danh; học bù nhiều bài cùng ngày vẫn chỉ tính một lần.</li><li>Trong {eligibility.effectiveDays} ngày hiệu lực, bạn được vắng tối đa {eligibility.maxAbsences} ngày. Ngày chưa có bài được công bố không tính vắng.</li><li>Đề mở trong cửa sổ hệ thống sau khi form được phát hành; chỉ số bài học và Season dùng để theo dõi tiến độ.</li>{appealRequired ? <li>Gửi khiếu nại tới Quản lý để được xem xét điều kiện dự thi.</li> : null}</ul>;
   const openToday = eligibility.accessEligible ?? eligibility.accessState === "eligible";
+  const attendanceDaysSoFar = eligibility.attendanceDaysSoFar ?? eligibility.attendedDays + eligibility.absenceDays;
   const state = appealRequired
     ? { label: "Cần kháng nghị", tone: "warn", copy: "Số ngày vắng đã vượt giới hạn." }
     : openToday
@@ -398,12 +399,16 @@ function MonthlyEligibilitySummary({ eligibility, actions }: { eligibility: NonN
     {compactUi ? <InfoTitle as="h3" title="Điều kiện dự thi" tip={<><b>Quy tắc điểm danh và giờ vào đề</b>{rules}</>} label="Quy tắc điểm danh và giờ vào đề" /> : <h3>Điều kiện dự thi</h3>}
     {state ? <div className="monthly-eligibility-state"><span className={`badge ${state.tone}`}>{state.label}</span><span className="small muted">{state.copy}</span></div> : null}
     <div className="monthly-eligibility-metrics">
-      <Metric label="Điểm danh" secondary={`Vắng ${eligibility.absenceDays}/${eligibility.maxAbsences}`} value={`${eligibility.attendedDays}/${eligibility.effectiveDays}`} percent={ratio(eligibility.attendedDays, eligibility.effectiveDays)} color={appealRequired ? "var(--danger)" : "var(--olive)"} />
+      <Metric label="Điểm danh" secondary={`Vắng ${eligibility.absenceDays}/${eligibility.maxAbsences}`} value={`${eligibility.attendedDays}/${attendanceDaysSoFar}`} percent={ratio(eligibility.attendedDays, attendanceDaysSoFar)} color={appealRequired ? "var(--danger)" : "var(--olive)"} />
       {(eligibility.frameworkApproved === true && (eligibility.scheduledLessons ?? 0) > 0)
         ? <Metric label="Hoàn thành lịch học" value={`${eligibility.completedLessons ?? 0}/${eligibility.scheduledLessons ?? 0}`} percent={ratio(eligibility.completedLessons ?? 0, eligibility.scheduledLessons ?? 0)} color="var(--primary)" />
         : <Metric label="Hoàn thành lịch học" pending="Chờ chốt lịch học" percent={0} color="var(--primary)" />}
       <Metric label="Season hợp lệ" value={`${eligibility.seasonTurns ?? 0}/${eligibility.seasonTurnsRequired ?? 100}`} percent={ratio(eligibility.seasonTurns ?? 0, eligibility.seasonTurnsRequired ?? 100)} color="var(--lav)" />
     </div>
+    {eligibility.missedDates?.length ? <details className="monthly-eligibility-rules">
+      <summary>Ngày vắng ({eligibility.missedDates.length})</summary>
+      <p>{eligibility.missedDates.map(date => `${date.slice(8, 10)}/${date.slice(5, 7)}`).join(", ")}</p>
+    </details> : null}
     {compactUi ? null : <details className="monthly-eligibility-rules"><summary>Quy tắc điểm danh và giờ vào đề</summary>{rules}</details>}
     {appealRequired ? <section className="card monthly-complaint-form"><h3>Khiếu nại điều kiện dự thi</h3><p className="small muted">Quản lý sẽ phản hồi trong 24 giờ. Nếu chưa xử lý đúng hạn, đơn sẽ được tự duyệt.</p>{complaints.filter((item) => item.kind === "exam_eligibility" && (item.month ?? item.submittedAt.slice(0, 7)) === eligibility.month).slice(0, 1).map((item) => <p className="small" key={item.id}>Đơn gần nhất: {item.status === "pending" ? "Đang chờ xử lý" : item.status === "auto_approved" || item.status === "approved" ? `Đã duyệt${item.resolution ? ` · ${item.resolution}` : ""}` : `Bị từ chối${item.resolution ? ` · ${item.resolution}` : ""}`}</p>)}{complaintError ? <p role="alert" className="small danger-text">{complaintError}</p> : null}<RequestEvidenceFields key={complaintRevision} value={complaintEvidence} onChange={setComplaintEvidence} label="Ngày hoặc mục cần kiểm tra" placeholder="Ví dụ: Điểm danh ngày 06/11" disabled={submittingComplaint} /><label>Lý do<textarea value={complaintReason} maxLength={2000} onChange={(event) => setComplaintReason(event.target.value)} /></label><button className="btn-sm btn-primary" type="button" disabled={submittingComplaint || complaintEvidence.blocked || complaintReason.trim().length < 5 || complaints.some((item) => item.kind === "exam_eligibility" && item.status === "pending")} onClick={() => { const submit = actions.submitComplaint; if (!submit) return; setSubmittingComplaint(true); setComplaintError(""); void submit("exam_eligibility", complaintReason.trim(), ...requestEvidenceArgs(complaintEvidence)).then(() => { setComplaintReason(""); setComplaintEvidence({}); setComplaintRevision(value => value + 1); return actions.getComplaints?.(); }).then((result) => { if (result) setComplaints(result.complaints); }).catch(() => setComplaintError("Không gửi được khiếu nại. Hãy thử lại sau.")).finally(() => setSubmittingComplaint(false)); }}>Gửi khiếu nại</button></section> : null}
   </section>;
@@ -418,7 +423,7 @@ function Metric({ metric, label, secondary, value, pending, percent, color = "va
 /** Days attended over the counted learning days that have already come (absences + attended days). */
 function HomeAttendanceMetric({ eligibility }: { eligibility: LearnerHomeView["monthlyEligibility"] }) {
   if (!eligibility) return <Metric metric="attendance" label="Điểm danh" value="–" percent={0} color="var(--peach)" />;
-  const daysSoFar = eligibility.attendedDays + eligibility.absenceDays;
+  const daysSoFar = eligibility.attendanceDaysSoFar ?? eligibility.attendedDays + eligibility.absenceDays;
   return <Metric metric="attendance" label="Điểm danh" value={`${eligibility.attendedDays}/${daysSoFar}`} percent={ratio(eligibility.attendedDays, daysSoFar)} color="var(--peach)" title={`Đã học ${eligibility.attendedDays} trên ${daysSoFar} ngày học đã qua`} />;
 }
 

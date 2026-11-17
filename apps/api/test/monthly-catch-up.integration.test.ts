@@ -184,4 +184,41 @@ describe("mid-month catch-up learners", () => {
     expect(progress?.points).toBe(30); // December completion and full-month bonus only.
     expect(progress?.monthlyProgress?.completedLessons).toBe(1);
   });
+  it("keeps the December 8 cohort's allowance stable as unpublished days pass", async () => {
+    await systemDate("2026-12-08");
+    const id = await learner("2026-12-08");
+    expect(await learnerMonthlyAccess(pool, id)).toMatchObject({ state: "active", effectiveDays: 17, seasonTarget: 78 });
+    expect(await monthlyExamEligibility(pool, id)).toMatchObject({ effectiveDays: 17, maxAbsences: 5, absenceDays: 0, seasonTurnsRequired: 78 });
+    await pool.query(`update month_lessons ml set lesson_date = '2026-12-08'
+      from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+      where ml.framework_id = mf.id and pm.month = '2026-12'`);
+    await systemDate("2026-12-09");
+    expect(await monthlyExamEligibility(pool, id)).toMatchObject({ effectiveDays: 17, maxAbsences: 5, absenceDays: 1 });
+    await systemDate("2026-12-31");
+    expect(await monthlyExamEligibility(pool, id)).toMatchObject({ effectiveDays: 17, attendanceDaysSoFar: 1, maxAbsences: 5, absenceDays: 1, missedDates: ["2026-12-08"], seasonTurnsRequired: 78 });
+    const manager = await repositories.manager.monthlyOverview(DEMO_IDS.manager, { month: "2026-12" });
+    expect(manager?.learners.find((row) => row.learnerId === id)).toMatchObject({ maxAbsences: 5, absenceDays: 1, attendanceAppealRequired: false, season: { target: 78 } });
+  });
+  it("keeps counted learners on the same appeal threshold for learner and Manager views", async () => {
+    await systemDate("2026-11-09");
+    const eligibleId = await learner("2026-11-09");
+    const overLimitId = await learner("2026-11-09");
+    for (const day of days.slice(5, 14)) {
+      await systemDate(day.date);
+      await complete(eligibleId, day.lessonNumber);
+      await complete(overLimitId, day.lessonNumber);
+    }
+    await systemDate(days[15]!.date);
+    await complete(eligibleId, days[15]!.lessonNumber);
+    await systemDate("2026-11-30");
+    expect(await monthlyExamEligibility(pool, eligibleId)).toMatchObject({
+      effectiveDays: 15, maxAbsences: 4, absenceDays: 4, accessState: "eligible"
+    });
+    expect(await monthlyExamEligibility(pool, overLimitId)).toMatchObject({
+      effectiveDays: 15, maxAbsences: 4, absenceDays: 5, accessState: "appeal_required"
+    });
+    const manager = await repositories.manager.monthlyOverview(DEMO_IDS.manager, { month: "2026-11" });
+    expect(manager?.learners.find((row) => row.learnerId === eligibleId)).toMatchObject({ absenceDays: 4, attendanceAppealRequired: false });
+    expect(manager?.learners.find((row) => row.learnerId === overLimitId)).toMatchObject({ absenceDays: 5, attendanceAppealRequired: true });
+  });
 });

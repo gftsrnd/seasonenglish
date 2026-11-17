@@ -100,7 +100,9 @@ function LearnerRow({ learner, monthly, weekStartDate, onOpen }: { learner: Mana
   const badgeDetailText = (learner.earnedBadgeDetails ?? []).map((badge) => `${badge.label}: ${badge.description}`).join(" · ");
   const earnedIcons = [...new Set([...learner.earnedBadges, ...(learner.earnedBadgeDetails ?? []).map(({ key }) => key)].map(rewardBadgeIcon))].join("");
   const lessonCount = monthly ? `${monthly.lessons.completed}/${monthly.lessons.scheduled}` : learner.totalLessonsThisWeek ? `${learner.completedLessons}/${learner.totalLessonsThisWeek}` : "—";
-  const assessment = monthly ? <span className="small">{monthlyExamLabel(monthly.exam)}</span> : learner.weeklyPracticeStatus === "scored"
+  const assessment = monthly ? monthly.attendanceAppealRequired
+    ? <Badge tone="warn">Cần kháng nghị</Badge>
+    : <span className="small">{monthlyExamLabel(monthly.exam)}</span> : learner.weeklyPracticeStatus === "scored"
     ? <Badge tone={(learner.weeklyPracticeScore ?? 0) >= 70 ? "ok" : "warn"}>{formatScore(learner.weeklyPracticeScore)}</Badge>
     : learner.weeklyPracticeStatus === "pending_review" ? <Badge tone="warn">chờ chấm</Badge> : <span className="muted">chưa</span>;
   const coach = monthly ? <>{monthly.season.turns}<span className="xs muted"> /{monthly.season.target}</span></> : <>{learner.coachTurnsThisWeek}{learner.coachTurnsThisWeek >= 50 ? " ✓" : <span className="xs muted"> /50</span>}</>;
@@ -113,7 +115,7 @@ function LearnerRow({ learner, monthly, weekStartDate, onOpen }: { learner: Mana
   return <tr className="manager-progress-record" role="row">
     <td className="manager-progress-name"><b>{learner.learnerName}</b></td>
     <td className="manager-progress-level"><Badge tone="primary">{learner.cefr}</Badge></td>
-    <td className="manager-progress-rhythm"><span className="manager-progress-compact-label">Nhịp học </span><WeekDots count={learner.sessionsThisWeek} {...(weekStartDate ? { weekStartDate } : {})} {...(learner.activityDatesThisWeek ? { activityDates: learner.activityDatesThisWeek } : {})} /> <span className="xs muted">{learner.sessionsThisWeek}</span></td>
+    <td className="manager-progress-rhythm"><span className="manager-progress-compact-label">Nhịp học </span><WeekDots count={learner.sessionsThisWeek} {...(weekStartDate ? { weekStartDate } : {})} {...(learner.activityDatesThisWeek ? { activityDates: learner.activityDatesThisWeek } : {})} /> <span className="xs muted">{learner.sessionsThisWeek}</span>{monthly && monthly.maxAbsences + monthly.elapsedDays > 0 ? <div className="xs muted">Vắng {monthly.absenceDays}/{monthly.maxAbsences}</div> : null}</td>
     <td className="manager-progress-lessons"><span className="manager-progress-compact-label">Bài tháng </span>{lessonCount}</td>
     <td className="manager-progress-desktop-detail">{coach}</td>
     <td className="manager-progress-desktop-detail">{assessment}</td>

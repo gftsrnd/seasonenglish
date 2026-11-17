@@ -1188,11 +1188,12 @@ export async function monthlyExamEligibility(pool: Pool, learnerId: string, opti
   const uncounted = access?.state === "uncounted";
   // December 2026: a past weekday without an approved lesson of the level is never an absence.
   const lessonDates = cohortEligible && access.cefr ? (await learnerMonthlyLessonDates(pool, learnerId, [row.month], access.cefr)).get(row.month) ?? new Set<string>() : new Set<string>();
-  const effectiveDates = cohortEligible ? monthlyAttendanceCountedDates(access.effectiveDates, lessonDates, systemDate) : [];
-  const elapsedDates = effectiveDates.filter(date => date < systemDate);
+  const effectiveDates = cohortEligible ? access.effectiveDates : [];
+  const availableDates = monthlyAttendanceCountedDates(effectiveDates, lessonDates, systemDate);
+  const elapsedDates = availableDates.filter(date => date < systemDate);
   const recorded = cohortEligible && access.cefr
     ? (await learnerMonthlyAttendanceDates(pool, learnerId, [row.month], { cefr: access.cefr })).get(row.month) ?? [] : [];
-  const attended = recorded.filter(date => effectiveDates.includes(date) && date <= systemDate);
+  const attended = recorded.filter(date => availableDates.includes(date) && date <= systemDate && lessonDates.has(date));
   const entryState = row.late_opened_at ? "open" : monthlyExamEntryState(systemDate, examDate, row.local_time);
   const eligibility = evaluateMonthlyExamEligibility({
     systemDate, examDate, effectiveDays: effectiveDates.length, elapsedEffectiveDays: elapsedDates.length,
@@ -1206,7 +1207,10 @@ export async function monthlyExamEligibility(pool: Pool, learnerId: string, opti
     windowOpen: entryState === "open"
   });
   return {
-    month: row.month, systemDate, examDate, ...eligibility, entryClosed: entryState === "closed",
+    month: row.month, systemDate, examDate, ...eligibility,
+    attendanceDaysSoFar: eligibility.attendedDays + eligibility.absenceDays,
+    missedDates: elapsedDates.filter(date => !attended.includes(date)),
+    entryClosed: entryState === "closed",
     opensAt: row.late_opened_at?.toISOString() ?? `${examDate}T00:00:00+07:00`,
     closesAt: row.late_opened_at ? new Date(row.late_opened_at.getTime() + 24 * 60 * 60 * 1000).toISOString() : `${examDate}T${MONTHLY_EXAM_ENTRY_CUTOFF}+07:00`
   };

@@ -111,12 +111,16 @@ export function learningAbsenceStreak(
   return { days, startedOn };
 }
 
+export function monthlyAttendanceAllowance(effectiveDays: number): number {
+  return Math.floor(effectiveDays * 0.3);
+}
+
 export interface MonthlyExamEligibilityInput {
   systemDate: string;
   examDate: string;
   /** All effective weekdays in the month, excluding the exam date. */
   effectiveDays: number;
-  /** Effective weekdays that have already ended. */
+  /** Effective weekdays with available lessons that have already ended. */
   elapsedEffectiveDays: number;
   attendedDays: number;
   attendedElapsedDays?: number;
@@ -164,7 +168,7 @@ export function evaluateMonthlyExamEligibility(input: MonthlyExamEligibilityInpu
   const attendedDays = Math.max(0, Math.min(effectiveDays, Math.floor(input.attendedDays)));
   const attendedElapsedDays = Math.max(0, Math.min(elapsedEffectiveDays, Math.floor(input.attendedElapsedDays ?? attendedDays)));
   const absenceDays = elapsedEffectiveDays - attendedElapsedDays;
-  const maxAbsences = Math.floor(effectiveDays * 0.3);
+  const maxAbsences = monthlyAttendanceAllowance(effectiveDays);
   const attendanceOverride = input.attendanceOverride === true;
   const attendanceEligible = absenceDays <= maxAbsences || attendanceOverride;
   const scheduledLessons = Math.max(0, Math.floor(input.scheduledLessons));

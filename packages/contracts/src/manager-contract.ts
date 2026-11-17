@@ -32,6 +32,7 @@ export interface ManagerMonthlyLearnerView {
   readonly levelCriteria: readonly [boolean, boolean, boolean, boolean] | null;
   readonly complaintCount: number;
   readonly attendanceEligible: boolean;
+  readonly attendanceAppealRequired?: boolean;
   readonly onTrack: boolean;
   readonly completedToDate: boolean;
   /** Lessons expected by today (a mid-month learner's catch-up lessons included) and how many are done. */

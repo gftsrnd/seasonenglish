@@ -187,6 +187,18 @@ describe("monthly learner home", () => {
     expect(screen.queryByRole("grid", { name: "Lịch học tháng 11/2026" })).not.toBeInTheDocument();
   });
 
+  it("shows actual missed dates and the stable allowance in monthly attendance", () => {
+    const current = view();
+    const eligibility = { ...current.monthlyEligibility!, effectiveDays: 17, attendedDays: 0,
+      attendanceDaysSoFar: 2, absenceDays: 2, maxAbsences: 5, missedDates: ["2026-11-09", "2026-11-12"] };
+    render(<LearnerMonthly view={view({ monthlyEligibility: eligibility })} actions={actions} />);
+    const summary = screen.getByRole("region", { name: "Điều kiện vào bài thi tháng" });
+    expect(summary).toHaveTextContent("0/2Điểm danhVắng 2/5");
+    expect(summary).toHaveTextContent("17 ngày hiệu lực");
+    fireEvent.click(within(summary).getByText("Ngày vắng (2)"));
+    expect(summary).toHaveTextContent("09/11, 12/11");
+  });
+
   it("shows only today's Season quota on the home card", () => {
     render(<LearnerHome view={view({ coach: { turnsToday: 7, turnsThisWeek: 22, targetTurns: 60, href: "/coach" } })} actions={actions} />);
     const card = screen.getByRole("link", { name: /Season AI Coach/i });

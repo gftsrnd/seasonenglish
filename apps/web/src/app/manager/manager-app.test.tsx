@@ -111,6 +111,24 @@ describe("new Manager app branch", () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
+  it("shows the learner's monthly absence allowance and appeal status in group progress", () => {
+    render(<ManagerProgress view={progress} monthly={{
+      organizationName: "GFT Demo", month: "2026-12", currentMonth: "2026-12", cefr: null, generatedAt: "2026-12-31",
+      survey: { submissions: 0, ratingResponses: 0, withoutRatingQuestion: 0, unansweredRating: 0, average: null },
+      learners: [{
+        learnerId: "learner-1", learnerName: "Học viên Demo", email: null, cefr: "A2", state: "active", lastActivityAt: null,
+        attendedDays: 0, elapsedDays: 8, absenceDays: 8, maxAbsences: 5, consecutiveAbsences: 0,
+        lessons: { completed: 0, scheduled: 9 }, reviews: { completed: 0, scheduled: 3 }, season: { turns: 0, target: 78 },
+        exam: { status: "not_started", scores: { listening: null, reading: null, writing: null, speaking: null }, total: null },
+        levelCriteria: null, complaintCount: 0, attendanceEligible: false, attendanceAppealRequired: true,
+        onTrack: false, completedToDate: false, lessonsToDate: { completed: 0, expected: 9 }, atRisk: true
+      }]
+    }} />);
+    const row = screen.getByRole("row", { name: /Học viên Demo/ });
+    expect(within(row).getByText("Vắng 8/5")).toBeInTheDocument();
+    expect(within(row).getAllByText("Cần kháng nghị").length).toBeGreaterThan(0);
+  });
+
   it("shows Managers when a placement was scored manually", () => {
     const manual = {
       ...progress,

@@ -324,7 +324,7 @@ function MonthlyLearnerTable({ learners }: { learners: readonly ManagerMonthlyLe
       </td>
       <td><span className="manager-monthly-cell-label">Bài học</span><b>{learner.lessons.completed}/{learner.lessons.scheduled} bài</b><div className="xs muted">{learner.reviews.completed}/{learner.reviews.scheduled} bài ôn</div></td>
       <td><span className="manager-monthly-cell-label">Season</span><b>{learner.season.turns}/{learner.season.target}</b><div className="xs muted">Lượt hợp lệ</div></td>
-      <td><span className="manager-monthly-cell-label">Bài thi tháng</span><b>{monthlyExamLabel(learner.exam)}</b>
+      <td><span className="manager-monthly-cell-label">Bài thi tháng</span><b>{learner.attendanceAppealRequired ? "Cần kháng nghị" : monthlyExamLabel(learner.exam)}</b>
         <MonthlySkillScores scores={learner.exam.scores} />
       </td>
       <td><span className="manager-monthly-cell-label">Khiếu nại / kháng nghị</span>{learner.complaintCount}</td>

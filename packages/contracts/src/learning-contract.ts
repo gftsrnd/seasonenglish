@@ -325,12 +325,16 @@ export interface MonthlyExamEligibilityView {
   month: string;
   systemDate: string;
   examDate: string;
-  /** Weekdays that count for attendance; the exam day is excluded. */
+  /** Effective weekday window used for the absence allowance; excludes the exam day. */
   effectiveDays: number;
+  /** Attended plus missed dates to date. Unpublished lesson dates do not count. */
+  attendanceDaysSoFar?: number;
   /** Distinct calendar dates with at least one completed lesson. */
   attendedDays: number;
   /** Effective dates that have ended without attendance. */
   absenceDays: number;
+  /** Published lesson dates already missed, in chronological order. */
+  missedDates?: string[];
   maxAbsences: number;
   attendanceEligible: boolean;
   /** Attendance exception granted by an approved or automatically approved complaint. */

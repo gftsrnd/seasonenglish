@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, learningAbsenceStreak, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, monthlyAccessCanStudy, monthlyAccessCounts, monthlyAccessState, LEVEL_READINESS_THRESHOLDS, type LearnerMonthlyAccessState, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
+import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, learningAbsenceStreak, monthlyAttendanceAllowance, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, monthlyAccessCanStudy, monthlyAccessCounts, monthlyAccessState, LEVEL_READINESS_THRESHOLDS, type LearnerMonthlyAccessState, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
 import { longestScheduledLessonStreak, nextRewardSeason, rewardBadgeDescription, rewardBadgeThreshold, rewardSeasonFor, rewardSeasonLabel, REWARD_BADGE_KEYS, REWARD_SEASONS, pickGameWordExample, type RewardSeason } from "@e4s/domain/engagement";
@@ -3025,8 +3025,10 @@ export async function learnerMonthlyLessonDates(pool: Pool | PoolClient, learner
        join program_months pm on pm.organization_id = u.organization_id and pm.month = any($2::text[])
        join month_frameworks mf on mf.program_month_id = pm.id and mf.cefr = $3
          and mf.status = 'approved' and mf.published_at is not null
-       join month_lessons ml on ml.framework_id = mf.id and ml.status = 'approved'
-      where u.id = $1`,
+       join month_lessons ml on ml.framework_id = mf.id and ml.status = 'approved' and ml.scope_hash = mf.scope_hash
+       join lessons l on l.id = ml.lesson_id
+       join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id and lsv.status = 'published'
+      where u.id = $1 and exists (select 1 from lesson_versions lv where lv.lesson_id = l.id and lv.status = 'published')`,
     [learnerId, months, cefr]
   );
   for (const row of rows) result.get(row.month)?.add(row.lesson_date);
@@ -3153,7 +3155,7 @@ async function learnerMissedPreviousExam(db: Pool | PoolClient, learnerId: strin
   // Only days that had an approved lesson count (the month is over, so every day is past).
   const counted = monthlyAttendanceCountedDates(prior.effectiveDates, lessonDates.get(previousMonth) ?? new Set(), prior.systemDate);
   const attended = attendance.filter(date => counted.includes(date)).length;
-  return counted.length - attended <= Math.floor(counted.length * 0.3);
+  return counted.length - attended <= monthlyAttendanceAllowance(prior.effectiveDates.length);
 }
 
 async function learnerLearningAbsences(db: Pool | PoolClient, learnerId: string, access: LearnerMonthlyAccess): Promise<number> {
@@ -12309,8 +12311,9 @@ class ManagerRepository {
         const hasAttendance = state === "active" || state === "graduated" || (state === "locked" && (access?.state === "active" || historicalWindow?.canStudy));
         // Past weekdays without an approved lesson of this level are not absences (December 2026).
         const lessonDates = cefr && hasAttendance ? (await learnerMonthlyLessonDates(this.pool, row.id, [month], cefr)).get(month) ?? new Set<string>() : new Set<string>();
-        const effective = hasAttendance ? monthlyAttendanceCountedDates(learningWindow?.effectiveDates ?? [], lessonDates, systemDate) : [];
-        const elapsed = effective.filter(date => date < systemDate);
+        const effective = hasAttendance ? learningWindow?.effectiveDates ?? [] : [];
+        const available = monthlyAttendanceCountedDates(effective, lessonDates, systemDate);
+        const elapsed = available.filter(date => date < systemDate);
         const [attendance, readiness] = await Promise.all([
           cefr && hasAttendance
             ? learnerMonthlyAttendanceDates(this.pool, row.id, [month], { cefr })
@@ -12319,11 +12322,11 @@ class ManagerRepository {
             ? new LearningRepository(this.pool).monthlyLevelUpReadiness(row.id, cefr, month)
             : null
         ]);
-        const attended = new Set((attendance.get(month) ?? []).filter(date => effective.includes(date) && date <= systemDate));
+        const attended = new Set((attendance.get(month) ?? []).filter(date => available.includes(date) && date <= systemDate && lessonDates.has(date)));
         const daysAttended = elapsed.filter(date => attended.has(date)).length;
         const absenceDays = elapsed.length - daysAttended;
-        const maxAbsences = Math.floor(effective.length * 0.3);
-        const consecutiveAbsences = consecutiveLearningAbsences(effective, [...attended], systemDate, access?.resetOn ?? undefined);
+        const maxAbsences = monthlyAttendanceAllowance(effective.length);
+        const consecutiveAbsences = consecutiveLearningAbsences(available, [...attended], systemDate, access?.resetOn ?? undefined);
         const scores = { listening: facts.listening, reading: facts.reading, writing: facts.writing, speaking: facts.speaking };
         const scoreValues = Object.values(scores);
         const examTotal = scoreValues.every((score): score is number => score !== null) ? scoreValues.reduce((sum, score) => sum + score, 0) : null;
@@ -12337,7 +12340,7 @@ class ManagerRepository {
         return {
           learnerId: row.id, learnerName: row.name, email: row.email, cefr, state,
           lastActivityAt: row.last_activity?.toISOString() ?? null,
-          attendedDays: attended.size, elapsedDays: effective.filter(date => date <= systemDate).length,
+          attendedDays: attended.size, elapsedDays: attended.size + absenceDays,
           absenceDays, maxAbsences, consecutiveAbsences,
           lessons: uncounted ? { completed: 0, scheduled: 0 } : { completed: facts.completed, scheduled: facts.scheduled },
           reviews: uncounted ? { completed: 0, scheduled: 0 } : { completed: facts.reviewed, scheduled: facts.reviews },
@@ -12347,6 +12350,7 @@ class ManagerRepository {
             : { status: facts.exam_status, scores, total: examTotal },
           levelCriteria, complaintCount: facts.complaints,
           attendanceEligible: state === "active" && (absenceDays <= maxAbsences || facts.attendance_override),
+          attendanceAppealRequired: Boolean(hasAttendance) && absenceDays > maxAbsences && !facts.attendance_override,
           onTrack: elapsed.length > 0 && daysAttended / elapsed.length >= 0.7,
           completedToDate: !uncounted && facts.elapsed_lessons > 0 && facts.completed_elapsed === facts.elapsed_lessons,
           lessonsToDate: uncounted ? { completed: 0, expected: 0 } : { completed: facts.completed_elapsed, expected: facts.elapsed_lessons },

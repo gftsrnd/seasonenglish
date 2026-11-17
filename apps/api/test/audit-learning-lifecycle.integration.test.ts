@@ -47,6 +47,25 @@ describe("audited monthly learning lifecycle", () => {
     await pool.query(`insert into month_frameworks (id, program_month_id, cefr, status, published_at, published_on)
       select gen_random_uuid(), id, 'A1', 'approved', now(), (month || '-01')::date from program_months
       where organization_id = $1 and month in ('2026-11', '2026-12')`, [DEMO_IDS.organization]);
+    // Attendance only includes dates with learner-visible published content.
+    const { rows: [framework] } = await pool.query<{ id: string }>(`select mf.id from month_frameworks mf
+      join program_months pm on pm.id = mf.program_month_id where pm.month = '2026-11'`);
+    const setId = randomUUID();
+    await pool.query("insert into lesson_sets (id, month_framework_id, cefr) values ($1, $2, 'A1')", [setId, framework!.id]);
+    await pool.query("update month_frameworks set scope_hash = 'scope' where id = $1", [framework!.id]);
+    const weekdays = Array.from({ length: 28 }, (_, index) => new Date(Date.UTC(2026, 10, index + 1)))
+      .filter(day => day.getUTCDay() >= 1 && day.getUTCDay() <= 5);
+    for (const scheduled of weekdays) {
+      const date = scheduled.toISOString().slice(0, 10);
+      const lessonId = randomUUID();
+      const versionId = randomUUID();
+      const day = Number(date.slice(8));
+      await pool.query("insert into lesson_set_versions (id, lesson_set_id, version, status) values ($1, $2, $3, 'published')", [versionId, setId, day]);
+      await pool.query("insert into lessons (id, lesson_set_version_id, day_number, title) values ($1, $2, $3, 'Audit lesson')", [lessonId, versionId, day]);
+      await pool.query("insert into lesson_versions (id, lesson_id, version, status, content) values (gen_random_uuid(), $1, 1, 'published', '{}'::jsonb)", [lessonId]);
+      await pool.query("insert into month_lessons (id, framework_id, lesson_number, lesson_date, lesson_id, scope_hash, status) values (gen_random_uuid(), $1, $2, $3, $4, 'scope', 'approved')",
+        [framework!.id, day, date, lessonId]);
+    }
     await pool.query(`with definition as (
       insert into assessment_definitions (id, organization_id, assessment_key, kind, title)
       values (gen_random_uuid(), $1, 'monthly-final-2026-11-a1', 'final', 'November A1') returning id
@@ -64,6 +83,25 @@ describe("audited monthly learning lifecycle", () => {
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });
+
+  it("opens a counted learner's daily lesson after sign-in and records one attendance", async () => {
+    await systemDate("2026-11-02");
+    const account = await learner("A1", "2026-11-01", true);
+    const cookie = await login(account.email);
+    const home = () => app.inject({ url: "/api/v1/learner/home", headers: { cookie } });
+    const before = await home();
+    expect(before.statusCode, before.body).toBe(200);
+    expect(before.json()).toMatchObject({ nextLesson: { lessonDate: "2026-11-02", lock: null }, monthlyEligibility: { attendedDays: 0 } });
+    const lessonId = before.json().nextLesson.id as string;
+    const content = await app.inject({ url: `/api/v1/lessons/${lessonId}`, headers: { cookie } });
+    expect(content.statusCode, content.body).toBe(200);
+    const completion = await app.inject({ method: "PUT", url: `/api/v1/lessons/${lessonId}/progress`, headers: { cookie }, payload: { markComplete: true } });
+    expect(completion.statusCode, completion.body).toBe(200);
+    expect(completion.json()).toMatchObject({ status: "completed" });
+    const after = await home();
+    expect(after.statusCode, after.body).toBe(200);
+    expect(after.json()).toMatchObject({ monthlyEligibility: { attendedDays: 1, attendanceDaysSoFar: 1, absenceDays: 0 } });
+  });
 
   it("counts ended learning dates, credits a holiday and resets the streak on manager reopen", async () => {
     const placed = await learner("A1", "2026-11-04", true);
@@ -111,7 +149,7 @@ describe("audited monthly learning lifecycle", () => {
     expect(await monthlyExamEligibility(pool, active.id)).toMatchObject({ effectiveDays: 15, absenceDays: 2, maxAbsences: 4, seasonTurnsRequired: 75 });
     expect(await learnerMonthlyAccess(pool, deferred.id)).toMatchObject({ state: "uncounted", startDate: "2026-12-01" });
     expect(await learnerConsecutiveLearningAbsences(pool, deferred.id)).toBe(0);
-    expect(await monthlyExamEligibility(pool, deferred.id)).toMatchObject({ effectiveDays: 0, absenceDays: 0, accessEligible: false, seasonTurnsRequired: 100 });
+    expect(await monthlyExamEligibility(pool, deferred.id)).toMatchObject({ effectiveDays: 0, absenceDays: 0, accessEligible: false, seasonTurnsRequired: 0 });
   });
 
   it("uses the late complaint for its original exam across a month boundary and resumes the same attempt", async () => {
