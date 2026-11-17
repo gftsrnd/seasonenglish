@@ -4728,6 +4728,7 @@ body > .operator-modal-scope .operator-editor-section textarea.line-field { min-
 
 .learner-placement-review-options li.is-selected {
   border-radius: 7px;
+  margin-inline-start: -6px;
   padding: 3px 6px;
   background: var(--primary-soft);
 }
