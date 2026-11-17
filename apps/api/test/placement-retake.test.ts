@@ -257,10 +257,41 @@ describe("learner retake request ('Xin thi lại') and the Operator's decision",
     retakeDb.createPlacementRetakeRequest.mockResolvedValue({ id: "r1", createdAt: new Date() });
     const server = await app();
     const open = await server.inject({ method: "GET", url: "/api/v1/learner/placement-retake-request" });
-    expect(open.json()).toEqual({ target: { attemptId: OLD_ATTEMPT_ID, title: "Test đầu vào", availableUntil: until.toISOString() }, request: null, retake: "not_granted" });
+    expect(open.json()).toEqual({ original: null, target: { attemptId: OLD_ATTEMPT_ID, title: "Test đầu vào", availableUntil: until.toISOString() }, request: null, retake: "not_granted" });
     const sent = await server.inject({ method: "POST", url: "/api/v1/learner/placement-retake-request" });
     expect(sent.statusCode, sent.body).toBe(201);
+    expect(retakeDb.createPlacementRetakeRequest).toHaveBeenLastCalledWith(expect.anything(), LEARNER_ID, undefined);
     expect(sent.json().request).toEqual(expect.objectContaining({ id: "r1", status: "pending" }));
+    await server.close();
+  });
+
+  it("trims the reason and refuses overlong input before creating a request", async () => {
+    retakeDb.createPlacementRetakeRequest.mockResolvedValue(null);
+    const server = await app();
+    const url = "/api/v1/learner/placement-retake-request";
+    const trimmed = await server.inject({ method: "POST", url, payload: { reason: "  Lý do  " } });
+    expect(trimmed.statusCode).toBe(409);
+    expect(retakeDb.createPlacementRetakeRequest).toHaveBeenLastCalledWith(expect.anything(), LEARNER_ID, "Lý do");
+    retakeDb.createPlacementRetakeRequest.mockClear();
+    const invalid = await server.inject({ method: "POST", url, payload: { reason: "x".repeat(2001) } });
+    expect(invalid.statusCode).toBe(400);
+    expect(retakeDb.createPlacementRetakeRequest).not.toHaveBeenCalled();
+    await server.close();
+  });
+
+  it("loads the original attempt and Operator feedback independently of retake status", async () => {
+    retakeDb.findPlacementRetakeRequestState.mockResolvedValueOnce({
+      original: { attemptId: OLD_ATTEMPT_ID, feedback: "Phản hồi ban đầu" }, target: null, request: null, retake: "used"
+    });
+    const original = { ...attempt(OLD_ATTEMPT_ID, "approved", "original-version"), responses: [{ section: "writing", taskKey: "W1", value: "My submitted answer", evidenceType: "text", savedAt: new Date() }] };
+    repositories.assessments.findAttempt.mockResolvedValueOnce(original);
+    repositories.assessments.findPublishedByVersion.mockResolvedValueOnce({ ...retakeForm, blueprint: placementDefinition });
+    const server = await app();
+    const response = await server.inject({ method: "GET", url: "/api/v1/learner/placement-retake-request" });
+    expect(response.json().original).toMatchObject({
+      definition: { key: "placement-a" }, attempt: { id: OLD_ATTEMPT_ID, responses: [{ value: "My submitted answer" }] }, feedback: "Phản hồi ban đầu"
+    });
+    expect(repositories.assessments.findAttempt).toHaveBeenCalledExactlyOnceWith(LEARNER_ID, OLD_ATTEMPT_ID);
     await server.close();
   });
 

@@ -163,6 +163,7 @@ export interface PlacementRetakeRequestState {
   /** The learner's retake request (appeals row with request_kind 'retake'), if any. */
   request: { id: string; status: "pending" | "accepted" | "rejected"; resolution: string | null; createdAt: Date; resolvedAt: Date | null } | null;
   retake: AssessmentRetakeStatus;
+  original: { attemptId: string; feedback: string | null } | null;
 }
 
 export async function findPlacementRetakeRequestState(db: Db, learnerId: string, now: Date = new Date()): Promise<PlacementRetakeRequestState> {
@@ -177,24 +178,27 @@ export async function findPlacementRetakeRequestState(db: Db, learnerId: string,
     createdAt: requestRow.rows[0].created_at, resolvedAt: requestRow.rows[0].resolved_at
   } : null;
   let target: PlacementRetakeRequestState["target"] = null;
-  if (!grant && !request) {
-    // The latest decided placement attempt; one request per learner (the retake is once only).
-    const latest = await db.query<{ id: string; status: string; title: string; decided_at: Date | null; has_appeal: boolean }>(
-      `select aa.id, aa.status, 'Test đầu vào' as title, decision.decided_at,
-              exists(select 1 from appeals a where a.attempt_id = aa.id) as has_appeal
-       from assessment_attempts aa
-       join assessment_versions av on av.id = aa.assessment_version_id
-       join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'placement'
-       left join assessment_decisions decision on decision.attempt_id = aa.id
-       where aa.learner_id = $1
-       order by aa.started_at desc limit 1`,
-      [learnerId]
-    );
-    const row = latest.rows[0];
-    const window = row ? placementRetakeRequestWindow({ status: row.status, decidedAt: row.decided_at, now }) : null;
-    if (row && window?.open && !row.has_appeal) target = { attemptId: row.id, title: row.title, availableUntil: window.availableUntil };
+  const latest = await db.query<{ id: string; status: string; submitted_at: Date | null; decided_at: Date | null; feedback: string | null; has_appeal: boolean }>(
+    `select aa.id, aa.status, aa.submitted_at, decision.decided_at,
+            case when decision.decided_by is not null then decision.reason end as feedback,
+            exists(select 1 from appeals a where a.attempt_id = aa.id) as has_appeal
+     from assessment_attempts aa
+     join assessment_versions av on av.id = aa.assessment_version_id
+     join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'placement'
+     left join assessment_decisions decision on decision.attempt_id = aa.id
+     where aa.learner_id = $1 and ad.assessment_key <> $2
+     order by aa.started_at desc limit 1`,
+    [learnerId, PLACEMENT_RETAKE_ASSESSMENT_KEY]
+  );
+  const row = latest.rows[0];
+  if (row && !grant && !request && !row.has_appeal) {
+    const window = placementRetakeRequestWindow({ status: row.status, decidedAt: row.decided_at, now });
+    if (window.open) target = { attemptId: row.id, title: "Test đầu vào", availableUntil: window.availableUntil };
   }
-  return { target, request, retake: placementRetakeStatus(grant) };
+  const original = row && row.status !== "in_progress" && (row.submitted_at || row.decided_at)
+    ? { attemptId: row.id, feedback: row.feedback }
+    : null;
+  return { target, request, retake: placementRetakeStatus(grant), original };
 }
 
 /**
@@ -202,7 +206,7 @@ export async function findPlacementRetakeRequestState(db: Db, learnerId: string,
  * request_kind 'retake') so the Operator's appeal queue, bell items and decision endpoint apply.
  * Accepting it grants the retake (see applyAcceptedAppealLevel). Null when the window is closed.
  */
-export async function createPlacementRetakeRequest(pool: Pool, learnerId: string, now: Date = new Date()): Promise<{ id: string; createdAt: Date } | null> {
+export async function createPlacementRetakeRequest(pool: Pool, learnerId: string, reason?: string, now: Date = new Date()): Promise<{ id: string; createdAt: Date } | null> {
   const client = await pool.connect();
   try {
     await client.query("begin");
@@ -216,7 +220,7 @@ export async function createPlacementRetakeRequest(pool: Pool, learnerId: string
        values ($1, $2, $3, $4, $5, 'retake')
        on conflict (attempt_id) where status = 'pending' do nothing
        returning created_at`,
-      [id, state.target.attemptId, learnerId, PLACEMENT_RETAKE_REQUEST_REASON, expiresAt]
+      [id, state.target.attemptId, learnerId, reason?.trim() || PLACEMENT_RETAKE_REQUEST_REASON, expiresAt]
     );
     await client.query("commit");
     return inserted.rows[0] ? { id, createdAt: inserted.rows[0].created_at } : null;

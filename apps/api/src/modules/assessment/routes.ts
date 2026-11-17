@@ -835,13 +835,19 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
   });
 
   /**
-   * Placement: the support page shows only "Xin thi lại" (no free-text appeal), while a request
-   * is possible: sent back, or approved and within 72 hours of the decision. The request is an
-   * appeal row the Operator accepts (= grants the one retake) or rejects.
+   * Learners may ask for a retake after a send-back or within 72 hours of an approval.
+   * The Operator accepts the request and grants one retake, or rejects it.
    */
   const placementRetakeRequestView = async (learnerId: string): Promise<AssessmentPlacementRetakeRequestView> => {
     const state = await findPlacementRetakeRequestState(pool, learnerId);
+    const attempt = state.original ? await repositories.assessments.findAttempt(learnerId, state.original.attemptId) : null;
+    const definition = attempt ? await definitionForAttempt(repositories.assessments, attempt) : null;
     return {
+      original: attempt && definition ? {
+        definition: publicAssessmentDefinition(definition.blueprint),
+        attempt: attemptView(attempt),
+        feedback: state.original?.feedback ?? null
+      } : null,
       target: state.target ? { ...state.target, availableUntil: state.target.availableUntil?.toISOString() ?? null } : null,
       request: state.request ? { ...state.request, createdAt: state.request.createdAt.toISOString(), resolvedAt: state.request.resolvedAt?.toISOString() ?? null } : null,
       retake: state.retake
@@ -855,7 +861,9 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
 
   app.post("/api/v1/learner/placement-retake-request", { preHandler: learnerOnly }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
-    const created = await createPlacementRetakeRequest(pool, learnerId);
+    const body = z.object({ reason: z.string().trim().max(2_000).optional() }).safeParse(request.body === undefined ? {} : request.body);
+    if (!body.success) return reply.code(400).send({ code: "PLACEMENT_RETAKE_REQUEST_INVALID" });
+    const created = await createPlacementRetakeRequest(pool, learnerId, body.data.reason);
     if (!created) return reply.code(409).send({ code: "PLACEMENT_RETAKE_REQUEST_NOT_AVAILABLE", message: "Đã hết thời hạn xin thi lại hoặc bạn đã gửi yêu cầu." });
     return reply.code(201).send(await placementRetakeRequestView(learnerId));
   });

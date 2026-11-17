@@ -13,7 +13,7 @@ import { adaptReviewAppeal } from "../operator/adapters.js";
 afterEach(cleanup);
 
 const notification = (kind: string, context: string) => ({ id: "n1", kind, context, createdAt: "2026-11-16T03:00:00.000Z", readAt: null }) as unknown as InboxNotificationView;
-const view = (overrides: Partial<AssessmentPlacementRetakeRequestView>): AssessmentPlacementRetakeRequestView => ({ target: null, request: null, retake: "not_granted", ...overrides });
+const view = (overrides: Partial<AssessmentPlacementRetakeRequestView>): AssessmentPlacementRetakeRequestView => ({ original: null, target: null, request: null, retake: "not_granted", ...overrides });
 const renderRequest = (api: NonNullable<Parameters<typeof PlacementRetakeRequest>[0]["api"]>) => render(<MemoryRouter><PlacementRetakeRequest api={api} /></MemoryRouter>);
 
 describe("placement retake request: bell → support page → 'Xin thi lại' → Operator decision", () => {
@@ -25,12 +25,18 @@ describe("placement retake request: bell → support page → 'Xin thi lại' �
     expect(notificationContent(notification("retake_granted", "placement")).path).toBe("/test/placement");
   });
 
-  it("shows only a 'Xin thi lại' button while the window is open, and the pending request after sending", async () => {
+  it("sends the optional reason only after confirmation", async () => {
     const user = userEvent.setup();
     const createPlacementRetakeRequest = vi.fn(async () => view({ request: { id: "r1", status: "pending", resolution: null, createdAt: "2026-11-16T03:00:00.000Z", resolvedAt: null } }));
     renderRequest({ getPlacementRetakeRequest: async () => view({ target: { attemptId: "a1", title: "Test đầu vào", availableUntil: "2026-11-19T02:00:00.000Z" } }), createPlacementRetakeRequest });
     await user.click(await screen.findByRole("button", { name: "Xin thi lại" }));
-    expect(createPlacementRetakeRequest).toHaveBeenCalledTimes(1);
+    await user.type(screen.getByRole("textbox", { name: /Lý do/ }), "  Tôi muốn thử lại.  ");
+    expect(screen.getByRole("dialog")).toHaveTextContent(/quyết định cuối cùng/i);
+    await user.click(screen.getByRole("button", { name: "Hủy" }));
+    expect(createPlacementRetakeRequest).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Xin thi lại" }));
+    await user.click(screen.getByRole("button", { name: "Gửi yêu cầu" }));
+    expect(createPlacementRetakeRequest).toHaveBeenCalledExactlyOnceWith("Tôi muốn thử lại.");
     expect(await screen.findByText(/Đã gửi yêu cầu thi lại/)).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Xin thi lại" })).not.toBeInTheDocument();

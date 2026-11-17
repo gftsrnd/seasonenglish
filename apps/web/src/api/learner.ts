@@ -17,7 +17,7 @@ export interface LearnerApiClient {
   getAppealableAssessments(): Promise<{ results: AssessmentAppealTargetView[] }>;
   /** Placement: the "Xin thi lại" request state (target while the window is open, the request and its decision). */
   getPlacementRetakeRequest?(): Promise<AssessmentPlacementRetakeRequestView>;
-  createPlacementRetakeRequest?(): Promise<AssessmentPlacementRetakeRequestView>;
+  createPlacementRetakeRequest?(reason?: string): Promise<AssessmentPlacementRetakeRequestView>;
   getLearnerAppeals(): Promise<{ appeals: LearnerAcademicAppealView[] }>;
   getLearnerComplaints(): Promise<{ complaints: LearnerComplaintView[] }>;
   submitLearnerComplaint(kind: LearnerComplaintKind, reason: string, evidence?: RequestEvidenceInput): Promise<{ complaint: LearnerComplaintView }>;
@@ -80,7 +80,7 @@ export const learnerApiClient: LearnerApiClient = {
   getCourseCompletion: () => request("/api/v1/learner/course-completion"),
   getAppealableAssessments: () => request("/api/v1/learner/appealable-assessments"),
   getPlacementRetakeRequest: () => request("/api/v1/learner/placement-retake-request"),
-  createPlacementRetakeRequest: () => request("/api/v1/learner/placement-retake-request", { method: "POST", body: "{}" }),
+  createPlacementRetakeRequest: (reason) => request("/api/v1/learner/placement-retake-request", { method: "POST", body: JSON.stringify({ reason }) }),
   getLearnerAppeals: () => request("/api/v1/learner/appeals"),
   getLearnerComplaints: () => request("/api/v1/learner/complaints"),
   submitLearnerComplaint: (kind, reason, evidence) => request("/api/v1/learner/complaints", { method: "POST", body: JSON.stringify({ kind, reason, ...evidence }) }),

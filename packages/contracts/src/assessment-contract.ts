@@ -178,10 +178,11 @@ export interface AssessmentPlacementRetakeView {
 }
 
 /**
- * Learner support page, placement only: the "Xin thi lại" button (no free-text appeal). target is
- * set while a request is possible (sent back, or approved and within 72 h of the decision).
+ * Learner support for placement. The original submission remains viewable after the retake
+ * request window ends and while the learner is taking the retake.
  */
 export interface AssessmentPlacementRetakeRequestView {
+  original: { definition: AssessmentDefinitionView; attempt: AssessmentAttemptView; feedback: string | null } | null;
   target: { attemptId: string; title: string; availableUntil: string | null } | null;
   request: { id: string; status: "pending" | "accepted" | "rejected"; resolution: string | null; createdAt: string; resolvedAt: string | null } | null;
   retake: AssessmentRetakeStatus;

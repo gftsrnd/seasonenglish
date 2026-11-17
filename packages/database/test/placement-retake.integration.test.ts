@@ -82,10 +82,22 @@ describe.skipIf(!databaseUrl)("placement retake persistence", () => {
     // Sent back long ago: no 72 h limit for a learner without a placement level.
     await pool.query("insert into assessment_decisions (id, attempt_id, status, reason, decided_by, decided_at) values ($1, $2, 'retry', 'Chưa đủ để xếp mức', $3, now() - interval '10 days')", [randomUUID(), attemptId, DEMO_IDS.operator]);
     expect((await findPlacementRetakeRequestState(pool, learnerId)).target).toEqual({ attemptId, title: "Test đầu vào", availableUntil: null });
-    const request = await createPlacementRetakeRequest(pool, learnerId);
-    await repositories.assessments.resolveAssessmentAppeal({ appealId: request!.id, reviewerId: DEMO_IDS.operator, status: "accepted", resolution: "Cho thi lại một lần." });
+    const request = await createPlacementRetakeRequest(pool, learnerId, "  Tôi muốn thử lại.  ");
+    expect((await pool.query("select reason from appeals where id = $1", [request!.id])).rows).toEqual([{ reason: "Tôi muốn thử lại." }]);
+    const decision = { appealId: request!.id, reviewerId: DEMO_IDS.operator, status: "accepted" as const, resolution: "Cho thi lại một lần." };
+    await pool.query("update assessment_versions set status = 'draft' where id = $1", [retakeVersionId]);
+    await expect(repositories.assessments.resolveAssessmentAppeal(decision)).rejects.toEqual(new PlacementRetakeError("PLACEMENT_RETAKE_FORM_NOT_PUBLISHED"));
+    expect(await findPlacementRetakeGrant(pool, learnerId)).toBeNull();
+    expect((await findPlacementRetakeRequestState(pool, learnerId)).request?.status).toBe("pending");
+    expect(await bell(learnerId, "retake_granted")).toEqual([]);
+    await pool.query("update assessment_versions set status = 'published' where id = $1", [retakeVersionId]);
+    await repositories.assessments.resolveAssessmentAppeal(decision);
     expect(await findPlacementRetakeGrant(pool, learnerId)).toEqual(expect.objectContaining({ sourceAttemptId: attemptId, reason: "Cho thi lại một lần." }));
-    expect((await findPlacementRetakeRequestState(pool, learnerId))).toEqual(expect.objectContaining({ retake: "granted", request: expect.objectContaining({ status: "accepted" }) }));
+    expect((await findPlacementRetakeRequestState(pool, learnerId))).toMatchObject({
+      retake: "granted",
+      request: { status: "accepted" },
+      original: { attemptId, feedback: "Chưa đủ để xếp mức" }
+    });
     expect(await bell(learnerId, "retake_granted")).toEqual([{ kind: "retake_granted", context: "placement" }]);
     expect(await bell(learnerId, "appeal_approved")).toEqual([]);
   });

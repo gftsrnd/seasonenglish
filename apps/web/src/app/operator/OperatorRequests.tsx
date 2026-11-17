@@ -77,7 +77,7 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
   const [data, setData] = useState<{ appeals: Appeal[]; hasMore: boolean; status: AppealStatus; page: number }>();
   const [revision, setRevision] = useState(0);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [actionError, setActionError] = useState("");
+  const [actionError, setActionError] = useState<ReactNode>("");
   const [decision, setDecision] = useState<boolean>();
   const [removingId, setRemovingId] = useState<string>();
   const [assessmentBusy, setAssessmentBusy] = useState(false);
@@ -148,8 +148,16 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
       else await client.decideReviewedAppeal(item.id, { ...input, ...(newScore === undefined ? {} : { newScore }), ...(exerciseCorrection ? { exerciseCorrection } : {}) });
       setData(undefined);
       reload();
-    } catch {
-      setActionError("Chưa lưu được quyết định. Hãy tải lại yêu cầu và thử lại.");
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "PLACEMENT_RETAKE_FORM_NOT_PUBLISHED") {
+        setActionError(<>Yêu cầu vẫn đang chờ xử lý. Hãy duyệt và phát hành <Link to="/op/tests?tab=placement">đề thi lại trong Kết quả bài thi</Link>, rồi quay lại duyệt yêu cầu.</>);
+      } else if (error instanceof ApiError && error.code === "PLACEMENT_RETAKE_ALREADY_GRANTED") {
+        setActionError("Học viên đã được cấp lượt thi lại. Hãy kiểm tra hồ sơ học viên trước khi xử lý yêu cầu.");
+      } else if (error instanceof ApiError && error.code === "PLACEMENT_RETAKE_NOT_AVAILABLE") {
+        setActionError("Kết quả đầu vào hiện tại chưa đủ điều kiện cấp lượt thi lại. Hãy kiểm tra hồ sơ học viên.");
+      } else {
+        setActionError("Chưa lưu được quyết định. Hãy tải lại yêu cầu và thử lại.");
+      }
     } finally {
       setDecision(undefined);
       setDecisionId(undefined);
