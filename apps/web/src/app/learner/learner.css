@@ -668,6 +668,10 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .placement-retake-heading { gap: 8px; }
 .placement-retake-heading h2 { margin: 0; }
 .modal-backdrop > .dialog.placement-retake-confirm { --compact-dialog-width: 380px; box-sizing: border-box; width: min(380px, calc(100vw - 24px)); max-width: 380px; max-height: 80dvh; }
+.coach-delete-dialog h2 { margin: 0 0 8px; }
+.coach-delete-dialog p { margin: 0 0 16px; }
+.coach-delete-dialog-actions { justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.coach-delete-dialog-actions button { min-width: 44px; min-height: 44px; }
 .placement-retake-confirm > .row:first-child { position: sticky; top: 0; background: var(--surface); z-index: 1; }
 .placement-retake-confirm > .row:first-child h2 { font-weight: 700 !important; }
 .placement-retake-confirm:focus-visible { outline: none; }

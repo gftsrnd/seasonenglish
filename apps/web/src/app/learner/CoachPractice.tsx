@@ -329,7 +329,16 @@ function ClearChatDialog({ titleId, descriptionId, onCancel, onConfirm }: { titl
     }
   };
 
-  return <div className="modal-backdrop" role="presentation"><section className="dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} tabIndex={-1} onKeyDown={handleKeyDown}><h2 id={titleId}>Xoá đoạn chat này?</h2><p id={descriptionId}>Toàn bộ tin nhắn trong đoạn chat hiện tại sẽ biến mất và không khôi phục lại được. Các từ đã mở vẫn được giữ; số lượt luyện trong lộ trình hiện tại vẫn tính.</p><div className="row" style={{ justifyContent: "flex-end", gap: 8 }}><button ref={cancelButtonRef} style={{ minWidth: 44, minHeight: 44 }} type="button" onClick={onCancel}>Huỷ</button><button className="btn-danger" style={{ minWidth: 44, minHeight: 44 }} type="button" disabled={remaining > 0} onClick={() => { if (remaining <= 0) onConfirm(); }}>{remaining > 0 ? `Xoá chat (${remaining})` : "Xoá chat"}</button></div></section></div>;
+  return <div className="modal-backdrop" role="presentation">
+    <section className="dialog coach-delete-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} tabIndex={-1} onKeyDown={handleKeyDown}>
+      <h2 id={titleId}>Xoá đoạn chat này?</h2>
+      <p id={descriptionId}>Toàn bộ tin nhắn trong đoạn chat hiện tại sẽ biến mất và không khôi phục lại được. Các từ đã mở vẫn được giữ; số lượt luyện trong lộ trình hiện tại vẫn tính.</p>
+      <div className="row coach-delete-dialog-actions">
+        <button ref={cancelButtonRef} type="button" onClick={onCancel}>Huỷ</button>
+        <button className="btn-danger" type="button" disabled={remaining > 0} onClick={() => { if (remaining <= 0) onConfirm(); }}>{remaining > 0 ? `Xoá chat (${remaining})` : "Xoá chat"}</button>
+      </div>
+    </section>
+  </div>;
 }
 
 export function LearnerChallenge({ view, actions }: { view: ChallengeView; actions: LearnerCallbacks }) {

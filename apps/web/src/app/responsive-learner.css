@@ -30,6 +30,8 @@
   /* Small confirm dialogs (clear chat, word-set change, level-up …): compact centred card. */
   :root:root:root:has(.learner-root) .modal-backdrop > .dialog:not(.wide):not(.vocabulary-modal) { width: min(380px, calc(100vw - 32px)); max-width: 380px; max-height: 78vh; overflow-y: auto; }
   :root:root:root:has(.learner-root) .modal-backdrop > .dialog.wide { max-height: 78vh; overflow-y: auto; }
+  :root:root:root:has(.learner-root) .modal-backdrop > .dialog.coach-delete-dialog { --compact-dialog-width: 380px; box-sizing: border-box; padding: 20px !important; }
+  :root:root:root:has(.learner-root) .coach-delete-dialog-actions > button { min-height: 44px !important; }
 
   /* ── Home ── */
   :root:root:root .learner-root .home-page > .bao-row { display: none; }
@@ -140,7 +142,6 @@
   :root:root:root .learner-root .game-page .crossword-actions .crossword-actions-note { display: none; }
   :root:root:root .learner-root .game-runner .crossword-clues ol { margin: 0; padding: 0; }
   :root:root:root .learner-root .game-runner .crossword-clues li > button { display: grid !important; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; width: 100%; min-height: 34px !important; padding: 2px 6px !important; text-align: left; }
-  :root:root:root .learner-root .game-runner .crossword-clues li > button > span { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; white-space: normal; overflow-wrap: anywhere; }
   :root:root:root .learner-root .game-runner .crossword-clues h3 { margin: 6px 0 2px; font-size: 14px !important; }
   :root:root:root .learner-root .game-runner .crossword-clues-toggle > summary { min-height: 36px !important; }
 
