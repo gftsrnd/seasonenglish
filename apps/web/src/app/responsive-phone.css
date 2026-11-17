@@ -764,6 +764,7 @@
      close button lands at the same top-right offset in all of them. */
   :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]),
   :root:root:root .monthly-resource-panel { padding: 0 12px 12px !important; }
+  :root:root:root .modal-backdrop > .dialog.assessment-violation-dialog { padding: 16px !important; }
   :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header),
   :root:root:root .modal-backdrop .operator-editor-sticky-header,
   :root:root:root .monthly-resource-panel > header {

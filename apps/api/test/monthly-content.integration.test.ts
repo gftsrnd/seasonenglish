@@ -4,6 +4,9 @@ import { buildMonthlyCalendar, buildMonthlyCurriculum, createCredentialHash, cre
 import type { CefrLevel } from "@e4s/contracts";
 import { DEMO_IDS, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { buildApi } from "../src/app.js";
+import { randomUUID } from "node:crypto";
+import { buildManualMonthlyFinalDraft } from "../src/modules/assessment/monthly-final-builder.js";
+import { frameworkRef, monthlyFinalContract } from "./support/monthly-final-fixture.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 
@@ -51,6 +54,35 @@ describe("monthly content API", () => {
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });
+
+  it("deletes only an unused monthly final draft as an operator and records the action", async () => {
+    const definitionId = randomUUID();
+    const publishedId = randomUUID();
+    const draftId = randomUUID();
+    const blueprint = buildManualMonthlyFinalDraft(monthlyFinalContract("B2"), frameworkRef);
+    await pool.query(
+      "insert into assessment_definitions (id, organization_id, assessment_key, kind, title) select $1, organization_id, $2, 'final', $3 from users where id = $4",
+      [definitionId, blueprint.key, blueprint.title, DEMO_IDS.operator]
+    );
+    await pool.query(
+      "insert into assessment_versions (id, definition_id, version, status, blueprint) values ($1, $3, 1, 'published', $4), ($2, $3, 2, 'draft', $4)",
+      [publishedId, draftId, definitionId, JSON.stringify(blueprint)]
+    );
+    const remove = (versionId: string, session = cookie) =>
+      app.inject({ method: "DELETE", url: "/api/v1/monthly-final-forms/" + versionId, headers: { cookie: session } });
+    expect((await remove(draftId, managerCookie)).statusCode).toBe(403);
+    expect((await remove(publishedId)).statusCode).toBe(404);
+    const deleted = await remove(draftId);
+    expect(deleted.statusCode, deleted.body).toBe(200);
+    expect(deleted.json()).toEqual({ versionId: draftId, deleted: true });
+    expect((await remove(draftId)).statusCode).toBe(404);
+    expect((await pool.query("select id, status from assessment_versions where definition_id = $1", [definitionId])).rows)
+      .toEqual([{ id: publishedId, status: "published" }]);
+    expect((await pool.query("select action from audit_events where entity_id = $1", [draftId])).rows)
+      .toEqual([{ action: "monthly_final.draft_deleted" }]);
+    await pool.query("delete from assessment_versions where id = $1", [publishedId]);
+    await pool.query("delete from assessment_definitions where id = $1", [definitionId]);
+  });
 
   it("keeps monthly authoring with the operator", async () => {
     const saved = await app.inject({

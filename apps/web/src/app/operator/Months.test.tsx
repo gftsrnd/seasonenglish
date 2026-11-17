@@ -453,20 +453,25 @@ describe("Operator monthly planner", () => {
     const user = userEvent.setup();
     let finish!: (value: any) => void;
     const generate = vi.fn(() => new Promise<any>(resolve => { finish = resolve; }));
-    render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="B1" busy={false}
+    const calendar = <ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="B1" busy={false}
       overview={{ systemDate: "2026-11-03", monthWindow, brief: null, frameworks: [approvedFramework] }}
-      actions={monthActions({ onGenerateDay: generate, onGenerateReview: generate }) as never} /></ToastProvider>);
+      actions={monthActions({ onGenerateDay: generate, onGenerateReview: generate }) as never} /></ToastProvider>;
+    const { unmount } = render(calendar);
     await user.click(screen.getAllByRole("button", { name: kind === "review" ? "Sinh" : "Sinh bài 1" })[0]!);
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "Sinh" }));
-    const pending = within(dialog).getByRole("button", { name: "Đang sinh bài" });
+    expect(dialog).not.toBeInTheDocument();
+    const pending = screen.getByRole("status", { name: "Đang sinh bài" }).closest("button")!;
     expect(pending).toBeDisabled();
     expect(pending).toHaveAttribute("aria-busy", "true");
     expect(within(pending).getByRole("status")).toHaveClass("spinner");
     await user.click(pending);
     expect(generate).toHaveBeenCalledTimes(1);
+    unmount();
+    render(calendar);
+    expect(screen.getByRole("status", { name: "Đang sinh bài" }).closest("button")).toBeDisabled();
     await act(async () => finish({ lesson: { title: "Bài", parts: [] }, report: { severe: [], light: [], contractVersion: 2 } }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Đang sinh bài" })).not.toBeInTheDocument();
   });
 
   it("confirms exam regeneration inside the app and shows progress on the exam button", async () => {

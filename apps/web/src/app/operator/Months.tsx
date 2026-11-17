@@ -14,6 +14,7 @@ import type { MonthlyResourceCheckpointPrefillView, MonthlyResourceCheckpointVie
 import { groupVocabularyForDisplay, isStandaloneWord } from "./resource-display.js";
 import { MonthlyFinalReview } from "./MonthlyFinalReview.js";
 import { MonthlyResourceProgress } from "./MonthlyResourceProgress.js";
+import { beginMonthlyGeneration, useMonthlyGeneration } from "./monthly-generation-progress.js";
 import { isGatewayTimeout, monthlyGenerationMessage, monthlyFinalGenerationMessage, monthlyFinalGenerationTone, monthlyResourceGenerationNotice, monthlyResourceManualSuggestion } from "./monthly-generation-message.js";
 import { MonthlyResourceEditor } from "./MonthlyResourceEditor.js";
 import { MonthlyReviewPractice } from "./MonthlyReviewPractice.js";
@@ -126,8 +127,10 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
   const toast = useToast();
   const modal = useModal();
   const hasSectionHeader = useManagerSectionHeader();
-  const [generating, setGenerating] = useState<number | "final">();
-  const generationInFlight = useRef(false);
+  const framework = overview.frameworks.find((item) => item.cefr === cefr);
+  const generating = useMonthlyGeneration(framework?.id);
+  const visibleFramework = useRef(framework?.id);
+  visibleFramework.current = framework?.id;
   const [resourceGenerating,setResourceGenerating] = useState(false);
   const [resourceGenerationAttempted,setResourceGenerationAttempted] = useState(false);
   const [resourceGenerationFailed,setResourceGenerationFailed] = useState(false);
@@ -141,7 +144,6 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
   },[resourceCheckpoint?.progress?.runId,resourceCheckpoint?.progress?.status]);
   const resourceRunning = resourceGenerating || resourceCheckpoint?.progress?.status === "running";
   const busy = externalBusy || generating !== undefined || resourceRunning;
-  const framework = overview.frameworks.find((item) => item.cefr === cefr);
   const calendar = useMemo(() => buildMonthlyCalendar(month), [month]);
   const calendarCells = useMemo(() => calendarGrid(month, calendar), [month, calendar]);
   const compact = useMediaQuery("(max-width: 960px)");
@@ -210,7 +212,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
     let active = true;
     void actions.onPeekMonthlyFinal(frameworkIdForExam).then((exists) => { if (active) setMonthlyFinalExists(exists); }).catch(() => undefined);
     return () => { active = false; };
-  }, [frameworkIdForExam]);
+  }, [frameworkIdForExam, generating === "final"]);
   useEffect(() => {
     setBrief(overview.brief ? {
       title: overview.brief.title,
@@ -346,11 +348,10 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
     } finally {resourceGenerationInFlight.current=false;setResourceGenerating(false);}
   };
   const generateDay = async ({ dayNumber, kind, label, date }: NonNullable<typeof generationConfirmation>) => {
-    if (generationInFlight.current) return;
     if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
     if (!framework || framework.status !== "approved") return showUnavailable("Hãy chốt tài nguyên tháng trước khi sinh bài học.");
-    generationInFlight.current = true;
-    setGenerating(dayNumber);
+    const finish = beginMonthlyGeneration(framework.id, dayNumber);
+    if (!finish) return;
     try {
       if (kind === "review") {
         if (!actions.onGenerateReview) return showUnavailable("Luồng sinh bài ôn chưa sẵn sàng.");
@@ -363,8 +364,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
     } catch (reason) {
       showUnavailable(monthlyGenerationMessage(reason));
     } finally {
-      generationInFlight.current = false;
-      setGenerating(undefined);
+      finish();
     }
   };
   const openManualEditor = (dayNumber: number, slot?: { kind: "new" | "review"; date?: string | undefined; title?: string | undefined }) => {
@@ -448,7 +448,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
     }
   };
   const generateMonthlyFinal = async () => {
-    if (generationInFlight.current) return;
+    if (generating !== undefined) return;
     if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
     if (!framework || framework.status !== "approved") return showUnavailable("Hãy chốt tài nguyên tháng trước khi sinh đề thi.");
     if (!actions.onGenerateMonthlyFinal) return showUnavailable("Luồng đề thi tháng chưa sẵn sàng.");
@@ -457,16 +457,15 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       ? "Sinh một bản nháp mới theo phạm vi đã duyệt. Đề đang phát hành vẫn dùng cho học viên cho đến khi bản mới được duyệt và phát hành."
       : "Sinh lại sẽ thay bản nháp đề thi tháng hiện có. Tiếp tục?";
     if ((monthlyFinalExists || replacingPublished) && !await modal.confirm({ title: replacingPublished ? "Sinh lại đề?" : "Sinh lại đề thi tháng?", message: regenerateMessage, confirmLabel: "Sinh lại", cancelLabel: "Quay lại", tone: "danger", countdownSeconds: 0 })) return;
-    if (generationInFlight.current) return;
-    generationInFlight.current = true;
-    setGenerating("final");
+    const finish = beginMonthlyGeneration(framework.id, "final");
+    if (!finish) return;
     try {
       const draft = await actions.onGenerateMonthlyFinal(framework.id);
-      if (draft?.blueprint) { setMonthlyFinal(draft); setMonthlyFinalExists(true); }
+      if (draft?.blueprint && visibleFramework.current === framework.id) { setMonthlyFinal(draft); setMonthlyFinalExists(true); }
       toast.show({ message: "Đã tạo bản nháp đề tháng. Kiểm tra đề và âm thanh, rồi duyệt trước 00:00 ngày thi.", tone: "ok" });
     }
     catch (reason) { toast.show({ message: monthlyFinalGenerationMessage(reason), tone: monthlyFinalGenerationTone(reason) }); }
-    finally { generationInFlight.current = false; setGenerating(undefined); }
+    finally { finish(); }
   };
   const openMonthlyFinal = async () => {
     if (!framework || framework.status !== "approved") return showUnavailable("Hãy chốt tài nguyên tháng trước khi xem đề thi.");
@@ -583,7 +582,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
             const isReview = scheduledKind === "review";
             const newLessonOrdinal = isReview ? null : monthlyNewLessonOrdinal(scheduledLessonNumber, calendar);
             const planDay = framework?.resources?.roadmap?.days.find(day => day.lessonNumber === scheduledLessonNumber); const dayLabel = isReview ? "bài ôn" : newLessonOrdinal ? `bài ${newLessonOrdinal}` : "bài học"; const reviewWeekNumber = planDay?.reviewWeekNumber ?? overview.calendar?.find(day => day.date === cell.date)?.reviewWeekNumber; const composeTitle = monthlyDefaultLessonTitle({ kind: isReview ? "review" : "new", newLessonNumber: newLessonOrdinal, reviewWeekNumber }, framework?.cefr ?? cefr); const dayText = formatMonthlyDayLabel({ kind: isReview ? "review" : "new", newLessonNumber: newLessonOrdinal ?? undefined, reviewWeekNumber, ...(planDay?.grammarPlan ? { grammarPlan: planDay.grammarPlan } : {}), ...(planDay?.pronunciationPlan ? { pronunciationPlan: planDay.pronunciationPlan } : {}) });
-            return <article id={monthlyDayCellId(cell.key)} key={cell.date} role={agenda ? "listitem" : "gridcell"} aria-label={`${cell.dateLabel}, ${dayText}${holidayDescription}`} title={calendarDay?.holiday?.name} className={`monthly-day-cell ${kind} ${calendarDay?.holiday ? "holiday" : ""} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{agenda ? <span>{WEEKDAYS[index % 7]}</span> : null}{cell.dateLabel}</b><strong>{dayText}</strong><div className="monthly-day-actions" role="group" aria-label={`Thao tác ${dayLabel}`}>{lesson && (lesson.status === "approved" || draft) ? <><button type="button" aria-label={`Xem ${dayLabel}`} title={draft ? "Xem bản nháp để duyệt" : "Xem bài đã duyệt"} className="monthly-day-action monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}><Eye aria-hidden="true" /><span>Xem</span></button>{draft ? <button type="button" aria-label={`Soạn tay ${dayLabel}`} title="Sửa tay bản nháp" className="monthly-day-action monthly-manual-action" disabled={busy || !canEdit || !resourcesApproved} onClick={() => openManualEditor(scheduledLessonNumber, { kind: isReview ? "review" : "new", date: cell.date, ...(composeTitle ? { title: composeTitle } : {}) })}><Pencil aria-hidden="true" /></button> : null}</> : <>{lesson?.generationFailure ? <button type="button" aria-label={aiCandidateCanBeRechecked ? `Xem bản AI ${dayLabel}` : `Xem lỗi sinh ${dayLabel}`} title={aiCandidateCanBeRechecked ? "Xem bản AI đã lưu" : "Xem lần sinh AI chưa đạt"} className={aiCandidateCanBeRechecked ? "monthly-day-action monthly-view-day" : "monthly-day-action monthly-failure-action"} disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}><Eye aria-hidden="true" /><span>{aiCandidateCanBeRechecked ? "Xem" : "Lỗi"}</span></button> : <button type="button" aria-label={isReview ? "Sinh" : `Sinh ${dayLabel}`} {...(resourcesApproved ? {} : { title: lockedDayTitle })} className="monthly-day-action monthly-generate-action" disabled={busy || !canEdit || !resourcesApproved} onClick={() => setGenerationConfirmation({ dayNumber: scheduledLessonNumber, kind: isReview ? "review" : "new", label: dayLabel, date: cell.key })}>{generating === scheduledLessonNumber ? <span className="spinner" role="status" aria-label="Đang sinh bài" /> : <><Sparkles aria-hidden="true" /><span>AI</span></>}</button>}<button type="button" aria-label={`Soạn tay ${dayLabel}`} title={resourcesApproved ? "Soạn tay" : lockedDayTitle} className="monthly-day-action monthly-manual-action" disabled={busy || !canEdit || !resourcesApproved} onClick={() => openManualEditor(scheduledLessonNumber, { kind: isReview ? "review" : "new", date: cell.date, ...(composeTitle ? { title: composeTitle } : {}) })}><Pencil aria-hidden="true" /></button></>}</div></article>;
+            return <article id={monthlyDayCellId(cell.key)} key={cell.date} role={agenda ? "listitem" : "gridcell"} aria-label={`${cell.dateLabel}, ${dayText}${holidayDescription}`} title={calendarDay?.holiday?.name} className={`monthly-day-cell ${kind} ${calendarDay?.holiday ? "holiday" : ""} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{agenda ? <span>{WEEKDAYS[index % 7]}</span> : null}{cell.dateLabel}</b><strong>{dayText}</strong><div className="monthly-day-actions" role="group" aria-label={`Thao tác ${dayLabel}`}>{lesson && (lesson.status === "approved" || draft) ? <><button type="button" aria-label={`Xem ${dayLabel}`} title={draft ? "Xem bản nháp để duyệt" : "Xem bài đã duyệt"} className="monthly-day-action monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}><Eye aria-hidden="true" /><span>Xem</span></button>{draft ? <button type="button" aria-label={`Soạn tay ${dayLabel}`} title="Sửa tay bản nháp" className="monthly-day-action monthly-manual-action" disabled={busy || !canEdit || !resourcesApproved} onClick={() => openManualEditor(scheduledLessonNumber, { kind: isReview ? "review" : "new", date: cell.date, ...(composeTitle ? { title: composeTitle } : {}) })}><Pencil aria-hidden="true" /></button> : null}</> : <>{lesson?.generationFailure ? <button type="button" aria-label={aiCandidateCanBeRechecked ? `Xem bản AI ${dayLabel}` : `Xem lỗi sinh ${dayLabel}`} title={aiCandidateCanBeRechecked ? "Xem bản AI đã lưu" : "Xem lần sinh AI chưa đạt"} className={aiCandidateCanBeRechecked ? "monthly-day-action monthly-view-day" : "monthly-day-action monthly-failure-action"} disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}><Eye aria-hidden="true" /><span>{aiCandidateCanBeRechecked ? "Xem" : "Lỗi"}</span></button> : <button type="button" aria-label={isReview ? "Sinh" : `Sinh ${dayLabel}`} {...(resourcesApproved ? {} : { title: lockedDayTitle })} className="monthly-day-action monthly-generate-action" disabled={busy || !canEdit || !resourcesApproved} aria-busy={generating === scheduledLessonNumber || undefined} onClick={() => setGenerationConfirmation({ dayNumber: scheduledLessonNumber, kind: isReview ? "review" : "new", label: dayLabel, date: cell.key })}>{generating === scheduledLessonNumber ? <span className="spinner" role="status" aria-label="Đang sinh bài" /> : <><Sparkles aria-hidden="true" /><span>AI</span></>}</button>}<button type="button" aria-label={`Soạn tay ${dayLabel}`} title={resourcesApproved ? "Soạn tay" : lockedDayTitle} className="monthly-day-action monthly-manual-action" disabled={busy || !canEdit || !resourcesApproved} onClick={() => openManualEditor(scheduledLessonNumber, { kind: isReview ? "review" : "new", date: cell.date, ...(composeTitle ? { title: composeTitle } : {}) })}><Pencil aria-hidden="true" /></button></>}</div></article>;
           })}
         </div>
       </section>;
@@ -594,7 +593,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
     <section className="monthly-month-card card">
       <h2 id="monthly-cycle-title" className="monthly-cycle-title">Chu kỳ tháng<SectionTip desktop text={OPERATOR_TIPS.cycle} label="Chu kỳ tháng là gì?" /></h2>
       <div className="monthly-month-tabs" role="tablist" aria-labelledby="monthly-cycle-title">
-        {monthChoices.map((choice) => <button key={choice} type="button" role="tab" disabled={busy} aria-selected={choice === month} className={choice === month ? "selected" : ""} aria-label={choice === monthChoices[0] ? `${monthLabel(choice)}, chỉ xem` : monthLabel(choice)} onClick={() => actions.onSelectMonth(choice)}>
+        {monthChoices.map((choice) => <button key={choice} type="button" role="tab" disabled={externalBusy || resourceRunning} aria-selected={choice === month} className={choice === month ? "selected" : ""} aria-label={choice === monthChoices[0] ? `${monthLabel(choice)}, chỉ xem` : monthLabel(choice)} onClick={() => actions.onSelectMonth(choice)}>
           <span className="monthly-month-full">{monthLabel(choice)}</span><span className="monthly-month-short" aria-hidden="true">{choice.slice(5)}/{choice.slice(0, 4)}</span>{choice === monthChoices[0] && <small>Chỉ xem</small>}
         </button>)}
       </div>
@@ -618,7 +617,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
         <button type="button" className="btn btn-primary" disabled={busy || !canEdit} onClick={() => void approveBrief()}>Chốt chủ đề</button>
       </div>
       </div>
-      <div className="monthly-level-tabs" role="tablist" aria-label="Chọn trình độ">{LEVELS.map((level) => <button key={level} type="button" role="tab" disabled={busy} aria-selected={level === cefr} className={level === cefr ? "selected" : ""} onClick={() => selectLevel(level)}>{level}</button>)}</div>
+      <div className="monthly-level-tabs" role="tablist" aria-label="Chọn trình độ">{LEVELS.map((level) => <button key={level} type="button" role="tab" disabled={externalBusy || resourceRunning} aria-selected={level === cefr} className={level === cefr ? "selected" : ""} onClick={() => selectLevel(level)}>{level}</button>)}</div>
     </section>
     <div className="monthly-workspace">
       {compact && resourcesApproved ? <>{calendarSection}{resourceColumn}</> : <>{resourceColumn}{calendarSection}</>}
@@ -670,7 +669,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       onSave={async (input) => { await actions.onCreateManualResources!(month, cefr, input); setManualResources(undefined); }}
     />}
     {requestingResourcesReopen && framework?.status === "approved" && <MonthlyReopenRequest label={`tài nguyên tháng ${cefr}`} onCancel={() => setRequestingResourcesReopen(false)} onSubmit={(reason) => void requestResourcesReopen(reason)} />}
-    {generationConfirmation && framework?.resources && <MonthlyGenerationConfirmation busy={generating !== undefined} dayNumber={generationConfirmation.dayNumber} kind={generationConfirmation.kind} framework={framework} onCancel={() => setGenerationConfirmation(undefined)} onConfirm={async () => { await generateDay(generationConfirmation); setGenerationConfirmation(undefined); }} />}
+    {generationConfirmation && framework?.resources && <MonthlyGenerationConfirmation dayNumber={generationConfirmation.dayNumber} kind={generationConfirmation.kind} framework={framework} onCancel={() => setGenerationConfirmation(undefined)} onConfirm={() => { setGenerationConfirmation(undefined); void generateDay(generationConfirmation); }} />}
     {monthlyFinal && <MonthlyFinalReview
       draft={monthlyFinal}
       readOnly={!canEdit}
@@ -755,7 +754,7 @@ export function MonthlyLessonPreview({ date, cefr, lesson, resources, focusedPar
   </OperatorPage>;
 }
 
-function MonthlyGenerationConfirmation({ dayNumber, kind, framework, busy, onCancel, onConfirm }: { dayNumber: number; kind: "new" | "review"; framework: MonthlyOperatorOverviewView["frameworks"][number]; busy: boolean; onCancel(): void; onConfirm(): void | Promise<void> }) {
+function MonthlyGenerationConfirmation({ dayNumber, kind, framework, onCancel, onConfirm }: { dayNumber: number; kind: "new" | "review"; framework: MonthlyOperatorOverviewView["frameworks"][number]; onCancel(): void; onConfirm(): void }) {
   const carryover = framework.resources?.carryoverReviews?.find(item => item.lessonNumber === dayNumber);
   const resources = { ...framework.resources!, ...(carryover ?? {}) };
   const isReview = kind === "review";
@@ -770,7 +769,7 @@ function MonthlyGenerationConfirmation({ dayNumber, kind, framework, busy, onCan
   const grammar = resources.grammarTopics.flatMap((topic) => topic.steps).filter((step) => grammarIds.includes(step.id));
   const soundIds = isReview ? day?.reviewSoundIds ?? [] : day?.pronunciationPlan?.targetIds ?? (day?.soundId ? [day.soundId] : []);
   const sounds = resources.sounds.filter((sound) => soundIds.includes(sound.id));
-  return <div className="monthly-lesson-preview-backdrop" role="presentation"><section className="monthly-generation-confirmation card" role="dialog" aria-modal="true" aria-label={isReview ? "Tài nguyên cho bài ôn" : `Tài nguyên cho bài ${dayNumber}`}><span className="eyebrow">Tài nguyên đã chốt</span><h2>{isReview ? "Sinh bài ôn?" : `Sinh ${teachingLabel}?`}</h2><p className="small muted">{isReview ? "Bài ôn chỉ dùng các tài nguyên đã phân bổ cho phần ôn." : "Bài sẽ dùng đúng tài nguyên của ngày này."}</p><dl>{day?.grammarPlan && <div><dt>Mục tiêu ngữ pháp</dt><dd>{withoutGrammarStepLabel(monthlyReadablePlanObjective(day.grammarPlan.objective, coreWords))}</dd></div>}{day?.pronunciationPlan && <div><dt>Mục tiêu phát âm</dt><dd>{monthlyReadablePlanObjective(day.pronunciationPlan.objective, coreWords)}</dd></div>}<div><dt>Từ vựng</dt><dd>{terms.map((term) => term.word).join(" · ") || "Chưa gán"}</dd></div><div><dt>Ngữ pháp</dt><dd>{grammar.map((step) => step.focus).join(" · ") || "Chưa gán"}</dd></div><div><dt>Phát âm</dt><dd>{sounds.map((sound) => `${sound.label} ${sound.ipa}`).join(" · ") || "Chưa gán"}</dd></div></dl><footer><button type="button" className="btn" disabled={busy} onClick={onCancel}>Quay lại</button><button type="button" className="btn btn-primary" disabled={busy} aria-busy={busy} aria-label={busy ? "Đang sinh bài" : "Sinh"} onClick={() => void onConfirm()}>{busy ? <span className="spinner" role="status" aria-label="Đang sinh bài" /> : "Sinh"}</button></footer></section></div>;
+  return <div className="monthly-lesson-preview-backdrop" role="presentation"><section className="monthly-generation-confirmation card" role="dialog" aria-modal="true" aria-label={isReview ? "Tài nguyên cho bài ôn" : `Tài nguyên cho bài ${dayNumber}`}><span className="eyebrow">Tài nguyên đã chốt</span><h2>{isReview ? "Sinh bài ôn?" : `Sinh ${teachingLabel}?`}</h2><p className="small muted">{isReview ? "Bài ôn chỉ dùng các tài nguyên đã phân bổ cho phần ôn." : "Bài sẽ dùng đúng tài nguyên của ngày này."}</p><dl>{day?.grammarPlan && <div><dt>Mục tiêu ngữ pháp</dt><dd>{withoutGrammarStepLabel(monthlyReadablePlanObjective(day.grammarPlan.objective, coreWords))}</dd></div>}{day?.pronunciationPlan && <div><dt>Mục tiêu phát âm</dt><dd>{monthlyReadablePlanObjective(day.pronunciationPlan.objective, coreWords)}</dd></div>}<div><dt>Từ vựng</dt><dd>{terms.map((term) => term.word).join(" · ") || "Chưa gán"}</dd></div><div><dt>Ngữ pháp</dt><dd>{grammar.map((step) => step.focus).join(" · ") || "Chưa gán"}</dd></div><div><dt>Phát âm</dt><dd>{sounds.map((sound) => `${sound.label} ${sound.ipa}`).join(" · ") || "Chưa gán"}</dd></div></dl><footer><button type="button" className="btn" onClick={onCancel}>Quay lại</button><button type="button" className="btn btn-primary" onClick={onConfirm}>Sinh</button></footer></section></div>;
 }
 
 /** "2026-11-06" → "06/11". */

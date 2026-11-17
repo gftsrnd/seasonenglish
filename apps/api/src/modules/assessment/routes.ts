@@ -58,7 +58,7 @@ import type { EdgeTtsRunner } from "./edge-tts.js";
 import type { ObjectStorage } from "@e4s/storage";
 import { synthesizeListeningScript } from "./dialogue-tts.js";
 import { blueprintListeningAudioIndex, listeningAudioServiceFor, withBlueprintListeningAudio } from "./listening-audio.js";
-import { registerMonthlyFinalRoutes } from "./monthly-final-routes.js";
+import { monthlyFinalTitle, registerMonthlyFinalRoutes } from "./monthly-final-routes.js";
 import { createRoleGuard } from "../identity/policy.js";
 import { monthlyExamEligibility } from "../learning/routes.js";
 import { gradeProductiveAssessment } from "./productive-grading.js";
@@ -1333,6 +1333,7 @@ async function assessmentFormPreviews(
     kind,
     forms: validRows.map((row): AssessmentFormPreviewView => {
       const monthlyFrameworkId = kind === "final" ? row.blueprint.monthlyExam?.framework?.id : undefined;
+      const monthlyTitle = kind === "final" ? monthlyFinalTitle(row.assessment_key) : undefined;
       const listeningGroups = row.blueprint.sections
         .filter((section) => section.code === "listening")
         .flatMap((section) => section.groups);
@@ -1341,7 +1342,7 @@ async function assessmentFormPreviews(
         versionId: row.version_id,
         ...(monthlyFrameworkId ? { monthlyFrameworkId } : {}),
         kind: row.kind,
-        title: row.title,
+        title: monthlyTitle ?? row.title,
         version: row.version,
         status: row.status,
         publishedAt: row.published_at?.toISOString() ?? null,

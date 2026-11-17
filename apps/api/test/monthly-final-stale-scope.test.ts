@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StoredAssessmentDefinition } from "@e4s/database";
 import { buildManualMonthlyFinalDraft } from "../src/modules/assessment/monthly-final-builder.js";
-import { monthlyFinalDraftView, monthlyFinalRegenerationBlock } from "../src/modules/assessment/monthly-final-routes.js";
+import { monthlyFinalDraftView, monthlyFinalRegenerationBlock, monthlyFinalTitle } from "../src/modules/assessment/monthly-final-routes.js";
 import { monthlyFinalScopeHash, monthlyFinalScopeStale } from "../src/modules/assessment/monthly-final-scope.js";
 import { frameworkRef, monthlyFinalContract } from "./support/monthly-final-fixture.js";
 
@@ -15,6 +15,12 @@ function scenario() {
 const current = (contract: ReturnType<typeof monthlyFinalContract>, scopeHash = "monthly-new-version-hash") => ({ frameworkId: frameworkRef.id, scopeHash, contract });
 const withExamScope = (blueprint: StoredAssessmentDefinition, contract: ReturnType<typeof monthlyFinalContract>): StoredAssessmentDefinition =>
   ({ ...blueprint, monthlyExam: { ...blueprint.monthlyExam!, framework: { ...blueprint.monthlyExam!.framework, examScopeHash: monthlyFinalScopeHash(contract) } } });
+
+it("uses a stable monthly exam label from the month and level", () => {
+  expect(monthlyFinalTitle("monthly-final-2026-12-b2")).toBe("Bài thi tháng 12/2026 · B2");
+  expect(monthlyFinalTitle("monthly-final-2027-01-a1")).toBe("Bài thi tháng 01/2027 · A1");
+  expect(monthlyFinalTitle("monthly-final-b1")).toBeUndefined();
+});
 
 describe("monthly final staleness follows the tested scope, not the plan version", () => {
   it("is not stale after a version bump that keeps the scope (legacy exam without examScopeHash)", () => {

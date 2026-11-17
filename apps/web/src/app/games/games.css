@@ -1255,7 +1255,6 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
 }
 
 .keyboard-row--actions button { flex: 1; }
-.keyboard-row--actions button[data-key="space"] { flex: 3; }
 /* Backspace is the only fixed action key (answers auto-submit): centred, a comfortable width, not full-row. */
 .virtual-keyboard .keyboard-row--actions button.is-backspace { flex: 0 1 180px; }
 

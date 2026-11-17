@@ -472,24 +472,27 @@ describe("learner game visual and interaction regressions", () => {
     expect(key("backspace")).not.toHaveClass("is-pressed");
   });
 
-  it("maps space to its on-screen key and presses a clicked key briefly", () => {
+  it("fills phrase separators automatically with only letters and backspace", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "performance", "Date"] });
     try {
-      const { container } = render(<TypingRaceGame words={[{ id: "ice-cream", english: "ice cream", vietnamese: "kem", definition: "a frozen dessert", partOfSpeech: "noun" }]} onFinish={vi.fn()} />);
+      const onFinish = vi.fn();
+      const { container } = render(<TypingRaceGame words={[{ id: "ice-cream", english: "ice cream", vietnamese: "kem", definition: "a frozen dessert", partOfSpeech: "noun" }]} onFinish={onFinish} />);
       const key = (name: string) => container.querySelector<HTMLButtonElement>(`.virtual-keyboard button[data-key="${name}"]`)!;
-      expect(key("space")).toHaveTextContent("Dấu cách");
-
-      fireEvent.keyDown(window, { key: " " });
-      expect(key("space")).toHaveClass("is-pressed");
-      fireEvent.keyUp(window, { key: " " });
-      expect(key("space")).not.toHaveClass("is-pressed");
-
-      fireEvent.click(key("backspace"));
+      expect(key("space")).toBeNull();
       fireEvent.click(key("i"));
       expect(key("i")).toHaveClass("is-pressed", "is-hit");
       expect(screen.getAllByTestId("typing-character")[0]).toHaveTextContent("I");
       act(() => { vi.advanceTimersByTime(200); });
       expect(key("i")).not.toHaveClass("is-pressed");
+      fireEvent.click(key("c"));
+      fireEvent.click(key("e"));
+      fireEvent.click(key("backspace"));
+      expect(screen.getAllByTestId("typing-character")[2]).toBeEmptyDOMElement();
+      fireEvent.click(key("e"));
+      fireEvent.keyDown(window, { key: " " });
+      for (const letter of "cream") fireEvent.click(key(letter));
+      act(() => { vi.advanceTimersByTime(500); });
+      expect(onFinish).toHaveBeenCalledWith({ answers: [expect.objectContaining({ answer: "ice cream" })] });
     } finally {
       vi.useRealTimers();
     }

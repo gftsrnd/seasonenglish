@@ -476,9 +476,39 @@ describe("OperatorRouteController", () => {
     await user.click(screen.getByRole("button", { name: "Sửa đề" }));
     editor = await screen.findByRole("dialog", { name: "Bản nháp đề thi tháng" });
     await user.click(within(editor).getByRole("button", { name: "Duyệt & phát hành" }));
+    const publication = await screen.findByRole("dialog", { name: "Duyệt và phát hành đề tháng?" });
+    await user.click(within(publication).getByRole("button", { name: "Duyệt & phát hành" }));
     await waitFor(() => expect(publishMonthlyFinal).toHaveBeenCalledWith("final-v1"));
     expect(await screen.findByText(/Phiên bản 1 · Đã phát hành/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Sửa đề" })).not.toBeInTheDocument();
+  });
+
+  it("deletes the confirmed monthly draft and keeps the published form", async () => {
+    const user = userEvent.setup();
+    const draft = monthlyFinalView();
+    const form = { ...draft, title: "Bài thi tháng 11/2026 · B1", kind: "final", monthlyFrameworkId: "framework-b1", totalMinutes: 30, totalScore: 100, sections: draft.blueprint.sections };
+    const published = { ...form, versionId: "published-v1", status: "published", editable: false };
+    let forms = [form, published];
+    const deleteMonthlyFinal = vi.fn(async () => { forms = [published]; });
+    const client = {
+      getContentReview: vi.fn().mockResolvedValue({ tabs: [], submissions: [], coachSamples: [], microLessons: [], appeals: [], lessonAttempts: [], assessments: [], weeklyPractices: [] }),
+      getAssessmentFormPreviews: vi.fn().mockImplementation(async kind => ({ kind, forms: kind === "final" ? forms : [] })),
+      deleteMonthlyFinal
+    };
+    render(<MemoryRouter initialEntries={["/op/tests"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+    await user.click(screen.getByRole("tab", { name: "Bài thi tháng" }));
+    await user.click(await screen.findByRole("button", { name: "Xoá" }));
+    const confirm = await screen.findByRole("dialog", { name: "Xoá bản nháp đề thi tháng?" });
+    expect(confirm).toHaveTextContent(form.title);
+    expect(deleteMonthlyFinal).not.toHaveBeenCalled();
+    await user.click(within(confirm).getByRole("button", { name: "Huỷ" }));
+    expect(deleteMonthlyFinal).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Xoá" }));
+    await user.click(within(await screen.findByRole("dialog", { name: "Xoá bản nháp đề thi tháng?" })).getByRole("button", { name: "Xoá bản nháp" }));
+    expect(await screen.findByText("Đã xoá bản nháp đề thi tháng.")).toBeInTheDocument();
+    expect(deleteMonthlyFinal).toHaveBeenCalledExactlyOnceWith(form.versionId);
+    expect(screen.queryByRole("button", { name: "Xoá" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Phiên bản 1 · Đã phát hành/)).toBeInTheDocument();
   });
 
   it("loads the real week contract for /op/weeks and persists edited frames", async () => {

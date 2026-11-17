@@ -401,7 +401,7 @@
   :root:root:root .learner-root .profile-form .row:has(> .opt) { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 1024px) {
-  /* ── Taking a test/exam (round 2): sticky compact progress header, flat parts, readable questions, 2-column short options. ── */
+  /* ── Taking a test/exam (round 2): sticky compact progress header, readable questions, 2-column short options. ── */
   :root:root:root .learner-root .test-page > .page-title { margin-bottom: 6px !important; }
   :root:root:root .learner-root .test-page .assessment-runtime-header { position: sticky; top: 0; z-index: 5; padding: 6px 10px !important; margin-bottom: 8px !important; box-shadow: 0 4px 12px rgb(0 0 0 / .06); }
   :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between { flex-wrap: nowrap !important; gap: 8px !important; }
@@ -414,8 +414,8 @@
   :root:root:root .learner-root .test-page .assessment-runtime-header .btn-sm.btn-primary { height: 32px; min-height: 32px !important; padding: 0 10px !important; white-space: nowrap; }
   :root:root:root .learner-root .test-page .assessment-runtime-header > .progress { margin-top: 6px !important; }
   :root:root:root .learner-root .test-page .assessment-content-card { padding: 12px !important; }
-  :root:root:root .learner-root .test-page .assessment-task-group { padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; }
-  :root:root:root .learner-root .test-page .assessment-task-group + .assessment-task-group { margin-top: 12px; padding-top: 12px !important; border-top: 1px solid var(--line) !important; }
+  :root:root:root .learner-root .test-page .assessment-section-groups { gap: 14px; }
+  :root:root:root .learner-root .test-page .assessment-task-group { padding: 12px !important; }
   :root:root:root .learner-root .test-page .assessment-task-card { padding: 10px 0 !important; border: 0 !important; border-top: 1px solid var(--line) !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; margin: 0 !important; }
   :root:root:root .learner-root .test-page .assessment-task-prompt { font-size: 15px; line-height: 1.45; margin: 4px 0 6px; }
   :root:root:root .learner-root .test-page .assessment-choices { display: grid !important; gap: 6px; }

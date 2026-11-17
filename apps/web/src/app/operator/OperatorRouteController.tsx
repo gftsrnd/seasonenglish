@@ -32,6 +32,7 @@ import { OperatorDashboard, OperatorProfileRows } from "./Dashboard.js";
 import { OperatorLevelFormDetail, OperatorLevelForms } from "./LevelForms.js";
 import { PlacementRetakeCard } from "./PlacementRetakeCard.js";
 import { OperatorLessonSet, OperatorLessons } from "./Lessons.js";
+import { useMonthlyGenerationRevision } from "./monthly-generation-progress.js";
 import { emptyLesson, LessonFormEditor } from "./LessonFormEditor.js";
 import { OperatorPrompts } from "./Prompts.js";
 import { OperatorReview, OperatorReviewAssessmentDetail, promptExerciseCorrection } from "./Review.js";
@@ -260,6 +261,8 @@ function useCapabilities(client: OperatorApiClient) {
 /** VH-R44 (chốt 03/11): daily lessons have no regenerate button. Kept behind a flag for a later decision. */
 const SHOW_MONTHLY_DAY_REGENERATE = false;
 
+const calendarSelections = new WeakMap<OperatorApiClient, { month: string; cefr: CefrLevel }>();
+
 function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient; readOnly: boolean; preview?: { frameworkId: string; dayNumber: number } }) {
   const toast = useToast();
   const modal = useModal();
@@ -271,15 +274,28 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
   const queryMonth = new URLSearchParams(search).get("month");
   const focusedPart = new URLSearchParams(search).get("part");
   const linkedMonth = queryMonth && /^\d{4}-(0[1-9]|1[0-2])$/u.test(queryMonth) ? queryMonth : null;
-  const [month, setMonth] = useState(linkedMonth ?? browserMonth);
-  const [cefr, setCefr] = useState<CefrLevel>("A1");
+  const savedSelection = useRef(calendarSelections.get(client)).current;
+  const [month, setMonth] = useState(linkedMonth ?? savedSelection?.month ?? browserMonth);
+  const [cefr, setCefr] = useState<CefrLevel>(savedSelection?.cefr ?? "A1");
+  const visibleMonth = useRef(month);
+  visibleMonth.current = month;
   const [overview, setOverview] = useState<import("@e4s/contracts").MonthlyOperatorOverviewView>();
   const [resourceCheckpoint, setResourceCheckpoint] = useState<Awaited<ReturnType<OperatorApiClient["getContentMonthResourceCheckpoint"]>>>();
   const [resourceGenerationActive,setResourceGenerationActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> }; kind?: "new" | "review"; date?: string; vocabularyCount?: number; defaultTitle?: string; cefr?: CefrLevel; findings?: { title: string; lines: MonthlyFindingLine[] }; grammarStepLabels?: Record<string, string>; grammarSteps?: readonly import("@e4s/domain/monthly").MonthlyGrammarStepSource[]; focusFinding?: string; severeCount?: number; approveBlocked?: string }>();
-  const systemMonthInitialized = useRef(false);
+  const generationRevision = useMonthlyGenerationRevision();
+  const loadedGenerationRevision = useRef(generationRevision);
+  useEffect(() => {
+    if (loadedGenerationRevision.current === generationRevision) return;
+    loadedGenerationRevision.current = generationRevision;
+    let active = true;
+    void client.getContentMonth(month).then(next => { if (active) setOverview(next); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [client, month, generationRevision]);
+  const systemMonthInitialized = useRef(Boolean(savedSelection));
+  useEffect(() => { if (overview) calendarSelections.set(client, { month, cefr }); }, [client, overview, month, cefr]);
   useEffect(() => { if (linkedMonth) setMonth(linkedMonth); }, [linkedMonth]);
   const pendingScrollRestore = useRef<number | null>(null);
   const selectMonth = (nextMonth: string) => {
@@ -318,6 +334,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
       client.getContentMonth(month),
       loadResourceCheckpoint()
     ]);
+    if (visibleMonth.current !== month) return;
     setOverview(next);
     setResourceCheckpoint(checkpoint);
   };
@@ -329,18 +346,21 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
   /** After an action: never turns its result into an error (see reloadQuietly). */
   const reload = () => reloadQuietly(fetchOverview);
   useEffect(() => {
+    let active = true;
     setOverview(undefined);
     void Promise.all([
       !systemMonthInitialized.current && !linkedMonth && client.getCurrentContentMonth ? client.getCurrentContentMonth() : client.getContentMonth(month),
       loadResourceCheckpoint()
     ]).then(([next, checkpoint]) => {
+      if (!active) return;
       setOverview(next);
       setResourceCheckpoint(checkpoint);
       if (!systemMonthInitialized.current) {
         systemMonthInitialized.current = true;
         if (!linkedMonth && next.monthWindow.current !== month) setMonth(next.monthWindow.current);
       }
-    }).catch((reason) => setError(message(reason)));
+    }).catch((reason) => { if (active) setError(message(reason)); });
+    return () => { active = false; };
   }, [client, month, cefr]);
   useLayoutEffect(() => {
     if (pendingScrollRestore.current === null || (!overview && !error)) return;
@@ -578,7 +598,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         if (!result) throw new Error("Không gửi được yêu cầu mở lại tài nguyên tháng.");
       },
       onGenerateMonthlyFinal: async (id) => {
-        const result = await act(() => client.generateMonthlyFinal(id));
+        const result = await client.generateMonthlyFinal(id);
         if (!result || !("blueprint" in result)) throw new Error("Không tải được bản nháp đề tháng.");
         return result;
       },
@@ -623,16 +643,9 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         return result;
       },
       onGenerateDay: async (id, dayNumber) => {
-        // A quality failure stores the failing candidate for the day view: reload so "Lỗi" appears.
-        const result = await act(() => client.generateContentMonthDay(id, dayNumber)).catch(async (reason: unknown) => { await reload(); throw reason; });
-        if (!result) throw new Error("AI không sinh được bài ngày đạt chuẩn.");
-        return result;
+        return client.generateContentMonthDay(id, dayNumber);
       },
-      onGenerateReview: async (id, dayNumber) => {
-        const result = await act(() => client.generateContentMonthReview(id, dayNumber)).catch(async (reason: unknown) => { await reload(); throw reason; });
-        if (!result) throw new Error("AI không sinh được bài ôn đạt chuẩn.");
-        return result;
-      },
+      onGenerateReview: (id, dayNumber) => client.generateContentMonthReview(id, dayNumber),
       onAcknowledge: async (id, dayNumber, findingKeys) => { await act(() => client.acknowledgeContentMonthQuality(id, dayNumber, findingKeys)); },
       onApproveDay: async (id, dayNumber) => { await act(() => client.approveContentMonthDay(id, dayNumber)); },
       onCreateCorrection: async (id, dayNumber, reason) => {
@@ -1005,7 +1018,10 @@ function AssessmentPreviewControl({
   kind: AssessmentResultKind;
   readOnly: boolean;
 }) {
+  const modal = useModal();
   const [forms, setForms] = useState<AssessmentFormPreviewView[]>();
+  const [deletingVersionId, setDeletingVersionId] = useState<string>();
+  const deletionInFlight = useRef(false);
   const [error, setError] = useState<string>();
   const [selected, setSelected] = useState<AssessmentFormPreviewView>();
   const [monthlyFinal, setMonthlyFinal] = useState<MonthlyFinalDraftView>();
@@ -1048,6 +1064,26 @@ function AssessmentPreviewControl({
     catch { setEditorError("Không tải lại được danh sách đề thi. Hãy mở lại tab để làm mới."); }
   };
   const canEditMonthly = (form: AssessmentFormPreviewView) => !readOnly && kind === "final" && form.editable && Boolean(form.monthlyFrameworkId);
+  const canDeleteMonthly = (form: AssessmentFormPreviewView) => !readOnly && kind === "final" && form.status === "draft" && Boolean(form.monthlyFrameworkId);
+
+  const deleteMonthly = async (form: AssessmentFormPreviewView) => {
+    if (deletionInFlight.current || !canDeleteMonthly(form)) return;
+    deletionInFlight.current = true;
+    try {
+      if (!await modal.confirm({ title: "Xoá bản nháp đề thi tháng?", message: `${form.title} · phiên bản ${form.version}`, confirmLabel: "Xoá bản nháp", cancelLabel: "Huỷ", tone: "danger", countdownSeconds: 0 })) return;
+      setDeletingVersionId(form.versionId);
+      setEditorError(undefined);
+      await client.deleteMonthlyFinal(form.versionId);
+      setForms(current => current?.filter(item => item.versionId !== form.versionId));
+      setNotice("Đã xoá bản nháp đề thi tháng.");
+      await refreshForms();
+    } catch (reason) {
+      setEditorError(message(reason));
+    } finally {
+      deletionInFlight.current = false;
+      setDeletingVersionId(undefined);
+    }
+  };
 
   if (error) return <Status tone="error">Không tải được nội dung đề thi: {error}</Status>;
   if (!forms) return <Status>Đang tải nội dung đề thi…</Status>;
@@ -1059,7 +1095,7 @@ function AssessmentPreviewControl({
         : kind === "pass_course"
           ? "Chưa có Form A chuẩn đã lưu để xem. Form A chỉ hiển thị khi nội dung cố định đã được nạp đầy đủ."
           : "Chưa có phiên bản đề đã lưu để xem.";
-    return <section className="card" aria-label="Chưa có nội dung đề thi"><h2>{kind === "final" ? "Bài thi tháng" : "Chưa có đề"}</h2><p className="small muted">{emptyMessage}</p></section>;
+    return <section className="card" aria-label="Chưa có nội dung đề thi"><h2>{kind === "final" ? "Bài thi tháng" : "Chưa có đề"}</h2><p className="small muted">{emptyMessage}</p>{notice ? <p role="status" className="small">{notice}</p> : null}</section>;
   }
   return <>
     <section className="card operator-assessment-form-list" aria-label="Phiên bản đề thi đã lưu">
@@ -1068,7 +1104,6 @@ function AssessmentPreviewControl({
       {editorError && !selected ? <p role="alert" className="small form-error">{editorError}</p> : null}
       <div className="stack">{forms.map(form => <article className="item operator-assessment-form-row" key={form.versionId}>
         <div className="operator-assessment-form-info">
-          {kind === "final" && finalExamMonthLabel(form.title) ? <div className="operator-assessment-form-month" style={{ gridColumn: "1 / -1", margin: "0 0 4px" }}><span className="badge primary">{finalExamMonthLabel(form.title)}</span></div> : null}
           <b>{form.title}</b>
           <p className="small muted">
             <span>Phiên bản {form.version} · {form.status === "published" ? "Đã phát hành" : form.status === "draft" ? "Bản nháp" : "Đã lưu lịch sử"}</span>
@@ -1077,7 +1112,7 @@ function AssessmentPreviewControl({
           </p>
           <p className="xs muted">Âm thanh: {form.audioConfigured ? "đã cấu hình nguồn audio" : "chưa đủ nguồn audio"}</p>
         </div>
-        <div className="row operator-assessment-form-actions" style={{ flex: "none", flexWrap: "nowrap", alignSelf: "flex-start", gap: 6 }}><button className="btn-sm" type="button" aria-label={`Xem ${form.title}`} disabled={Boolean(openingVersionId)} onClick={() => { setEditorError(undefined); setSelected(form); }}><ActionLabel icon={EyeIcon_} label="Xem" /></button>{canEditMonthly(form) ? <button className="btn-sm btn-primary" type="button" disabled={Boolean(openingVersionId)} onClick={() => void editMonthly(form)}><ActionLabel icon={PencilIcon_} label={openingVersionId === form.versionId ? "Đang mở…" : "Sửa đề"} /></button> : null}</div>
+        <div className="row operator-assessment-form-actions" style={{ flex: "none", alignSelf: "flex-start", gap: 6 }}><button className="btn-sm" type="button" aria-label={`Xem ${form.title}`} disabled={Boolean(openingVersionId || deletingVersionId)} onClick={() => { setEditorError(undefined); setSelected(form); }}><ActionLabel icon={EyeIcon_} label="Xem" /></button>{canEditMonthly(form) ? <button className="btn-sm btn-primary" type="button" disabled={Boolean(openingVersionId || deletingVersionId)} onClick={() => void editMonthly(form)}><ActionLabel icon={PencilIcon_} label={openingVersionId === form.versionId ? "Đang mở…" : "Sửa đề"} /></button> : null}{canDeleteMonthly(form) ? <button className="btn-sm btn-danger" type="button" disabled={Boolean(openingVersionId || deletingVersionId)} onClick={() => void deleteMonthly(form)}>{deletingVersionId === form.versionId ? "Đang xoá…" : "Xoá"}</button> : null}</div>
       </article>)}</div>
     </section>
     {selected ? <AssessmentPreviewDialog
@@ -1902,14 +1937,4 @@ function message(reason: unknown) {
   }
   // Never a bare code: errorMessage() already fell back to the server's Vietnamese message or the generic text.
   return label;
-}
-
-const ENGLISH_MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
-/** "Tháng 11/2026" from a monthly final's title ("… November 2026 …" or "… (2026-12) …"), so two exams of different months are told apart. */
-export function finalExamMonthLabel(title: string): string | null {
-  const iso = /\b(20\d{2})-(0[1-9]|1[0-2])\b/.exec(title);
-  if (iso) return `Tháng ${Number(iso[2])}/${iso[1]}`;
-  const named = /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(20\d{2})\b/i.exec(title);
-  if (named) return `Tháng ${ENGLISH_MONTHS.indexOf(named[1]!.toLowerCase()) + 1}/${named[2]}`;
-  return null;
 }

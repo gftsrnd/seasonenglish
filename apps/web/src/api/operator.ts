@@ -127,6 +127,7 @@ export interface OperatorApiClient {
   generateMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
   composeMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
   updateMonthlyFinal(versionId: string, input: MonthlyFinalUpdateInput): Promise<MonthlyFinalDraftView>;
+  deleteMonthlyFinal(versionId: string): Promise<{ versionId: string; deleted: true }>;
   publishMonthlyFinal(versionId: string): Promise<{ versionId: string; publishedAt: string }>;
   synthesizeAssessmentEdgeTts(input: { text: string; voice: string }): Promise<{ filename: string; mimeType: string; base64: string }>;
   saveContentMonthDay(id: string, dayNumber: number, lesson: { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> }): Promise<{ severe: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; light: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; contractVersion: number }>;
@@ -244,6 +245,7 @@ export const operatorApiClient: OperatorApiClient = {
   dismissExerciseWarning: (id) => request(`/api/v1/content/review/exercise-warnings/${encodeURIComponent(id)}/no-issue`, { method: "POST", body: "{}" }),
   correctExerciseWarning: (id, exerciseVersionId, correction) => request(`/api/v1/content/review/exercise-warnings/${encodeURIComponent(id)}/correction`, { method: "PUT", body: JSON.stringify({ exerciseVersionId, correction }) }),
   getMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final`),
+  deleteMonthlyFinal: (versionId) => request(`/api/v1/monthly-final-forms/${encodeURIComponent(versionId)}`, { method: "DELETE" }),
   getMonthlyIllustrations: (id) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/illustrations`),
   generateMonthlyIllustrations: (id, input = {}) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/illustrations/generate`, { method: "POST", body: JSON.stringify(input) }),
   setMonthlyIllustration: (id, input) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/illustrations`, { method: "PUT", body: JSON.stringify(input) }),

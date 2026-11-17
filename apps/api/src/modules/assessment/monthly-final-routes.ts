@@ -69,6 +69,11 @@ export function monthlyFinalWindowOpen(today: string, examDate: string): boolean
   return today < examDate;
 }
 
+export function monthlyFinalTitle(assessmentKey: string): string | undefined {
+  const match = /^monthly-final-(\d{4})-(0[1-9]|1[0-2])-(a1|a2|b1|b2|c1)$/u.exec(assessmentKey);
+  return match ? `Bài thi tháng ${match[2]}/${match[1]} · ${match[3]!.toUpperCase()}` : undefined;
+}
+
 export function registerMonthlyFinalRoutes(
   app: FastifyInstance, pool: Pool, guard: preHandlerHookHandler, runnerFor: (actorId: string) => Promise<AiTaskRunner | undefined>,
   listeningAudio?: ListeningAudioService
@@ -234,10 +239,41 @@ export function registerMonthlyFinalRoutes(
     let blueprint;
     try { blueprint = applyMonthlyFinalUpdate(version.blueprint, body.data, actorId, new Date()); }
     catch (error) { return reply.code(400).send({ code: errorCode(error, "MONTHLY_FINAL_FORM_INVALID") }); }
-    const evaluated = withEvaluation(blueprint, context.contract);
-    await pool.query("update assessment_definitions set title = $1 where id = $2", [evaluated.title, version.definitionId]);
-    await pool.query("update assessment_versions set blueprint = $1::jsonb where id = $2 and status = 'draft'", [JSON.stringify(evaluated), params.data.versionId]);
+    const evaluated = withEvaluation({ ...blueprint, title: monthlyFinalTitle(definitionKey(context)) ?? blueprint.title }, context.contract);
+    const saved = await pool.query("update assessment_versions set blueprint = $1::jsonb where id = $2 and status = 'draft'", [JSON.stringify(evaluated), params.data.versionId]);
+    if (!saved.rowCount) return reply.code(409).send({ code: "MONTHLY_FINAL_NOT_EDITABLE" });
     return currentMonthlyFinal(pool, context);
+  });
+
+  app.delete("/api/v1/monthly-final-forms/:versionId", { preHandler: guard }, async (request, reply) => {
+    const params = versionParam.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "MONTHLY_FINAL_VERSION_INVALID" });
+    const actorId = request.e4sSession!.user.id;
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      const version = await draftVersion(client, actorId, params.data.versionId, true);
+      if (!version || !monthlyFinalTitle(version.assessmentKey) || !version.blueprint.monthlyExam?.framework.id) {
+        await client.query("rollback");
+        return reply.code(404).send({ code: "MONTHLY_FINAL_NOT_FOUND", message: "Bản nháp đề thi tháng không còn trong danh sách." });
+      }
+      const attempts = await client.query("select 1 from assessment_attempts where assessment_version_id = $1 limit 1", [params.data.versionId]);
+      if (attempts.rowCount) {
+        await client.query("rollback");
+        return reply.code(409).send({ code: "MONTHLY_FINAL_ALREADY_STARTED", message: "Đề đã có lượt thi nên không thể xoá." });
+      }
+      await client.query("delete from assessment_versions where id = $1", [params.data.versionId]);
+      await client.query(
+        `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values (gen_random_uuid(), $1, $2, 'monthly_final.draft_deleted', 'assessment_version', $3, '{}'::jsonb, gen_random_uuid()::text)`,
+        [version.organizationId, actorId, params.data.versionId]
+      );
+      await client.query("commit");
+      return { versionId: params.data.versionId, deleted: true };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
   });
 
   app.post("/api/v1/monthly-final-forms/:versionId/publication", { preHandler: guard }, async (request, reply) => {
@@ -442,9 +478,10 @@ async function publishedRegenerationBlock(pool: Pool, context: FrameworkContext)
 /** replaceDraft = AI regeneration: the previous draft becomes "Đã thay" (retired) and the new one starts as DRAFT. */
 async function saveNewDraft(pool: Pool, context: FrameworkContext, generated: StoredAssessmentDefinition, replaceDraft: boolean): Promise<void> {
   // Content-only fingerprint of the plan this exam was built from, so a later version bump does not make it stale.
+  const title = monthlyFinalTitle(definitionKey(context)) ?? generated.title;
   const blueprint: StoredAssessmentDefinition = generated.monthlyExam
-    ? { ...generated, monthlyExam: { ...generated.monthlyExam, framework: { ...generated.monthlyExam.framework, examScopeHash: monthlyFinalScopeHash(context.contract) } } }
-    : generated;
+    ? { ...generated, title, monthlyExam: { ...generated.monthlyExam, framework: { ...generated.monthlyExam.framework, examScopeHash: monthlyFinalScopeHash(context.contract) } } }
+    : { ...generated, title };
   const client = await pool.connect();
   try {
     await client.query("begin");
@@ -507,7 +544,7 @@ export function monthlyFinalDraftView(
   return {
     definitionId: row.definition_id, versionId: row.version_id, version: row.version, status: row.status,
     blueprint: {
-      title: blueprint.title,
+      title: (exam && monthlyFinalTitle(`monthly-final-${exam.framework.month}-${exam.framework.cefr.toLowerCase()}`)) || blueprint.title,
       sections: blueprint.sections.map((section) => ({
         ...section,
         groups: section.groups.map((group) => ({ ...group, tasks: group.tasks.map((task) => ({ ...task, correctAnswer: task.correctAnswer ?? null })) }))
@@ -523,14 +560,14 @@ export function monthlyFinalDraftView(
   };
 }
 
-async function draftVersion(db: Queryable, actorId: string, versionId: string, lock = false): Promise<{ definitionId: string; blueprint: StoredAssessmentDefinition } | null> {
-  const result = await db.query<{ definition_id: string; blueprint: StoredAssessmentDefinition }>(
-    `select av.definition_id, av.blueprint from assessment_versions av
+async function draftVersion(db: Queryable, actorId: string, versionId: string, lock = false): Promise<{ definitionId: string; organizationId: string; assessmentKey: string; blueprint: StoredAssessmentDefinition } | null> {
+  const result = await db.query<{ definition_id: string; organization_id: string; assessment_key: string; blueprint: StoredAssessmentDefinition }>(
+    `select av.definition_id, ad.organization_id, ad.assessment_key, av.blueprint from assessment_versions av
      join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'final'
      join users operator on operator.id = $1 and operator.organization_id = ad.organization_id and operator.role = 'operator'
      where av.id = $2 and av.status = 'draft'${lock ? " for update of av" : ""}`, [actorId, versionId]);
   const row = result.rows[0];
-  return row ? { definitionId: row.definition_id, blueprint: row.blueprint } : null;
+  return row ? { definitionId: row.definition_id, organizationId: row.organization_id, assessmentKey: row.assessment_key, blueprint: row.blueprint } : null;
 }
 
 /** Every listening message must point at an audio file persisted in this organization's content media. */
