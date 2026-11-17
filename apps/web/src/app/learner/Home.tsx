@@ -172,7 +172,7 @@ export function LevelUpCelebration({
         <ModalCloseButton ref={closeRef} label="Đóng hộp thoại" iconOnly onClick={() => void onClose()} />
       </div>
       <div className="level-adjustment-result">
-        {announcement.level ? <span className="badge lvl level-adjustment-emblem">{announcement.level}<span className="sr-only"> · Mức mới</span></span> : null}
+        {announcement.level ? <span className="badge lvl level-adjustment-emblem"><strong>{announcement.level}</strong><span className="sr-only"> · Mức mới</span></span> : null}
         <h2 id="level-adjustment-title">Trình độ mới của bạn</h2>
         {!genuine ? <span className="badge">Mô phỏng</span> : null}
       </div>
