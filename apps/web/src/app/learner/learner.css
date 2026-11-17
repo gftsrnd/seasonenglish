@@ -2149,7 +2149,6 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
 .monthly-home-metrics .stat .stat-figure{width:64px;height:64px;display:grid;place-items:center}
 .monthly-home-metrics .stat .stat-figure > b{font-size:1.25rem;font-weight:600}
 .monthly-home-metrics .stat .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.monthly-home-metrics[data-trial] .stat .lbl{white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
 .home-absence-chip{margin:10px 0 0;white-space:normal}
 .home-absence-chip.warn{background:var(--warn-soft);color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn-line)}
 .home-absence-chip.danger{box-shadow:inset 0 0 0 1px var(--danger-line)}
