@@ -133,7 +133,7 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
   const accountPanel = useRef<HTMLDivElement>(null);
   const bottomNav = useRef<HTMLElement>(null);
   const [bottomNavHeight, setBottomNavHeight] = useState(0);
-  const notificationBell = <NotificationBell key={`${session.user.id}:${role}`} deferArrival={guideActive} arrivalBottom={compact ? (bottomNavHeight || 64) + 12 : undefined} />;
+  const notificationBell = <NotificationBell key={`${session.user.id}:${role}`} deferArrival={guideActive} />;
   const appGuide = <AppGuide key={`${session.user.id}:${role}:${location.pathname}`} role={role} pathname={location.pathname} compact={compact} onOpenChange={setGuideActive} />;
   useEffect(() => {
     const nav = bottomNav.current;

@@ -237,7 +237,7 @@ export function notificationContent(item: InboxNotificationView): NotificationCo
 /** A new-notification card: one item, or several collapsed into "N thông báo mới". */
 type Arrival = { count: number; item?: InboxNotificationView };
 const ARRIVAL_MS = 6_000;
-export function NotificationBell({ deferArrival = false, arrivalBottom }: { deferArrival?: boolean; arrivalBottom?: number | undefined } = {}) {
+export function NotificationBell({ deferArrival = false }: { deferArrival?: boolean } = {}) {
   const navigate = useNavigate();
   const dialog = useRef<HTMLElement>(null);
   const feed = useRef<HTMLDivElement>(null);
@@ -256,6 +256,7 @@ export function NotificationBell({ deferArrival = false, arrivalBottom }: { defe
   const [pending, setPending] = useState(false);
   const [reload, setReload] = useState(0);
   const trigger = useRef<HTMLButtonElement>(null);
+  const arrivalCard = useRef<HTMLDivElement>(null);
   /** Unread count of the last poll; null until the first one, so old unread items never pop up on load. */
   const knownCount = useRef<number | null>(null);
   const openRef = useRef(open);
@@ -303,6 +304,31 @@ export function NotificationBell({ deferArrival = false, arrivalBottom }: { defe
   useEffect(() => {
     if (deferArrival) setArrivalHeld(false);
   }, [deferArrival]);
+
+  useLayoutEffect(() => {
+    const bell = trigger.current;
+    const card = arrivalCard.current;
+    if (!arrival || !bell || !card) return;
+    const place = () => {
+      const anchor = bell.getBoundingClientRect();
+      const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+      const cardWidth = card.getBoundingClientRect().width;
+      const gutter = 8;
+      card.style.top = `${anchor.bottom + 4}px`;
+      card.style.left = `${Math.max(gutter, Math.min(anchor.right - cardWidth, viewportWidth - gutter - cardWidth))}px`;
+    };
+    place();
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(place);
+    observer?.observe(bell);
+    observer?.observe(card);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [arrival, deferArrival, open]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -459,18 +485,15 @@ export function NotificationBell({ deferArrival = false, arrivalBottom }: { defe
         <Pager {...feedPaged} label="thông báo" />
       </section>
     </div>, document.body) : null}
-    {arrival && !open && !deferArrival ? createPortal(<div className="inbox-arrival" role="status" aria-live="polite" data-testid="inbox-arrival" data-guide-ignore
-      style={arrivalBottom ? { insetBlockEnd: arrivalBottom } : undefined}
+    {arrival && !open && !deferArrival ? createPortal(<div ref={arrivalCard} className="inbox-arrival" role="status" aria-live="polite" data-testid="inbox-arrival" data-guide-ignore
       onPointerEnter={() => setArrivalHeld(true)} onPointerLeave={() => setArrivalHeld(false)}
       onFocus={() => setArrivalHeld(true)} onBlur={() => setArrivalHeld(false)}>
       <button type="button" className="inbox-arrival-open" onClick={openArrival}>
         <Bell size={16} strokeWidth={1.8} aria-hidden="true" />
-        <span className="inbox-arrival-text">
-          <strong>{arrivalContent ? arrivalContent.title : arrival.count > 1 ? `${arrival.count} thông báo mới` : "Có thông báo mới"}</strong>
-          {arrivalPreview ? <span>{arrivalPreview}</span> : null}
-        </span>
+        <strong>{arrivalContent ? arrivalContent.title : arrival.count > 1 ? `${arrival.count} thông báo mới` : "Có thông báo mới"}</strong>
       </button>
       <button type="button" className="inbox-arrival-close" aria-label="Ẩn thông báo mới" onClick={() => announce(null)}><X size={16} aria-hidden="true" /></button>
+      {arrivalPreview ? <span className="inbox-arrival-preview">{arrivalPreview}</span> : null}
     </div>, document.body) : null}
   </>;
 }

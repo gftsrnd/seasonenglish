@@ -86,16 +86,18 @@
   .inbox-mark-all { margin-inline-start: 0; }
 }
 
-/* Keep new arrivals below the content heading and clear of the mobile navigation. */
+/* The bell anchors the card; the viewport only caps its intrinsic width. */
 .inbox-arrival {
   position: fixed;
-  inset-block-end: max(16px, env(safe-area-inset-bottom, 0px));
-  inset-inline-end: max(8px, env(safe-area-inset-right, 0px));
+  top: 60px;
+  left: 8px;
   z-index: 85;
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-  width: min(320px, calc(100vw - 16px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 4px;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 16px));
   box-sizing: border-box;
   padding: 4px;
   border: 1px solid color-mix(in srgb, var(--primary) 35%, white);
@@ -107,12 +109,12 @@
 }
 .inbox-arrival-open {
   display: flex;
-  flex: 1;
   min-width: 0;
   min-block-size: 32px;
-  gap: 8px;
-  align-items: flex-start;
-  padding: 8px;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 4px 5px;
   border: 0;
   border-radius: 9px;
   background: transparent;
@@ -123,10 +125,12 @@
   cursor: pointer;
 }
 .inbox-arrival-open:hover, .inbox-arrival-open:focus-visible { background: var(--primary-soft); }
-.inbox-arrival-open > svg { flex: none; margin-top: 2px; color: var(--primary-dark); }
-.inbox-arrival-text { display: grid; gap: 2px; min-width: 0; }
-.inbox-arrival-text strong { font-size: .88rem; overflow-wrap: anywhere; }
-.inbox-arrival-text span {
+.inbox-arrival-open > svg { flex: none; color: var(--primary-dark); }
+.inbox-arrival-open > strong { font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-arrival-preview {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 0 5px 3px 27px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -153,7 +157,7 @@
 .inbox-arrival-close:hover, .inbox-arrival-close:focus-visible { background: var(--primary-soft); }
 
 @keyframes inbox-arrival-in {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: none; }
 }
 

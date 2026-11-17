@@ -124,15 +124,17 @@ describe("NotificationBell new-notification card", () => {
     expect(screen.queryByTestId("inbox-arrival")).not.toBeInTheDocument();
   });
 
-  it("places the compact arrival above the bottom navigation and keeps placement details in the bell", async () => {
+  it("anchors the compact arrival below the bell and keeps placement details in the bell", async () => {
     const server = inbox([]);
     const user = userEvent.setup();
-    render(<MemoryRouter><NotificationBell arrivalBottom={76} /></MemoryRouter>);
-    await screen.findByRole("button", { name: "Thông báo" });
+    renderBell();
+    const bell = await screen.findByRole("button", { name: "Thông báo" });
+    const bounds = vi.spyOn(bell, "getBoundingClientRect").mockReturnValue(new DOMRect(270, 12, 40, 40));
     server.arrive(item("approved", "assessment_result", "placement"));
     await poll();
     const card = await screen.findByTestId("inbox-arrival");
-    expect(card).toHaveStyle({ insetBlockEnd: "76px" });
+    expect(card).toHaveStyle({ top: "56px", left: "310px" });
+    bounds.mockRestore();
     expect(card).toHaveTextContent("Có kết quả Test đầu vào");
     expect(card).not.toHaveTextContent(/xin thi lại/);
     expect(within(card).getByRole("button", { name: "Ẩn thông báo mới" })).toHaveTextContent(/^$/);
