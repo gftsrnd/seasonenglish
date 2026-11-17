@@ -575,7 +575,7 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
         )}</tbody>
       </table>
     </div>}
-    {onRescore && <div className="row">
+    {onRescore && <div className="row operator-assessment-rescore">
       <button className="btn-sm" type="button" disabled={rescoring || savingManualScore} onClick={onRescore}>{rescoring ? "Đang chấm lại…" : "Chấm lại bằng AI"}</button>
       {detail.aiScoring?.status === "failed" && <span className="small muted">Lần chấm AI gần nhất thất bại. Có thể chấm tay.</span>}
     </div>}
@@ -590,8 +590,8 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
       {onSaveManualScore && monthlyRubric?.length ? <AssessmentMonthlyRubricScore rubric={monthlyRubric} saved={monthlyScores} comment={comment} onSave={onSaveManualScore} saving={savingManualScore} writingContent={renderSectionContent("writing")} speakingContent={renderSectionContent("speaking")} />
         : onSaveManualScore && detail.kind !== "final" ? <AssessmentManualScore writingTasks={manualTasks("writing") as ManualScoreInput["writingTasks"]} speakingTasks={manualTasks("speaking") as ManualScoreInput["speakingTasks"]} comment={comment} onSave={onSaveManualScore} saving={savingManualScore} writingContent={renderSectionContent("writing")} speakingContent={renderSectionContent("speaking")} {...(detail.kind === "pass_course" && detail.productiveRubric ? { passCourseRubric: detail.productiveRubric } : {})} {...(scoreFor("writing")?.score !== undefined ? { writingScore: scoreFor("writing")!.score } : {})} {...(scoreFor("speaking")?.score !== undefined ? { speakingScore: scoreFor("speaking")!.score } : {})} /> : <>{renderAssessmentSection("writing")}{renderAssessmentSection("speaking")}</>}
     </div></section>
-    {detail.decision && <div className="banner info"><div className="body small">Quyết định: {detail.decision.status} · {detail.decision.approvedLevel ?? "—"} · {detail.decision.reason}</div></div>}
-    {detail.appeal && <div className="banner warn"><div className="body small">Kháng nghị: {detail.appeal.status} · {detail.appeal.reason}{detail.appeal.resolution ? ` · ${detail.appeal.resolution}` : ""}</div></div>}
+    {detail.decision && <div className="banner info operator-assessment-outcome"><div className="body small">Quyết định: {detail.decision.status} · {detail.decision.approvedLevel ?? "—"} · {detail.decision.reason}</div></div>}
+    {detail.appeal && <div className="banner warn operator-assessment-outcome"><div className="body small">Kháng nghị: {detail.appeal.status} · {detail.appeal.reason}{detail.appeal.resolution ? ` · ${detail.appeal.resolution}` : ""}</div></div>}
     <div ref={scroll.end} className="app-scroll-edge" aria-hidden="true" />
     {scroll.visible && <ScrollJumpButton atTop={scroll.atTop} onClick={scroll.jump} inExam />}
   </section></div>;

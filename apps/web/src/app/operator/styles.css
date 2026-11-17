@@ -3054,6 +3054,8 @@ body:has(.app-operator) #modal > .dialog > .row {
 .operator-assessment-dialog > .table-wrap { margin-top: 8px !important; }
 .operator-assessment-dialog > .table-wrap th,
 .operator-assessment-dialog > .table-wrap td { padding: 7px 10px; }
+.operator-assessment-dialog > .operator-assessment-rescore { margin-block: 12px; }
+.operator-assessment-dialog > .operator-assessment-outcome { margin-block-start: 10px; }
 .operator-assessment-document { margin: 0; }
 .operator-answer-sections { display: block; margin-top: 0; }
 .operator-answer-section { margin: 0; border: 0; padding: 0; background: transparent; }
