@@ -40,4 +40,3 @@ export function ManualGrammarHighlight({ text, ranges, offset = 0 }: { text: str
     return <Fragment key={index}>{plain}<strong data-grammar-highlight={range.color}>{text.slice(start, end)}</strong></Fragment>;
   })}{text.slice(cursor)}</>;
 }
-
