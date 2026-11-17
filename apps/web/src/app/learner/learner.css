@@ -681,7 +681,7 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .level-adjustment-dialog .level-adjustment-result { display: grid; justify-items: center; gap: 8px; padding: 16px 28px; border: 1px solid var(--primary-line); background: var(--primary-soft); text-align: center; }
 .level-adjustment-result h2 { margin: 0; font-size: 1.22rem; }
 .level-adjustment-emblem { display: grid; width: 46px; height: 46px; place-items: center; border-radius: 50%; background: var(--surface); color: var(--primary); }
-.level-adjustment-emblem > .celebration-icon { width: 27px; height: 27px; margin: 0; color: inherit; }
+.level-adjustment-result .level-adjustment-emblem > .celebration-icon { width: 27px; height: 27px; margin: 0; color: inherit; }
 .level-adjustment-dialog .level-adjustment-reason { margin-top: 12px; overflow-wrap: anywhere; text-align: left; }
 .level-adjustment-dialog .level-adjustment-rule { margin: 12px 0 0; text-align: center; text-wrap: balance; }
 .level-adjustment-dialog .modal-actions { justify-content: center; margin-top: 14px; }
