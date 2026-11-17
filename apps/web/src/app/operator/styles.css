@@ -4325,7 +4325,26 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 }
 .operator-request-expanded .operator-review-action-footer { justify-content: flex-end; }
 .operator-request-expanded .operator-review-appeal-compact { padding: 0; border: 0; background: transparent; box-shadow: none; }
-.operator-request-expanded .operator-review-appeal-compact .operator-review-action-footer { flex-wrap: nowrap; gap: 6px; padding: 0; }
+.operator-request-expanded .operator-review-appeal-compact .operator-review-action-footer { justify-content: flex-start; flex-wrap: wrap; gap: 6px; padding: 0; }
+.app-operator .operator-review-action-footer .operator-retake-approve:not(:disabled) {
+  border-color: #17603e;
+  background: #17603e;
+  color: #fff;
+  box-shadow: none;
+}
+.app-operator .operator-review-action-footer .operator-retake-approve:hover:not(:disabled) {
+  border-color: #114b30;
+  background: #114b30;
+}
+.app-operator .operator-review-action-footer .operator-retake-reject:not(:disabled) {
+  border-color: #b91c1c;
+  background: #fff;
+  color: #b91c1c;
+  box-shadow: none;
+}
+.app-operator .operator-review-action-footer .operator-retake-reject:hover:not(:disabled) {
+  background: #fff1f2;
+}
 .operator-requests .request-table .request-actions .request-collapse {
   display: inline-grid;
   place-items: center;

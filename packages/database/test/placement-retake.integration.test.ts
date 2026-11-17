@@ -146,6 +146,8 @@ describe.skipIf(!databaseUrl)("placement retake persistence", () => {
     await pool.query("update assessment_attempts set status = 'pending_review', submitted_at = now() where id = $1", [attemptId]);
     await expect(repositories.assessments.decide({ attemptId: attemptId!, reviewerId: DEMO_IDS.operator, status: "needs_retry", approvedLevel: null, reason: "x" }))
       .rejects.toEqual(new PlacementRetakeError("PLACEMENT_RETAKE_FINAL"));
+    const previousLevel = (await pool.query<{ cefr: string }>("select cefr from enrollments where learner_id = $1 and cefr_approved", [DEMO_IDS.learner])).rows[0]?.cefr;
+    expect((await repositories.learning.learnerLifecycle(DEMO_IDS.learner, 0))?.rewardAnnouncement.kind).not.toBe("placement-retake-finalized");
     const placed = await repositories.assessments.decide({ attemptId: attemptId!, reviewerId: DEMO_IDS.operator, status: "approved", approvedLevel: "B1", reason: "Xếp lớp sau thi lại" });
     expect(placed?.approvedLevel).toBe("B1");
     await expect(repositories.assessments.decide({ attemptId: attemptId!, reviewerId: DEMO_IDS.operator, status: "approved", approvedLevel: "A1", reason: "Quyết định cũ trên tab khác" }))
@@ -154,5 +156,9 @@ describe.skipIf(!databaseUrl)("placement retake persistence", () => {
       .resolves.toEqual(placed);
     const inbox = await new InboxNotificationRepository(pool).list(DEMO_IDS.learner, 20, false);
     expect(inbox.items).toContainEqual(expect.objectContaining({ relatedId: attemptId, kind: "assessment_result", context: "placement_retake" }));
+    const announcement = (await repositories.learning.learnerLifecycle(DEMO_IDS.learner, 0))?.rewardAnnouncement;
+    expect(announcement).toMatchObject({ kind: "placement-retake-finalized", level: "B1", previousLevel, reason: "Xếp lớp sau thi lại" });
+    await expect(repositories.learning.acknowledgeRewardAnnouncement(DEMO_IDS.learner, announcement!.announcementId!)).resolves.toBe(true);
+    expect((await repositories.learning.learnerLifecycle(DEMO_IDS.learner, 0))?.rewardAnnouncement.kind).toBe("normal");
   });
 });

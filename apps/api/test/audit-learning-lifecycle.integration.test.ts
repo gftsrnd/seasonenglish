@@ -158,6 +158,20 @@ describe("audited monthly learning lifecycle", () => {
     expect(approved.find(row => row.learnerId === active.id)?.trialCountsFrom).toBeUndefined();
   });
 
+  it("shows the November 17 learner a trial month and starts counting on December 1", async () => {
+    await systemDate("2026-11-17");
+    const account = await learner("A1", "2026-11-17", true);
+    const cookie = await login(account.email);
+    const home = () => app.inject({ url: "/api/v1/learner/home", headers: { cookie } });
+    expect(await learnerMonthlyAccess(pool, account.id)).toMatchObject({ state: "uncounted", effectiveDays: 9, startDate: "2026-12-01" });
+    const november = await home();
+    expect(november.statusCode, november.body).toBe(200);
+    expect(november.json()).toMatchObject({ monthlyUncounted: { countsFrom: "2026-12-01" }, monthlyExam: null, metrics: { completedLessons: 0, totalLessons: 0 } });
+    await systemDate("2026-12-01");
+    expect(await learnerMonthlyAccess(pool, account.id)).toMatchObject({ state: "active", startDate: "2026-12-01" });
+    expect((await home()).json().monthlyUncounted).toBeUndefined();
+  });
+
   it("uses the late complaint for its original exam across a month boundary and resumes the same attempt", async () => {
     await systemDate("2026-11-20");
     const learnerAccount = await learner("A1", "2026-11-02", true);

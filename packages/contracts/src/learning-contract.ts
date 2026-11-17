@@ -19,13 +19,15 @@ export type PilotPhase = "before_pilot" | "in_pilot" | "after_pilot";
 export type LevelUpPhase = "none" | "eligible" | "testing" | "ungraded" | "challenge" | "requested" | "approved" | "failed";
 
 export interface RewardAnnouncementView {
-  kind: "normal" | "placement-approved" | "new-level-announcement" | "level-adjustment" | "top-level-redirect" | "season-up";
+  kind: "normal" | "placement-approved" | "placement-retake-finalized" | "new-level-announcement" | "level-adjustment" | "top-level-redirect" | "season-up";
   points: number;
   nextPoints: number | null;
   seasonName: string;
   /** `season-up`: the reward Season (2–4) just reached, at the CEFR level `level`. */
   seasonLevel?: number;
   level?: CefrLevel | null;
+  /** Level immediately before the final retake decision. */
+  previousLevel?: CefrLevel | null;
   /** Stable server key used to acknowledge a one-time celebration. */
   announcementId?: string;
   source?: "genuine" | "simulated";

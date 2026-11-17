@@ -1210,12 +1210,20 @@ class LearningRepository {
          where m.learner_id = $1 and m.celebrated_at is null and m.cefr = learner_current_cefr(m.learner_id)
          order by m.season_level desc limit 1`, [learnerId]
       ),
-      this.pool.query<{ attempt_id: string; assessment_key: string; approved_level: CefrLevel; decided_at: Date }>(
-        `select attempt.id as attempt_id, definition.assessment_key, decision.approved_level, decision.decided_at
+      this.pool.query<{ attempt_id: string; assessment_key: string; approved_level: CefrLevel; reason: string; previous_level: CefrLevel | null; decided_at: Date }>(
+        `select attempt.id as attempt_id, definition.assessment_key, decision.approved_level, decision.reason, decision.decided_at,
+                coalesce(event.payload->>'previousLevel', original.approved_level) as previous_level
          from assessment_decisions decision
          join assessment_attempts attempt on attempt.id = decision.attempt_id
          join assessment_versions version on version.id = attempt.assessment_version_id
          join assessment_definitions definition on definition.id = version.definition_id and definition.kind = 'placement'
+         left join assessment_retake_grants grant_row on grant_row.retake_attempt_id = attempt.id and grant_row.kind = 'placement'
+         left join assessment_decisions original on original.attempt_id = grant_row.source_attempt_id and original.status = 'approved'
+         left join lateral (
+           select audit.payload from audit_events audit
+           where audit.entity_id = attempt.id and audit.action = 'assessment.decision' and audit.payload->>'status' = 'approved'
+           order by audit.created_at desc limit 1
+         ) event on grant_row.id is not null
          where attempt.learner_id = $1 and attempt.status = 'approved' and decision.status = 'approved'
            and decision.decided_at > now() - interval '72 hours'
          order by decision.decided_at desc limit 1`, [learnerId]
@@ -1253,12 +1261,16 @@ class LearningRepository {
     const newLevel = Boolean(latestChangedAt && latestLevel === enrollment?.cefr
       && latest?.from !== latestLevel && Date.now() - latestChangedAt.getTime() < 30 * 24 * 60 * 60 * 1000);
     const raised = Boolean(latest?.from && cefrIndex(latest.from) < cefrIndex(latestLevel));
-    const initialPlacement = placement.rows[0];
-    const newlyPlaced = initialPlacement?.assessment_key === "placement-a" && enrollment?.cefr_approved
-      && initialPlacement.approved_level === enrollment.cefr && (!latestChangedAt || latestChangedAt <= initialPlacement.decided_at);
-    const candidateKind = newlyPlaced ? "placement-approved" : enrollment?.cefr === "C1" ? "top-level-redirect"
+    const placementDecision = placement.rows[0];
+    const activePlacementDecision = placementDecision && enrollment?.cefr_approved
+      && placementDecision.approved_level === enrollment.cefr && (!latestChangedAt || latestChangedAt <= placementDecision.decided_at)
+      ? placementDecision : undefined;
+    const newlyPlaced = activePlacementDecision?.assessment_key === "placement-a" ? activePlacementDecision : undefined;
+    const retakeDecision = activePlacementDecision?.assessment_key === PLACEMENT_RETAKE_ASSESSMENT_KEY ? activePlacementDecision : undefined;
+    const candidateKind = retakeDecision ? "placement-retake-finalized" : newlyPlaced ? "placement-approved" : enrollment?.cefr === "C1" ? "top-level-redirect"
       : newLevel ? raised ? "new-level-announcement" : "level-adjustment" : "normal";
-    const candidateId = newlyPlaced ? `placement-approved:${initialPlacement.attempt_id}:${initialPlacement.decided_at.toISOString()}`
+    const candidateId = retakeDecision ? `placement-retake-finalized:${retakeDecision.attempt_id}`
+      : newlyPlaced ? `placement-approved:${newlyPlaced.attempt_id}:${newlyPlaced.decided_at.toISOString()}`
       : candidateKind === "top-level-redirect"
       ? `top-level:${enrollment?.cefr ?? "C1"}:${latestChangedAt?.toISOString() ?? "current"}`
       : newLevel && latestLevel && latestChangedAt
@@ -1301,7 +1313,8 @@ class LearningRepository {
         ...(announcementKind === "normal" ? {} : {
           ...(candidateId ? { announcementId: candidateId } : {}),
           source: "genuine" as const,
-          ...(newLevel && !newlyPlaced && latest?.reason?.trim() ? { reason: latest.reason.trim() } : {}),
+          ...(retakeDecision ? { previousLevel: retakeDecision.previous_level, reason: retakeDecision.reason.trim() }
+            : newLevel && !newlyPlaced && latest?.reason?.trim() ? { reason: latest.reason.trim() } : {}),
           rule: announcementKind === "top-level-redirect"
             ? "Mức C1 là mức cao nhất của lộ trình hiện tại."
             : announcementKind === "level-adjustment"
@@ -8638,6 +8651,7 @@ class AssessmentRepository {
          values ($1, $2, $3, 'assessment.decision', 'assessment_attempt', $4, $5::jsonb, $6)`,
         [randomUUID(), attempt.organization_id, input.reviewerId, input.attemptId,
           JSON.stringify({ status: input.status, approvedLevel: input.approvedLevel, reason: input.reason,
+            ...(attempt.assessment_key === PLACEMENT_RETAKE_ASSESSMENT_KEY ? { previousLevel: attempt.current_level } : {}),
             ...(passCourseScore === undefined ? {} : { totalScore: passCourseScore, recommendedStatus: passCourseScore >= 85 ? "approved" : "needs_retry" }),
             ...(attempt.kind === "level_up" && input.status === "approved"
               ? { effectiveAt: decidedAt.toISOString() } : {}) }), randomUUID()]

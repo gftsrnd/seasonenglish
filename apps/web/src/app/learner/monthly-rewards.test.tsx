@@ -139,6 +139,18 @@ it("shows a compact level-up notice with one close control and the operator's re
   expect(onClose).toHaveBeenCalledTimes(1);
 });
 
+it.each([
+  ["A2", "Bạn đã lên mức B1"],
+  ["B1", "Bạn đã được chốt mức B1"],
+  ["B2", "Trình độ đã được điều chỉnh xuống B1"]
+] as const)("names the final retake decision when the previous level was %s", (previousLevel, title) => {
+  render(<RewardAnnouncementDialog onClose={vi.fn()} announcement={{
+    kind: "placement-retake-finalized", points: 0, nextPoints: 500, seasonName: "Mùa thu",
+    level: "B1", previousLevel, reason: "Đã xét kết quả hai lần thi."
+  }} />);
+  expect(screen.getByRole("dialog", { name: title })).toHaveTextContent("Đã xét kết quả hai lần thi.");
+});
+
 describe("Season congratulation modal", () => {
   it("congratulates the learner on the new Season and closes once", async () => {
     const onClose = vi.fn();
