@@ -225,13 +225,31 @@ async function repairReadAloud(runner:AiTaskRunner,input:MonthlyFinalGenerationI
         limits[index] = count;
       }
     }
-    return Promise.all(sentences.map((sentence, index) => {
-      const count = counts[index]!;
+    const budgets = counts.map((count, index) => {
       const limit = limits[index]!;
       const shared = Math.min(available, Math.max(0, count - limit));
       available -= shared;
-      return count > limit + shared ? writeSentence(groups,index,limit + shared,sentence.text) : sentence;
-    }));
+      return limit + shared;
+    });
+    const rewrites = sentences.map((sentence, index) =>
+      counts[index]! > budgets[index]! ? writeSentence(groups, index, budgets[index]!, sentence.text) : sentence);
+    if (input.cefr !== "B1") return Promise.all(rewrites);
+
+    const results = await Promise.allSettled(rewrites);
+    const failure = results.findIndex(result => result.status === "rejected");
+    if (failure < 0) return Promise.all(rewrites);
+    for (const result of results) {
+      if (result.status === "rejected" && (!result.reason || result.reason.code !== "AI_OUTPUT_INVALID")) throw result.reason;
+    }
+    // Keep the complete sentence that failed compression. Try spending the
+    // remaining whole-passage budget on the other sentence instead.
+    const other = 1 - failure;
+    const remaining = profile.maxWords - counts[failure]!;
+    if (remaining < MIN_READ_ALOUD_SENTENCE_WORDS) return Promise.all(rewrites);
+    const previous = results[other]!;
+    const source = previous.status === "fulfilled" ? previous.value : sentences[other]!;
+    const replacement = monthlyFinalWordCount(source.text) <= remaining ? source : await writeSentence(groups, other, remaining, source.text);
+    return sentences.map((sentence, index) => index === other ? replacement : sentence);
   };
   let sentences: Awaited<ReturnType<typeof composeSentences>>;
   try {

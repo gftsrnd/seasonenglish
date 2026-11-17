@@ -53,7 +53,7 @@ export const MONTHLY_FINAL_LEVEL_PROFILES: Record<CefrLevel, MonthlyFinalLevelPr
     listeningScriptWords: { min: 110, max: 130, delivery: "moderate" },
     readingItem: { sentences: "1–2 sentences", maxWords: 20 },
     writing: { genre: "email", minWords: 80, maxWords: 100, ideas: 3, support: "Facts only." },
-    speakingA: { sentences: "2 sentences", maxWords: 25 },
+    speakingA: { sentences: "2 sentences", maxWords: 26 },
     speakingB: { minSeconds: 60, maxSeconds: 75, limitSeconds: 90, ideas: 3 },
     pronunciationType: "final sounds, consonant clusters, word stress"
   },

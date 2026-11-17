@@ -16,7 +16,7 @@ it("repairs only an overlong read-aloud after the full productive response exhau
     if(calls.length===1)throw Object.assign(new Error("AI_OUTPUT_INVALID"),{code:"AI_OUTPUT_INVALID",details:{invalidOutput:JSON.stringify(candidate)}});
     const start=(raw.pools as any[])[0].code==="P1"?0:2;
     expect(raw.pools).toEqual(input.pronunciation.slice(start,start+2).map(p=>({code:p.code,focus:p.ipa,examples:p.taughtExamples})));// Requested size is 12–13 words per sentence; a sentence is accepted up to the passage cap (25) minus a minimal 6-word second sentence.
-    expect(raw.maxWords).toBe(19);
+    expect(raw.maxWords).toBe(20);
     return {output:{candidates:[start===0?"Our client will attend to the tasks and desks.":"Hold the old list and check the cost."]},metadata:{}};
   }} as unknown as AiTaskRunner;
   const result=await generateMonthlyFinalProductive(runner,input,"Generate exam");
@@ -116,7 +116,7 @@ it("accepts a longer first read-aloud sentence when the whole passage still fits
   return {output:{candidates:[raw.pools[0].code==="P1"?first:"Hold the old list and check the cost."]},metadata:{}};
  }} as unknown as AiTaskRunner;
  const result=await generateMonthlyFinalProductive(runner,input,"Generate exam");
- // 16 + 8 = 24 words within the B1 cap of 25: no failure and no shortening call.
+ // 16 + 8 = 24 words within the B1 cap of 26: no failure and no shortening call.
  expect(calls).toEqual(["monthly_final_productive_generation","monthly_final_read_aloud_repair","monthly_final_read_aloud_repair"]);
  expect((result.output as any).speakingA.text).toBe(`${first} Hold the old list and check the cost.`);
  expect((result.output as any).speakingA.positions).toHaveLength(8);
@@ -134,9 +134,45 @@ it("shortens a long first sentence only when the composed passage exceeds the ca
   return {output:{candidates:[raw.previousText?"Our client will attend to the tasks and desks.":long]},metadata:{}};
  }} as unknown as AiTaskRunner;
  const result=await generateMonthlyFinalProductive(runner,input,"Generate exam");
- // 19 + 8 > 25: the existing rebalancing asks for the first sentence within 25 - 8 = 17 words.
- expect(limits).toEqual([19,17]);
+ // 19 + 8 > 26: rebalancing asks for the first sentence within 26 - 8 = 18 words.
+ expect(limits).toEqual([20,18]);
  expect((result.output as any).speakingA.text).toBe("Our client will attend to the tasks and desks. Hold the old list and check the cost.");
+});
+it("preserves the December B1 two-phrase sentence when its local word budget cannot be met", async () => {
+ const input = buildMonthlyFinalGenerationInput(monthlyFinalContract("B1"), frameworkRef);
+ const pools = [
+  ["asked", "checked", "finished", "helped", "laughed", "fixed", "washed", "wished", "stopped"],
+  ["called", "planned", "agreed", "caused", "listened", "improved", "approved", "reviewed", "followed"],
+  ["started", "needed", "updated", "wanted", "visited", "accepted", "decided", "provided", "added"],
+  ["booked it", "moved on", "closed a deal", "approved everything", "pulled out", "signed off", "hired an assistant", "named a new owner", "wrapped up early"]
+ ];
+ const candidate = fakeMonthlyFinalAiOutput(input).productive;
+ input.pronunciation.forEach((pool, index) => {
+  pool.taughtExamples = pools[index]!.map((word, term) => ({ word, exampleId: `${pool.code}-${term}`, ipa: pool.ipa }));
+ });
+ candidate.speakingA.text += " More words before the meeting starts.".repeat(3);
+ const first = "We called the team, planned the review, then checked and finished the report.";
+ const shorterFirst = "We called and planned, then checked and finished the final project report.";
+ const second = "We started the review, updated the records, signed off, and then wrapped up early.";
+ const failedSecond = "We started the work, updated the notes, and signed off just before the afternoon meeting.";
+ const invalid = (output: unknown) => Object.assign(new Error("invalid"), {
+  code: "AI_OUTPUT_INVALID", details: { invalidOutput: JSON.stringify(output) }
+ });
+ const limits: Array<[string, number]> = [];
+ const runner = { runTask: async (taskId: string, raw: any) => {
+  if (taskId === "monthly_final_grammar_evidence_review") return { output: { items: raw.items.map((item: any) => ({ key: item.key, matches: true, reason: "Matches." })) }, metadata: {} };
+  if (taskId === "monthly_final_productive_generation") throw invalid(candidate);
+  const pool = raw.pools[0].code;
+  limits.push([pool, raw.maxWords]);
+  if (pool === "P3" && raw.maxWords <= 13) throw invalid({ candidates: [failedSecond] });
+  return { output: { candidates: [pool === "P3" ? second : raw.previousText ? shorterFirst : first] }, metadata: {} };
+ }} as unknown as AiTaskRunner;
+ const { output } = await generateMonthlyFinalProductive(runner, input, "Generate exam");
+ expect(limits).toEqual([["P1", 20], ["P3", 20], ["P3", 13], ["P1", 12]]);
+ expect((output as any).speakingA.text).toBe(`${shorterFirst} ${second}`);
+ expect((output as any).speakingA.positions.map(({word}: {word:string}) => word)).toEqual(
+  ["checked", "finished", "called", "planned", "started", "updated", "signed off", "wrapped up early"]
+ );
 });
 it("does not send an already accepted grammar quote to the reviewer again, but re-reviews rejected ones",async()=>{
  let reviews=0;
