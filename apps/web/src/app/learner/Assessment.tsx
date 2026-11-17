@@ -347,7 +347,7 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
   return <>
   <div className="app-learner-page test-page">
     <PageTitle title={assessmentHeading(view)} detail="Thời gian vẫn chạy nếu bạn rời trang" />
-    <section className="card flat assessment-runtime-header" style={{ position: "sticky", top: 64, zIndex: 5 }}>
+    <section className="card flat assessment-runtime-header">
       <div className="row between">
         <div className="row"><span className="badge">Phần {sectionIndex + 1}/4 · {section.title}</span><span className="badge primary" role="timer" aria-label="Thời gian còn lại">◷ {runtime.formattedTime}</span></div>
         <div className="row"><span className="xs muted">Cảnh báo {runtime.violationCount}/{runtime.violationLimit}</span><span className="badge warn" title="Câu trả lời được tự động lưu; đồng hồ vẫn chạy liên tục">Tự động lưu</span><button className="btn-sm btn-primary" type="button" aria-label={section.code === "speaking" ? "Nộp bài" : `Nộp phần ${section.title}`} aria-busy={busy || undefined} disabled={submitDisabled} onClick={() => setSubmitConfirm(true)}>{busy ? "Đang nộp…" : section.code === "speaking" ? "Nộp bài" : "Nộp phần này →"}</button></div>
