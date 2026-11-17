@@ -1949,8 +1949,7 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
   }
 }
 
-/* The approved-learner table has variable button counts and goal lengths;
-   reserve a stable action column and give each control breathing room. */
+/* Keep the variable row actions inside the approved-learner table. */
 .app-operator .operator-action-table {
   table-layout: fixed;
 }
@@ -1984,14 +1983,13 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
   width: 41%;
 }
 
+.app-operator .operator-approved-panel .operator-action-table :is(th, td):last-child {
+  width: 59%;
+}
+
 .app-operator .operator-action-table td {
   vertical-align: middle;
   line-height: 1.45;
-}
-
-.app-operator .operator-action-table td[data-label="Điểm đầu vào"],
-.app-operator .operator-action-table td[data-label="Mục tiêu tháng"] {
-  vertical-align: middle;
 }
 
 .app-operator .operator-action-table td[data-label="Mức"] .badge {
@@ -2019,17 +2017,16 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
 .app-operator .operator-approved-actions {
   display: flex;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 6px;
   width: 100%;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  min-width: 0;
 }
 
 .app-operator .operator-approved-actions > .btn,
 .app-operator .operator-approved-actions > button {
   flex: 0 0 auto;
-  min-width: max-content;
+  max-width: 100%;
   padding-inline: 10px;
   white-space: nowrap;
   line-height: 1.2;

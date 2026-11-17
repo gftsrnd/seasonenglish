@@ -8,7 +8,7 @@ import { OperatorDashboard } from "./Dashboard.js";
 import { adaptAssessmentOverview } from "./adapters.js";
 import type { OperatorDashboardActions } from "./types.js";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 const overview = (levelUpOverride: AssessmentLevelUpOverrideSummary | null, currentLevel: "A2" | "C1" = "A2") => ({
   pendingAssessments: [],
@@ -30,6 +30,22 @@ const actions = (onToggleLevelUpOverride = vi.fn()): OperatorDashboardActions =>
 const granted = { targetLevel: "B1" as const, reason: "Kiểm thử", grantedBy: "Hà", grantedAt: "2026-11-12T08:00:00.000Z" };
 
 describe("Operator approved learner: level-up exception", () => {
+  it.each([false, true])("keeps the goal action without a goal display in the approved list, compact %s", async (compact) => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: compact, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    const user = userEvent.setup();
+    const callbacks = actions();
+    const data = overview(null);
+    const source = { ...data, approvedLearners: data.approvedLearners.map(learner => ({ ...learner, monthlyGoal: "Luyện họp nhóm" })) };
+    render(<OperatorDashboard view={adaptAssessmentOverview(source, { aiConnected: true, openAppeals: 0 })} actions={callbacks} />);
+    const row = within(screen.getByTestId("approved-learner-1"));
+    if (compact) await user.click(row.getByText("Thao tác", { exact: true }));
+    expect(screen.queryByRole("columnheader", { name: "Mục tiêu tháng" })).not.toBeInTheDocument();
+    expect(row.queryByText("Luyện họp nhóm")).not.toBeInTheDocument();
+    await user.click(row.getByRole("button", { name: /^Mục tiêu$/u }));
+    expect(callbacks.onEditGoal).toHaveBeenCalledWith("learner-1");
+    expect(row.getByRole("button", { name: "Hồ sơ" })).toBeVisible();
+  });
+
   it("offers a short 'Thi lên mức' button next to 'Đổi level' when not yet allowed", async () => {
     const user = userEvent.setup();
     const onToggle = vi.fn();
