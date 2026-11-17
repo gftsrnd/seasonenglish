@@ -8,6 +8,13 @@ describe("learner route guards", () => {
     expect(shouldRedirectApprovedPlacement("level-up", "approved")).toBe(false);
   });
 
+  it("keeps a submitted retake visible until the final placement", () => {
+    expect(shouldRedirectApprovedPlacement("placement", "pending_review")).toBe(true);
+    expect(shouldRedirectApprovedPlacement("placement", "submitted", true)).toBe(false);
+    expect(shouldRedirectApprovedPlacement("placement", "pending_review", true)).toBe(false);
+    expect(shouldRedirectApprovedPlacement("placement", "approved", true)).toBe(true);
+  });
+
   it("recognizes only the real no-challenge state as a Home redirect", () => {
     expect(shouldRedirectUnavailableChallenge("challenge", new Error("LEVEL_CHALLENGE_NOT_AVAILABLE"))).toBe(true);
     expect(shouldRedirectUnavailableChallenge("challenge", new Error("HTTP_500"))).toBe(false);

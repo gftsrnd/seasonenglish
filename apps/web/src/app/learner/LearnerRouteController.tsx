@@ -68,8 +68,8 @@ export function LearnerLoadFailure({ route, message, onRetry, navigate }: Learne
  * an approved placement and an unavailable level-up challenge both return the
  * learner to Home instead of leaving them on a dead-end route.
  */
-export function shouldRedirectApprovedPlacement(kind: AssessmentKind | "levelup" | "passcourse", status?: string | null) {
-  return kind === "placement" && (status === "submitted" || status === "pending_review" || status === "approved");
+export function shouldRedirectApprovedPlacement(kind: AssessmentKind | "levelup" | "passcourse", status?: string | null, isRetake = false) {
+  return kind === "placement" && (status === "approved" || (!isRetake && (status === "submitted" || status === "pending_review")));
 }
 
 export function shouldRedirectUnavailableChallenge(route: ResolvedLearnerRoute["name"], reason: unknown) {
@@ -242,7 +242,7 @@ function LearnerContent({ courseCompleted }: { courseCompleted: boolean }) {
             return;
           }
           const assessment = await apiClient.getAssessment(route.params.kind);
-          if (shouldRedirectApprovedPlacement(route.params.kind, assessment.attempt?.status)) {
+          if (shouldRedirectApprovedPlacement(route.params.kind, assessment.attempt?.status, assessment.definition.key === "placement-retake")) {
             navigate("/home", { replace: true });
             return;
           }
@@ -283,7 +283,7 @@ function LearnerContent({ courseCompleted }: { courseCompleted: boolean }) {
       refreshing = true;
       void apiClient.getAssessment("placement")
         .then((assessment) => {
-          if (live && shouldRedirectApprovedPlacement("placement", assessment.attempt?.status)) {
+          if (live && shouldRedirectApprovedPlacement("placement", assessment.attempt?.status, assessment.definition.key === "placement-retake")) {
             navigate("/home", { replace: true });
           }
         })
