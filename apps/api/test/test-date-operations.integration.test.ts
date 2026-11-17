@@ -58,7 +58,7 @@ describe("Manager test date", () => {
       await seedDemo(client);
     } finally { client.release(); }
     const monthId = randomUUID();
-    const days = lessonDates.map((date, index) => ({ lessonNumber: index + 1, date, kind: "new", lessonId: lessonIds[index] }));
+    const days = lessonDates.map((date, index) => ({ lessonNumber: index + 1, date, kind: new Date(`${date}T00:00:00Z`).getUTCDay() === 5 ? "review" : "new", lessonId: lessonIds[index] }));
     await pool.query(
       "insert into program_months (id, organization_id, month, exam_date, lesson_count, brief_status) values ($1, $2, $3, '2030-03-29', $4, 'approved')",
       [monthId, DEMO_IDS.organization, month, days.length]
@@ -119,12 +119,12 @@ describe("Manager test date", () => {
     expect(await monthlyExamEligibility(pool, id)).toMatchObject({ systemDate: "2030-03-29", examDate: "2030-03-29", entryClosed: false });
   });
 
-  it("counts exam-day absences only on days that had an approved lesson (December 2026: 22 absences with 7 lessons)", async () => {
+  it("counts exam-day absences only for approved lessons while keeping the full allowance", async () => {
     await setTestDate("2030-03-29");
     const id = await learner("2030-03-04");
     // March 2030 has 19 effective weekdays before the exam, but lessons exist only on the first 10.
     const empty = await monthlyExamEligibility(pool, id);
-    expect(empty).toMatchObject({ effectiveDays: 10, elapsedEffectiveDays: 10, absenceDays: 10, maxAbsences: 3 });
+    expect(empty).toMatchObject({ effectiveDays: 19, elapsedEffectiveDays: 10, absenceDays: 10, maxAbsences: 5 });
     for (const [index, date] of lessonDates.slice(0, 8).entries()) {
       await pool.query(
         `insert into progress_records (id, learner_id, lesson_id, status, started_at, completed_at)
