@@ -1,7 +1,7 @@
 import { Component, createContext, Suspense, useContext, useEffect, useState, type ComponentType, type ErrorInfo, type ReactNode } from "react";
 import { Link, Navigate, useLocation } from "react-router";
 import { CircleHelp, LockKeyhole } from "lucide-react";
-import type { SessionView } from "@e4s/contracts";
+import type { CefrLevel, SessionView } from "@e4s/contracts";
 import { ManagerSectionLayout } from "./manager/shared.js";
 
 const RouteLoadingLabelContext = createContext("Đang tải trang");
@@ -39,7 +39,7 @@ function preloadableRoute<P extends object>(load: () => Promise<ComponentType<P>
   return { Component: PreloadableRoute, preload };
 }
 
-const learnerRouteModule = preloadableRoute<{ courseCompleted?: boolean }>(() => import("./learner/LearnerRouteController.js").then(({ LearnerRouteController }) => LearnerRouteController));
+const learnerRouteModule = preloadableRoute<{ courseCompleted?: boolean; onLearnerCefr?: ((level: CefrLevel) => void) | undefined }>(() => import("./learner/LearnerRouteController.js").then(({ LearnerRouteController }) => LearnerRouteController));
 const managerRouteModule = preloadableRoute(() => import("./manager/ManagerRouteController.js").then(({ ManagerRouteController }) => ManagerRouteController));
 const operatorRouteModule = preloadableRoute(() => import("./operator/OperatorRouteController.js").then(({ OperatorRouteController }) => OperatorRouteController));
 const LearnerRouteController = learnerRouteModule.Component;
@@ -67,7 +67,7 @@ const managerRoutes = ["/mgr", "/mgr/ops", "/mgr/requests", "/mgr/reopen-request
 const operatorRoutes = ["/op", "/op/levelforms", "/op/months", "/op/review", "/op/requests", "/op/tests"] as const;
 const managerContentRoutes = ["/mgr/ops/levels", "/mgr/ops/months", "/mgr/ops/review", "/mgr/ops/tests", "/mgr/ops/level-forms"] as const;
 
-export function RoleRoutes({ session, onSessionRevoked }: { session: SessionView; onSessionRevoked?: (() => void) | undefined }) {
+export function RoleRoutes({ session, onSessionRevoked, onLearnerCefr }: { session: SessionView; onSessionRevoked?: (() => void) | undefined; onLearnerCefr?: ((level: CefrLevel) => void) | undefined }) {
   const location = useLocation();
   const pathname = normalizePathname(location.pathname);
   const role: unknown = session.role;
@@ -82,7 +82,7 @@ export function RoleRoutes({ session, onSessionRevoked }: { session: SessionView
     if (operatorRoute) return <AccessFallback home="/home" message="Tài khoản này không có quyền mở khu vực vận hành." />;
     if (managerArea || settingsArea || (rewardPreviewRoute && pathname !== "/reward/preview")) return <AccessFallback home="/home" message="Tài khoản này không có quyền mở khu vực quản lý." />;
     if (pathname === "/") return <Navigate replace to="/home" />;
-    return <RoleRouteLoadingBoundary label={loadingLabel(pathname)}><LearnerRouteController courseCompleted={session.courseCompleted === true} /></RoleRouteLoadingBoundary>;
+    return <RoleRouteLoadingBoundary label={loadingLabel(pathname)}><LearnerRouteController courseCompleted={session.courseCompleted === true} onLearnerCefr={onLearnerCefr} /></RoleRouteLoadingBoundary>;
   }
   if (pathname === "/op/prompts") return <AccessFallback home="/op" message="Tài khoản này không có quyền mở cấu hình Prompt & rubric." />;
   if (pathname === "/mgr/ops/prompts" || pathname === "/settings/prompts") return <AccessFallback home={role === "operator" ? "/op" : "/mgr/ops"} message="Tài khoản này không có quyền mở cấu hình Prompt & rubric." />;

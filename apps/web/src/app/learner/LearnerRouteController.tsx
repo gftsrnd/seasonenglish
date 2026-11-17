@@ -4,6 +4,7 @@ import type {
   AssessmentKind,
   AssessmentResponseView,
   AssessmentViolationInput,
+  CefrLevel,
   GameFinishInput,
   GameKey,
   LearnerAvatarData,
@@ -134,22 +135,24 @@ export function printLearnerReward() {
  * Full learner route integration. Mount once under the learner wildcard route;
  * it reads React Router location, fetches server contracts, and owns mutation refreshes.
  */
-export function LearnerRouteController({ courseCompleted = false }: { courseCompleted?: boolean } = {}) {
+type LearnerRouteProps = { courseCompleted?: boolean; onLearnerCefr?: ((level: CefrLevel) => void) | undefined };
+
+export function LearnerRouteController(props: LearnerRouteProps = {}) {
   // `.learner-root` (display: contents) scopes the phone/tablet rules in responsive-learner.css.
-  return <div className="learner-root"><LearnerRoutes courseCompleted={courseCompleted} /></div>;
+  return <div className="learner-root"><LearnerRoutes {...props} /></div>;
 }
 
-function LearnerRoutes({ courseCompleted }: { courseCompleted: boolean }) {
+function LearnerRoutes(props: LearnerRouteProps) {
   const { pathname, hash } = useLocation();
   const path = normalizeLearnerPath(pathname);
   if (path === "/profile" && hash === "#my-requests") return <Navigate replace to="/support?from=profile" />;
   if (path === "/support") return <LearnerRequestHistory />;
   if (path === "/survey/monthly") return <Navigate replace to="/support?type=feedback" />;
   if (path === "/reward/course") return <CourseCompletion onPrint={printLearnerReward} />;
-  return <LearnerContent courseCompleted={courseCompleted} />;
+  return <LearnerContent {...props} />;
 }
 
-function LearnerContent({ courseCompleted }: { courseCompleted: boolean }) {
+function LearnerContent({ courseCompleted = false, onLearnerCefr }: LearnerRouteProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const experience = useExperience();
@@ -308,6 +311,7 @@ function LearnerContent({ courseCompleted }: { courseCompleted: boolean }) {
       refreshing = true;
       void apiClient.getHome().then(home => {
         if (!live || home.onboardingRequired || !home.learner.cefr) return;
+        onLearnerCefr?.(home.learner.cefr);
         setContracts(current => ({ ...current, home }));
         setUiState(current => ({ ...current, home: { ...current.home, approvalPending: false } }));
       }).catch(() => undefined).finally(() => { refreshing = false; });
@@ -321,7 +325,7 @@ function LearnerContent({ courseCompleted }: { courseCompleted: boolean }) {
       window.removeEventListener("focus", refreshApproval);
       document.removeEventListener("visibilitychange", refreshApproval);
     };
-  }, [route.name, uiState.home?.approvalPending]);
+  }, [route.name, uiState.home?.approvalPending, onLearnerCefr]);
 
   const saveProfileRecord = async (profile: LearnerProfileData, leave: boolean) => {
     if (!profileRecord) throw new Error("PROFILE_NOT_LOADED");
