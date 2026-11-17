@@ -4710,3 +4710,19 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 .app-operator textarea.line-field,
 .operator-modal-scope textarea.line-field,
 body > .operator-modal-scope .operator-editor-section textarea.line-field { min-height: 40px; line-height: 1.35; resize: vertical; overflow: hidden; overflow-wrap: anywhere; }
+
+.learner-placement-review-options {
+  display: grid;
+  gap: 4px;
+  margin: 5px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.learner-placement-review-options li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  overflow-wrap: anywhere;
+}

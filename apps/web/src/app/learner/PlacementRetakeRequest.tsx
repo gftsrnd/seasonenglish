@@ -108,6 +108,9 @@ export function OriginalPlacementModal({ submission, onClose }: { submission: No
         ...(group.stimulus ? { stimulus: group.stimulus } : {}),
         tasks: group.tasks.map(({ key, title, prompt, maxScore, minWords, maxWords, options }) => ({
           taskKey: key, prompt, maxScore, answer: null,
+          ...((section.code === "listening" || section.code === "reading") && submission.objectiveAnswerKeys?.[section.code]?.[key] ? {
+            correctAnswer: submission.objectiveAnswerKeys[section.code]![key]!
+          } : {}),
           ...(title ? { title } : {}),
           ...(minWords === undefined ? {} : { minWords }),
           ...(maxWords === undefined ? {} : { maxWords }),

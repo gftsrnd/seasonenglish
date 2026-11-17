@@ -182,7 +182,13 @@ export interface AssessmentPlacementRetakeView {
  * request window ends and while the learner is taking the retake.
  */
 export interface AssessmentPlacementRetakeRequestView {
-  original: { definition: AssessmentDefinitionView; attempt: AssessmentAttemptView; submittedAt?: string | null; feedback: string | null } | null;
+  original: {
+    definition: AssessmentDefinitionView;
+    attempt: AssessmentAttemptView;
+    submittedAt?: string | null;
+    feedback: string | null;
+    objectiveAnswerKeys?: Partial<Record<"listening" | "reading", Record<string, string>>>;
+  } | null;
   target: { attemptId: string; title: string; availableUntil: string | null } | null;
   request: { id: string; reason?: string; status: "pending" | "accepted" | "rejected"; resolution: string | null; createdAt: string; resolvedAt: string | null } | null;
   retake: AssessmentRetakeStatus;

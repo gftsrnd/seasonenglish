@@ -103,6 +103,32 @@ describe("placement retake request: bell → support page → 'Xin thi lại' �
     expect(within(dialog).getByText("(không có file ghi âm)")).toBeVisible();
   });
 
+  it("shows the review answer key and keeps an aggregate-only reading score without inventing skipped items", async () => {
+    const user = userEvent.setup();
+    const reading = original.definition.sections.find(section => section.code === "reading")!;
+    const task = reading.groups[0]!.tasks[0]!;
+    const reviewed = {
+      ...original,
+      objectiveAnswerKeys: { reading: { [task.key]: "B" } },
+      attempt: { ...original.attempt, totalScore: 55, sectionScores: { ...original.attempt.sectionScores, reading: 16 } },
+      definition: { ...original.definition, sections: original.definition.sections.map(section => section.code === "reading" ? {
+        ...section, maxScore: 40, groups: [{ ...reading.groups[0]!, tasks: [{ ...task, options: [{ value: "A", label: "First choice" }, { value: "B", label: "Second choice" }] }] }]
+      } : section) }
+    };
+    mockHistory(view({ original: reviewed, target: { attemptId: "a1", title: "Test đầu vào", availableUntil: null } }));
+    await user.click(await screen.findByRole("button", { name: "Xem bài làm" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Bài đầu vào đã nộp" }));
+    expect(dialog.getByText(/Tổng điểm: 55\/100/u)).toBeVisible();
+    await user.click(dialog.getByText("Đọc · 16/40", { exact: true }));
+    expect(dialog.getByText(/Chưa có chi tiết từng câu/u)).toBeVisible();
+    await user.click(dialog.getByText("Group reading", { exact: true }));
+    expect(dialog.getByText("A. First choice")).toBeVisible();
+    expect(dialog.getByText("B. Second choice").parentElement).toHaveTextContent("Đáp án đúng");
+    const section = dialog.getByText("Đọc · 16/40").closest("details")!;
+    expect(within(section).queryByText("Chưa trả lời")).not.toBeInTheDocument();
+    expect(within(section).queryByText(/Bạn đã chọn/)).not.toBeInTheDocument();
+  });
+
   it.each([["accepted","Đã duyệt","ok"],["rejected","Đã từ chối","danger"]] as const)("shows a %s request only in history", async (status, label, tone) => {
     mockHistory(view({ original, request: { id: "r1", status, resolution: "Kết quả xử lý.", createdAt: "2026-11-16T03:00:00Z", resolvedAt: "2026-11-16T04:00:00Z" } }));
     expect(await screen.findByText(label)).toHaveClass(tone);

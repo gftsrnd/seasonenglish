@@ -288,7 +288,7 @@ describe("learner retake request ('Xin thi lại') and the Operator's decision",
     });
     const original = { ...attempt(OLD_ATTEMPT_ID, "approved", "original-version"), responses: [{ section: "writing", taskKey: "W1", value: "My submitted answer", evidenceType: "text", savedAt: new Date() }] };
     repositories.assessments.findAttempt.mockResolvedValueOnce(original);
-    repositories.assessments.findPublishedByVersion.mockResolvedValueOnce({ ...retakeForm, blueprint: placementDefinition });
+    repositories.assessments.findPublishedByVersion.mockResolvedValueOnce({ ...retakeForm, assessmentKey: "placement-a", versionId: "original-version", blueprint: placementDefinition });
     const server = await app();
     const response = await server.inject({ method: "GET", url: "/api/v1/learner/placement-retake-request" });
     expect(response.json().original).toMatchObject({
@@ -296,8 +296,28 @@ describe("learner retake request ('Xin thi lại') and the Operator's decision",
     });
     expect(response.json().original.definition.sections.map((section: { code: string }) => section.code)).toEqual(["listening", "reading", "writing", "speaking"]);
     expect(JSON.stringify(response.json().original)).not.toContain("correctAnswer");
+    const keys = response.json().original.objectiveAnswerKeys;
+    const first = placementDefinition.sections[0]!.groups[0]!.tasks[0]!;
+    expect(keys.listening[first.key]).toEqual(first.correctAnswer);
+    expect(keys.writing).toBeUndefined();
+    expect(keys.speaking).toBeUndefined();
     expect(response.json().original.definition.sections[0].groups[0].stimulus).toEqual({ type: "audio_script", audioSrc: expect.any(String) });
     expect(repositories.assessments.findAttempt).toHaveBeenCalledExactlyOnceWith(LEARNER_ID, OLD_ATTEMPT_ID);
+    await server.close();
+  });
+
+  it.each(["active", "other learner", "retake paper"] as const)("does not expose review keys for %s", async scenario => {
+    retakeDb.findPlacementRetakeRequestState.mockResolvedValueOnce({
+      original: { attemptId: OLD_ATTEMPT_ID, feedback: null }, target: null, request: null, retake: "not_granted"
+    });
+    const base = attempt(OLD_ATTEMPT_ID, scenario === "active" ? "in_progress" : "approved", RETAKE_VERSION_ID);
+    repositories.assessments.findAttempt.mockResolvedValueOnce(scenario === "other learner" ? { ...base, learnerId: "other" } : base);
+    if (scenario === "retake paper") repositories.assessments.findPublishedByVersion.mockResolvedValueOnce(retakeForm);
+    const server = await app();
+    const response = await server.inject({ url: "/api/v1/learner/placement-retake-request" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().original).toBeNull();
+    if (scenario !== "retake paper") expect(repositories.assessments.findPublishedByVersion).not.toHaveBeenCalled();
     await server.close();
   });
 

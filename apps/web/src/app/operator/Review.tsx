@@ -437,7 +437,7 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     const option = task.options?.find(item => item.value === value);
     return option ? `${option.value}. ${option.label}` : value;
   };
-  const renderAnswer = (section: string, task: ReviewTask, answer: ContentReviewAssessmentDetailView["answers"][number] | undefined, showTitle = true, itemLabel = "") => {
+  const renderAnswer = (section: string, task: ReviewTask, answer: ContentReviewAssessmentDetailView["answers"][number] | undefined, showTitle = true, itemLabel = "", missingItemEvidence = false) => {
     const audioKey = `${section}:${task.taskKey}`;
     const objective = section === "listening" || section === "reading";
     const answerValue = answer?.value ?? "";
@@ -448,7 +448,16 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     const points = task.maxScore == null ? "" : ` (${formatScore(task.maxScore)}đ)`;
     return <article className="operator-answer-row" key={audioKey}>
       {objective ? <p className="operator-answer-question"><b>{itemLabel}{normalizeBlankPrompt(task.prompt)}</b><span className="muted">{points}</span></p> : <>{showTitle && task.title ? <p className="operator-answer-task-title"><b>{task.title}</b></p> : null}{task.prompt ? <p className="operator-answer-question"><b>{itemLabel}{normalizeBlankPrompt(task.prompt)}</b></p> : null}</>}
-      {objective ? <p className="operator-answer-result">{answerValue ? <><span className={isCorrect ? "operator-answer-correct" : task.correctAnswer ? "operator-answer-wrong" : ""}>{answerText(task, answerValue)}</span>{task.correctAnswer && !isCorrect ? <> <span className="operator-answer-arrow">→</span> {answerText(task, task.correctAnswer)}</> : null}</> : <>{learnerView ? "Chưa trả lời" : "bỏ qua"}{task.correctAnswer ? <> <span className="operator-answer-arrow">→</span> {answerText(task, task.correctAnswer)}</> : null}</>}</p> : <div className="operator-answer-response">
+      {objective && learnerView ? <>
+        {task.options?.length ? <ul className="learner-placement-review-options" role="list">
+          {task.options.map(option => <li key={option.value}>
+            <span>{answerText(task, option.value)}</span>
+            {option.value === task.correctAnswer ? <span className="operator-answer-correct">Đáp án đúng</span> : null}
+          </li>)}
+        </ul> : task.correctAnswer ? <p className="operator-answer-result">Đáp án đúng: {answerText(task, task.correctAnswer)}</p> : null}
+        {answerValue ? <p className="operator-answer-result">Bạn đã chọn: <strong>{answerText(task, answerValue)}</strong></p>
+          : missingItemEvidence ? null : <p className="operator-answer-result">Chưa trả lời</p>}
+      </> : objective ? <p className="operator-answer-result">{answerValue ? <><span className={isCorrect ? "operator-answer-correct" : task.correctAnswer ? "operator-answer-wrong" : ""}>{answerText(task, answerValue)}</span>{task.correctAnswer && !isCorrect ? <> <span className="operator-answer-arrow">→</span> {answerText(task, task.correctAnswer)}</> : null}</> : <>bỏ qua{task.correctAnswer ? <> <span className="operator-answer-arrow">→</span> {answerText(task, task.correctAnswer)}</> : null}</>}</p> : <div className="operator-answer-response">
         {evidenceLabel ? <div className="xs muted"><b>{evidenceLabel}</b></div> : null}
         {!answer?.audioArtifact ? answerValue ? <p className="operator-answer-value">{answerValue}</p> : <p className="operator-answer-value muted">{section === "writing" ? "(không có bài viết)" : "(không có lời chép)"}</p> : null}
         {!learnerView && answer?.evidenceType === "typed_proxy" ? <div className="banner warn" role="alert"><div className="body small">Bằng chứng này phải chấm tay: văn bản thay thế không xác minh phát âm, độ trôi chảy hoặc tương tác theo thời gian thực.</div></div> : null}
@@ -481,7 +490,7 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     // (e.g. imported/fixture totals) must not read as "every question skipped, 0 points".
     const knownTaskKeys = new Set([...items.map(({ task }) => task.taskKey), ...groupedKeys]);
     const missingItemEvidence = (section === "listening" || section === "reading") && score?.score != null && Number(score.score) > 0
-      && !answers.some(answer => knownTaskKeys.has(answer.taskKey));
+      && !answers.some(answer => knownTaskKeys.has(answer.taskKey) && Boolean(answer.value?.trim()));
     return <div className="operator-answer-section-content">
       {missingItemEvidence && <p className="small muted operator-answer-empty">Chưa có chi tiết từng câu cho phần này; điểm {sectionLabel(section)} là tổng đã lưu, không tính lại từ các câu bên dưới.</p>}
       {groups.map(group => {
@@ -500,7 +509,7 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
           {(section === "listening" || section === "reading") && group.instruction && <p className="small muted operator-answer-instruction">{group.instruction}</p>}
           <div className="operator-answer-rows">{group.tasks.map((task, index) => {
             const itemLabel = objective ? `${start + index + 1}. ` : section === "speaking" && group.key === "S3" ? `Câu ${index + 1}. ` : "";
-            return renderAnswer(section, task, answers.find(answer => answer.taskKey === task.taskKey), false, itemLabel);
+            return renderAnswer(section, task, answers.find(answer => answer.taskKey === task.taskKey), false, itemLabel, missingItemEvidence);
           })}</div>
         </>;
         return objective ? <details className="operator-answer-group-details" key={group.key}>
@@ -511,7 +520,7 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
           {body}
         </section>;
       })}
-      {ungrouped.length ? <div className="operator-answer-rows">{ungrouped.map(({ task, answer }, index) => renderAnswer(section, task, answer, true, `${numberOffset + index + 1}. `))}</div> : null}
+      {ungrouped.length ? <div className="operator-answer-rows">{ungrouped.map(({ task, answer }, index) => renderAnswer(section, task, answer, true, `${numberOffset + index + 1}. `, missingItemEvidence))}</div> : null}
     </div>;
   };
 

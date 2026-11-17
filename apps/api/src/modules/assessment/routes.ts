@@ -37,6 +37,7 @@ import {
   listPlacementRetakeStates,
   normalizeLevelFormQuestionPrompts,
   PlacementRetakeError,
+  PLACEMENT_RETAKE_ASSESSMENT_KEY,
   placementRetakeStatus,
   startPlacementRetakeAttempt,
   publicAssessmentDefinition,
@@ -863,10 +864,17 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
   const placementRetakeRequestView = async (learnerId: string): Promise<AssessmentPlacementRetakeRequestView> => {
     const state = await findPlacementRetakeRequestState(pool, learnerId);
     const attempt = state.original ? await repositories.assessments.findAttempt(learnerId, state.original.attemptId) : null;
-    const definition = attempt ? await definitionForAttempt(repositories.assessments, attempt) : null;
+    const definition = attempt && attempt.learnerId === learnerId && attempt.status !== "in_progress"
+      ? await definitionForAttempt(repositories.assessments, attempt)
+      : null;
+    const originalDefinition = definition?.kind === "placement" && definition.assessmentKey !== PLACEMENT_RETAKE_ASSESSMENT_KEY
+      && definition.blueprint.key !== PLACEMENT_RETAKE_ASSESSMENT_KEY ? definition.blueprint : null;
     return {
-      original: attempt && definition ? {
-        definition: publicAssessmentDefinition(definition.blueprint, { hideListeningScript: true }),
+      original: attempt && originalDefinition ? {
+        definition: publicAssessmentDefinition(originalDefinition, { hideListeningScript: true }),
+        objectiveAnswerKeys: Object.fromEntries(originalDefinition.sections
+          .filter(section => section.code === "listening" || section.code === "reading")
+          .map(section => [section.code, Object.fromEntries(section.groups.flatMap(group => group.tasks.flatMap(task => task.correctAnswer ? [[task.key, task.correctAnswer]] : [])))])),
         attempt: attemptView(attempt),
         submittedAt: attempt.submittedAt?.toISOString() ?? null,
         feedback: state.original?.feedback ?? null
