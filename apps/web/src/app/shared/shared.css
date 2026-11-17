@@ -737,8 +737,17 @@ body :is(.ds-toast-viewport, .assessment-toast-viewport) {
   min-width: 0;
 }
 
-#modal .dialog > h3:first-of-type {
-  padding-right: 48px;
+#modal .app-modal-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+#modal .app-modal-heading .app-modal-close {
+  position: static;
+  flex: 0 0 44px;
 }
 
 #modal .app-modal-actions {
@@ -752,13 +761,13 @@ body :is(.ds-toast-viewport, .assessment-toast-viewport) {
 
 /* Prompt/confirm rhythm: title, message, then a real field label with its
    own space, so the sentence and "Lý do" do not run together. */
-#modal .dialog > h3:first-of-type {
-  margin: 0 0 10px;
+#modal .app-modal-heading > h3 {
+  margin: 0;
   font-size: 1.125rem;
   line-height: 1.35;
 }
 
-#modal .dialog > h3:first-of-type + .small {
+#modal .app-modal-heading + .small {
   font-size: .9375rem;
   line-height: 1.5;
 }

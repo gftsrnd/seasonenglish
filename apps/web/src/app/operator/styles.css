@@ -2094,8 +2094,8 @@ body:has(.app-operator) #modal > .dialog {
   padding: 24px;
 }
 
-body:has(.app-operator) #modal > .dialog > h3 {
-  margin: 0 32px 16px 0;
+body:has(.app-operator) #modal > .dialog > .app-modal-heading {
+  margin-bottom: 16px;
 }
 
 body:has(.app-operator) #modal > .dialog > .field {

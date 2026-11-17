@@ -260,14 +260,15 @@ function ModalRoot({ children }: { children: ReactNode }) {
     {children}
     <div id="modal" className={modal ? "modal-backdrop" : undefined} role={modal ? "presentation" : undefined} onClick={(event) => { if (event.target === event.currentTarget) cancel(); }}>{modal ?
       <form ref={dialogRef} className="dialog" role="dialog" aria-modal="true" aria-labelledby={dialogTitleId} aria-describedby={hasDescription ? dialogDescriptionId : undefined} aria-busy={countdown ? "true" : undefined} tabIndex={-1} onSubmit={submit}>
-        <button className="app-modal-close" data-action="modal-close" type="button" aria-label="Đóng hộp thoại" title="Đóng" onClick={cancel}>×</button>
-        {countdown ? <>
+        <div className="app-modal-heading">
           <h3 id={dialogTitleId}>{dialogLabel}</h3>
+          <button className="app-modal-close" data-action="modal-close" type="button" aria-label="Đóng hộp thoại" title="Đóng" onClick={cancel}>×</button>
+        </div>
+        {countdown ? <>
           <p id={dialogDescriptionId} className="small">Thao tác này không hoàn tác được. Bấm <b>Dừng lại</b> nếu bạn đổi ý.</p>
           <div className="countdown" aria-live="assertive">{modal.remaining}</div>
           <div className="row" style={{ justifyContent: "center" }}><button data-action="modal-cancel" type="button" onClick={cancel}>Dừng lại</button></div>
         </> : <>
-          <h3 id={dialogTitleId}>{modal.title}</h3>
           {modal.message ? <div id={dialogDescriptionId} className="small">{modal.message}</div> : null}
           {modal.kind === "prompt" ? <label className="field app-modal-prompt-field"><span>{modal.label}</span>
             {modal.multiline

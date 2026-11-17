@@ -857,7 +857,14 @@ describe("OperatorRouteController", () => {
     await user.click(screen.getByRole("button", { name: "Duyệt mức" }));
     const approval = screen.getByRole("dialog", { name: "Duyệt mức đầu vào" });
     expect(approval).toHaveTextContent(/học thử tháng 11.*xét lên mức bắt đầu tính từ 01\/12/iu);
-    await user.click(within(approval).getByRole("button", { name: /Huỷ|Hủy/ }));
+    const heading = within(approval).getByRole("heading", { name: "Duyệt mức đầu vào" });
+    const close = within(approval).getByRole("button", { name: "Đóng hộp thoại" });
+    expect(close.parentElement).toBe(heading.parentElement);
+    expect(within(approval).getByLabelText("Lý do")).toHaveFocus();
+    await user.click(close);
+    expect(decideAssessment).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Duyệt mức" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Duyệt mức đầu vào" })).getByRole("button", { name: /Huỷ|Hủy/ }));
     await user.click(screen.getByRole("button", { name: "Duyệt mức" }));
     screen.getByRole("dialog", { name: "Duyệt mức đầu vào" });
     await user.keyboard("{Escape}");
