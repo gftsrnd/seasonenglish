@@ -392,6 +392,23 @@ describe("learner lesson study content", () => {
     expect(sanitizeGrammarSpeechText("Example: She is OK + now. | Do not read this label")).toBe("She is OK now.");
   });
 
+  it("NP-004 and PA-002 show the complete introduction first and clarify the American t in meeting", () => {
+    const lesson = {
+      id: "test9-study", title: "Present simple", dayNumber: 2, weekNumber: 1, weekTopic: "Meetings", durationMinutes: 10, cefr: "A1",
+      content: { parts: [
+        { code: "grammar", title: "Ngữ pháp", content: { formula: "Subject + V\nSubject + V-s", usage: "Dùng hiện tại đơn để nói về thói quen." } },
+        { code: "pronunciation", title: "Phát âm", content: { focus: "/t/", words: [{ word: "meeting", ipa: "/ˈmiː.tɪŋ/" }] } }
+      ] },
+      progress: { status: "in_progress", completedPartCodes: [], evidence: {} }
+    } as any;
+    const { container } = render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+    const formula = container.querySelector(".lesson-grammar-formula-row")!;
+    const usage = screen.getByText("Dùng hiện tại đơn để nói về thói quen.");
+    expect(usage.compareDocumentPosition(formula) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText(/Trong giọng Mỹ, t trong “meeting”/u)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe từ phát âm: meeting" })).toBeEnabled();
+  });
+
   it("hides the IPA-only control and keeps pronunciation word examples audible", () => {
     const speak = vi.fn();
     const lesson = {

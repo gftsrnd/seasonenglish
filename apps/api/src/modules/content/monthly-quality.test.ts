@@ -6,6 +6,32 @@ import { evaluateMonthlyReviewSections, isVietnameseReviewText, monthlyReviewVie
 const requiredCodes = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"];
 
 describe("monthly lesson quality", () => {
+  it("NP-008 rejects be + adjective examples for the present continuous formula", () => {
+    const plan = contract();
+    const formula = "Subject + am/is/are + V-ing";
+    plan.grammarTopics[0]!.steps[0]!.formula = formula;
+    const candidate = lesson();
+    const grammar = candidate.parts.find((part) => part.code === "grammar")!.content;
+    grammar.formula = formula;
+    grammar.examples = ["Linh is ready.", "We are happy.", "We are checking the report."];
+    const mismatch = (value: typeof candidate) => evaluateMonthlyLessonQuality(plan, 1, value).severe.find((item) => item.code === "MONTHLY_CONTINUOUS_EXAMPLE_MISMATCH");
+    expect(mismatch(candidate)?.message).toContain("Linh is ready. / We are happy.");
+    grammar.examples = ["Linh is reviewing the file.", "We are checking the report."];
+    expect(mismatch(candidate)).toBeUndefined();
+  });
+
+  it("NP-007 checks the locked present simple scope of a retry", () => {
+    const plan = contract();
+    plan.grammarTopics[0]!.title = "Present simple";
+    const candidate = lesson({ parts: reviewParts() });
+    const grammar = candidate.parts.find((part) => part.code === "grammar")!.content;
+    const item = (grammar.items as Record<string, unknown>[])[0]!;
+    item.variants = [{ prompt: "We will ____ the plan next week.", options: ["start", "starts", "starting", "started"], answer: "start" }];
+    const mismatches = () => evaluateMonthlyLessonQuality(plan, 2, candidate).severe.filter((finding) => finding.code === "MONTHLY_REVIEW_GRAMMAR_SCOPE");
+    expect(mismatches()[0]?.message).toContain("grammar item 1 variant 1");
+    item.variants = [{ prompt: "We ____ the plan together every week.", options: ["start", "starts", "starting", "started"], answer: "start" }];
+    expect(mismatches()).toEqual([]);
+  });
   it("gates the Vietnamese question/answer translation of every exercise, daily and review (12/11)", () => {
     const untranslate = (content: Record<string, unknown>): Record<string, unknown> => JSON.parse(JSON.stringify(content, (key, value) => key === "questionTranslation" || key === "answerTranslation" ? undefined : value));
     const daily = lesson();

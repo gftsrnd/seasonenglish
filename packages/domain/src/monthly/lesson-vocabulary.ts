@@ -112,6 +112,13 @@ export const MONTHLY_RELATION_DEFINITION_MAX_WORDS = 14;
 export const MONTHLY_RELATION_DEFINITION_MAX_CHARS = 100;
 const VIETNAMESE_MEANING_LETTER = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉĩịọỏốồổỗộớờởỡợụủũứừửữựỳỵỷỹàáèéìíòóùúý]/iu;
 
+/** Known workplace choices that change the literal sense given on the card. */
+export function isLiteralReadingSynonymMismatch(core: { word: string; meaning?: string | undefined }, candidate: string): boolean {
+  return core.word.trim().toLowerCase() === "read"
+    && /^đọc(?:$|\s+(?!lại\b)|[,;])/iu.test(core.meaning?.trim() ?? "")
+    && /^(review|study)$/iu.test(candidate.trim());
+}
+
 /**
  * Gate for the meaning a synonym/antonym support carries (12/11). A1–A2: the
  * `meaning` is a Vietnamese gloss. B1–C1: a short `definition` in simple
@@ -220,7 +227,8 @@ function attachTerms(
     const linked = (relation: string) => core ? supports.filter((term) => term.relatedCoreTermId === core.id && term.relation === relation) : [];
     // With a month level, a synonym/antonym the model added beyond the plan stays only with its level meaning.
     const unplanned = (relation: "synonym" | "antonym") => core && cefr && MONTHLY_CARD_LEVELS.has(cefr) ? (entry: Item) => monthlyModelRelationEntry(entry, relation, cefr) : undefined;
-    item.synonyms = mergeEntries(item.synonyms, linked("synonym").map((term) => relationEntry(term, cefr)), unplanned("synonym"));
+    item.synonyms = mergeEntries(item.synonyms, linked("synonym").map((term) => relationEntry(term, cefr)), unplanned("synonym"))
+      .filter((entry) => !isLiteralReadingSynonymMismatch({ word, meaning: core?.meaning || (typeof item.meaning === "string" ? item.meaning : undefined) }, String(entry.word)));
     item.antonyms = mergeEntries(item.antonyms, linked("antonym").map((term) => relationEntry(term, cefr)), unplanned("antonym"));
     item.family = withCoreIpa(mergeEntries(item.family, linked("word_family").map((term) => relationWordEntry(term, cefr))), cores);
     const plannedCollocations = linked("collocation");

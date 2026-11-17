@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { grammarFormulaLines } from "./presentation.js";
 import { grammarFormulaBoxes } from "./study-highlight.js";
 
+it("NP-02, NP-005 and NP-006 clarify A1 formulas without changing the rules", () => {
+  expect(grammarFormulaBoxes("Chủ ngữ + am/is/are + (không bỏ) + danh từ/tính từ/nơi chốn", "vi")[0]?.lines)
+    .toEqual(["Chủ ngữ + am/is/are + danh từ/tính từ/nơi chốn"]);
+  expect(grammarFormulaBoxes("Do/Does + chủ ngữ + V?", "vi")[0]?.lines).toEqual(["Do/Does + chủ ngữ + V (base form)?"]);
+  expect(grammarFormulaBoxes("I/You/We/They + V (base form)\nHe/She/It + V-s/es", "vi")[0]?.lines).toEqual([
+    "I/You/We/They/chủ ngữ số nhiều + V (base form)",
+    "He/She/It/chủ ngữ số ít + V-s/es"
+  ]);
+});
+
 describe("grammarFormulaLines", () => {
   it("puts two named patterns written as sentences on separate lines", () => {
     expect(grammarFormulaLines("Past simple: Subject + verb-ed / irregular past (I finished the report, then I sent it). Past continuous: Subject + was/were + verb-ing (I was writing the report when the call came)")).toEqual([

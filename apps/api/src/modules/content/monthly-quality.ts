@@ -6,6 +6,7 @@ import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIE
 import { monthlyAnswerKeyFindings } from "./monthly-answer-checks.js";
 import { monthlyWordFormScopeFindings } from "./monthly-word-form-scope.js";
 import { monthlyObjectiveFixHint, monthlyObjectiveIssues } from "./monthly-objective-quality.js";
+import { checkMonthlyGrammarStep, monthlyGrammarFormulaRows } from "@e4s/domain/monthly";
 
 const REQUIRED_COMPONENTS = [
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",
@@ -131,6 +132,18 @@ export function evaluateMonthlyLessonQuality(
   // Advisory light finding: shown to the Operator, never counted toward the two-light approval limit.
   const formulaExampleIssues = monthlyGrammarFormulaExampleIssues(grammarContent, { requireMarks: options.requireGrammarMarks === true });
   if (formulaExampleIssues.length) light.push({ severity: "light", code: MONTHLY_GRAMMAR_FORMULA_EXAMPLE_MISMATCH, message: monthlyGrammarFormulaExampleMessage(formulaExampleIssues), dayNumber, component: "grammar" });
+  // Check the sentence as well as AI-supplied marks for an unambiguous A1 continuous formula.
+  if (contract.cefr === "A1" && grammarContent) {
+    const blocks = Array.isArray(grammarContent.steps) && grammarContent.steps.length >= 2 ? grammarContent.steps.filter(isRecord) : [grammarContent];
+    for (const block of blocks) {
+      const lockedFormula = asString(block.formula);
+      const rows = monthlyGrammarFormulaRows(lockedFormula);
+      if (!rows.length || !rows.every((row) => /\bam\s*\/\s*is\s*\/\s*are\s*\+\s*(?:V|verb)-ing\b/iu.test(row))) continue;
+      const examples = Array.isArray(block.examples) ? block.examples.map(asString) : [];
+      const unmatched = checkMonthlyGrammarStep(lockedFormula, examples).examplesWithoutRow;
+      if (unmatched.length) severe.push(finding("MONTHLY_CONTINUOUS_EXAMPLE_MISMATCH", `Examples need am/is/are + a verb ending in -ing: ${unmatched.join(" / ")}. Replace examples that only use be + adjective.`, dayNumber, "grammar"));
+    }
+  }
 
   const pronunciation = parts.get("pronunciation")?.content;
   const focus = asString(pronunciation?.focus);
@@ -166,7 +179,7 @@ export function evaluateMonthlyLessonQuality(
       // One finding per broken question, labelled "grammar item N" so the Operator page names and opens that question.
       if (problems.length) severe.push(finding("MONTHLY_DAILY_GRAMMAR_QUESTION", `Every grammar question needs a prompt, 4 distinct options, an answer copied from them, and an explanation. grammar item ${index + 1}: ${problems.join(", ")}`, dayNumber, "grammar"));
     });
-    if (day.grammarPlan?.recallMilestoneIds.length && !questions.some(question => day.grammarPlan!.recallMilestoneIds.includes(asString(question.milestoneId)))) severe.push(finding("MONTHLY_DAILY_GRAMMAR_RECALL", "Include the locked topic A recall question (every topic B day)", dayNumber, "grammar"));
+    if (day.grammarPlan?.recallMilestoneIds.length && !questions.some(question => day.grammarPlan!.recallMilestoneIds.includes(asString(question.milestoneId)))) severe.push(finding("MONTHLY_DAILY_GRAMMAR_RECALL", "Add a topic A recall question in Bài tập and select its Ôn lại grammar topic (every topic B day)", dayNumber, "grammar"));
     for (const issue of monthlyGrammarRoadmapDayIssues(day, contract.cefr, grammar, dayWords)) severe.push(finding(issue.code, issue.message, dayNumber, "grammar"));
     if (pronunciation?.stage !== day.pronunciationPlan?.stage || !monthlyPlanObjectivesMatch(pronunciation?.objective, day.pronunciationPlan?.objective, expected.coreWords)) severe.push(finding("MONTHLY_DAILY_PRONUNCIATION_STAGE", `Pronunciation must teach the locked daily stage and objective. Set pronunciation.stage to "${day.pronunciationPlan?.stage ?? ""}" and pronunciation.objective to exactly "${expected.pronunciationObjective ?? ""}" (copy verbatim)`, dayNumber, "pronunciation"));
     const required = day.pronunciationPlan?.requiredPositions;

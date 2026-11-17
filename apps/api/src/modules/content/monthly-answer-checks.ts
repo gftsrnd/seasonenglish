@@ -360,8 +360,18 @@ function finding(code: string, message: string, dayNumber: number, component: st
 export function monthlyAnswerKeyFindings(contract: MonthlyCurriculumContract, day: MonthlyDaySpec, dayNumber: number, parts: readonly Part[]): MonthlyQualityFinding[] {
   const findings: MonthlyQualityFinding[] = [];
   const byComponent = new Map<string, string[]>();
+  const reviewIds = day.kind === "review" ? day.reviewGrammarStepIds ?? [] : [];
+  const reviewTopics = contract.grammarTopics.filter((topic) => topic.steps.some((step) => reviewIds.includes(step.id)));
+  const simplePresentReview = contract.cefr === "A1" && reviewTopics.length === 1
+    && (reviewTopics[0]?.catalogId === "a1-p2-a" || /^(?:present simple|hiện tại đơn)\b/iu.test(reviewTopics[0]?.title ?? ""));
   for (const item of collectMonthlyVerifiableItems(contract, day, parts)) {
     if (item.component === "listening" || item.component === "reading") continue;
+    if (simplePresentReview && item.component === "grammar") {
+      const sentence = blankSentence(item.prompt);
+      if (sentence && (/\b(?:will|will not|won't)\s*$/u.test(normalized(sentence.before)) || /^(?:will|won't)\b/u.test(normalized(item.answer)))) {
+        findings.push(finding("MONTHLY_REVIEW_GRAMMAR_SCOPE", `${item.label}: the blank tests will + verb, outside the locked present simple review. Rewrite it as a present simple question or retry.`, dayNumber, "grammar"));
+      }
+    }
     const issues = monthlyAnswerKeyIssues(item);
     if (issues.length) byComponent.set(item.component, [...(byComponent.get(item.component) ?? []), ...issues]);
   }
@@ -394,6 +404,7 @@ export const MONTHLY_ANSWER_VERIFICATION_PROMPT = [
   "For each item, solve it yourself: the key is NOT given. Read the prompt (an instruction may be in Vietnamese; the English sentence or question is what is tested), the context (reading passage or listening script) when there is one, and every option.",
   "correctOptions = EVERY option, copied exactly, that you would mark fully correct: grammatical British English, natural, the right tense, voice and agreement (The slides aren't ready; The reports have been read), and the meaning fits the sentence or is stated in the context. If two options are both acceptable, list both. If none is acceptable, return an empty list. Do not list an option only because it is the most likely intended answer.",
   "For a reading or listening question, an option is correct only when the context states it; an option that is only partly supported or mixes two details is not correct.",
+  "Distinguish an object pronoun (Please give the file to her after the meeting) from a possessive pronoun (The file is hers). Use the role in the whole sentence.",
   "For an item with mustTest, also set testsLabelledPoint: true only when choosing the correct option requires the grammar point named in mustTest (not today's other topic or a vocabulary choice).",
   "note: one short English sentence. Return one entry per input item with its ref unchanged."
 ].join("\n");

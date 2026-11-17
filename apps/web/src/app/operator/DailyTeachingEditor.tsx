@@ -33,13 +33,14 @@ function milestoneLabels(ids: readonly string[], recallIds: readonly string[], k
 }
 
 export function DailyTeachingEditor({ grammar, pronunciation, disabled, onChange, grammarStepLabels = {} }: { grammar: Record<string, unknown>; pronunciation: Record<string, unknown>; disabled: boolean; onChange(items: Item[], passage: string): void; grammarStepLabels?: Readonly<Record<string, string>> | undefined }) {
-  const planned = [...new Set([...strings(grammar.milestoneIds), ...strings(grammar.recallMilestoneIds)])];
+  const recallIds = strings(grammar.recallMilestoneIds);
+  const planned = [...new Set([...strings(grammar.milestoneIds), ...recallIds])];
   // A day with a single grammar step needs no choice: new questions take that step.
   const soleMilestone = planned.length === 1 ? planned[0]! : "";
   const [items, setItems] = useState(() => { const existing = dailyPracticeItems(grammar.items); return existing.length ? existing : Array.from({length:3}, (_, i) => emptyItem("grammar-" + (i + 1), soleMilestone)); });
   const [passage, setPassage] = useState(text(pronunciation.passage));
   const milestones = [...new Set([...planned, ...items.map(item => item.milestoneId).filter(Boolean)])];
-  const labels = milestoneLabels(milestones, strings(grammar.recallMilestoneIds), grammarStepLabels);
+  const labels = milestoneLabels(milestones, recallIds, grammarStepLabels);
   const update = (next: Item[]) => { setItems(next); onChange(next, passage); };
   const patch = (index: number, change: (row: Item) => Item) => update(items.map((row, i) => i === index ? change(row) : row));
   // Lessons saved before 13/11 store the objective with an internal code and the word list; show the readable wording.
@@ -47,6 +48,7 @@ export function DailyTeachingEditor({ grammar, pronunciation, disabled, onChange
   const pronunciationObjective = monthlyReadablePlanObjective(text(pronunciation.objective));
   return <EditorSection title="Luyện tập theo ngày" disabled={disabled}>
     {grammarObjective ? <p className="small operator-daily-objective"><b>Mục tiêu ngữ pháp:</b> {grammarObjective}</p> : null}
+    {recallIds.length && !items.some((item) => recallIds.includes(item.milestoneId)) ? <p className="small operator-daily-objective">Trong phần Bài tập này, thêm câu ôn chủ điểm A hoặc chọn mục “Ôn lại” ở trường Chủ điểm ngữ pháp của câu ôn phù hợp.</p> : null}
     {items.map((item, index) => { const strayAnswer = Boolean(item.answer) && !item.options.includes(item.answer); return <div className="operator-daily-question" role="group" aria-label={`Câu luyện tập ${index + 1}`} data-daily-item={index + 1} key={item.id}>
       <div className="row between operator-daily-question-header"><b>Câu {index + 1}</b>{items.length > 3 ? <Button type="button" small onClick={() => update(items.filter((_, i) => i !== index))}>Bỏ câu</Button> : null}</div>
       <Field label="Câu hỏi"><textarea aria-label={`Câu ${index + 1} – Câu hỏi`} value={item.prompt} onChange={event => patch(index, row => ({ ...row, prompt: event.target.value }))} /></Field>

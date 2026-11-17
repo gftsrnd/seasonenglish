@@ -4,6 +4,7 @@ import { monthlyResourcePlanOutputSchema, type MonthlyResourcePlanTaskOutput } f
 import { validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.js";
 import { MONTHLY_BRITISH_IPA_RULE, monthlyBritishIpaIssue } from "./monthly-british-ipa.js";
 import { buildMonthlyCoreCefrGuidance, buildMonthlyOtherLevelCoreExclusionText, buildMonthlyPronunciationExampleRules, getMonthlyCoreLevelIssue, getMonthlyPronunciationCatalogExampleIssue, getMonthlyPronunciationExampleQualityIssue } from "./monthly-resource-quality-gates.js";
+import { isLiteralReadingSynonymMismatch } from "@e4s/domain/monthly";
 
 /**
  * VH-R33: umbrella/synonym/antonym (and every other support) may come from the
@@ -1025,14 +1026,15 @@ export const MONTHLY_MAX_UMBRELLA_REUSE = 2;
  * that can replace the core in a sentence, never a definition, a negation, a
  * narrower/broader word or a neighbour of the same category.
  */
-export const MONTHLY_SYNONYM_RULE = "A synonym is ONE word of the same part of speech and register that can replace the core in a normal workplace sentence (a phrasal verb only for a verb core: pick up, set up). Never a definition or paraphrase (week -> seven days, easy -> not hard), a number phrase, a narrower or broader word or a neighbour in the same category (town -> village, building -> house or office, computer -> laptop, complete -> do), or a loose association; when a core has no true synonym, give none.";
+export const MONTHLY_SYNONYM_RULE = "A synonym is ONE word of the same part of speech and register that can replace the core in a normal workplace sentence (a phrasal verb only for a verb core: pick up, set up). Never a definition or paraphrase (week -> seven days, easy -> not hard), a number phrase, a narrower or broader word or a neighbour in the same category (town -> village, building -> house or office, computer -> laptop, complete -> do), or a loose association. For read in its literal sense of reading a document, review adds rechecking or evaluating and study adds close study; neither is a substitute. When a core has no true synonym, give none.";
 
 const PHRASAL_PARTICLES = new Set(["up", "down", "out", "off", "on", "in", "over", "back", "away", "through", "about", "around", "forward", "ahead"]);
 const NUMBER_WORDS = /\b(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|hundred|thousand|\d+)\b/u;
 
 /** Deterministic synonym-shape rejection reason (MONTHLY_SYNONYM_RULE), or undefined. */
-export function monthlySynonymShapeIssue(core: { word: string; type: string }, candidate: { word: string; relation: string }): string | undefined {
+export function monthlySynonymShapeIssue(core: { word: string; type: string; meaning?: string }, candidate: { word: string; relation: string }): string | undefined {
   if (candidate.relation !== "synonym") return undefined;
+  if (isLiteralReadingSynonymMismatch(core, candidate.word)) return `"${candidate.word}" changes the literal meaning of "${core.word}"; leave the synonym slot empty if there is no natural substitute`;
   const words = candidate.word.trim().toLocaleLowerCase("en").split(/\s+/u).filter(Boolean);
   if (words.length < 2) return undefined;
   if (/^(?:not|no|non|never)$/u.test(words[0]!)) return `"${candidate.word}" is a negated definition, not a synonym; give one word with the same meaning, or none`;
@@ -1042,7 +1044,7 @@ export function monthlySynonymShapeIssue(core: { word: string; type: string }, c
 }
 
 export function monthlySupportQualityIssue(
-  core: { word: string; type: string; cefr?: string },
+  core: { word: string; type: string; meaning?: string; cefr?: string },
   candidate: { word: string; relation: string },
   existingMonthCount: number
 ): string | undefined {

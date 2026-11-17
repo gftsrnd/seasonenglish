@@ -2,6 +2,15 @@ import { describe, expect, it } from "vitest";
 import { attachMonthlyExpandedTerms, monthlyCollocationTranslationIssues, monthlyRelationMeaningIssue } from "../src/monthly/lesson-vocabulary.js";
 
 describe("attachMonthlyExpandedTerms", () => {
+  it("TV-001 removes changes of meaning from literal reading synonyms", () => {
+    const [item] = attachMonthlyExpandedTerms(
+      [{ word: "read", meaning: "đọc", synonyms: [{ word: "study", note: "nghiên cứu" }] }],
+      [{ id: "read", word: "read", meaning: "đọc" }],
+      [{ id: "review", word: "review", meaning: "xem lại", relation: "synonym", relatedCoreTermId: "read" }],
+      "A1"
+    );
+    expect(item!.synonyms).toEqual([]);
+  });
   const cores = [{ id: "c1", word: "client", type: "noun", ipa: "/ˈklaɪənt/" }];
   const supports = [
     { id: "s1", word: "customer", meaning: "khách hàng", relation: "synonym", relatedCoreTermId: "c1" },

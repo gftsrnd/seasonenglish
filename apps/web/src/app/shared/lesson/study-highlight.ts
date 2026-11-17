@@ -719,8 +719,13 @@ const cleanPiece = (value: string) => value.replace(/^[\s/;,.()]+|[\s/;,(]+$/gu,
  * line and per top-level ";" rule.
  */
 export function grammarFormulaBoxes(formula: string, language: "vi" | "en", splitLines: (formula: string) => string[] = monthlyGrammarFormulaLines, names: readonly string[] = []): GrammarFormulaBox[] {
-  const text = formula.replace(/\s+/gu, " ").trim();
-  const single: GrammarFormulaBox[] = [{ tone: "neutral", lines: splitLines(formula) }];
+  const displayFormula = formula
+    .replace(/(\bam\s*\/\s*is\s*\/\s*are\b)\s*(?:\+\s*)?\(không bỏ\)/giu, "$1")
+    .replace(/^(.*\bdo\s*\/\s*does\b.*?\+\s*V)\s*\?/gimu, "$1 (base form)?")
+    .replace(/\b(I\s*\/\s*you\s*\/\s*we\s*\/\s*they)(?=\s*\+\s*V\b(?!\s*-))/giu, language === "vi" ? "$1/chủ ngữ số nhiều" : "$1/plural subject")
+    .replace(/\b(he\s*\/\s*she\s*\/\s*it)(?=\s*\+\s*V\s*-\s*s\b)/giu, language === "vi" ? "$1/chủ ngữ số ít" : "$1/singular subject");
+  const text = displayFormula.replace(/\s+/gu, " ").trim();
+  const single: GrammarFormulaBox[] = [{ tone: "neutral", lines: splitLines(displayFormula) }];
   if (!text) return single;
   // (c) "Error check: …" and "(NOT …)" rules: one neutral box, never a two-structure compare, one row per rule; a
   // "(NOT …)" wrong form stays on its own rule's row and other notes in parentheses become that row's muted notes.
