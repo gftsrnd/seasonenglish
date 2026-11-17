@@ -33,7 +33,7 @@
 }
 
 .seasonal-catch { isolation: isolate; }
-.seasonal-catch .catch-hero { bottom: var(--season-stage-floor); pointer-events: none; transition: none; }
+.seasonal-catch .catch-hero { bottom: var(--season-stage-floor); width: clamp(84px, 23vw, 124px); pointer-events: none; transition: none; }
 .catch-wave {
   position: absolute;
   inset: 0;
@@ -65,7 +65,7 @@
   pointer-events: none;
 }
 .season-catch-player {
-  width: clamp(84px, 23vw, 124px);
+  width: 100%;
   height: auto;
   display: block;
   translate: 0 6.25%;

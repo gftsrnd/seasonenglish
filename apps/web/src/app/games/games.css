@@ -76,7 +76,7 @@
 .game-result__copy h2,
 .game-result > div h2 { margin: 3px 0 4px; }
 .game-result__copy p { margin: 0; color: var(--muted); }
-.game-result__score { display: grid; justify-items: center; gap: 2px; min-width: 126px; padding: 14px; border: 1px solid var(--primary-line); border-radius: 18px; background: color-mix(in srgb, var(--primary-soft) 56%, white); }
+.game-result__score { display: grid; justify-items: center; text-align: center; gap: 2px; min-width: 126px; padding: 14px; border: 1px solid var(--primary-line); border-radius: 18px; background: color-mix(in srgb, var(--primary-soft) 56%, white); }
 .game-result__score strong { font-size: clamp(2rem, 5vw, 2.8rem); line-height: 1; color: var(--primary-strong, var(--olive-dark)); }
 .game-result__score span { color: var(--muted); font-size: .78rem; }
 .game-result__actions { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 10px; }
@@ -1303,7 +1303,7 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
 
 @media (max-width: 720px) {
   .game-result { grid-template-columns: auto minmax(0, 1fr); min-height: 0; }
-  .game-result__score { grid-column: 1 / -1; justify-self: stretch; grid-template-columns: auto 1fr; align-items: center; text-align: left; }
+  .game-result__score { grid-column: 1 / -1; justify-self: stretch; }
   .game-result__actions { grid-column: 1 / -1; }
   .game-board > .card,
   .game-runner {

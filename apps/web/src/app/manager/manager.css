@@ -1568,7 +1568,7 @@
 
 .manager-monthly-learner-list { display: none; }
 .manager-report-more-learners { margin-top: 8px; min-height: 44px; }
-@media screen and (min-width: 961px) {
+@media screen and (min-width: 521px) {
   .manager-monthly-report .manager-report-level-distribution:has(> .barrow) {
     display: grid;
     align-self: stretch;

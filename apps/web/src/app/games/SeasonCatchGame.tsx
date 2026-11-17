@@ -21,6 +21,7 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
   const [lives, setLives] = useState(3);
   const livesRef = useRef(3);
   const basketRef = useRef(50);
+  const basketEdge = useRef(5);
   const answers = useRef<GameAnswerInput[]>([]);
   const events = useRef<GameEvidenceEventInput[]>([]);
   const [notice, setNotice] = useState("");
@@ -57,7 +58,7 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
   }, []);
 
   const moveBasket = (next: number) => {
-    basketRef.current = Math.max(5, Math.min(95, next));
+    basketRef.current = Math.max(basketEdge.current, Math.min(100 - basketEdge.current, next));
     if (catcherRef.current) catcherRef.current.style.left = `${basketRef.current}%`;
   };
 
@@ -80,7 +81,9 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
       const spriteBox = sprite.getBoundingClientRect();
       width = arenaBox.width;
       height = arenaBox.height;
-      if (!height) return;
+      if (!width || !height) return;
+      basketEdge.current = Math.min(50, Math.max(5, spriteBox.width * 50 / width));
+      moveBasket(basketRef.current);
       // The supplied catcher art has an inset at the top edge of its square.
       rimY = (spriteBox.top + spriteBox.height * .1725 - arenaBox.top) * 100 / height;
       surfaceY = (ground.getBoundingClientRect().top + 3 - arenaBox.top) * 100 / height;
