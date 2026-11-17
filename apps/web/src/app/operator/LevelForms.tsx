@@ -93,6 +93,8 @@ type LevelFormDetailProps = {
   /** Overrides "Đề lên mức {level}" for other assessment kinds (e.g. the monthly final). */
   kicker?: string;
   dialogLabel?: string;
+  draftMaintenance?: ReactNode;
+  draftMaintenanceBusy?: boolean;
   /** Kind-specific review panels rendered above the four sections. */
   children?: ReactNode;
   /** Notified with every local edit so a wrapper can track unsaved changes. */
@@ -118,7 +120,7 @@ export function parseScriptLines(value: string): Array<{ speaker: string; text: 
   return lines.length ? lines : [{ speaker: "Narrator", text: "" }];
 }
 
-export function OperatorLevelFormDetail({ detail, readOnly = false, editing = false, onClose, onSave, onPublish, publicationReady, onConfirmDiscard, uploadAudio, synthesizeEdgeTts, kicker, dialogLabel, children, onDraftChange, speakTextOnly = false, hideValidation = false }: LevelFormDetailProps) {
+export function OperatorLevelFormDetail({ detail, readOnly = false, editing = false, onClose, onSave, onPublish, publicationReady, onConfirmDiscard, uploadAudio, synthesizeEdgeTts, kicker, dialogLabel, children, draftMaintenance, draftMaintenanceBusy = false, onDraftChange, speakTextOnly = false, hideValidation = false }: LevelFormDetailProps) {
   const dialogRef = useRef<HTMLElement>(null);
   const scroll = useScrollJump(true);
   const closeRef = useRef<() => void>(onClose);
@@ -134,7 +136,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
   const [questionError, setQuestionError] = useState<{ taskKey: string; message: string }>();
   const dirty = Boolean(onConfirmDiscard || onPublish) && (draft.title !== detail.title || JSON.stringify(draft.sections) !== JSON.stringify(detail.sections));
   const close = async () => {
-    if (interactionLocked.current || saving || audioJob) return;
+    if (interactionLocked.current || saving || audioJob || draftMaintenanceBusy) return;
     if (dirty && onConfirmDiscard) {
       interactionLocked.current = true;
       try { if (!await onConfirmDiscard()) return; }
@@ -222,7 +224,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
     finally { setAudioJob(null); }
   };
   const save = async () => {
-    if (!onSave || readOnly || !editing || saving) return;
+    if (!onSave || readOnly || !editing || saving || draftMaintenanceBusy || interactionLocked.current) return;
     setSaving(true);
     setActionError(undefined);
     setQuestionError(undefined);
@@ -242,7 +244,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
     : publicationReady !== true ? "Cần hoàn thiện đề trước khi phát hành."
     : !answersReviewed ? "Đánh dấu đã đọc lại đáp án từng câu trước khi phát hành." : undefined;
   const publish = async () => {
-    if (!onPublish || readOnly || !editing || publishBlocker || saving || audioJob || interactionLocked.current) return;
+    if (!onPublish || readOnly || !editing || publishBlocker || saving || audioJob || draftMaintenanceBusy || interactionLocked.current) return;
     interactionLocked.current = true;
     setPublishing(true);
     setActionError(undefined);
@@ -323,8 +325,8 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
     <div className="operator-level-form-dialog-header">
       <div className="operator-level-form-dialog-title"><span className="operator-level-kicker">{kicker ?? (detail.targetLevel === "placement-retake" ? "Đề thi lại bài đầu vào" : `Đề lên mức ${detail.targetLevel ?? ""}`)}</span><h3>{detail.title}</h3><p className="small muted">{detail.status === "published" ? "Đã phát hành" : detail.status === "retired" ? "Đã lưu lịch sử" : "Bản nháp"}</p></div>
       <div className="row operator-level-form-dialog-actions">
-        {editing && !readOnly ? <button className="btn-sm btn-primary" type="button" disabled={saving || publishing || Boolean(audioJob)} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</button> : null}
-        <ModalCloseButton disabled={saving || publishing || Boolean(audioJob)} onClick={() => void close()} />
+        {editing && !readOnly ? <button className="btn-sm btn-primary" type="button" disabled={saving || publishing || Boolean(audioJob) || draftMaintenanceBusy} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</button> : null}
+        <ModalCloseButton disabled={saving || publishing || Boolean(audioJob) || draftMaintenanceBusy} onClick={() => void close()} />
       </div>
     </div>
     <div className="operator-level-form-dialog-body">
@@ -333,18 +335,19 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
         {editing && !readOnly && onPublish ? <section className="card flat operator-level-publication" aria-label="Trạng thái đề lên mức">
           <header className="row between">
             <div><b>Trạng thái đề</b> <Badge tone={publishBlocker ? "warn" : "ok"}>{dirty ? "Có thay đổi chưa lưu" : publicationReady ? "Sẵn sàng phát hành" : "Cần hoàn thiện"}</Badge></div>
-            <button className="btn btn-primary" type="button" disabled={saving || publishing || Boolean(audioJob) || Boolean(publishBlocker)} title={publishBlocker} onClick={() => void publish()}>{publishing ? "Đang phát hành…" : "Duyệt & phát hành"}</button>
+            <button className="btn btn-primary" type="button" disabled={saving || publishing || Boolean(audioJob) || Boolean(publishBlocker) || draftMaintenanceBusy} title={publishBlocker} onClick={() => void publish()}>{publishing ? "Đang phát hành…" : "Duyệt & phát hành"}</button>
           </header>
-          <label className="row small"><input type="checkbox" checked={answersReviewed} disabled={saving || publishing || dirty} onChange={(event) => setAnswersReviewed(event.target.checked)} />Tôi đã đọc lại đáp án từng câu</label>
+          <label className="row small"><input type="checkbox" checked={answersReviewed} disabled={saving || publishing || dirty || draftMaintenanceBusy} onChange={(event) => setAnswersReviewed(event.target.checked)} />Tôi đã đọc lại đáp án từng câu</label>
           {publishBlocker ? <p className="small muted">{publishBlocker}</p> : null}
         </section> : null}
+        {draftMaintenance ? <fieldset disabled={saving || publishing || Boolean(audioJob)} className="operator-level-draft-maintenance">{draftMaintenance}</fieldset> : null}
         {actionError ? <p className="small form-error" role="alert">{actionError}</p> : null}
         {detail.deleteReason && <div className="banner warn"><div className="body small">Không thể xoá: {detail.deleteReason}</div></div>}
         <AutoFixedNote notes={detail.autoFixed} />
         {hideValidation ? null : detail.warnings.length ? <LevelFormWarnings warnings={detail.warnings} /> : onPublish ? null : <div className="banner ok"><div className="body small">Đề đủ cấu trúc hiện tại, chưa có cảnh báo.</div></div>}
         {children}
         <h4>Chi tiết 4 phần</h4>
-        <div className="list operator-level-section-list">{draft.sections.map(renderSection)}</div>
+        <div className="list operator-level-section-list" inert={draftMaintenanceBusy || undefined}>{draft.sections.map(renderSection)}</div>
         <LevelFormVersionHistory versions={detail.versions} />
       </div>
       <div ref={scroll.end} className="app-scroll-edge" aria-hidden="true" />

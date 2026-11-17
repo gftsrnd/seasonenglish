@@ -112,6 +112,7 @@ describe("Level adjustment modal", () => {
     const close = within(dialog).getByRole("button", { name: "Đóng hộp thoại" });
     expect(close).toBeInTheDocument();
     expect(dialog).toHaveFocus();
+    expect(dialog.querySelector(".modal-illustration > svg")).toBeInTheDocument();
     expect(within(dialog).getByText("Mức A1")).toBeInTheDocument();
     expect(within(dialog).getByText("Cần củng cố kỹ năng nghe.")).toBeInTheDocument();
     expect(within(dialog).queryByText("Thông báo thật")).toBeNull();
@@ -147,6 +148,7 @@ describe("Season congratulation modal", () => {
     }} />);
     const dialog = screen.getByRole("dialog", { name: "Bạn đã lên cấp Mùa 3" });
     expect(dialog).toHaveClass("learner-reward-dialog");
+    expect(dialog.querySelector(".modal-illustration .profile-season-figure")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Đóng hộp thoại" })).toBeInTheDocument();
     expect(within(dialog).getByText("Mùa thu · B1")).toBeInTheDocument();
     expect(dialog).toHaveTextContent("Huy hiệu đã nhận vẫn được giữ.");

@@ -88,3 +88,5 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+.manager-reward-controls > .field > select { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -1,3 +1,5 @@
+import { Award, TrendingDown, TrendingUp } from "lucide-react";
+import { SeasonFigure } from "../shared/SeasonProgressCard.js";
 import type { RewardAnnouncementView } from "@e4s/contracts";
 import { Button, Modal } from "./ui.js";
 
@@ -9,6 +11,7 @@ export function RewardAnnouncementDialog({ announcement, onClose }: {
   const seasonUp = announcement.kind === "season-up";
   const topLevel = announcement.kind === "top-level-redirect";
   const close = () => void onClose();
+  const Icon = adjusted ? TrendingDown : topLevel ? Award : TrendingUp;
   let title = "Bạn đã lên mức";
   if (adjusted) title = "Trình độ đã được cập nhật";
   else if (seasonUp) title = announcement.seasonLevel ? `Bạn đã lên cấp Mùa ${announcement.seasonLevel}` : "Bạn đã lên cấp Mùa";
@@ -16,8 +19,9 @@ export function RewardAnnouncementDialog({ announcement, onClose }: {
   else if (announcement.level) title += ` ${announcement.level}`;
 
   return <Modal
-    className="learner-reward-dialog"
+    className={adjusted ? "learner-reward-dialog is-adjustment" : "learner-reward-dialog"}
     title={title}
+    illustration={seasonUp ? <SeasonFigure level={announcement.seasonLevel ?? 1} /> : <Icon size={36} strokeWidth={1.8} />}
     onClose={close}
     dismissOnBackdrop
     actions={<Button variant="primary" onClick={close}>Tiếp tục học</Button>}
@@ -25,7 +29,7 @@ export function RewardAnnouncementDialog({ announcement, onClose }: {
     {seasonUp || (adjusted && announcement.level) || announcement.source === "simulated" ? <div className="row">
       {seasonUp ? <span className="badge lvl">{announcement.seasonName}</span> : null}
       {adjusted && announcement.level ? <span className="badge lvl">Mức {announcement.level}</span> : null}
-      {announcement.source === "simulated" ? <span className="badge">Mô phỏng</span> : null}
+      {announcement.source === "simulated" ? <span className="badge reward-simulation">Mô phỏng</span> : null}
     </div> : null}
     {announcement.reason ? <p className={adjusted ? undefined : "small"}><b>Lý do của Vận hành</b><br />{announcement.reason}</p> : null}
     {adjusted ? <p className="small muted">{announcement.rule ?? "Đường lên mức bắt đầu lại theo trình độ mới. Kết quả cũ vẫn được lưu."}</p> : null}

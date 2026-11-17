@@ -40,7 +40,7 @@ import { OperatorWeeks } from "./Weeks.js";
 import { MonthlyLessonPreview, OperatorMonths } from "./Months.js";
 import { OperatorRequests } from "./OperatorRequests.js";
 import { MonthlyFinalReview } from "./MonthlyFinalReview.js";
-import { Badge, OperatorPage, PageTitle } from "./primitives.js";
+import { Badge, Button, OperatorPage, PageTitle } from "./primitives.js";
 import { ModalProvider, useDialog, useModal } from "../shared/ModalProvider.js";
 import { AssessmentDefinitionPreview } from "../shared/AssessmentDefinitionPreview.js";
 import { ScrollJumpButton, useScrollJump } from "../shared/ScrollJump.js";
@@ -1138,6 +1138,7 @@ function LevelFormsRoute({ client, readOnly, embedded = false, slots }: { client
   const paths = useOperatorRoutePaths();
   const [data, setData] = useState<AssessmentLevelFormSlotView[]>();
   const [generating, setGenerating] = useState<LevelFormTarget | null>(null);
+  const [maintainingDraft, setMaintainingDraft] = useState<"generate" | "delete" | null>(null);
   const [error, setError] = useState<string>();
   const [dialog, setDialog] = useState<{ detail: AssessmentLevelFormDetailView; editing: boolean }>();
   const capabilities = useCapabilities(client);
@@ -1174,7 +1175,39 @@ function LevelFormsRoute({ client, readOnly, embedded = false, slots }: { client
     if (fromPublished) void client.copyAssessmentLevelFormToDraft(id).then(detail => { setDialog({ detail, editing: true }); void reload(); }, notifyError);
     else show(id, true);
   };
-  const onDelete = (id: string) => { if (readOnly || typeof client.deleteAssessmentLevelForm !== "function") return; void modal.confirm({ title: "Xoá bản nháp đề thi?", message: retakeOnly ? "Bản nháp đề thi lại này sẽ bị xoá." : "Bản nháp này sẽ bị xoá khỏi danh sách đề lên mức.", confirmLabel: "Xoá bản nháp", tone: "danger" }).then(confirmed => { if (confirmed) refresh(client.deleteAssessmentLevelForm(id), "Đã xoá bản nháp đề thi."); }); };
+  const deleteDraft = async (id: string, closeEditor = false) => {
+    if (readOnly || typeof client.deleteAssessmentLevelForm !== "function") return;
+    if (!await modal.confirm({
+      title: "Xoá bản nháp đề thi?",
+      message: retakeOnly ? "Bản nháp đề thi lại này sẽ bị xoá." : "Bản nháp này sẽ bị xoá khỏi danh sách đề lên mức.",
+      confirmLabel: "Xoá bản nháp", tone: "danger", ...(retakeOnly ? { countdownSeconds: 0 } : {})
+    })) return;
+    await client.deleteAssessmentLevelForm(id);
+    if (closeEditor) setDialog(undefined);
+    notify("Đã xoá bản nháp đề thi.");
+    await reload();
+  };
+  const onDelete = (id: string) => void deleteDraft(id).catch(notifyError);
+  const maintainRetakeDraft = async (action: "generate" | "delete", id: string) => {
+    if (readOnly || maintainingDraft) return;
+    setMaintainingDraft(action);
+    try {
+      if (action === "delete") {
+        await deleteDraft(id, true);
+      } else if (await modal.confirm({
+        title: "Sinh lại đề thi lại bằng AI?",
+        message: "Khi sinh thành công, bản nháp mới sẽ thay bản đang sửa. Các thay đổi chưa lưu sẽ mất.",
+        confirmLabel: "Sinh lại", cancelLabel: "Quay lại"
+      })) {
+        const form = await client.generateAssessmentLevelForm("placement-retake");
+        const detail = await client.getAssessmentLevelForm(form.versionId);
+        setDialog({ detail, editing: true });
+        notify("Đã sinh bản nháp đề thi lại mới.");
+        await reload();
+      }
+    } catch (reason) { notifyError(reason); }
+    finally { setMaintainingDraft(null); }
+  };
   // The placement retake form has its own card in "Đề đầu vào"; the level-up list never includes it.
   return <>{retakeOnly ? <PlacementRetakeCard
     slot={data.find(slot => slot.targetLevel === "placement-retake") ?? null}
@@ -1198,6 +1231,11 @@ function LevelFormsRoute({ client, readOnly, embedded = false, slots }: { client
       editing={!readOnly && dialog.detail.status === "draft"}
       readOnly={readOnly || dialog.detail.status !== "draft"}
       publicationReady={dialog.detail.publicationReady === true}
+      draftMaintenanceBusy={maintainingDraft !== null}
+      draftMaintenance={retakeOnly && !readOnly && dialog.detail.status === "draft" ? <div className="row operator-level-form-actions">
+        <Button small disabled={!capabilities?.ai || maintainingDraft !== null} title={capabilities?.ai ? undefined : "AI hệ thống tạm chưa sẵn sàng"} onClick={() => void maintainRetakeDraft("generate", dialog.detail.versionId)}>{maintainingDraft === "generate" ? "Đang sinh…" : "Sinh lại bằng AI"}</Button>
+        <Button small danger disabled={!dialog.detail.deletable || maintainingDraft !== null || Boolean(missing.delete)} title={dialog.detail.deleteReason ?? missing.delete} onClick={() => void maintainRetakeDraft("delete", dialog.detail.versionId)}>{maintainingDraft === "delete" ? "Đang xoá…" : "Xoá bản nháp"}</Button>
+      </div> : null}
       synthesizeEdgeTts={input => client.synthesizeAssessmentEdgeTts(input)}
       uploadAudio={(file, filename) => client.uploadContentMedia("audio", file, filename)}
       onClose={() => setDialog(undefined)}

@@ -82,10 +82,11 @@ export function Loading({ label = "Đang tải…", className, ...rest }: HTMLAt
   return <div {...rest} className={["loading-state", className].filter(Boolean).join(" ")} role="status" aria-live="polite" aria-busy="true"><span aria-hidden="true">…</span> {label}</div>;
 }
 
-export function Modal({ open = true, title, description, children, actions, onClose, className, dismissOnBackdrop = false }: {
+export function Modal({ open = true, title, description, illustration, children, actions, onClose, className, dismissOnBackdrop = false }: {
   open?: boolean;
   title: string;
   description?: ReactNode;
+  illustration?: ReactNode;
   children?: ReactNode;
   actions?: ReactNode;
   onClose?: (() => void) | undefined;
@@ -106,7 +107,8 @@ export function Modal({ open = true, title, description, children, actions, onCl
 
   if (!open) return null;
   return <div className="modal-backdrop" role="presentation" onClick={(event) => { if (dismissOnBackdrop && event.target === event.currentTarget) onClose?.(); }}><section ref={dialogRef} className={["dialog", className].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} tabIndex={-1}>
-    <div className="row between"><h2 id={titleId}>{title}</h2>{onClose ? <ModalCloseButton iconOnly label="Đóng hộp thoại" onClick={onClose} /> : null}</div>
+    <div className="row between">{illustration ? <span aria-hidden="true" /> : <h2 id={titleId}>{title}</h2>}{onClose ? <ModalCloseButton iconOnly label="Đóng hộp thoại" onClick={onClose} /> : null}</div>
+    {illustration ? <><div className="modal-illustration" aria-hidden="true">{illustration}</div><h2 id={titleId}>{title}</h2></> : null}
     {description ? <p id={descriptionId} className="small">{description}</p> : null}
     {children}
     {actions ? <div className="row modal-actions" style={{ justifyContent: "flex-end", marginTop: 12 }}>{actions}</div> : null}

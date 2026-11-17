@@ -23,7 +23,7 @@ const ALL_BADGES = levels.flatMap((level) => level.required);
 const cases = [
   ["Mới vào trình độ", 0, []], ["Cấp 1 · đủ điểm, thiếu huy hiệu", 650, ["starter"]], ["Cấp 1 · đủ huy hiệu, thiếu điểm", 300, SUMMER],
   ["Vừa lên cấp 2", 520, SUMMER], ["Cấp 2 · điểm cao, kẹt vì huy hiệu", 3000, [...SUMMER, "week_complete"]], ["Vừa lên cấp 3", 2100, [...SUMMER, ...AUTUMN]],
-  ["Cấp 3 · thiếu 1 huy hiệu cuối", 5600, [...SUMMER, ...AUTUMN, "first_try", "monthly_final_score"]], ["Cấp cao nhất", 5600, ALL_BADGES], ["Có huy hiệu cấp cao nhưng thiếu cấp dưới", 5600, ["starter", "first_try", "monthly_final_score", "wordsmith"]]
+  ["Cấp 3 · thiếu 1 huy hiệu cuối", 5600, [...SUMMER, ...AUTUMN, "first_try", "monthly_final_score"]], ["Cấp cao nhất", 5600, ALL_BADGES], ["Thiếu huy hiệu cấp dưới", 5600, ["starter", "first_try", "monthly_final_score", "wordsmith"]]
 ] as const;
 
 export function ManagerRewards() {

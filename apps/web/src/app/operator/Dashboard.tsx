@@ -85,7 +85,7 @@ export function OperatorDashboard({ view, actions, readOnly = false, unavailable
   const retakeButton = (learnerId: string, state: PlacementRetakeState | undefined) => state === "not_granted" && actions.onGrantPlacementRetake
     ? <Button small title="Học viên làm bài trên đề thi lại đã phát hành" disabled={readOnly || Boolean(blocked("placementRetake"))} onClick={() => actions.onGrantPlacementRetake?.(learnerId)}>Cho thi lại</Button>
     : null;
-  const approvedActions = (item: OperatorDashboardView["approved"][number]) => <><Button small disabled={readOnly || Boolean(blocked("changeLevel"))} onClick={() => actions.onChangeLevel(item.id)}>Đổi level</Button>{levelUpToggle(item)}{retakeButton(item.id, item.placementRetake)}<Button small disabled={readOnly || Boolean(blocked("editGoal"))} onClick={() => actions.onEditGoal(item.id)}>Mục tiêu</Button>{item.testId && <Button small disabled={Boolean(blocked("viewTest"))} onClick={() => actions.onViewTest(item.testId!)}>Bài test</Button>}</>;
+  const approvedActions = (item: OperatorDashboardView["approved"][number]) => <><Button small disabled={readOnly || Boolean(blocked("changeLevel"))} onClick={() => actions.onChangeLevel(item.id)}>Đổi level</Button>{levelUpToggle(item)}<Button small disabled={readOnly || Boolean(blocked("editGoal"))} onClick={() => actions.onEditGoal(item.id)}>Mục tiêu</Button>{item.testId && <Button small disabled={Boolean(blocked("viewTest"))} onClick={() => actions.onViewTest(item.testId!)}>Bài test</Button>}</>;
 
   return <OperatorPage title="Duyệt trình độ">
     {/* Mini game topic reports and deletion requests reach staff through the notification bell. */}

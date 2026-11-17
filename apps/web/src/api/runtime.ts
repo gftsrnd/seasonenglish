@@ -22,11 +22,13 @@ export async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const sandbox = await sandboxProfileRequest<T>(url, init);
   if (sandbox !== undefined) return sandbox;
   let response: Response;
+  const headers = new Headers(init?.headers);
+  if (init?.body != null && !headers.has("content-type")) headers.set("content-type", "application/json");
   try {
     response = await fetch(apiUrl(url), {
       ...init,
       credentials: "include",
-      headers: { "content-type": "application/json", ...init?.headers }
+      headers
     });
   } catch {
     throw new ApiError("NETWORK_UNAVAILABLE", "network");

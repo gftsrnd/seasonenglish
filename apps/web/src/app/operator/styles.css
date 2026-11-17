@@ -4753,3 +4753,5 @@ body > .operator-modal-scope .operator-editor-section textarea.line-field { min-
 .operator-retake-comparison table { width: 100%; margin-bottom: 8px; font-size: .875rem; }
 .operator-retake-comparison th, .operator-retake-comparison td { padding: 4px; text-align: left; }
 .operator-retake-comparison .row { flex-wrap: wrap; gap: 6px; }
+
+.operator-level-draft-maintenance { border: 0; min-inline-size: 0; margin: 0; padding: 0; }

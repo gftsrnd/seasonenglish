@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { ApiError, apiUrl } from "./runtime.js";
+import { describe, expect, it, vi } from "vitest";
+import { ApiError, apiUrl, request } from "./runtime.js";
 
 describe("ApiError presentation", () => {
   it("keeps the network code for logic while exposing a friendly message to UI fallbacks", () => {
@@ -17,4 +17,14 @@ describe("apiUrl", () => {
   it("keeps relative paths for the local same-origin proxy", () => {
     expect(apiUrl("/api/health", "")).toBe("/api/health");
   });
+});
+
+it("sends a bodyless DELETE without a JSON content type", async () => {
+  const send = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response('{"deleted":true}'));
+  try {
+    await expect(request("/api/v1/assessment-level-forms/qa-draft", { method: "DELETE" })).resolves.toEqual({ deleted: true });
+    expect(new Headers(send.mock.calls[0]?.[1]?.headers).has("content-type")).toBe(false);
+  } finally {
+    send.mockRestore();
+  }
 });

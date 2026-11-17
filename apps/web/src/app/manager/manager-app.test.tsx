@@ -320,7 +320,7 @@ describe("new Manager app branch", () => {
     await user.click(custom);
     expect(custom).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("button", { name: "Khởi đầu" })).toHaveAttribute("aria-pressed", "true");
-    await user.selectOptions(cases, "Có huy hiệu cấp cao nhưng thiếu cấp dưới");
+    await user.selectOptions(cases, "Thiếu huy hiệu cấp dưới");
     expect(screen.getByRole("status")).toHaveTextContent("Cấp 1/4 · Mùa xuân – gieo hạt");
   });
 

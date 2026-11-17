@@ -29,9 +29,11 @@
 .modal-backdrop > .dialog.learner-reward-dialog {
   --compact-dialog-width: 380px;
   box-sizing: border-box;
-  width: min(380px, calc(100vw - 32px));
-  max-width: 380px;
+  position: relative;
+  width: min(480px, calc(100vw - 32px));
+  max-width: 480px;
   max-height: 80dvh;
+  text-align: center;
 }
 .learner-reward-dialog > .row:first-child {
   position: sticky;
@@ -40,6 +42,28 @@
   margin-bottom: 8px;
   background: var(--surface);
 }
-.learner-reward-dialog > .row:first-child h2 { font-weight: 700 !important; }
+.learner-reward-dialog > h2 { margin: 12px 0 8px; }
 .learner-reward-dialog:focus-visible { outline: none; }
 .learner-reward-dialog > p { margin: 8px 0; overflow-wrap: anywhere; }
+.learner-reward-dialog .modal-illustration {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+.learner-reward-dialog.is-adjustment .modal-illustration {
+  background: var(--warn-soft, var(--surface-2));
+  color: var(--warn-dark, var(--text));
+}
+.learner-reward-dialog .modal-illustration .profile-season-figure {
+  max-width: 100%;
+  max-height: 100%;
+  font-size: 2.15rem;
+}
+.learner-reward-dialog > .row:not(:first-child) { justify-content: center; }
+.learner-reward-dialog > .row.modal-actions { justify-content: center !important; }
+.learner-reward-dialog .reward-simulation { position: absolute; inset-block-start: 18px; inset-inline-start: 18px; }
