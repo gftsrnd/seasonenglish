@@ -66,14 +66,14 @@ it("opens a focused practice appeal from the old review link and shows the saved
   expect(await screen.findByText("Chưa có kháng nghị đã xử lý.")).toBeVisible();
 });
 
-it.each([false, true])("uses the compact retake collapse icon only on phone or tablet (%s)", async (compact) => {
+it.each([false, true])("shows the full retake appeal card with the appropriate collapse control (%s)", async (compact) => {
   vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
     matches: compact && query === "(max-width: 1024px)",
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
   })));
   const getContentReviewAppeals = vi.fn(async () => ({
-    appeals: [{ ...appeal, kind: "assessment", requestKind: "retake", assessmentKind: "placement" }], hasMore: false,
+    appeals: [{ ...appeal, kind: "assessment", requestKind: "retake", assessmentKind: "placement", attemptId: "attempt-1" }], hasMore: false,
   }));
   openRoute("/op/review?tab=appeals&id=appeal-1", { getContentReviewAppeals });
 
@@ -81,6 +81,20 @@ it.each([false, true])("uses the compact retake collapse icon only on phone or t
   expect(toggle).toHaveAttribute("aria-expanded", "true");
   if (compact) expect(toggle.querySelector("svg")).toBeInTheDocument();
   else expect(toggle).toHaveTextContent("Thu gọn");
+
+  const card = await screen.findByRole("article", { name: "Yêu cầu thi lại của Hà" });
+  expect(card.closest("td")).toHaveAttribute("colspan", "5");
+  expect(within(card).getByRole("heading", { name: "Yêu cầu thi lại bài đầu vào" })).toBeVisible();
+  expect(within(card).getByText("Bài kiểm tra")).toBeVisible();
+  expect(within(card).getByText("Chờ xử lý")).toBeVisible();
+  expect(within(card).getByText("Lý do xin thi lại")).toBeVisible();
+  expect(within(card).getByText(appeal.reason)).toBeVisible();
+  const buttons = within(card).getAllByRole("button");
+  expect(buttons).toHaveLength(3);
+  expect(buttons[0]).toHaveAccessibleName("Duyệt cho thi lại");
+  expect(buttons[1]).toHaveAccessibleName("Từ chối");
+  expect(buttons[2]).toHaveAccessibleName("Xem bài làm");
+  for (const button of buttons) expect(button.className).not.toMatch(/\b(?:btn-primary|btn-danger|operator-retake-approve|operator-retake-reject)\b/);
 });
 
 it("redirects the old month hash and shows decisions directly in the manager request list", async () => {

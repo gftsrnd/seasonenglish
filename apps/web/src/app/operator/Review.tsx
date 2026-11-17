@@ -118,39 +118,37 @@ function appealPartLabel(part?: string) {
   return part ? appealPartLabels[part] ?? part : "Bài kiểm tra";
 }
 
-export function AppealReviewCard({ item, readOnly, blockedMessage, busy, itemBusy, onDecision, compactRetake, reviewAction }: {
+export function AppealReviewCard({ item, readOnly, blockedMessage, busy, itemBusy, onDecision, reviewAction }: {
   item: ReviewAppeal;
   readOnly: boolean;
   blockedMessage?: string;
   busy(decision: boolean): boolean;
   itemBusy: boolean;
   onDecision(decision: boolean): void;
-  compactRetake?: boolean;
   reviewAction?: React.ReactNode;
 }) {
   const partLabel = appealPartLabel(item.part);
   const retake = item.retakeRequest === true;
-  const compact = retake && compactRetake;
   const title = retake ? "Yêu cầu thi lại bài đầu vào" : item.title || (item.kind === "sub" ? "Bài thực hành tuần" : "Bài kiểm tra");
   const statusLabel = item.statusLabel || (item.status === "pending" ? "Chờ xử lý" : item.status === "accepted" ? (retake ? "Đã cho thi lại" : "Đã chấp nhận") : (retake ? "Đã từ chối" : "Giữ nguyên"));
-  return <article className={`operator-review-appeal operator-review-appeal-${item.status}${compact ? " operator-review-appeal-compact" : ""}`} aria-label={retake ? `Yêu cầu thi lại của ${item.learnerName}` : `Kháng nghị phần ${partLabel} của ${item.learnerName}`}>
-    {!compact ? <header className="operator-review-appeal-header">
+  return <article className={`operator-review-appeal operator-review-appeal-${item.status}`} aria-label={retake ? `Yêu cầu thi lại của ${item.learnerName}` : `Kháng nghị phần ${partLabel} của ${item.learnerName}`}>
+    <header className="operator-review-appeal-header">
       <div className="operator-review-appeal-heading">
-        <div className="row operator-review-appeal-badges">{item.cefr && <LevelChip level={item.cefr} />}{!retake ? <Badge>{item.kind === "part" ? `Phần ${partLabel}` : item.kind === "sub" ? "Bài thực hành tuần" : "Bài kiểm tra"}</Badge> : null}</div>
+        <div className="row operator-review-appeal-badges">{item.cefr && <LevelChip level={item.cefr} />}<Badge>{item.kind === "part" ? `Phần ${partLabel}` : item.kind === "sub" ? "Bài thực hành tuần" : "Bài kiểm tra"}</Badge></div>
         <h3>{title}</h3>
         <p className="xs muted">{item.learnerName} · {item.at}{item.kind === "part" ? ` · ${item.attempts ?? 0} lượt làm` : ""}{item.currentScore != null ? ` · Điểm hiện tại ${formatScoreOutOf(item.currentScore, 100)}` : ""}</p>
       </div>
       <Badge tone={item.overdue ? "danger" : item.status === "pending" ? "warn" : item.status === "accepted" ? "ok" : "danger"}>{item.overdue ? "Quá hạn xử lý" : statusLabel}</Badge>
-    </header> : null}
+    </header>
     {item.question ? <section className="operator-review-appeal-block"><b className="operator-review-field-label">Đề bài</b><p>{normalizeBlankPrompt(item.question)}</p>{item.options?.length ? <div className="operator-review-appeal-options">{item.options.map((option, index) => <span key={`${item.id}-option-${index}`}>{option}</span>)}</div> : null}</section> : null}
     {item.answer ? <section className="operator-review-appeal-block operator-review-learner-answer"><b className="operator-review-field-label">Bài làm của học viên</b><p>{item.answer}</p></section> : null}
     {(item.key || item.aiFeedback) ? <div className="operator-review-appeal-comparison">{item.key ? <section><b className="operator-review-field-label">Đáp án tham khảo</b><p>{item.key}</p></section> : null}{item.aiFeedback ? <section><b className="operator-review-field-label">Nhận xét trước đó</b><p>{item.aiFeedback}</p></section> : null}</div> : null}
-    {!compact ? <section className="operator-review-appeal-reason"><b className="operator-review-field-label">{retake ? "Lý do xin thi lại" : "Lý do kháng nghị"}</b><p>{item.reason}</p>
+    <section className="operator-review-appeal-reason"><b className="operator-review-field-label">{retake ? "Lý do xin thi lại" : "Lý do kháng nghị"}</b><p>{item.reason}</p>
         {item.proposedLevel ? <p>Trình độ đề xuất · {item.proposedLevel}</p> : null}
       <RequestEvidenceDetails kind={item.kind === "part" ? "lesson_part" : item.kind === "sub" ? "weekly_practice" : "assessment"} item={item} />
-    </section> : null}
-    {item.status === "pending" ? <footer className="row operator-review-action-footer"><Button primary={!retake} small className={retake ? "operator-retake-approve" : ""} busy={busy(true)} disabled={readOnly || Boolean(blockedMessage) || itemBusy} title={blockedMessage} onClick={() => onDecision(true)}>{busy(true) ? "Đang xử lý…" : retake ? "Duyệt cho thi lại" : "Chấp nhận kháng nghị"}</Button><Button small className={retake ? "operator-retake-reject" : ""} busy={busy(false)} disabled={readOnly || Boolean(blockedMessage) || itemBusy} title={blockedMessage} onClick={() => onDecision(false)}>{busy(false) ? "Đang xử lý…" : retake ? "Từ chối" : "Giữ nguyên kết quả"}</Button>{reviewAction}</footer> : <>
-      {!compact && item.decidedSummary ? <p className="xs muted operator-review-appeal-resolution">{item.decidedSummary}</p> : null}
+    </section>
+    {item.status === "pending" ? <footer className="row operator-review-action-footer"><Button primary={!retake} small busy={busy(true)} disabled={readOnly || Boolean(blockedMessage) || itemBusy} title={blockedMessage} onClick={() => onDecision(true)}>{busy(true) ? "Đang xử lý…" : retake ? "Duyệt cho thi lại" : "Chấp nhận kháng nghị"}</Button><Button small busy={busy(false)} disabled={readOnly || Boolean(blockedMessage) || itemBusy} title={blockedMessage} onClick={() => onDecision(false)}>{busy(false) ? "Đang xử lý…" : retake ? "Từ chối" : "Giữ nguyên kết quả"}</Button>{reviewAction}</footer> : <>
+      {item.decidedSummary ? <p className="xs muted operator-review-appeal-resolution">{item.decidedSummary}</p> : null}
       {reviewAction ? <footer className="row operator-review-action-footer">{reviewAction}</footer> : null}
     </>}
   </article>;

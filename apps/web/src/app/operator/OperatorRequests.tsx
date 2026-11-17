@@ -226,7 +226,6 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
       rows={loadFailed ? [] : data?.appeals.map(item => {
         const open = item.id === id;
         const compactCollapse = compact && open && item.requestKind === "retake";
-        const pendingRetake = item.requestKind === "retake" && item.status === "pending";
         const view = adaptReviewAppeal(item);
         const detailId = `appeal-detail-${item.id}`;
         return {
@@ -237,7 +236,7 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
           status: item.overdue ? <Badge tone="warn">Quá hạn xử lý</Badge> : <StatusBadge status={item.status} />,
           date: item.createdAt,
           action: <>
-            <Link to={requestSearch("appeals", listStatus, open ? undefined : item.id, listPage)} className={["btn-sm", compactCollapse && "request-collapse", pendingRetake && "request-retake-toggle"].filter(Boolean).join(" ")}
+            <Link to={requestSearch("appeals", listStatus, open ? undefined : item.id, listPage)} className={compactCollapse ? "btn-sm request-collapse" : "btn-sm"}
               aria-expanded={open} aria-controls={open ? detailId : undefined}
               {...(compactCollapse ? { title: "Thu gọn", "aria-label": "Thu gọn" } : {})}>
               {compactCollapse ? <Triangle size={12} strokeWidth={0} fill="currentColor" aria-hidden="true" style={{ rotate: "180deg" }} /> : open ? "Thu gọn" : item.status === "pending" ? "Xử lý" : "Chi tiết"}
@@ -245,9 +244,8 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
             {item.status !== "pending" ? <button className="btn-sm btn-danger request-delete" type="button" title="Xóa" aria-label="Xóa" disabled={removingId !== undefined || decisionId !== undefined}
               onClick={() => void remove(item)}><Trash2 size={15} aria-hidden="true" />{removingId === item.id ? "Đang xóa…" : <span>Xóa</span>}</button> : null}
           </>,
-          detailInActionColumn: pendingRetake,
           detail: open ? <div className="operator-request-expanded" id={detailId}>
-            <AppealReviewCard item={view} readOnly={false} compactRetake
+            <AppealReviewCard item={view} readOnly={false}
               reviewAction={item.attemptId ? <Button small busy={assessmentBusy} title="Xem bài làm" aria-label="Xem bài làm" className={item.status === "pending" ? "request-view-icon" : ""} onClick={() => void openAssessment(item.attemptId!)}>
                 <Eye size={15} aria-hidden="true" /><span>Xem bài làm</span>
               </Button> : null}
