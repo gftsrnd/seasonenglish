@@ -463,7 +463,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
     try {
       const draft = await actions.onGenerateMonthlyFinal(framework.id);
       if (draft?.blueprint) { setMonthlyFinal(draft); setMonthlyFinalExists(true); }
-      toast.show({ message: "Đã sinh bản nháp đề tháng. Rà báo cáo GEN, thêm và nghe soát audio, rồi duyệt trước 00:00 ngày thi.", tone: "ok" });
+      toast.show({ message: "Đã tạo bản nháp đề tháng. Kiểm tra đề và âm thanh, rồi duyệt trước 00:00 ngày thi.", tone: "ok" });
     }
     catch (reason) { toast.show({ message: monthlyFinalGenerationMessage(reason), tone: monthlyFinalGenerationTone(reason) }); }
     finally { generationInFlight.current = false; setGenerating(undefined); }
