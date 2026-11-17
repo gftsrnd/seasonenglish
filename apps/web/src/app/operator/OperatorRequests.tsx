@@ -68,7 +68,7 @@ function RequestPagination({ page, hasMore, link }: { page: number; hasMore: boo
 }
 
 function LoadError({ children, retry }: { children: ReactNode; retry: () => void }) {
-  return <p className="banner danger operator-request-error" role="alert">{children} <Button small onClick={retry}>Thử lại</Button></p>;
+  return <p className="banner danger operator-request-error" role="alert"><span>{children}</span><Button small onClick={retry}>Thử lại</Button></p>;
 }
 
 function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClient; id: string | undefined; status: AppealStatus; page: number }) {
