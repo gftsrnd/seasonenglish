@@ -89,12 +89,16 @@ describe("learner game visual and interaction regressions", () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
 
-    const rioView = render(<SeasonRioGame words={wordSet.words} onFinish={vi.fn()} />);
-    expect(rioView.container.querySelector('.gift-gate > span img[src^="data:image/svg+xml"]')).toBeInTheDocument();
-    expect(rioView.container.querySelector('.rio-boss > b')).toHaveTextContent("🌰");
+    localStorage.setItem("e4s:organisation-theme", "autumn");
+    const rioView = render(<ThemeProvider><SeasonRioGame words={wordSet.words} onFinish={vi.fn()} /></ThemeProvider>);
+    expect(rioView.container.querySelector('.gift-gate img[src$="/chest.svg"]')).toBeInTheDocument();
+    expect(rioView.container.querySelector('.gift-gate img[src$="/gate-post.svg"]')).toBeInTheDocument();
+    expect(rioView.container.querySelector('.rio-platform[src$="/platform.svg"]')).toBeInTheDocument();
+    expect(rioView.container.querySelector('.rio-boss img')).toHaveAttribute("alt", "Hạt dẻ");
     expect(rioView.container.querySelector('.rio-flag')).toHaveAttribute("aria-label", "Cột mốc về đích");
-    expect(rioView.container.querySelector('.rio-flag img')).toHaveAttribute("src", "/media/games/flag.png");
-    expect(rioView.container.querySelector('.rio-hero img[src^="data:image/svg+xml"]')).toHaveAttribute("alt", "Sóc mùa thu");
+    expect(rioView.container.querySelector('.rio-flag img')).toHaveAttribute("src", "/media/games/seven-seasons/seasons/thu/finish-flag.svg");
+    expect(rioView.container.querySelector('.rio-hero img')).toHaveAttribute("alt", "Sóc");
+    localStorage.removeItem("e4s:organisation-theme");
     expect(screen.getAllByTestId("gift-gate")).toHaveLength(3);
     expect(screen.getAllByTestId("gift-gate").map((gate) => gate.dataset.state)).toEqual(["closed", "closed", "closed"]);
   });
