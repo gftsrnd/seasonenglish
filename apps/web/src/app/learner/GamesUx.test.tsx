@@ -516,6 +516,7 @@ describe("learner game visual and interaction regressions", () => {
     const hero = screen.getByTestId("season-rio-hero");
     fireEvent.pointerDown(right, { pointerId: 4 });
     expect(hero).toHaveClass("is-running");
+    fireEvent.keyDown(screen.getByRole("application", { name: "Màn chơi Season-rio" }), { key: "ArrowUp" });
     for (let index = 0; index < 80 && !screen.queryByRole("dialog"); index += 1) {
       await act(async () => {
         const callback = frames.shift();

@@ -61,7 +61,7 @@
   animation: season-event-fade .65s ease-out both;
 }
 
-.season-catch-result {
+.season-stage-result {
   position: absolute;
   z-index: 4;
   top: 50%;
@@ -166,3 +166,28 @@
 }
 
 .seasonal-rio .rio-hero.is-running img { animation: none; }
+
+/* Gameplay scenery fills its own viewport, including at compact breakpoints. */
+.seasonal-catch,
+.seasonal-rio { --season-stage-floor: 36px; background: transparent; border: 0; box-shadow: none; }
+
+.season-stage-background,
+.season-stage-ambient { inset: 0; }
+:root:root:root .learner-root .game-page .season-stage-background { object-fit: cover; }
+:root:root:root .learner-root .game-page .season-stage-ambient,
+:root:root:root .learner-root .game-page .season-stage-ground,
+:root:root:root .learner-root .game-page .rio-platform { object-fit: fill; }
+
+.season-stage-ground { height: var(--season-stage-floor); }
+.seasonal-catch .catch-hero { bottom: var(--season-stage-floor); }
+.seasonal-rio .rio-viewport { border-radius: var(--radius-sm); overflow: hidden; }
+.seasonal-rio .rio-platform { bottom: var(--season-stage-floor); }
+.seasonal-rio .rio-boss,
+.seasonal-rio .rio-flag { bottom: var(--season-stage-floor); }
+.seasonal-rio .rio-quiz { place-items: start center; padding: 10px; background: linear-gradient(#2226, transparent 75%); }
+.seasonal-rio .rio-quiz > div { max-height: 100%; overflow: auto; transform: none; }
+.seasonal-rio .mario-controls { background: transparent; margin-inline: 0; }
+
+.season-stage-result > img { display: block; width: 84px; height: 48px; object-fit: contain; margin: 0 auto 4px; }
+
+.seasonal-rio.rio-scene:has(.rio-quiz) .mario-controls { visibility: visible; }

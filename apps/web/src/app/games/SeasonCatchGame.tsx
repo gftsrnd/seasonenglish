@@ -171,8 +171,8 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
       onPointerCancel={() => { pointerDown.current = false; }} onLostPointerCapture={() => { pointerDown.current = false; }}>
       <SeasonStageSky season={season} />
       <SeasonImage season={season} asset="ground" className="season-stage-ground" />
-      <p className="catch-prompt"><SeasonImage season={season} asset="drop" /><strong>{current.vietnamese}</strong><small>{current.definition}</small></p>
-      {items.map(item => <div data-testid="falling-item" className="falling-item" key={item.word.id} style={{ left: `${item.x}%`, top: `${item.y}%` }}>
+      <p className="catch-prompt"><SeasonImage season={season} asset="drop" /><strong>{current.vietnamese}</strong>{current.definition !== current.vietnamese ? <small>{current.definition}</small> : null}</p>
+      {items.map(item => <div data-testid="falling-item" className="falling-item" key={item.word.id} style={{ left: `${item.x}%`, top: `${item.y}%`, visibility: item.y < 0 ? "hidden" : "visible" }}>
         <SeasonImage season={season} asset="fx/drop-trail" className="season-drop-trail" />
         <SeasonImage season={season} asset="drop" className="season-drop" />
         <b>{item.word.english}</b>
@@ -181,7 +181,10 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
       <div data-testid="catch-basket" className="catch-hero" style={{ left: `${basketX}%` }}>
         <SeasonImage season={season} asset={pose} alt={`${season.hero} cầm rổ`} className="season-catch-player" />
       </div>
-      {ending ? <div className="season-catch-result" role="status">{ending === "won" ? "Hết lượt!" : "Hết mạng!"}</div> : null}
+      {ending ? <div className="season-stage-result" role="status">
+        <SeasonImage season={season} asset={ending === "won" ? "fx/win" : "fx/lose"} />
+        {ending === "won" ? "Hết lượt!" : "Hết mạng!"}
+      </div> : null}
     </div>
     {compactUi ? null : <p className="catch-help">{help}</p>}
     {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
