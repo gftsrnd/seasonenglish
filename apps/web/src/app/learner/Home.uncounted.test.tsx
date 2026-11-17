@@ -27,9 +27,11 @@ function homeView(overrides: Partial<LearnerHomeView> = {}): LearnerHomeView {
 const actions = { navigate: () => undefined } as unknown as LearnerCallbacks;
 
 describe("uncounted (học thử) month on Home", () => {
-  it("explains that the month does not count and keeps the lessons open with catch-up", () => {
+  it("keeps trial lessons in the calendar and the announcement in the bell", () => {
     render(<LearnerHome view={homeView()} actions={actions} />);
-    expect(screen.getByText("Tháng này bạn học thử để làm quen. Tiến độ, điểm danh, thi tháng và xét lên mức bắt đầu tính từ tháng sau (01/12).")).toBeInTheDocument();
+    expect(screen.queryByText(/Tháng này bạn học thử để làm quen/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Tiến độ tháng" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Gợi ý học thử/)).toBeInTheDocument();
     // The learner is not told to wait: lesson 1 is offered as a catch-up lesson.
     expect(screen.queryByText(/Bạn sẽ bắt đầu học từ ngày/)).not.toBeInTheDocument();
     expect(document.querySelector('[data-home-block="primary"] a[href="/lesson/lesson-1"]')).not.toBeNull();
@@ -41,7 +43,7 @@ describe("uncounted (học thử) month on Home", () => {
 
   it("shows the exam exemption on the monthly landing page", () => {
     render(<LearnerMonthly view={homeView()} actions={actions} />);
-    expect(screen.getByText(/Tháng học thử không có bài thi/)).toBeInTheDocument();
+    expect(screen.getByText("Tháng học thử không có bài thi.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Vào bài thi" })).toBeNull();
   });
 
@@ -49,5 +51,6 @@ describe("uncounted (học thử) month on Home", () => {
     const { monthlyUncounted: _trial, ...counted } = homeView();
     render(<LearnerHome view={counted} actions={actions} />);
     expect(screen.queryByText(/học thử/)).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Tiến độ tháng" })).toBeInTheDocument();
   });
 });

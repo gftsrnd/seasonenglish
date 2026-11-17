@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createRepositories, learnerConsecutiveLearningAbsences, learnerMonthlyAccess, learnerMonthlyAttendanceDates, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
+import { createRepositories, learnerConsecutiveLearningAbsences, learnerMonthlyAccess, learnerMonthlyAttendanceDates, migrateDatabase, resetPublicSchema, seedDemo, syncLearnerUncountedMonthNotice } from "@e4s/database";
 import { DEMO_IDS } from "@e4s/test-support";
 import { monthlyExamEligibility } from "../src/modules/learning/routes.js";
 
@@ -142,6 +142,11 @@ describe("mid-month catch-up learners", () => {
     await systemDate("2026-11-12");
     const id = await learner("2026-11-12");
     expect(await learnerMonthlyAccess(pool, id)).toMatchObject({ state: "uncounted", startDate: "2026-12-01", approvalDate: "2026-11-12" });
+    await syncLearnerUncountedMonthNotice(pool, id);
+    await pool.query("update inbox_notifications set read_at = now() where recipient_id = $1 and kind = 'monthly_uncounted'", [id]);
+    await syncLearnerUncountedMonthNotice(pool, id);
+    const notices = await pool.query("select context, read_at from inbox_notifications where recipient_id = $1 and kind = 'monthly_uncounted'", [id]);
+    expect(notices.rows).toEqual([{ context: "2026-12-01", read_at: expect.any(Date) }]);
     const lessons = await repositories.learning.listMonthlyLessons(id, month);
     expect(lessons.map((lesson) => lesson.dayNumber)).toEqual(days.map((day) => day.lessonNumber));
     expect(await lockOf(id)).toEqual(new Map(days.map((day) => [day.lessonNumber, day.date <= "2026-11-12" ? null : { reason: "date", blocker: undefined }])));

@@ -7,7 +7,6 @@ import { buildMonthlyTeachingCalendar } from "@e4s/domain/monthly";
 import { LevelReadinessCard } from "./LevelReadiness.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { InfoTitle, useCompactUi } from "../shared/CompactUi.js";
-import { monthlyUncountedText } from "../shared/monthly-uncounted.js";
 import type { LearnerComplaintView } from "@e4s/contracts";
 
 export function LearnerHome({ view, actions, courseCompleted = false }: { view: LearnerHomeView; actions: LearnerCallbacks; courseCompleted?: boolean }) {
@@ -40,7 +39,6 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
         account lock stays on the page, as one compact line. */}
     {view.inactivityReminder && view.inactivityReminder.inactiveDays >= ABSENCE_LOCK_DAYS - 1 ? <p className="home-blocking-banner" role="alert"><b>Vắng thêm 1 ngày học sẽ bị khóa tài khoản.</b> Học bài hôm nay để giữ tài khoản.</p> : null}
     {!view.aiAvailable && view.aiAvailable !== undefined ? <Notice tone="warn">Bạn vẫn có thể học, làm bài thi và luyện với Season. Nhận xét AI đang tạm thời gián đoạn.</Notice> : null}
-    {view.monthlyUncounted ? <section className="card" data-home-block="uncounted" role="status"><p style={{ margin: 0 }}>{monthlyUncountedText(view.monthlyUncounted.countsFrom)}</p></section> : null}
     <PrimaryLesson view={view} next={next} actions={actions} />
     {view.learner.cefr === "C1" && !courseCompleted ? <section className="card learner-summary-card pass-course-home-card" aria-label="Bài thi đầu ra">
       <div className="row between">
@@ -52,14 +50,14 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
         {view.passCourse ? <AppLink className="btn btn-primary" href="/test/pass-course" navigate={actions.navigate}>{view.passCourse.status === "in_progress" ? "Tiếp tục bài thi" : view.passCourse.status === "pending_review" ? "Xem trạng thái bài thi" : "Thi Pass Course"}</AppLink> : null}
       </div>
     </section> : null}
-    {!monthlyPreparation ? <section data-home-block="metrics" aria-label="Tiến độ tháng" style={{ marginTop: 16, padding: "16px 18px", borderRadius: 18, background: "var(--mint)", border: "1px solid var(--border)" }}>
+    {!monthlyPreparation && !view.monthlyUncounted ? <section data-home-block="metrics" aria-label="Tiến độ tháng" style={{ marginTop: 16, padding: "16px 18px", borderRadius: 18, background: "var(--mint)", border: "1px solid var(--border)" }}>
       <div><div className="eyebrow">Theo tháng</div><h2 style={{ margin: "2px 0 0" }}>Tiến độ học tập</h2></div>
-      {view.monthlyUncounted ? <p>Bạn có thể học hoặc ôn tự do các bài đã mở trong tháng học thử.</p> : <div className="stats monthly-home-metrics" style={{ marginTop: 12 }}>
+      <div className="stats monthly-home-metrics" style={{ marginTop: 12 }}>
         <Metric metric="lessons" label="Bài theo lịch" value={`${view.metrics.completedLessons}/${view.metrics.totalLessons}`} percent={ratio(view.metrics.completedLessons, view.metrics.totalLessons)} />
         <Metric metric="reviews" label="Bài ôn" value={`${view.metrics.completedReviews ?? 0}/${view.metrics.totalReviews ?? 0}`} percent={ratio(view.metrics.completedReviews ?? 0, view.metrics.totalReviews ?? 0)} color="var(--primary)" />
         <HomeAttendanceMetric eligibility={view.monthlyEligibility} />
         <HomePointsMetric points={view.metrics.seasonPoints ?? view.metrics.points} totalPoints={view.metrics.points} level={view.learner.cefr} nextTier={view.metrics.nextPointsTier ?? null} />
-      </div>}
+      </div>
       {view.monthlyEligibility ? <AbsenceChip absenceDays={view.monthlyEligibility.absenceDays} maxAbsences={view.monthlyEligibility.maxAbsences} /> : null}
     </section> : null}
     {monthly ? <MonthlyCalendar month={monthly} lessons={view.lessons} actions={actions} uncounted={Boolean(view.monthlyUncounted)} /> : null}
@@ -338,7 +336,7 @@ export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actio
     <PageTitle {...(monthLabel ? { eyebrow: `Tháng ${formatMonth(monthLabel)}` } : {})} title="Bài thi tháng" detail={month?.themeTitle} />
     <section className="monthly-assessment-landing" aria-label="Bài thi tháng">
       {view.monthlyUncounted ? <div className="monthly-assessment-form-state">
-        <p>Tháng học thử không có bài thi. {monthlyUncountedText(view.monthlyUncounted.countsFrom)}</p>
+        <p>Tháng học thử không có bài thi.</p>
       </div> : <>
         <header className="monthly-assessment-header">
           <div>

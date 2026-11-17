@@ -74,16 +74,30 @@ describe("NotificationBell", () => {
     expect(within(dialog).getByText("Một bài học đang được cập nhật")).toBeInTheDocument();
   });
 
-  it("tells a learner in an uncounted month that counting starts next month", async () => {
-    const items = [{ ...notification, id: "uncounted", kind: "monthly_uncounted", context: "2026-12-01" }];
-    api.getNotificationInbox.mockImplementation(async (limit) => ({ items: limit ? items : [], unreadCount: 1, nextCursor: null }));
-    api.markInboxRead.mockResolvedValue({ unreadCount: 0 });
+  it("keeps the trial announcement and start date accessible after marking it read", async () => {
+    const item = { ...notification, id: "uncounted", kind: "monthly_uncounted" as const, context: "2026-12-01" };
+    let readAt: string | null = null;
+    api.getNotificationInbox.mockImplementation(async (limit, unreadOnly) => ({
+      items: limit && (!unreadOnly || !readAt) ? [{ ...item, readAt }] : [],
+      unreadCount: readAt ? 0 : 1,
+      nextCursor: null
+    }));
+    api.markInboxRead.mockImplementation(async () => {
+      readAt = "2026-11-20T09:00:00.000Z";
+      return { unreadCount: 0 };
+    });
     const user = userEvent.setup();
     render(<MemoryRouter><NotificationBell /></MemoryRouter>);
     await user.click(await screen.findByRole("button", { name: /1 chưa đọc/ }));
     const dialog = screen.getByRole("dialog", { name: "Thông báo" });
-    expect(await within(dialog).findByText("Tháng này bạn học thử để làm quen")).toBeInTheDocument();
-    expect(within(dialog).getByText("Tiến độ, điểm danh, thi tháng và xét lên mức bắt đầu tính từ tháng sau (01/12).")).toBeInTheDocument();
+    const notice = "Tháng này bạn học thử để làm quen";
+    expect(await within(dialog).findByText(notice)).toBeInTheDocument();
+    expect(within(dialog).getByText("Tiến độ chính thức, điểm danh, thi tháng và xét lên mức bắt đầu từ tháng sau (01/12).")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Chưa đọc" }));
+    await user.click(within(dialog).getByRole("button", { name: "Đánh dấu tất cả đã đọc" }));
+    await within(dialog).findByText("Bạn đã đọc hết thông báo.");
+    await user.click(within(dialog).getByRole("button", { name: "Tất cả" }));
+    expect(await within(dialog).findAllByText(notice)).toHaveLength(1);
   });
 
   it("tells the learner about a new badge and a new Season", async () => {
