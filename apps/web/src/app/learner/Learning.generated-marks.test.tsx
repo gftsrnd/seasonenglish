@@ -35,6 +35,24 @@ describe("generated grammar example marks (live B1 2026-12 lesson 17)", () => {
     expect(examples.map(marksOf)).toEqual([["knows"], ["agree", "need"], ["is", "always", "asking"], ["registered"], ["wrote"], ["have got", "had"]]);
   });
 
+
+  it("shows saved manual color instead of generated marks without changing spoken text", () => {
+    const part = grammarPart(true);
+    const text = part.content.steps[0]!.examples[0]!;
+    const start = text.indexOf("testing");
+    const manualPart = { ...part, content: { ...part.content, manualExampleHighlights: [
+      [{ text, ranges: [{ start, end: start + 7, color: "purple" }] }],
+      [{ text: "old text", ranges: [] }]
+    ] } };
+    const { container } = view(manualPart);
+    const examples = Array.from(container.querySelectorAll(".lesson-grammar-step .lesson-example-list > *"));
+    expect(examples[0]!.querySelector("strong[data-grammar-highlight='purple']")).toHaveTextContent("testing");
+    expect(examples[0]).toHaveTextContent(text);
+    expect(marksOf(examples[0]!)).toEqual([]);
+    expect(marksOf(examples[1]!)).toEqual(["agree", "need"]);
+    expect(marksOf(examples[3]!)).toEqual(["registered"]);
+  });
+
   it("a lesson stored without marks keeps the formula-based highlight", () => {
     const { container } = view(grammarPart(false));
     const examples = Array.from(container.querySelectorAll(".lesson-grammar-step .lesson-example-list > *"));

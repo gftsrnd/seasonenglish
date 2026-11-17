@@ -110,6 +110,26 @@ describe("Sửa tay mirrors the lesson view: grammar points and pronunciation so
     expect(screen.getAllByLabelText("Đoạn đọc luyện âm")).toHaveLength(1);
   });
 
+
+  it("saves a manual highlight for the selected grammar words without modifying the example or AI marks", async () => {
+    const user = userEvent.setup();
+    const source = twoPointGrammar();
+    const onSave = open(lessonWith(source, fourSoundPronunciation()));
+    const field = screen.getByLabelText("Điểm 1 – câu ví dụ 1") as HTMLTextAreaElement;
+    const start = field.value.indexOf("is always");
+    const end = start + "is always".length;
+    await user.selectOptions(screen.getByLabelText("Màu đánh dấu ví dụ"), "purple");
+    field.focus();
+    field.setSelectionRange(start, end);
+    await user.click(screen.getByRole("button", { name: "Tô chữ: Điểm 1 – câu ví dụ 1" }));
+    expect(screen.getByText("is always", { selector: "strong[data-grammar-highlight='purple']" })).toBeVisible();
+    const saved = await save(user, onSave);
+    expect(saved.grammar.steps).toEqual(source.steps);
+    expect(saved.grammar.manualExampleHighlights).toEqual([[{
+      text: field.value, ranges: [{ start, end, color: "purple" }]
+    }, null, null], [null, null, null, null, null]]);
+  });
+
   it("round trip: a save with no edit writes grammar and pronunciation back exactly as stored", async () => {
     const user = userEvent.setup();
     const onSave = open(lessonWith(twoPointGrammar(), fourSoundPronunciation()));

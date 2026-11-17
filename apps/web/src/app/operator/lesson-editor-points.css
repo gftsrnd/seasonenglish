@@ -39,3 +39,8 @@ body .operator-modal-scope .operator-lesson-icon-button { display: inline-grid; 
   /* Word + IPA side by side still fit at 360px; the IPA box is the narrower one. */
   .operator-modal-scope .operator-lesson-point-row--word { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; }
 }
+
+.operator-modal-scope .operator-grammar-highlight-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: .85rem; }
+.operator-modal-scope .operator-grammar-highlight-toolbar select { width: auto; }
+.operator-modal-scope .operator-grammar-example-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+.operator-modal-scope .operator-grammar-highlight-preview { grid-column: 1 / -1; margin: 0; padding: 2px 8px; overflow-wrap: anywhere; }

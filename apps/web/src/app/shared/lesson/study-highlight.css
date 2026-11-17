@@ -42,3 +42,6 @@
 .lesson-example-pair-arrow{color:var(--muted,#6b645b)}
 .lesson-example-wrong{color:#7d271b;text-decoration:line-through;text-decoration-thickness:1px}
 .lesson-example-right{color:#294414}
+
+[data-grammar-highlight="blue"] { color: #214f93; }
+[data-grammar-highlight="purple"] { color: #6b348f; }

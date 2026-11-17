@@ -1,6 +1,9 @@
-import { Plus, X } from "lucide-react";
+import { useState } from "react";
+import { Highlighter, Plus, X } from "lucide-react";
 import { withMonthlyGrammarSteps, type MonthlyGrammarStepSource } from "@e4s/domain/monthly";
 import { Field, LineField } from "./LessonEditorFields.js";
+import { applyGrammarHighlight, grammarHighlightEntry, ManualGrammarHighlight, type GrammarHighlightColor, type GrammarHighlightRange } from "../shared/lesson/manual-grammar-highlight.js";
+import { conciseGrammarExample } from "../shared/lesson/presentation.js";
 import "./lesson-editor-points.css";
 
 /**
@@ -17,7 +20,7 @@ import "./lesson-editor-points.css";
  *
  * Saving writes back only what changed, into the field it was read from; every other stored field is kept.
  */
-export type GrammarExampleDraft = { text: string; translation: string; /** Index in the stored list, -1 for a new row. */ source: number };
+export type GrammarExampleDraft = { text: string; translation: string; highlights?: GrammarHighlightRange[]; /** Index in the stored list, -1 for a new row. */ source: number };
 export type GrammarPointDraft = { formulaLines: string[]; explanation: string; examples: GrammarExampleDraft[] };
 export type GrammarDraft = {
   /** "steps": one block per entry of grammar.steps; "single": the top-level formula; "plan": the day plan's steps. */
@@ -59,20 +62,30 @@ function planSteps(content: Record<string, unknown>, steps: readonly MonthlyGram
 }
 
 export function readGrammarDraft(content: Record<string, unknown>, plan: readonly MonthlyGrammarStepSource[] = []): GrammarDraft {
+  const read = (source: Record<string, unknown>, mode: "steps" | "single", minimumExamples: number, pointIndex: number): GrammarPointDraft => {
+    const point = readPoint(source, mode, minimumExamples);
+    return { ...point, examples: point.examples.map((example, index) => {
+      const entry = grammarHighlightEntry(content.manualExampleHighlights, pointIndex, example.source >= 0 ? example.source : index, example.text);
+      return entry ? { ...example, highlights: entry.ranges } : example;
+    }) };
+  };
   if (plan.length >= 2) {
     const steps = planSteps(content, plan);
-    return { mode: "plan", formulaLocked: true, stepIndexes: steps.map((_, index) => index), points: steps.map(step => readPoint(step, "steps", 1)) };
+    return { mode: "plan", formulaLocked: true, stepIndexes: steps.map((_, index) => index), points: steps.map((step, index) => read(step, "steps", 1, index)) };
   }
   const stepIndexes = viewSteps(content);
   if (stepIndexes.length >= 2) {
     const steps = rawList(content.steps);
-    return { mode: "steps", stepIndexes, points: stepIndexes.map(index => readPoint(record(steps[index]), "steps", 1)) };
+    return { mode: "steps", stepIndexes, points: stepIndexes.map((index, position) => read(record(steps[index]), "steps", 1, position)) };
   }
   // One topic: three example slots, like the 3-example rule of a daily lesson.
-  return { mode: "single", stepIndexes: [], points: [readPoint(content, "single", 3)] };
+  return { mode: "single", stepIndexes: [], points: [read(content, "single", 3, 0)] };
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const withoutHighlights = ({ text, translation, source }: GrammarExampleDraft) => ({ text, translation, source });
+const examplesChanged = (point: GrammarPointDraft, before: GrammarPointDraft) =>
+  !same(point.examples.map(withoutHighlights), before.examples.map(withoutHighlights));
 
 /**
  * One grammar point written back onto its stored object (a step, or the grammar content itself).
@@ -87,8 +100,8 @@ function writePoint(source: Record<string, unknown>, point: GrammarPointDraft, b
   const formulaChanged = !same(point.formulaLines, before.formulaLines);
   if (formulaChanged) next.formula = formula;
   if (point.explanation !== before.explanation) next[explanationKey(source, mode)] = point.explanation.trim();
-  const examplesChanged = !same(point.examples, before.examples);
-  if (examplesChanged) {
+  const changedExamples = examplesChanged(point, before);
+  if (changedExamples) {
     const kept = point.examples.map(example => ({ ...example, text: example.text.trim(), translation: example.translation.trim() })).filter(example => example.text);
     const aligned = (key: string) => {
       if (!(key in source)) return;
@@ -99,24 +112,40 @@ function writePoint(source: Record<string, unknown>, point: GrammarPointDraft, b
     aligned("exampleAudioUrls");
     if ("exampleTranslations" in source || kept.some(example => example.translation)) next.exampleTranslations = kept.map(example => example.translation);
   }
-  if ((formulaChanged || examplesChanged) && "exampleMarks" in next) delete next.exampleMarks;
+  if ((formulaChanged || changedExamples) && "exampleMarks" in next) delete next.exampleMarks;
   return next;
 }
 
 export function writeGrammarDraft(content: Record<string, unknown>, draft: GrammarDraft, plan: readonly MonthlyGrammarStepSource[] = []): Record<string, unknown> {
   const before = readGrammarDraft(content, plan);
   if (same(draft, before)) return content;
+  const highlights = draft.points.map((point, index) => {
+    const compacted = examplesChanged(point, before.points[index]!);
+    const rows = point.examples.filter(example => compacted ? Boolean(example.text.trim()) : example.source >= 0);
+    const entries: Array<ReturnType<typeof grammarHighlightEntry> | null> = [];
+    rows.forEach((example, position) => {
+      entries[compacted ? position : example.source] = example.highlights
+        ? { text: conciseGrammarExample(example.text), ranges: example.highlights } : null;
+    });
+    return entries;
+  });
+  const withHighlights = (value: Record<string, unknown>) => {
+    if (highlights.some(point => point.some(Boolean))) return { ...value, manualExampleHighlights: highlights };
+    if (!("manualExampleHighlights" in value)) return value;
+    const { manualExampleHighlights, ...rest } = value;
+    return rest;
+  };
   if (draft.mode === "plan") {
     // Stored steps that line up with the plan keep their own extra fields; otherwise the preview's steps are stored.
     const stored = rawList(content.steps);
     const aligned = stored.length === plan.length && stored.every(step => step && typeof step === "object" && !Array.isArray(step));
     const derived = planSteps(content, plan);
-    return { ...content, steps: derived.map((step, at) => writePoint(aligned ? { ...record(stored[at]), formula: step.formula, examples: step.examples, ...("exampleMarks" in step ? { exampleMarks: step.exampleMarks } : {}) } : step, draft.points[at]!, before.points[at]!, "steps")) };
+    return withHighlights({ ...content, steps: derived.map((step, at) => writePoint(aligned ? { ...record(stored[at]), formula: step.formula, examples: step.examples, ...("exampleMarks" in step ? { exampleMarks: step.exampleMarks } : {}) } : step, draft.points[at]!, before.points[at]!, "steps")) });
   }
-  if (draft.mode === "single") return writePoint(content, draft.points[0]!, before.points[0]!, "single");
+  if (draft.mode === "single") return withHighlights(writePoint(content, draft.points[0]!, before.points[0]!, "single"));
   const steps = [...rawList(content.steps)];
   draft.stepIndexes.forEach((index, at) => { steps[index] = writePoint(record(steps[index]), draft.points[at]!, before.points[at]!, "steps"); });
-  return { ...content, steps };
+  return withHighlights({ ...content, steps });
 }
 
 /** Vietnamese problems for the save check (prefixed "ngữ pháp" so the editor opens the Ngữ pháp section). */
@@ -142,9 +171,11 @@ export function GrammarPointsEditor({ draft, onChange, translations = false, poi
   /** Readable step names (from the month's resources), index-aligned with the points when known. */
   pointLabels?: readonly (string | undefined)[];
 }) {
+  const [color, setColor] = useState<GrammarHighlightColor | "erase">("blue");
   const many = draft.points.length > 1;
   const setPoint = (index: number, point: GrammarPointDraft) => onChange({ ...draft, points: replace(draft.points, index, point) });
   return <div className="operator-lesson-points">
+    <label className="operator-grammar-highlight-toolbar"><span>Màu đánh dấu ví dụ</span><select aria-label="Màu đánh dấu ví dụ" value={color} onChange={event => setColor(event.target.value as GrammarHighlightColor | "erase")}><option value="blue">Xanh dương</option><option value="purple">Tím</option><option value="erase">Bỏ tô</option></select></label>
     {draft.points.map((point, index) => {
       const name = many ? `điểm ngữ pháp ${index + 1}` : "ngữ pháp";
       const exampleLabel = (at: number) => many ? `Điểm ${index + 1} – câu ví dụ ${at + 1}` : `Câu ví dụ ngữ pháp ${at + 1}`;
@@ -163,12 +194,23 @@ export function GrammarPointsEditor({ draft, onChange, translations = false, poi
         </div>
         <div className="field" role="group" aria-label={`Câu ví dụ ${name}`}>
           <span>Câu ví dụ để đọc thành tiếng</span>
-          <div className="operator-lesson-point-list">{point.examples.map((example, at) => <div className={`operator-lesson-point-row${translations ? " operator-lesson-point-row--translated" : ""}`} key={at}>
-            <LineField aria-label={exampleLabel(at)} value={example.text} placeholder={`Câu ví dụ ${at + 1} (tiếng Anh)`} onChange={event => setPoint(index, { ...point, examples: replace(point.examples, at, { ...example, text: event.target.value }) })} />
+          <div className="operator-lesson-point-list">{point.examples.map((example, at) => <div className={`operator-lesson-point-row operator-grammar-example-row${translations ? " operator-lesson-point-row--translated" : ""}`} key={at}>
+            <LineField aria-label={exampleLabel(at)} value={example.text} placeholder={`Câu ví dụ ${at + 1} (tiếng Anh)`} onChange={event => setPoint(index, { ...point, examples: replace(point.examples, at, { text: event.target.value, translation: example.translation, source: example.source }) })} />
+            <button type="button" className="btn-sm operator-lesson-icon-button" title="Tô chữ đã chọn" aria-label={"Tô chữ: " + exampleLabel(at)} disabled={!example.text.trim()} onPointerDown={event => event.preventDefault()} onClick={event => {
+              const field = event.currentTarget.parentElement?.querySelector("textarea");
+              if (!field || field.selectionStart === field.selectionEnd) return;
+              const position = (offset: number) => field.value.slice(0, offset).trimStart().replace(/\s+/gu, " ").length;
+              const start = position(field.selectionStart);
+              const end = Math.min(position(field.selectionEnd), conciseGrammarExample(example.text).length);
+              if (start >= end) return;
+              const highlights = applyGrammarHighlight(example.highlights ?? [], start, end, color);
+              setPoint(index, { ...point, examples: replace(point.examples, at, { ...example, highlights }) });
+            }}><Highlighter size={15} aria-hidden="true" /></button>
             <button type="button" className="btn-sm operator-lesson-icon-button" aria-label={`Xoá ${exampleLabel(at).toLowerCase()}`} title="Xoá câu" onClick={() => setPoint(index, { ...point, examples: point.examples.filter((_, i) => i !== at) })}><X size={15} aria-hidden="true" /></button>
+            {example.highlights?.length ? <p className="operator-grammar-highlight-preview"><ManualGrammarHighlight text={conciseGrammarExample(example.text)} ranges={example.highlights} /></p> : null}
             {translations ? <LineField className="operator-lesson-point-translation" aria-label={`Dịch ${exampleLabel(at).toLowerCase()}`} value={example.translation} placeholder="Nghĩa tiếng Việt" onChange={event => setPoint(index, { ...point, examples: replace(point.examples, at, { ...example, translation: event.target.value }) })} /> : null}
           </div>)}</div>
-          <small className="xs muted">Mỗi ô một câu; câu ví dụ thuộc đúng điểm ngữ pháp này.{shown > 3 ? " Học viên thấy 3 câu đầu." : ""} Sửa câu hoặc công thức thì phần tô đậm tự tính lại theo công thức.</small>
+          <small className="xs muted">Mỗi ô một câu; câu ví dụ thuộc đúng điểm ngữ pháp này.{shown > 3 ? " Học viên thấy 3 câu đầu." : ""} Chọn chữ trong câu rồi bấm bút tô. Sửa câu sẽ tính lại phần tô tự động.</small>
           <button type="button" className="btn-sm operator-lesson-add-button" onClick={() => setPoint(index, { ...point, examples: [...point.examples, { text: "", translation: "", source: -1 }] })}><Plus size={15} aria-hidden="true" />Thêm ví dụ</button>
         </div>
       </section>;
