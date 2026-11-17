@@ -14,8 +14,9 @@ describe("game surface layout guardrails", () => {
     expect(stylesheet).toMatch(/\.virtual-keyboard\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
   });
 
-  it("bounds the compact game topic to its column beside the record badge", () => {
-    expect(responsiveStylesheet).toMatch(/\.game-running-header h1\s*\{[^}]*max-width:\s*100%[^}]*text-overflow:\s*ellipsis/s);
+  it("lets the full game topic wrap above the controls on narrow phones", () => {
+    expect(responsiveStylesheet).toMatch(/\.game-running-header h1\s*\{[^}]*max-width:\s*100%[^}]*overflow-wrap:\s*anywhere[^}]*white-space:\s*normal/s);
+    expect(responsiveStylesheet).toMatch(/@media \(max-width: 480px\)\s*\{\s*[^{}]*\.game-running-header\s*\{[^}]*flex-wrap:\s*wrap[^}]*\}\s*[^{}]*\.game-running-header > div:first-child\s*\{[^}]*flex-basis:\s*100%/s);
   });
 
   it("reserves the same safe bottom-nav clearance for the hub and every game route", () => {
