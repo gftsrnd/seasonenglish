@@ -482,6 +482,8 @@ describe("Friday review gate (AI quality round 2, 11/11)", () => {
 
   it("rejects non-minimal pairs from the remeasure and keeps real ones", () => {
     const plan = contract();
+    plan.sounds[0]!.examples.push({ id: "test9-board", word: "board", ipa: "/bɔːd/" });
+    plan.daySpecs[1]!.reviewPronunciationExampleIds = [...plan.daySpecs[1]!.reviewPronunciationExampleIds!, "test9-board"];
     plan.sounds[0]!.examples.push({ id: "sound-example-4", word: "event", ipa: "/ɪˈvent/" }, { id: "sound-example-5", word: "bat", ipa: "/bæt/" });
     plan.daySpecs[1]!.reviewPronunciationExampleIds = [...plan.daySpecs[1]!.reviewPronunciationExampleIds!, "sound-example-4", "sound-example-5"];
     const speaking = (first: string[], second: string[]) => sections({ speaking: { items: [
@@ -491,6 +493,7 @@ describe("Friday review gate (AI quality round 2, 11/11)", () => {
       { id: "s4", prompt: "Hãy nói với quản lý về kế hoạch.", requiredWords: ["core-one", "core-two", "core-three"], minRequiredWords: 2 }
     ] } });
     expect(codes(evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, speaking(["cost", "coast"], ["can", "cane"])))).not.toContain("MONTHLY_REVIEW_MINIMAL_PAIR_NOT_MINIMAL");
+    expect(codes(evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, speaking(["poured", "board"], ["can", "cane"])))).not.toContain("MONTHLY_REVIEW_MINIMAL_PAIR_NOT_MINIMAL");
     const bad = evaluateMonthlyReviewSections(plan, plan.daySpecs[1]!, 2, speaking(["event", "segment"], ["bat", "box"])).severe.filter((item) => item.code === "MONTHLY_REVIEW_MINIMAL_PAIR_NOT_MINIMAL");
     // The repair message names the item first (December 2026 A1 L4).
     expect(bad.map((item) => item.message.split(" is not")[0])).toEqual(["speaking item s1: \"event / segment\"", "speaking item s2: \"bat / box\""]);

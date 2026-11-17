@@ -146,6 +146,7 @@ export function monthlyTargetContrastDistance(pairs: readonly (readonly [string,
 /** Common contrast words with reviewed British IPA, usable when outside the month's approved word pools. */
 export const MONTHLY_REVIEW_COMMON_CONTRAST_IPA: Readonly<Record<string, string>> = {
   easy: "/ˈiːzi/", dizzy: "/ˈdɪzi/", busy: "/ˈbɪzi/",
+  board: "/bɔːd/", poured: "/pɔːd/",
   seat: "/siːt/", sit: "/sɪt/", feel: "/fiːl/", fill: "/fɪl/", leave: "/liːv/", live: "/lɪv/",
   sheep: "/ʃiːp/", ship: "/ʃɪp/", heat: "/hiːt/", hit: "/hɪt/", eat: "/iːt/", it: "/ɪt/",
   cheap: "/tʃiːp/", chip: "/tʃɪp/", green: "/ɡriːn/", grin: "/ɡrɪn/", sleep: "/sliːp/", slip: "/slɪp/",
@@ -160,7 +161,7 @@ export const MONTHLY_REVIEW_COMMON_CONTRAST_IPA: Readonly<Record<string, string>
  * real partner with one neighbouring sound]. Used to make a failed
  * minimal-pair repair actionable (December 2026: "team / teem" came back six
  * times because "team" has no common minimal partner - "Tim" is a name).
- * Every pair passes the minimal-pair gate on spelling alone.
+ * Suggested pairs can be checked by reviewed IPA or spelling.
  */
 export const A1A2_MINIMAL_PAIR_SUGGESTIONS: Readonly<Record<string, ReadonlyArray<readonly [string, string]>>> = {
   "iː": [["seat", "sit"], ["feel", "fill"], ["leave", "live"], ["sheep", "ship"], ["read", "rid"], ["heat", "hit"], ["eat", "it"], ["cheap", "chip"], ["green", "grin"], ["sleep", "slip"]],
@@ -185,8 +186,8 @@ export const A1A2_MINIMAL_PAIR_SUGGESTIONS: Readonly<Record<string, ReadonlyArra
   n: [["night", "might"], ["sun", "sum"]],
   l: [["light", "right"], ["lead", "read"], ["long", "wrong"], ["fly", "fry"]],
   h: [["hat", "at"], ["heat", "eat"], ["hold", "old"], ["hand", "and"]],
-  p: [["pin", "bin"], ["pack", "back"], ["cap", "cab"], ["pay", "bay"]],
-  b: [["bin", "pin"], ["back", "pack"], ["bay", "pay"]],
+  p: [["pin", "bin"], ["pack", "back"], ["cap", "cab"], ["pay", "bay"], ["poured", "board"]],
+  b: [["bin", "pin"], ["back", "pack"], ["bay", "pay"], ["board", "poured"]],
   t: [["time", "dime"], ["ten", "den"], ["sent", "send"], ["tie", "die"]],
   d: [["send", "sent"], ["die", "tie"]],
   f: [["fan", "van"], ["fine", "vine"]],

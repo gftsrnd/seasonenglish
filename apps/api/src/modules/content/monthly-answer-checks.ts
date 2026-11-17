@@ -107,6 +107,7 @@ function agrees(subject: SubjectNumber, value: string): boolean {
 
 const POSSESSIVE_DETERMINERS: Readonly<Record<string, string>> = { my: "mine", your: "yours", her: "hers", our: "ours", their: "theirs" };
 const POSSESSIVE_PRONOUNS: Readonly<Record<string, string>> = { mine: "my", yours: "your", hers: "her", ours: "our", theirs: "their" };
+const BEFORE_OBJECT_PRONOUN = /\b(?:to|for|with|from|about|at|by|of|beside|behind|near|between)\s*$/iu;
 /** Words that cannot follow a possessive determiner (my ____ for / my today): prepositions, conjunctions, adverbs. */
 const NOT_A_NOUN_AFTER = new Set(["for", "to", "at", "in", "on", "with", "from", "by", "about", "and", "but", "or", "so", "because", "now", "today", "tomorrow", "too", "again", "yet", "already", "here", "there", "then", "this", "next", "last", "is", "are", "was", "were", "will", "can", "not", "if", "when", "after", "before", "until", "since"]);
 /** Function words that can follow a possessive pronoun in the same clause (mine is / mine and…). */
@@ -155,7 +156,8 @@ export function monthlyAnswerKeyIssues(choice: MonthlyChoice): string[] {
     const next = words(sentence.after)[0];
     const nextIsEnd = !next || /^\s*[.!?,;:)]/u.test(sentence.after);
     const pronoun = POSSESSIVE_DETERMINERS[key];
-    if (pronoun && (nextIsEnd || NOT_A_NOUN_AFTER.has(next!)) && choice.options.some((option) => normalized(option) === pronoun)) {
+    const canBeObject = key === "her" && BEFORE_OBJECT_PRONOUN.test(sentence.before);
+    if (pronoun && !canBeObject && (nextIsEnd || NOT_A_NOUN_AFTER.has(next!)) && choice.options.some((option) => normalized(option) === pronoun)) {
       issues.push(`${choice.label}: "${answer}" needs a noun after it, but the blank is followed by ${next && !nextIsEnd ? `"${next}"` : "the end of the sentence"}; the possessive pronoun "${pronoun}" is the correct option. Fix the answer key and explanation, or rewrite the sentence`);
     }
     const determiner = POSSESSIVE_PRONOUNS[key];

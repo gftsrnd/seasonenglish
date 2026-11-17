@@ -34,6 +34,15 @@ describe("December 2026 wrong answer keys (deterministic)", () => {
     expect(issues).toHaveLength(1);
     expect(issues[0]).toContain('"mine" is the correct option');
   });
+
+  it("NP-001 accepts her as the recipient after the preposition to", () => {
+    expect(monthlyAnswerKeyIssues({
+      label: "grammar item 1 variant 1",
+      prompt: "Chọn từ đúng để hoàn thành câu: Please give the file to ____ after the meeting.",
+      options: ["she", "her", "hers", "herself"],
+      answer: "her"
+    })).toEqual([]);
+  });
   it("flags B1 L16 g3: used to + verb next to its simple past", () => {
     const issues = monthlyAnswerKeyIssues(item("B1-L16", "k1-3"));
     expect(issues.join(" ")).toContain('both "used to assess" and "assessed" are correct');
