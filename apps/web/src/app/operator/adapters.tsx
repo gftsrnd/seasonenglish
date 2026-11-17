@@ -430,7 +430,7 @@ function operatorLessonAnswer(part: OperatorLessonPart): string {
 }
 
 function OperatorCorrectAnswer({ answer, label = "Đáp án đúng:" }: { answer: string; label?: string }) {
-  return <div className="operator-correct-answer"><strong>{label}</strong><span>{answer}</span></div>;
+  return <div className="operator-correct-answer"><strong>{label}</strong>{" "}<span>{answer}</span></div>;
 }
 
 export function OperatorPracticeReview({ sectionNumber, part, headingText }: { sectionNumber: number; part: OperatorLessonPart; /** Replaces "N. Section · English" (e.g. "Câu 1" inside a review section block). */ headingText?: string }) {
@@ -798,7 +798,7 @@ function formatLegacyDetail(label: string, value: unknown): string {
 }
 
 function PreviewList({ values }: { values: string[] }) { return values.length ? <ul className="small">{values.map((value, index) => <li key={`${value}-${index}`}>{value}</li>)}</ul> : <p className="small muted">—</p>; }
-function AnswerOptions({ options, answer }: { options: string[]; answer?: string | undefined }) { return options.length ? <ol className="operator-answer-options">{options.map((option, index) => <li className={`operator-answer-choice${option === answer ? " is-answer" : ""}`} key={`${option}-${index}`}><span className="operator-answer-letter">{String.fromCharCode(65 + index)}</span><span>{option}</span>{option === answer ? <Check className="operator-inline-icon" size={15} strokeWidth={2.5} aria-label="Đáp án đúng" /> : null}</li>)}</ol> : answer ? <p className="operator-answer-key"><b>Đáp án mẫu:</b> {answer}</p> : null; }
+function AnswerOptions({ options, answer }: { options: string[]; answer?: string | undefined }) { return options.length ? <ul className="operator-answer-options" role="list">{options.map((option, index) => <li className={`operator-answer-choice${option === answer ? " is-answer" : ""}`} key={`${option}-${index}`}><span className="operator-answer-letter">{String.fromCharCode(65 + index)}.</span>{" "}<span>{option}</span>{option === answer ? <Check className="operator-inline-icon" size={15} strokeWidth={2.5} aria-label="Đáp án đúng" /> : null}</li>)}</ul> : answer ? <p className="operator-answer-key"><b>Đáp án mẫu:</b> {answer}</p> : null; }
 function humanizeContent(content: Record<string, unknown>): string { return Object.values(content).flatMap(value => Array.isArray(value) ? value : [value]).filter(value => typeof value === "string" || typeof value === "number").join(" · ") || "—"; }
 
 export interface ReviewAdapterDetails {

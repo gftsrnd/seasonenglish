@@ -490,9 +490,9 @@ describe("lesson detail warnings", () => {
     expect(transcript.nextElementSibling?.nextElementSibling).toHaveClass("operator-answer-options");
     const listeningChoices = within(listeningSection).getAllByRole("listitem");
     expect(listeningChoices).toHaveLength(4);
-    expect(listeningChoices.map(choice => choice.textContent)).toEqual(["AA", "BB", "CC", "DD"]);
+    expect(listeningChoices.map(choice => choice.textContent)).toEqual(["A. A", "B. B", "C. C", "D. D"]);
     expect(listeningChoices[0]).toHaveClass("is-answer");
-    expect(within(listeningSection).getByText("Đáp án đúng:").parentElement).toHaveTextContent("A");
+    expect(within(listeningSection).getByText("Đáp án đúng:").parentElement).toHaveTextContent("Đáp án đúng: A");
     fireEvent.click(listenButton);
     expect(spoken).toEqual(["I give clear feedback."]);
     const readingSection = screen.getByRole("heading", { name: "2. Đọc · Reading" }).closest("section")!;
@@ -500,9 +500,9 @@ describe("lesson detail warnings", () => {
     expect(readingSection.querySelector(".operator-reading-passage")).toHaveTextContent("First paragraph. Second paragraph.");
     const readingChoices = within(readingSection).getAllByRole("listitem");
     expect(readingChoices).toHaveLength(4);
-    expect(readingChoices.map(choice => choice.textContent)).toEqual(["AA", "BB", "CC", "DD"]);
+    expect(readingChoices.map(choice => choice.textContent)).toEqual(["A. A", "B. B", "C. C", "D. D"]);
     expect(readingChoices[0]).toHaveClass("is-answer");
-    expect(within(readingSection).getByText("Đáp án đúng:").parentElement).toHaveTextContent("A");
+    expect(within(readingSection).getByText("Đáp án đúng:").parentElement).toHaveTextContent("Đáp án đúng: A");
     expect(screen.getByRole("heading", { name: "3. Viết · Writing" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "4. Từ loại · Word class" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "5. Dùng từ · Word use" })).toBeInTheDocument();
