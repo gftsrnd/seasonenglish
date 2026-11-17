@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { LearnerHome, LearnerMonthly } from "./Home.js";
 import type { LearnerCallbacks, LearnerHomeView } from "./contracts.js";
@@ -28,9 +28,16 @@ const actions = { navigate: () => undefined } as unknown as LearnerCallbacks;
 
 describe("uncounted (học thử) month on Home", () => {
   it("keeps trial lessons in the calendar and the announcement in the bell", () => {
-    render(<LearnerHome view={homeView()} actions={actions} />);
+    const review = { ...lessonOne, id: "review-1", lessonDate: "2026-11-06", kind: "review" as const, status: "completed" as const };
+    const completed = { ...lessonOne, id: "lesson-2", lessonDate: "2026-11-03", status: "completed" as const };
+    render(<LearnerHome view={homeView({ lessons: [lessonOne, completed, review] })} actions={actions} />);
     expect(screen.queryByText(/Tháng này bạn học thử để làm quen/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Tiến độ tháng" })).not.toBeInTheDocument();
+    const progress = screen.getByRole("region", { name: "Tiến độ tháng" });
+    expect(within(progress).getByText("Tháng học thử. Tiến độ bắt đầu tính từ 01/12.")).toBeInTheDocument();
+    expect(progress.querySelector('[data-home-metric="lessons"]')).toHaveTextContent("1/2");
+    expect(progress.querySelector('[data-home-metric="reviews"]')).toHaveTextContent("1/1");
+    expect(progress.querySelector('[data-home-metric="attendance"]')).toHaveTextContent("—");
+    expect(progress.querySelector('[data-home-metric="points"]')).toHaveTextContent("Điểm huy hiệu");
     expect(screen.getByText(/Gợi ý học thử/)).toBeInTheDocument();
     // The learner is not told to wait: lesson 1 is offered as a catch-up lesson.
     expect(screen.queryByText(/Bạn sẽ bắt đầu học từ ngày/)).not.toBeInTheDocument();
