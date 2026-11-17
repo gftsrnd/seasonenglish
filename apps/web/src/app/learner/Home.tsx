@@ -123,6 +123,7 @@ export function LevelUpCelebration({
   onClose: () => void | Promise<void>;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const adjustmentRef = useRef<HTMLElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const genuine = announcement.source !== "simulated";
   const isTopLevel = announcement.kind === "top-level-redirect";
@@ -130,7 +131,7 @@ export function LevelUpCelebration({
   const seasonUp = announcement.kind === "season-up";
   useEffect(() => {
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeRef.current?.focus();
+    (adjustmentRef.current ?? closeRef.current)?.focus();
     return () => previousFocusRef.current?.focus();
   }, []);
   const handleDialogKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
@@ -159,18 +160,19 @@ export function LevelUpCelebration({
   if (adjusted) return <div className="modal-backdrop" role="presentation" onClick={(event) => {
     if (event.currentTarget === event.target) void onClose();
   }}>
-    <section className="dialog level-adjustment-dialog" role="dialog" aria-modal="true" aria-labelledby="level-adjustment-title" tabIndex={-1} onKeyDown={handleDialogKeyDown}>
+    <section ref={adjustmentRef} className="dialog level-adjustment-dialog" role="dialog" aria-modal="true" aria-labelledby="level-adjustment-title" tabIndex={-1} onKeyDown={handleDialogKeyDown}>
       <div className="level-adjustment-close">
         <ModalCloseButton ref={closeRef} label="Đóng hộp thoại" iconOnly onClick={() => void onClose()} />
       </div>
-      <div className="card flat level-adjustment-result">
-        <span className="level-adjustment-emblem"><Sprout className="celebration-icon" aria-hidden="true" /></span>
+      <div className="level-adjustment-result">
+        {announcement.level ? <span className="badge lvl level-adjustment-emblem">{announcement.level}<span className="sr-only"> · Mức mới</span></span> : null}
         <h2 id="level-adjustment-title">Trình độ mới của bạn</h2>
-        {announcement.level ? <span className="badge lvl">Mức {announcement.level}</span> : null}
         {!genuine ? <span className="badge">Mô phỏng</span> : null}
       </div>
-      {announcement.reason ? <div className="level-adjustment-reason"><Notice><b>Nhận xét của Vận hành</b><br />{announcement.reason}</Notice></div> : null}
-      <p className="small muted level-adjustment-rule">{announcement.rule ?? "Lộ trình lên mức bắt đầu lại. Kết quả cũ vẫn có trong lịch sử."}</p>
+      <div className="level-adjustment-copy">
+        {announcement.reason ? <p className="level-adjustment-reason"><b>Nhận xét của Vận hành</b><br />{announcement.reason}</p> : null}
+        <p className="small muted level-adjustment-rule">{announcement.rule ?? "Lộ trình lên mức bắt đầu lại. Kết quả cũ vẫn có trong lịch sử."}</p>
+      </div>
       <div className="row modal-actions"><Button variant="primary" onClick={() => void onClose()}>Tiếp tục học</Button></div>
     </section>
   </div>;

@@ -677,14 +677,15 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .placement-retake-reason textarea:focus { box-shadow: inset 0 0 0 2px var(--primary); }
 .modal-backdrop > .dialog.level-adjustment-dialog { width: min(440px, calc(100vw - 24px)); max-width: 440px; }
 .level-adjustment-close { position: sticky; top: 0; z-index: 1; }
-.level-adjustment-close .modal-close { position: absolute; inset-block-start: 8px; inset-inline-end: 8px; display: grid; width: 36px; height: 36px; place-items: center; padding: 0; }
-.level-adjustment-dialog .level-adjustment-result { display: grid; justify-items: center; gap: 8px; padding: 16px 28px; border: 1px solid var(--primary-line); background: var(--primary-soft); text-align: center; }
+.level-adjustment-dialog:focus { outline: none; }
+.level-adjustment-close .modal-close { position: absolute; inset-block-start: 8px; inset-inline-end: 0; display: grid; width: 36px; height: 36px; place-items: center; padding: 0; }
+.level-adjustment-result { display: grid; justify-items: center; gap: 10px; padding: 10px 30px 16px; text-align: center; }
 .level-adjustment-result h2 { margin: 0; font-size: 1.22rem; }
-.level-adjustment-emblem { display: grid; width: 46px; height: 46px; place-items: center; border-radius: 50%; background: var(--surface); color: var(--primary); }
-.level-adjustment-result .level-adjustment-emblem > .celebration-icon { width: 27px; height: 27px; margin: 0; color: inherit; }
-.level-adjustment-dialog .level-adjustment-reason { margin-top: 12px; overflow-wrap: anywhere; text-align: left; }
-.level-adjustment-dialog .level-adjustment-rule { margin: 12px 0 0; text-align: center; text-wrap: balance; }
-.level-adjustment-dialog .modal-actions { justify-content: center; margin-top: 14px; }
+.level-adjustment-result .level-adjustment-emblem { display: grid; width: 64px; height: 64px; place-items: center; border: 1px solid var(--primary-line); border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-size: 1.5rem; font-weight: 700; }
+.level-adjustment-copy { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; text-align: left; overflow-wrap: anywhere; }
+.level-adjustment-copy > p { margin: 0; }
+.level-adjustment-reason > b { display: inline-block; margin-bottom: 2px; }
+.level-adjustment-dialog .modal-actions { justify-content: flex-end; margin-top: 14px; }
 .placement-retake-confirm .modal-actions { flex-wrap: nowrap; gap: 8px; }
 .placement-retake-confirm .modal-actions button { height: 34px; min-height: 34px !important; white-space: nowrap; }
 .test-page .prep-check{gap:8px;min-height:32px}
