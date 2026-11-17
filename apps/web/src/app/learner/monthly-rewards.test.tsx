@@ -101,6 +101,26 @@ describe("badge certificate link", () => {
   });
 });
 
+describe("Level adjustment modal", () => {
+  it.each(["genuine", "simulated"] as const)("shows the decision and identifies simulation for %s", async (source) => {
+    const onClose = vi.fn();
+    render(<LevelUpCelebration displayName="Minh Anh" onClose={onClose} announcement={{
+      kind: "level-adjustment", points: 0, nextPoints: 5000, seasonName: "Mùa xuân", level: "A1",
+      source, reason: "Cần củng cố kỹ năng nghe."
+    }} />);
+    const dialog = screen.getByRole("dialog", { name: "Trình độ đã được cập nhật" });
+    const close = within(dialog).getByRole("button", { name: "Đóng hộp thoại" });
+    expect(close).toHaveFocus();
+    expect(within(dialog).getByText("Mức A1")).toBeInTheDocument();
+    expect(within(dialog).getByText("Cần củng cố kỹ năng nghe.")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Thông báo thật")).toBeNull();
+    expect(Boolean(within(dialog).queryByText("Mô phỏng"))).toBe(source === "simulated");
+    expect(within(dialog).getAllByRole("button")).toHaveLength(2);
+    await userEvent.setup().click(within(dialog).getByRole("button", { name: "Tiếp tục học" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("Season congratulation modal", () => {
   it("congratulates the learner on the new Season and closes once", async () => {
     const onClose = vi.fn();

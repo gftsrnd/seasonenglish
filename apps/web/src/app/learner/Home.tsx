@@ -6,7 +6,7 @@ import { Button, Modal, Notice, PageTitle, Progress, AppLink, learnerLessonLabel
 import { buildMonthlyTeachingCalendar } from "@e4s/domain/monthly";
 import { LevelReadinessCard } from "./LevelReadiness.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
-import { InfoTitle, useCompactUi } from "../shared/CompactUi.js";
+import { InfoTitle, ModalCloseButton, useCompactUi } from "../shared/CompactUi.js";
 import { OPEN_LEARNER_HOME_GUIDE } from "../shared/AppGuide.js";
 import type { LearnerComplaintView } from "@e4s/contracts";
 
@@ -153,11 +153,29 @@ export function LevelUpCelebration({
       first.focus();
     }
   };
+  if (adjusted) return <div className="modal-backdrop" role="presentation" onClick={(event) => {
+    if (event.currentTarget === event.target) void onClose();
+  }}>
+    <section className="dialog level-adjustment-dialog" role="dialog" aria-modal="true" aria-label="Trình độ đã được cập nhật" tabIndex={-1} onKeyDown={handleDialogKeyDown}>
+      <div className="row between">
+        <h2>Trình độ đã được cập nhật</h2>
+        <ModalCloseButton ref={closeRef} label="Đóng hộp thoại" onClick={() => void onClose()} />
+      </div>
+      <div className="row">
+        {announcement.level ? <span className="badge lvl">Mức {announcement.level}</span> : null}
+        {!genuine ? <span className="badge">Mô phỏng</span> : null}
+      </div>
+      {announcement.reason ? <p><b>Lý do của Vận hành</b><br />{announcement.reason}</p> : null}
+      <p className="small muted">{announcement.rule ?? "Đường lên mức bắt đầu lại theo trình độ mới. Kết quả cũ vẫn được lưu."}</p>
+      <div className="row modal-actions"><Button variant="primary" onClick={() => void onClose()}>Tiếp tục học</Button></div>
+    </section>
+  </div>;
+
   return <div className="modal-backdrop" role="presentation">
-    <section className="dialog wide" role="dialog" aria-modal="true" aria-label={adjusted ? "Thông báo cập nhật trình độ" : seasonUp ? "Chúc mừng lên Season mới" : "Chúc mừng lên mức"} data-testid="modal.level-up-celebration" data-modal={seasonUp ? "season-up-celebration" : "level-up-celebration"} tabIndex={-1} onKeyDown={handleDialogKeyDown}>
+    <section className="dialog wide" role="dialog" aria-modal="true" aria-label={seasonUp ? "Chúc mừng lên Season mới" : "Chúc mừng lên mức"} data-testid="modal.level-up-celebration" data-modal={seasonUp ? "season-up-celebration" : "level-up-celebration"} tabIndex={-1} onKeyDown={handleDialogKeyDown}>
       <div className="row between"><span className={`badge ${genuine ? "ok" : ""}`}>{genuine ? "Thông báo thật" : "Mô phỏng"}</span><button ref={closeRef} type="button" aria-label="Đóng" onClick={() => void onClose()}>Đóng</button></div>
-      <div className="card flat" style={{ marginTop: 12, textAlign: "center" }}><div className="eyebrow">{announcement.seasonName}</div>{adjusted ? null : <Sprout className="celebration-icon" aria-hidden="true" />}<h2>{adjusted ? "Trình độ đã được cập nhật" : isTopLevel ? "Bạn đã đạt mức cao nhất" : `Chúc mừng ${displayName}!`}</h2>{seasonUp ? <p className="badge lvl">Mùa học {announcement.seasonLevel ?? "—"}/4{announcement.level ? ` · ${announcement.level}` : ""}</p> : announcement.level ? <p className="badge lvl">Mức {announcement.level}</p> : null}</div>
-      <p>{adjusted ? "Bài học và điều kiện thi lên mức áp dụng theo trình độ hiện tại của bạn." : isTopLevel ? "Bạn đã hoàn thành chặng CEFR cao nhất trong lộ trình hiện tại." : seasonUp ? `Bạn vừa lên ${announcement.seasonName}. Huy hiệu đã nhận được giữ mãi; điểm trong trình độ này tiếp tục được cộng cho Season tiếp theo.` : "Bạn vừa mở một cột mốc mới trong hành trình học tiếng Anh."}</p>
+      <div className="card flat" style={{ marginTop: 12, textAlign: "center" }}><div className="eyebrow">{announcement.seasonName}</div><Sprout className="celebration-icon" aria-hidden="true" /><h2>{isTopLevel ? "Bạn đã đạt mức cao nhất" : `Chúc mừng ${displayName}!`}</h2>{seasonUp ? <p className="badge lvl">Mùa học {announcement.seasonLevel ?? "—"}/4{announcement.level ? ` · ${announcement.level}` : ""}</p> : announcement.level ? <p className="badge lvl">Mức {announcement.level}</p> : null}</div>
+      <p>{isTopLevel ? "Bạn đã hoàn thành chặng CEFR cao nhất trong lộ trình hiện tại." : seasonUp ? `Bạn vừa lên ${announcement.seasonName}. Huy hiệu đã nhận được giữ mãi; điểm trong trình độ này tiếp tục được cộng cho Season tiếp theo.` : "Bạn vừa mở một cột mốc mới trong hành trình học tiếng Anh."}</p>
       {announcement.reason ? <p><b>Lý do của Vận hành</b><br />{announcement.reason}</p> : null}
       <Notice tone="info"><b>Quy tắc công nhận:</b> {announcement.rule ?? (isTopLevel ? "Mức cao nhất được giữ lại trong hồ sơ của bạn." : "Mức mới chỉ hiển thị sau khi người vận hành duyệt bằng chứng học tập.")}</Notice>
       <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}><button type="button" onClick={() => void onClose()}>Đóng</button><button className="btn-primary" type="button" onClick={() => void onClose()}>Tiếp tục học</button></div>
