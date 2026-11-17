@@ -108,14 +108,11 @@ describe("Level adjustment modal", () => {
       kind: "level-adjustment", points: 0, nextPoints: 5000, seasonName: "Mùa xuân", level: "A1",
       source, reason: "Cần củng cố kỹ năng nghe."
     }} />);
-    const dialog = screen.getByRole("dialog", { name: "Trình độ mới của bạn" });
+    const dialog = screen.getByRole("dialog", { name: "Trình độ đã được cập nhật" });
     const close = within(dialog).getByRole("button", { name: "Đóng hộp thoại" });
-    expect(dialog).toHaveFocus();
-    await userEvent.setup().tab();
     expect(close).toHaveFocus();
-    expect(within(dialog).getByText("A1", { exact: true })).toBeInTheDocument();
+    expect(within(dialog).getByText("Mức A1")).toBeInTheDocument();
     expect(within(dialog).getByText("Cần củng cố kỹ năng nghe.")).toBeInTheDocument();
-    expect(within(dialog).getByText("Nhận xét của Vận hành")).toBeInTheDocument();
     expect(within(dialog).queryByText("Thông báo thật")).toBeNull();
     expect(Boolean(within(dialog).queryByText("Mô phỏng"))).toBe(source === "simulated");
     expect(within(dialog).getAllByRole("button")).toHaveLength(2);

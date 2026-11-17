@@ -138,6 +138,6 @@ export function InfoTitle({ as: Tag = "h3", title, tip, label, className }: { as
  * (CSS `.modal-close`), "× Đóng" on desktop and a 32px × square on
  * phones/tablets, same neutral style everywhere.
  */
-export function ModalCloseButton({ onClick, disabled, label = "Đóng", iconOnly, ref }: { onClick: () => void; disabled?: boolean; label?: string; iconOnly?: boolean; ref?: Ref<HTMLButtonElement> }) {
-  return <button ref={ref} type="button" className="btn-sm modal-close" aria-label={label} title={label} disabled={disabled} onClick={onClick}>{iconOnly ? <X size={16} strokeWidth={2.2} aria-hidden="true" /> : <ActionLabel icon={X} label="Đóng" />}</button>;
+export function ModalCloseButton({ onClick, disabled, label = "Đóng", ref }: { onClick: () => void; disabled?: boolean; label?: string; ref?: Ref<HTMLButtonElement> }) {
+  return <button ref={ref} type="button" className="btn-sm modal-close" aria-label={label} title={label} disabled={disabled} onClick={onClick}><ActionLabel icon={X} label="Đóng" /></button>;
 }
