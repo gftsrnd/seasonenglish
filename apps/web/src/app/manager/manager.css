@@ -668,6 +668,14 @@
   outline-offset: 3px;
 }
 
+.manager-purge-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 @media (max-width: 480px) {
   .manager-reminder-toolbar { align-items: stretch; flex-direction: column; }
   .manager-reminder-toolbar .btn-primary { width: 100%; }
