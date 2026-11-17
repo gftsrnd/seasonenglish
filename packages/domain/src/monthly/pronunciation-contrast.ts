@@ -1,6 +1,7 @@
 import type { CefrLevel } from "@e4s/contracts";
+import { monthlyIpaPhonemes } from "./pronunciation-ipa.js";
 import { areLikelyHomophones, isPlausibleMinimalPair } from "../content/choice-quality.js";
-import { findMonthlyPronunciationCatalogItem, type MonthlyPronunciationCatalogItem } from "./pronunciation-catalog.js";
+import { findMonthlyPronunciationCatalogItem, monthlyPronunciationCatalog, type MonthlyPronunciationCatalogItem } from "./pronunciation-catalog.js";
 
 /**
  * Friday review listen-and-choose items (two per review): the learner hears one
@@ -26,6 +27,8 @@ export interface MonthlyPronunciationContrastRule {
   kind: MonthlyPronunciationContrastKind;
   /** Ending phenomena: the inflection is stripped to find the stem the partner must share. */
   ending?: "s" | "ed";
+  /** The two phonemes that must substitute for one another in a target-pair exercise. */
+  targetPairs?: readonly (readonly [string, string])[];
   /** One-line instruction for the AI, with an illustration of a valid pair. */
   guidance: string;
 }
@@ -42,9 +45,25 @@ export function monthlyPronunciationExampleText(word: string): string {
 
 const PHRASE_FORMS = new Set(["phrase", "contraction_s", "ed_link"]);
 
-export function monthlyPronunciationContrastRule(cefr: CefrLevel, sound: { ipa: string; catalogId?: string | undefined; examples?: ReadonlyArray<{ word: string }> }): MonthlyPronunciationContrastRule {
+type ContrastSound = { ipa: string; catalogId?: string | undefined };
+export function monthlyPronunciationContrastRule(cefr: CefrLevel, sound: ContrastSound & { examples?: ReadonlyArray<{ word: string }> }, monthSounds: readonly ContrastSound[] = [sound]): MonthlyPronunciationContrastRule {
   const item: MonthlyPronunciationCatalogItem | undefined = findMonthlyPronunciationCatalogItem(cefr, sound);
   const beginner = cefr === "A1" || cefr === "A2";
+  const activePhonemes = new Set(monthSounds.flatMap(target => soundPhonemes(cefr, target)));
+  if (beginner) {
+    const ownPhonemes = soundPhonemes(cefr, sound);
+    const targetPairs = monthlyPronunciationCatalog(cefr).flatMap(target => {
+      const left = target.sides?.[0] ?? [];
+      const right = target.sides?.[1] ?? [];
+      return left.flatMap((phoneme, index) => {
+        const counterpart = right[index];
+        if (!counterpart || !activePhonemes.has(phoneme) || !activePhonemes.has(counterpart)) return [];
+        return ownPhonemes.includes(phoneme) || ownPhonemes.includes(counterpart) ? [[phoneme, counterpart] as const] : [];
+      });
+    });
+    if (targetPairs.length) return { kind: "minimal_pair", targetPairs,
+      guidance: "a true minimal pair with one of these monthly substitutions (" + targetPairs.map(([first, second]) => "/" + first + "/ ↔ /" + second + "/").join(", ") + "). If no common minimal partner is suitable, a verified pair of real common words may differ by two phonemes, including that same target substitution. Describe a two-phoneme fallback as a sound contrast only" };
+  }
   // Legacy sounds outside the catalog keep the phoneme minimal-pair rule.
   if (beginner || !item || item.type === "phoneme" || item.type === "pair") {
     return { kind: "minimal_pair", guidance: "a true minimal pair: the example word and a real, common word that sounds exactly the same except that the target sound is replaced by one neighbouring sound (same number of sounds, all other sounds identical and in the same order, e.g. ship / sheep, fan / van; never pairs such as event / segment, bat / box or sheet / shift, and never two spellings of the same sound such as team / teem, week / weak or meet / meat: homophones sound identical)" };
@@ -70,13 +89,19 @@ export function monthlyPronunciationContrastRule(cefr: CefrLevel, sound: { ipa: 
 
 /**
  * Why `partner` is not a valid contrast for the taught `example` under `rule`,
- * or undefined when it is. `ipa` is used only by the strict minimal-pair rule.
+ * or undefined when it is. Explicit target pairs use verified IPA for both options.
  */
 export function monthlyPronunciationContrastIssue(rule: MonthlyPronunciationContrastRule, example: string, partner: string, ipa?: { first?: string | undefined; second?: string | undefined }): string | undefined {
   const a = monthlyPronunciationExampleText(example);
   const b = monthlyPronunciationExampleText(partner);
   if (!a || !b) return "both options are needed";
   if (rule.kind === "minimal_pair") {
+    if (a.toLocaleLowerCase("en-US") === b.toLocaleLowerCase("en-US")) return "the two options are the same word";
+    if (rule.targetPairs?.length) {
+      if (!/^[a-z]+$/iu.test(a) || !/^[a-z]+$/iu.test(b) || !ipa?.first || !ipa.second) return "both options must be real single words with verified IPA";
+      if (areLikelyHomophones(a, b)) return "the two options are homophones";
+      return monthlyTargetContrastDistance(rule.targetPairs, ipa.first, ipa.second) ? undefined : "the two words must differ by one or two phonemes, including the specified monthly target substitution";
+    }
     if (areLikelyHomophones(a, b)) return `"${a}" and "${b}" sound exactly the same (homophones), so the learner cannot hear a difference; the partner must differ in the target sound`;
     return isPlausibleMinimalPair(a, b, ipa) ? undefined : "not a minimal pair: the two words must sound exactly the same except for the target sound, replaced by one neighbouring sound";
   }
@@ -104,6 +129,31 @@ export function monthlyPronunciationContrastIssue(rule: MonthlyPronunciationCont
   if (commonSuffix(x, y) >= 2 && letterDistance(x, y) <= 2) return undefined;
   return "the partner must be the same word or stem with only the target feature changed";
 }
+
+/** Distance of a shortest pronunciation alignment that includes the configured substitution. */
+export function monthlyTargetContrastDistance(pairs: readonly (readonly [string, string])[], first: string, second: string): 1 | 2 | undefined {
+  const segments = (ipa: string) => monthlyIpaPhonemes(ipa).filter(segment => !["ˈ", "ˌ", "."].includes(segment));
+  const a = segments(first);
+  const b = segments(second);
+  const distance = tokenDistance(a, b);
+  if (distance !== 1 && distance !== 2) return undefined;
+  const aligned = a.some((left, i) => b.some((right, j) =>
+    pairs.some(([x, y]) => (left === x && right === y) || (left === y && right === x))
+    && 1 + tokenDistance(a.slice(0, i), b.slice(0, j)) + tokenDistance(a.slice(i + 1), b.slice(j + 1)) === distance));
+  return aligned ? distance : undefined;
+}
+
+/** Common contrast words with reviewed British IPA, usable when outside the month's approved word pools. */
+export const MONTHLY_REVIEW_COMMON_CONTRAST_IPA: Readonly<Record<string, string>> = {
+  easy: "/ˈiːzi/", dizzy: "/ˈdɪzi/", busy: "/ˈbɪzi/",
+  seat: "/siːt/", sit: "/sɪt/", feel: "/fiːl/", fill: "/fɪl/", leave: "/liːv/", live: "/lɪv/",
+  sheep: "/ʃiːp/", ship: "/ʃɪp/", heat: "/hiːt/", hit: "/hɪt/", eat: "/iːt/", it: "/ɪt/",
+  cheap: "/tʃiːp/", chip: "/tʃɪp/", green: "/ɡriːn/", grin: "/ɡrɪn/", sleep: "/sliːp/", slip: "/slɪp/",
+  week: "/wiːk/", wick: "/wɪk/", bed: "/bed/", bad: "/bæd/", pen: "/pen/", pan: "/pæn/",
+  men: "/men/", man: "/mæn/", set: "/set/", sat: "/sæt/", bet: "/bet/", bat: "/bæt/",
+  send: "/send/", sand: "/sænd/", see: "/siː/", she: "/ʃiː/", sip: "/sɪp/", sell: "/sel/", shell: "/ʃel/",
+  three: "/θriː/", tree: "/triː/", thank: "/θæŋk/", tank: "/tæŋk/", thin: "/θɪn/", tin: "/tɪn/", then: "/ðen/", den: "/den/"
+};
 
 /**
  * Common A1–A2 minimal pairs by target phoneme: [word with the target sound,

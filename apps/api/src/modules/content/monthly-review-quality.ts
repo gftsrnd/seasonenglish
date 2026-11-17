@@ -1,4 +1,4 @@
-import { containsVietnameseLearnerText, isExerciseTranslationKey, isVietnameseTranslationKey, monthlyMinimalPairPartners, monthlyMinimalPairRepairAdvice, monthlyPronunciationContrastIssue, monthlyPronunciationContrastRule, monthlyPronunciationExampleText, normalizeWeeklyReviewReadAloud, type MonthlyCurriculumContract, type MonthlyDaySpec, type MonthlyPronunciationContrastRule } from "@e4s/domain";
+import { containsVietnameseLearnerText, isExerciseTranslationKey, isVietnameseTranslationKey, monthlyMinimalPairPartners, monthlyMinimalPairRepairAdvice, MONTHLY_REVIEW_COMMON_CONTRAST_IPA, monthlyTargetContrastDistance, monthlyPronunciationContrastIssue, monthlyPronunciationContrastRule, monthlyPronunciationExampleText, normalizeWeeklyReviewReadAloud, type MonthlyCurriculumContract, type MonthlyDaySpec, type MonthlyPronunciationContrastRule } from "@e4s/domain";
 import type { MonthlyQualityFinding } from "./monthly-quality.js";
 
 /**
@@ -119,10 +119,7 @@ export function evaluateMonthlyReviewSections(
   // what the pair contrasts depends on the roadmap item (pronunciation-contrast).
   const weekExamples = weekPronunciationExamples(contract, day);
   const exampleWords = [...new Set(weekExamples.map((example) => example.text))];
-  const ipaByWord = new Map<string, string>([
-    ...contract.coreTerms.map((term) => [normalize(term.word), term.ipa] as const),
-    ...contract.sounds.flatMap((sound) => sound.examples.map((example) => [spoken(example.word), example.ipa] as const))
-  ].filter(([word, ipa]) => Boolean(word) && typeof ipa === "string" && /\p{L}/u.test(ipa) && !/X/u.test(ipa)));
+  const ipaByWord = pronunciationIpaByWord(contract);
   for (const [index, item] of minimalPairs.entries()) {
     const label = `speaking item ${text(item.id) || index + 1}`;
     const options = strings(item.options);
@@ -147,13 +144,20 @@ export function evaluateMonthlyReviewSections(
     // Round 2: A1–A2 pairs differ by exactly one sound (IPA when both are known,
     // else spelling); B1+ phenomena use the contrast their roadmap item implies.
     const partner = taught.text === spoken(first) ? second : first;
-    const issue = monthlyPronunciationContrastIssue(taught.rule, taught.text, partner, { first: ipaByWord.get(taught.text), second: ipaByWord.get(spoken(partner)) });
+    const ipa = { first: ipaByWord.get(taught.text), second: ipaByWord.get(spoken(partner)) };
+    const issue = monthlyPronunciationContrastIssue(taught.rule, taught.text, partner, ipa);
+    const distance = taught.rule.targetPairs && ipa.first && ipa.second ? monthlyTargetContrastDistance(taught.rule.targetPairs, ipa.first, ipa.second) : undefined;
+    if (!issue && distance === 2 && /\bminimal pairs?\b|cặp(?:\s+âm)?\s+tối thiểu/iu.test(text(item.explanation))) {
+      add("severe", "speaking", "MONTHLY_REVIEW_MINIMAL_PAIR_NOT_MINIMAL", label + ": describe these two words as a sound contrast; they differ by two phonemes.");
+    }
     if (issue) {
       // December 2026: "team / teem" came back six times on a generic message. Name the item, say why,
       // and give real partners (or another taught example of the same sound when the word has none).
       const sound = contract.sounds.find((candidate) => candidate.id === taught.soundId);
       const advice = sound ? monthlyMinimalPairRepairAdvice(contract.cefr, sound, taught.text, weekExamples.filter((example) => example.soundId === taught.soundId).map((example) => example.text)) : "";
-      add("severe", "speaking", "MONTHLY_REVIEW_MINIMAL_PAIR_NOT_MINIMAL", taught.rule.kind === "minimal_pair"
+      add("severe", "speaking", "MONTHLY_REVIEW_MINIMAL_PAIR_NOT_MINIMAL", taught.rule.targetPairs
+        ? label + ': "' + first + " / " + second + '" is not a valid sound contrast: ' + issue + ". Use " + taught.rule.guidance + ". Update options, answer, audioText and explanation together."
+        : taught.rule.kind === "minimal_pair"
         ? `${label}: "${first} / ${second}" is not a minimal pair${/homophones/u.test(issue) ? ` (${issue})` : ""}: the two words must sound exactly the same except for the week's target sound ${taught.soundLabel}, replaced by one neighbouring sound (e.g. ship / sheep, think / sink, fan / van; never homophones such as team / teem or week / weak). Keep the week example word when it has a real partner and replace the partner word with a real, common English word. ${advice} Update options, answer, audioText and explanation together`.trim()
         : `${label}: "${first} / ${second}" is not a valid contrast for ${taught.soundLabel}: ${issue}. Keep the week example "${taught.text}" and use as partner ${taught.rule.guidance}`);
     }
@@ -234,7 +238,7 @@ export function weekPronunciationExamples(contract: MonthlyCurriculumContract, d
   return contract.sounds.flatMap((sound) => {
     const examples = sound.examples.filter((example) => ids.has(example.id));
     if (!examples.length) return [];
-    const rule = monthlyPronunciationContrastRule(contract.cefr, sound);
+    const rule = monthlyPronunciationContrastRule(contract.cefr, sound, contract.sounds);
     const soundLabel = `${sound.label} ${sound.ipa}`.trim();
     return examples.map((example) => ({ soundId: sound.id, soundLabel, text: spoken(example.word), rule })).filter((example) => Boolean(example.text));
   });
@@ -245,12 +249,36 @@ export function weekPronunciationExamples(contract: MonthlyCurriculumContract, d
  * examples to copy and what the partner option must be (A1–A2 minimal pairs,
  * B1+ the contrast the roadmap item implies).
  */
+function pronunciationIpaByWord(contract: MonthlyCurriculumContract): Map<string, string> {
+  return new Map([
+    ...contract.coreTerms.map((term) => [normalize(term.word), term.ipa] as const),
+    ...contract.sounds.flatMap((sound) => sound.examples.map((example) => [spoken(example.word), example.ipa] as const)),
+    ...Object.entries(MONTHLY_REVIEW_COMMON_CONTRAST_IPA)
+  ].filter(([word, ipa]) => Boolean(word) && typeof ipa === "string" && /\p{L}/u.test(ipa) && !/X/u.test(ipa)));
+}
+
 export function monthlyReviewSpeakingContrastGuidance(contract: MonthlyCurriculumContract, day: MonthlyDaySpec): string {
   const bySound = new Map<string, WeekPronunciationExample[]>();
   for (const example of weekPronunciationExamples(contract, day)) bySound.set(example.soundId, [...(bySound.get(example.soundId) ?? []), example]);
+  const ipaByWord = pronunciationIpaByWord(contract);
   return [...bySound.values()].map((examples) => {
     const base = `${examples[0]!.soundLabel}: one option is one of [${examples.map((example) => `"${example.text}"`).join(", ")}] copied exactly; the other option is ${examples[0]!.rule.guidance}`;
     if (examples[0]!.rule.kind !== "minimal_pair") return base;
+    const targetPairs = examples[0]!.rule.targetPairs;
+    if (targetPairs) {
+      const suggestions = examples.flatMap(example => {
+        const firstIpa = ipaByWord.get(example.text);
+        if (!firstIpa || !/^[a-z]+$/u.test(example.text)) return [];
+        const matches = [...ipaByWord].flatMap(([partner, secondIpa]) => {
+          if (!/^[a-z]+$/u.test(partner) || partner === example.text) return [];
+          const distance = monthlyTargetContrastDistance(targetPairs, firstIpa, secondIpa);
+          return distance ? [{ partner, distance }] : [];
+        });
+        const preferred = matches.find(match => match.distance === 1) ?? matches[0];
+        return preferred ? [example.text + " / " + preferred.partner + (preferred.distance === 2 ? " (two-phoneme sound contrast)" : "")] : [];
+      });
+      return base + (suggestions.length ? "; verified options: " + suggestions.join(", ") : "; use only words in the approved teaching resources with verified IPA");
+    }
     // Name the real partners up front so the model does not reach for a homophone (team / teem).
     const sound = contract.sounds.find((candidate) => candidate.id === examples[0]!.soundId);
     const known = sound ? monthlyMinimalPairPartners(contract.cefr, sound, examples.map((example) => example.text)) : [];

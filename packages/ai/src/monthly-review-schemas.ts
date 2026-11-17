@@ -65,14 +65,14 @@ const speakingItemJsonSchema = {
   type: "object", additionalProperties: true, required: ["id", "prompt"],
   properties: {
     id: str(), prompt: str(),
-    audioText: str("minimal pair: the option the app speaks"),
-    options: { type: "array", items: { type: "string" }, description: "minimal pair only: EXACTLY 2 strings" },
-    answer: str("minimal pair only: equal to audioText"),
-    explanation: str("minimal pair only"),
+    audioText: str("sound contrast: the option the app speaks"),
+    options: { type: "array", items: { type: "string" }, description: "listen-and-choose only: EXACTLY 2 strings" },
+    answer: str("listen-and-choose only: equal to audioText"),
+    explanation: str("for listen-and-choose, explain the sound difference; call a two-phoneme fallback a sound contrast"),
     passage: str("read-aloud only: one workplace sentence"),
     requiredWords: { type: "array", items: { type: "string" }, description: "free response only: 4-6 week core words" },
     minRequiredWords: { type: "integer", description: "free response only: 2" },
-    questionTranslation: str("minimal pair only"), answerTranslation: str("minimal pair only")
+    questionTranslation: str("listen-and-choose only"), answerTranslation: str("listen-and-choose only")
   }
 };
 
@@ -100,7 +100,7 @@ export const monthlyReviewExercisesOutputJsonSchema = {
             items: { type: "array", minItems: 3, maxItems: 3, items: choiceItemJsonSchema(false), description: "exactly 3 comprehension questions; every item has variants" }
           }
         },
-        speaking: itemsSection(speakingItemJsonSchema, "exactly 4 items: 2 minimal pairs, 1 read-aloud, 1 free response")
+        speaking: itemsSection(speakingItemJsonSchema, "exactly 4 items: 2 sound contrasts, 1 read-aloud, 1 free response")
       }
     }
   }

@@ -80,6 +80,27 @@ describe("Friday review listen-and-choose items (pronunciation roadmap, round 3)
     expect(options[0]!.message).toContain("the week example \"name\"");
   });
 
+
+  it("allows an approved two-phoneme fallback only when it changes the monthly contrast", () => {
+    const contract = plan("A1");
+    contract.sounds = [
+      { id: "long-i", ipa: "/iː/", label: "Long vowel", catalogId: "phoneme-iː", examples: ex("long-i", [["easy", "/ˈiːzi/"], ["sheep", "/ʃiːp/"], ["cheese", "/tʃiːz/"]]) },
+      { id: "short-i", ipa: "/ɪ/", label: "Short vowel", catalogId: "phoneme-ɪ", examples: ex("short-i", [["ship", "/ʃɪp/"], ["it", "/ɪt/"], ["ink", "/ɪŋk/"]]) }
+    ];
+    const day = { ...contract.daySpecs[0]!, reviewPronunciationExampleIds: contract.sounds.flatMap(sound => sound.examples.map(example => example.id)) };
+    const issues = (partner: string, explanation = "Listen for the stressed vowels.") => evaluateMonthlyReviewSections(contract, day, 5, new Map([
+      ["speaking", { content: { items: [pair("s1", ["easy", partner], { explanation }), pair("s2", ["sheep", "ship"]), ...tail("It is easy to ship cheese.") ] } }]
+    ])).severe.filter(finding => finding.component === "speaking");
+
+    expect(issues("dizzy")).toEqual([]);
+    expect(issues("easy")).toHaveLength(1);
+    expect(issues("cheese")).toHaveLength(1);
+    expect(issues("ink")).toHaveLength(1);
+    expect(issues("dizzi")).toHaveLength(1);
+    expect(issues("dizzy", "This is a minimal pair.")).toHaveLength(1);
+    expect(monthlyReviewSpeakingContrastGuidance(contract, day)).toContain("easy / dizzy");
+  });
+
   it("A1: phoneme items keep the strict minimal-pair rule (A1 N20 meeting / meaning, hear / hat rejected)", () => {
     expect(codes(speakingFindings("A1", [pair("s1", ["name", "game"]), pair("s2", ["hat", "cat"]), ...tail("I am happy to hear the meeting news.")]))).toEqual([]);
     const bad = speakingFindings("A1", [pair("s1", ["meeting", "meaning"]), pair("s2", ["hear", "hat"]), ...tail("I am happy to hear the meeting news.")]);
