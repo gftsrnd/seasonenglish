@@ -103,6 +103,31 @@ describe("placement retake request: bell → support page → 'Xin thi lại' �
     expect(within(dialog).getByText("(không có file ghi âm)")).toBeVisible();
   });
 
+  it.each([false, true])("shows inline skill scores and listening playback with transcript, compact %s", async (compact) => {
+    const user = userEvent.setup();
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: compact, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    try {
+      const listening = original.definition.sections.find(section => section.code === "listening")!;
+      const withListening: NonNullable<AssessmentPlacementRetakeRequestView["original"]> = {
+        ...original,
+        definition: { ...original.definition, sections: original.definition.sections.map(section => section.code === "listening" ? {
+          ...section, groups: [{ ...listening.groups[0]!, stimulus: { type: "audio_script", audioSrc: "/recording.wav", lines: [{ speaker: "Anna", text: "The office closes at noon." }] } }]
+        } : section) }
+      };
+      mockHistory(view({ original: withListening, target: { attemptId: "a1", title: "Test đầu vào", availableUntil: null } }));
+      await user.click(await screen.findByRole("button", { name: "Xem bài làm" }));
+      const dialogElement = screen.getByRole("dialog", { name: "Bài đầu vào đã nộp" });
+      const dialog = within(dialogElement);
+      expect(dialog.queryByRole("heading", { name: "Điểm theo 4 kỹ năng" })).not.toBeInTheDocument();
+      expect(dialog.getByText(/^Nghe ·/u)).toBeVisible();
+      expect(dialog.queryByText(/Nhật ký xử lý|Nhật ký cảnh báo|Chấm lại/u)).not.toBeInTheDocument();
+      await user.click(dialog.getByText(/^Nghe ·/u));
+      await user.click(dialog.getByText("Group listening", { exact: true }));
+      expect(dialogElement.querySelector("audio[controls]")).toHaveAttribute("src", "/recording.wav");
+      expect(dialog.getByText(/The office closes at noon/u)).toBeVisible();
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it("shows the review answer key and keeps an aggregate-only reading score without inventing skipped items", async () => {
     const user = userEvent.setup();
     const reading = original.definition.sections.find(section => section.code === "reading")!;

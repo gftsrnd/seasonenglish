@@ -871,7 +871,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       && definition.blueprint.key !== PLACEMENT_RETAKE_ASSESSMENT_KEY ? definition.blueprint : null;
     return {
       original: attempt && originalDefinition ? {
-        definition: publicAssessmentDefinition(originalDefinition, { hideListeningScript: true }),
+        definition: publicAssessmentDefinition(originalDefinition),
         objectiveAnswerKeys: Object.fromEntries(originalDefinition.sections
           .filter(section => section.code === "listening" || section.code === "reading")
           .map(section => [section.code, Object.fromEntries(section.groups.flatMap(group => group.tasks.flatMap(task => task.correctAnswer ? [[task.key, task.correctAnswer]] : [])))])),
@@ -1599,7 +1599,7 @@ function validEvidence(task: StoredAssessmentTask, evidence: AssessmentEvidenceT
 }
 
 function assessmentView(definition: PublishedAssessmentRecord, attempt: AssessmentAttemptRecord | null): AssessmentView {
-  const publicDefinition = publicAssessmentDefinition(definition.blueprint);
+  const publicDefinition = publicAssessmentDefinition(definition.blueprint, { hideListeningScript: definition.kind === "placement" });
   if (!attempt) return { definition: publicDefinition, screenState: "preparation", attempt: null };
   const screenState = attempt.status === "in_progress"
     ? attempt.currentSection ?? "submitting"

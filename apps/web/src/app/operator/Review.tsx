@@ -424,12 +424,17 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
   type ReviewTask = { taskKey: string; title?: string; prompt?: string; maxScore?: number; minWords?: number; maxWords?: number; options?: Array<{ value: string; label: string }>; correctAnswer?: string | null };
   const renderStimulus = (stimulus: { type: string; text?: string; audioSrc?: string; lines?: Array<{ speaker: string; text: string }>; headers?: string[]; rows?: string[][] } | undefined) => {
     if (!stimulus) return null;
+    const transcript = stimulus.lines?.length
+      ? <p className="operator-stimulus"><span className="operator-stimulus-label">Transcript:</span> {stimulus.lines.map((line, index) => <span key={`${line.speaker}-${index}`}><i>{line.speaker}:</i> {line.text}{index < stimulus.lines!.length - 1 ? " " : ""}</span>)}</p>
+      : stimulus.text ? <p className="operator-stimulus"><span className="operator-stimulus-label">{stimulus.type === "audio_script" ? "Transcript:" : "Nội dung:"}</span> {stimulus.text}</p> : null;
     if (learnerView && stimulus.type === "audio_script") {
-      return stimulus.audioSrc ? <audio className="operator-stimulus" controls preload="none" src={stimulus.audioSrc} aria-label="Đoạn nghe của đề đầu vào" />
-        : <p className="small muted">Đoạn nghe hiện không có bản phát lại.</p>;
+      return <div className="learner-placement-review-audio">
+        {stimulus.audioSrc ? <audio className="operator-stimulus" controls preload="none" src={stimulus.audioSrc} aria-label="Đoạn nghe của đề đầu vào" />
+          : <p className="small muted">Đoạn nghe hiện không có bản phát lại.</p>}
+        {transcript}
+      </div>;
     }
-    if (stimulus.lines?.length) return <p className="operator-stimulus"><span className="operator-stimulus-label">Transcript:</span> {stimulus.lines.map((line, index) => <span key={`${line.speaker}-${index}`}><i>{line.speaker}:</i> {line.text}{index < stimulus.lines!.length - 1 ? " " : ""}</span>)}</p>;
-    if (stimulus.text) return <p className="operator-stimulus"><span className="operator-stimulus-label">Nội dung:</span> {stimulus.text}</p>;
+    if (transcript) return transcript;
     if (stimulus.headers?.length && stimulus.rows?.length) return <div className="operator-stimulus-table"><div className="table-wrap"><table><thead><tr>{stimulus.headers.map(header => <th key={header}>{header}</th>)}</tr></thead><tbody>{stimulus.rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={`${index}-${cellIndex}`}>{cell}</td>)}</tr>)}</tbody></table></div></div>;
     return null;
   };

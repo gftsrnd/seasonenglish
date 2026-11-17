@@ -3040,7 +3040,6 @@ body:has(.app-operator) #modal > .dialog > .row {
   line-height: 1.35;
 }
 
-.operator-detail-modal > .learner-original-placement-dialog { max-height: 80dvh; }
 .learner-original-placement-dialog > .row:first-child {
   position: sticky;
   top: -16px;

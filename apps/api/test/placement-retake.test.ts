@@ -231,6 +231,8 @@ describe("learner placement lifecycle with a granted retake", () => {
     expect(response.statusCode, response.body).toBe(201);
     expect(retakeDb.startPlacementRetakeAttempt).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ learnerId: LEARNER_ID, assessmentVersionId: RETAKE_VERSION_ID, firstSection: "listening" }));
     expect(response.json().attempt.id).toBe(RETAKE_ATTEMPT_ID);
+    expect(response.json().definition.sections[0].groups[0].stimulus).toEqual({ type: "audio_script", audioSrc: expect.any(String) });
+    expect(JSON.stringify(response.json().definition)).not.toContain("correctAnswer");
     expect(response.json().placementRetake).toEqual(expect.objectContaining({ status: "used", retakeAttemptId: RETAKE_ATTEMPT_ID }));
     expect(repositories.assessments.resumePlacementAttempt).not.toHaveBeenCalled();
     expect(repositories.assessments.startAttempt).not.toHaveBeenCalled();
@@ -301,7 +303,7 @@ describe("learner retake request ('Xin thi lại') and the Operator's decision",
     expect(keys.listening[first.key]).toEqual(first.correctAnswer);
     expect(keys.writing).toBeUndefined();
     expect(keys.speaking).toBeUndefined();
-    expect(response.json().original.definition.sections[0].groups[0].stimulus).toEqual({ type: "audio_script", audioSrc: expect.any(String) });
+    expect(response.json().original.definition.sections[0].groups[0].stimulus).toMatchObject({ type: "audio_script", audioSrc: expect.any(String), lines: expect.arrayContaining([expect.objectContaining({ speaker: expect.any(String), text: expect.any(String) })]) });
     expect(repositories.assessments.findAttempt).toHaveBeenCalledExactlyOnceWith(LEARNER_ID, OLD_ATTEMPT_ID);
     await server.close();
   });
