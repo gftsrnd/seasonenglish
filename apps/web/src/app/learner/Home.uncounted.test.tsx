@@ -29,12 +29,14 @@ const actions = { navigate: () => undefined } as unknown as LearnerCallbacks;
 describe("uncounted (học thử) month on Home", () => {
   it("explains that the month does not count and keeps the lessons open with catch-up", () => {
     render(<LearnerHome view={homeView()} actions={actions} />);
-    expect(screen.getByText("Tháng này bạn học thử để làm quen. Tiến độ, điểm danh và thi tháng bắt đầu tính từ tháng sau (01/12).")).toBeInTheDocument();
+    expect(screen.getByText("Tháng này bạn học thử để làm quen. Tiến độ, điểm danh, thi tháng và xét lên mức bắt đầu tính từ tháng sau (01/12).")).toBeInTheDocument();
     // The learner is not told to wait: lesson 1 is offered as a catch-up lesson.
     expect(screen.queryByText(/Bạn sẽ bắt đầu học từ ngày/)).not.toBeInTheDocument();
     expect(document.querySelector('[data-home-block="primary"] a[href="/lesson/lesson-1"]')).not.toBeNull();
     // No attendance or absence counting is shown.
     expect(document.querySelector('[data-home-metric="absence"]')).toBeNull();
+    expect(screen.getByRole("gridcell", { name: "2026-11-30" })).toHaveTextContent("Miễn thi");
+    expect(screen.queryByRole("link", { name: "Bài thi tháng" })).toBeNull();
   });
 
   it("shows the exam exemption on the monthly landing page", () => {

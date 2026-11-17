@@ -83,7 +83,7 @@ describe("NotificationBell", () => {
     await user.click(await screen.findByRole("button", { name: /1 chưa đọc/ }));
     const dialog = screen.getByRole("dialog", { name: "Thông báo" });
     expect(await within(dialog).findByText("Tháng này bạn học thử để làm quen")).toBeInTheDocument();
-    expect(within(dialog).getByText("Tiến độ, điểm danh và thi tháng bắt đầu tính từ tháng sau (01/12).")).toBeInTheDocument();
+    expect(within(dialog).getByText("Tiến độ, điểm danh, thi tháng và xét lên mức bắt đầu tính từ tháng sau (01/12).")).toBeInTheDocument();
   });
 
   it("tells the learner about a new badge and a new Season", async () => {

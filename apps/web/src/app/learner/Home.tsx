@@ -62,7 +62,7 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
       </div>}
       {view.monthlyEligibility ? <AbsenceChip absenceDays={view.monthlyEligibility.absenceDays} maxAbsences={view.monthlyEligibility.maxAbsences} /> : null}
     </section> : null}
-    {monthly ? <MonthlyCalendar month={monthly} lessons={view.lessons} actions={actions} /> : null}
+    {monthly ? <MonthlyCalendar month={monthly} lessons={view.lessons} actions={actions} uncounted={Boolean(view.monthlyUncounted)} /> : null}
     <section className="grid cols-2" style={{ marginTop: 16, alignItems: "stretch", gridAutoRows: "1fr", minWidth: 0 }} data-home-block="activities" aria-label="Hoạt động tháng">
       <AppLink className={`tile ${!monthlyPreparation && (view.coach.turnsToday ?? 0) > 0 ? "mint" : "peach"}`} style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/coach" navigate={actions.navigate}><ActivityIcon /><span className="t">Season AI Coach</span><span className={`s${monthlyPreparation ? " home-tile-desc" : ""}`}>{monthlyPreparation ? "Luyện theo trình độ đã được duyệt trong khi chờ bộ bài tháng." : `Lượt hợp lệ hôm nay ${view.coach.turnsToday ?? 0}/${view.coach.targetTurns}`}</span></AppLink>
       <AppLink className="tile mint" style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/monthly" navigate={actions.navigate}><BookOpen aria-hidden="true" /><span className="t">Bài tháng</span><span className="s home-tile-desc">{monthlyPreparation ? "Xem trạng thái chuẩn bị lộ trình tháng." : "Xem lịch bài học, bài ôn và bài thi tháng."}</span></AppLink>
@@ -258,7 +258,7 @@ const monthlyCalendarKinds = {
   exam: "Bài thi tháng"
 } as const;
 
-function MonthlyCalendar({ month, lessons, actions }: { month: NonNullable<LearnerHomeView["month"]>; lessons: LearnerHomeView["lessons"]; actions: LearnerCallbacks }) {
+function MonthlyCalendar({ month, lessons, actions, uncounted }: { month: NonNullable<LearnerHomeView["month"]>; lessons: LearnerHomeView["lessons"]; actions: LearnerCallbacks; uncounted: boolean }) {
   const compact = useMediaQuery("(max-width: 700px)");
   const [selectedWeek, setSelectedWeek] = useState<{ month: string; index: number }>();
   const days = buildMonthlyTeachingCalendar(month.month, month.holidays);
@@ -285,7 +285,7 @@ function MonthlyCalendar({ month, lessons, actions }: { month: NonNullable<Learn
       <strong aria-live="polite">{shortDate(visibleDays[0]!.date)} – {shortDate(visibleDays[6]!.date)}</strong>
       <button type="button" className="btn" aria-label="Tuần sau" disabled={week === lastWeek} onClick={() => setSelectedWeek({ month: month.month, index: week + 1 })}><ChevronRight size={18} aria-hidden="true" /></button>
     </div> : <ul className="monthly-learner-calendar-legend" aria-label="Chú thích lịch">
-      {Object.entries(monthlyCalendarKinds).map(([kind, label]) => <li className={kind} key={kind}>{label}</li>)}
+      {Object.entries(monthlyCalendarKinds).map(([kind, label]) => <li className={kind} key={kind}>{uncounted && kind === "exam" ? "Miễn thi" : label}</li>)}
     </ul>}
     <div className={`monthly-learner-calendar${compact ? " monthly-learner-calendar--agenda" : ""}`} role={compact ? "list" : "grid"} aria-label={compact ? "Lịch học trong tuần" : `Lịch học tháng ${formatMonth(month.month)}`}>
         {!compact && weekdays.map(label => <b className="monthly-learner-calendar-heading" role="columnheader" key={label}>{label}</b>)}
@@ -304,7 +304,9 @@ function MonthlyCalendar({ month, lessons, actions }: { month: NonNullable<Learn
           const status = lesson?.status === "completed" ? "Đã học" : lesson?.lock ? "Chưa mở" : lesson?.status === "in_progress" ? "Đang học" : lesson ? "Có thể học" : "Chưa có bài";
           return <div className={`monthly-learner-calendar-day ${kind}`} role={dayRole} aria-label={date} aria-current={date === month.systemDate ? "date" : undefined} key={date}>
             {dayLabel}
-            {exam ? <AppLink href="/monthly" navigate={actions.navigate} className="monthly-learner-calendar-link">Bài thi tháng</AppLink>
+            {exam ? (uncounted
+              ? <span className="monthly-learner-calendar-label">Miễn thi</span>
+              : <AppLink href="/monthly" navigate={actions.navigate} className="monthly-learner-calendar-link">Bài thi tháng</AppLink>)
               : !lesson && (rest || holiday) ? <span className="monthly-learner-calendar-label" title={holiday}>{holiday ? "Nghỉ lễ" : "Nghỉ"}</span>
                 : <>
                   {lesson && !lesson.lock ? <AppLink href={`/lesson/${lesson.id}`} navigate={actions.navigate} className="monthly-learner-calendar-link" title={lesson.title}>{activity}</AppLink>
