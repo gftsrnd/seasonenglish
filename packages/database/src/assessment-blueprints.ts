@@ -251,12 +251,12 @@ export function normalizeLevelFormQuestionPrompts(stored: StoredAssessmentDefini
   };
 }
 
-export function publicAssessmentDefinition(stored: StoredAssessmentDefinition): AssessmentDefinitionView {
+export function publicAssessmentDefinition(stored: StoredAssessmentDefinition, options: { hideListeningScript?: boolean } = {}): AssessmentDefinitionView {
   // Operator-only data (answer keys, grader package, plan snapshot) is removed
   // here. For a monthly final v2.0 the listening script is part of the grader
   // package too (GEN18): learners only receive the reviewed audio file.
   const { monthlyExam, monthlyScope: _monthlyScope, ...definition } = normalizeLevelFormQuestionPrompts(stored);
-  const hideScript = Boolean(monthlyExam);
+  const hideScript = Boolean(monthlyExam) || options.hideListeningScript;
   return {
     ...definition,
     sections: definition.sections.map((section) => ({

@@ -844,7 +844,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const definition = attempt ? await definitionForAttempt(repositories.assessments, attempt) : null;
     return {
       original: attempt && definition ? {
-        definition: publicAssessmentDefinition(definition.blueprint),
+        definition: publicAssessmentDefinition(definition.blueprint, { hideListeningScript: true }),
         attempt: attemptView(attempt),
         submittedAt: attempt.submittedAt?.toISOString() ?? null,
         feedback: state.original?.feedback ?? null

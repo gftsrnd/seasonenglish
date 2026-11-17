@@ -230,7 +230,7 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
           kind: item.requestKind === "retake" ? "Yêu cầu thi lại" : "Kháng nghị",
           content: <><b>{view.title}</b><p className="small muted">{item.learnerName} · {appealLabels[item.kind]}</p><p>{item.reason}</p>
             {item.resolution ? <p className="small muted">Phản hồi: {item.resolution}</p> : null}</>,
-          status: item.overdue ? <Badge tone="danger">Quá hạn xử lý</Badge> : <StatusBadge status={item.status} />,
+          status: item.overdue ? <Badge tone="warn">Quá hạn xử lý</Badge> : <StatusBadge status={item.status} />,
           date: item.createdAt,
           action: <>
             <Link to={requestSearch("appeals", listStatus, open ? undefined : item.id, listPage)} className="btn-sm"
