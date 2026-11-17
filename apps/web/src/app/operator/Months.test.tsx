@@ -435,6 +435,20 @@ describe("Operator monthly planner", () => {
     });
   });
 
+
+  it("confirms generation with the calendar lesson number and date instead of its storage slot", async () => {
+    const user = userEvent.setup();
+    const onGenerateDay = vi.fn().mockResolvedValue({ lesson: { title: "Lesson 15", parts: [] }, report: { severe: [], light: [], contractVersion: 2 } });
+    const { container } = render(<ToastProvider><OperatorMonths month="2026-12" todayMonth="2026-11" cefr="B1" busy={false}
+      overview={{ systemDate: "2026-11-16", monthWindow, brief: null, frameworks: [approvedFramework] }}
+      actions={monthActions({ onGenerateDay }) as never} /></ToastProvider>);
+    const cell = container.querySelector<HTMLElement>("#monthly-day-2026-12-24")!;
+    await user.click(within(cell).getByRole("button", { name: "Sinh bài 15" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Sinh" }));
+    expect(onGenerateDay).toHaveBeenCalledWith("framework-b1", 18);
+    expect(await screen.findByText("Đã sinh bài 15 · 24/12.")).toBeInTheDocument();
+  });
+
   it.each(["new", "review"] as const)("shows a spinner and blocks duplicate %s generation until the request settles", async (kind) => {
     const user = userEvent.setup();
     let finish!: (value: any) => void;
