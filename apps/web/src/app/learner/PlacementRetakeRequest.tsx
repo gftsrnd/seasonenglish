@@ -53,7 +53,7 @@ export function PlacementRetakeRequest({ api = learnerApiClient, onSent, onViewC
       <button type="button" className="btn-primary" onClick={() => setConfirming(true)}>Xin thi lại</button>
       {confirming ? <Modal
         title="Gửi yêu cầu thi lại?"
-        description="Nếu yêu cầu được duyệt, Vận hành sẽ chốt xếp lớp sau khi bạn nộp bài thi lại."
+        description="Bạn chỉ được thi lại một lần. Kết quả thi lại là kết quả cuối cùng."
         className="placement-retake-confirm"
         dismissOnBackdrop={!busy && !reason.trim()}
         onClose={() => { if (!busy) setConfirming(false); }}

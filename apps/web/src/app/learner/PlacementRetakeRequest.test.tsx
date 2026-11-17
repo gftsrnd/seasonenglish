@@ -37,7 +37,9 @@ describe("placement retake request: bell → support page → 'Xin thi lại' �
     await user.type(screen.getByRole("textbox", { name: /Lý do/ }), "   ");
     expect(screen.getByRole("button", { name: "Gửi yêu cầu" })).toBeDisabled();
     await user.type(screen.getByRole("textbox", { name: /Lý do/ }), "Tôi muốn thử lại.  ");
-    expect(screen.getByRole("dialog")).toHaveTextContent(/chốt xếp lớp/i);
+    const confirmation = screen.getByRole("dialog", { name: "Gửi yêu cầu thi lại?" });
+    expect(within(confirmation).getByRole("heading", { name: "Gửi yêu cầu thi lại?" })).toBeInTheDocument();
+    expect(confirmation).toHaveTextContent("Bạn chỉ được thi lại một lần. Kết quả thi lại là kết quả cuối cùng.");
     await user.click(screen.getByRole("button", { name: "Hủy" }));
     expect(createPlacementRetakeRequest).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Xin thi lại" }));

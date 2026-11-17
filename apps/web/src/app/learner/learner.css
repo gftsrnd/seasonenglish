@@ -669,6 +669,7 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .placement-retake-heading h2 { margin: 0; }
 .modal-backdrop > .dialog.placement-retake-confirm { --compact-dialog-width: 380px; box-sizing: border-box; width: min(380px, calc(100vw - 24px)); max-width: 380px; max-height: 80dvh; }
 .placement-retake-confirm > .row:first-child { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.placement-retake-confirm > .row:first-child h2 { font-weight: 700; }
 .placement-retake-reason { display: grid; gap: 6px; }
 .placement-retake-reason label { font-size: 14px; line-height: 1.35; margin: 0; }
 .placement-retake-reason textarea { width: 100%; min-height: 56px; field-sizing: content; }
