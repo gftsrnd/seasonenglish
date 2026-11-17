@@ -58,6 +58,7 @@ describe("Monthly final review screen", () => {
 
     const onSave = vi.fn().mockResolvedValue(undefined);
     const second = render(<ModalProvider><MonthlyFinalReview draft={monthlyFinalView({ audio: true })} onClose={vi.fn()} onSave={onSave} /></ModalProvider>);
+    expect(screen.getByText("Audio chờ nghe soát")).toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: "Đã nghe soát audio" }));
     await user.click(screen.getByRole("button", { name: "Lưu bản nháp" }));
     await waitFor(() => expect(onSave.mock.calls[0]![0].review.audioReviewed).toBe(true));

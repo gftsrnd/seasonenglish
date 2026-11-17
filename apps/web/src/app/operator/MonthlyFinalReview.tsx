@@ -18,7 +18,6 @@ const STATUS_COPY: Record<MonthlyFinalExamStatus, { label: string; tone: string;
 };
 /** A published exam shows its real state, whatever the re-run checks say under today's rules. */
 const PUBLISHED_COPY = { label: "Đã phát hành", tone: "ok", description: "Đề đang dùng cho các lượt thi tháng." };
-const AUDIO_LABEL: Record<string, string> = { SCRIPT_ONLY: "Chưa có audio", REVIEWED: "Audio đã nghe soát" };
 
 /** Plain-language summary of a failed check: what is missing and where, without rule codes. */
 export function plainMonthlyFinalIssue(check: MonthlyFinalCheckView): { area: string; text: string } {
@@ -90,6 +89,8 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
   const contentDirty = JSON.stringify(current.sections) !== savedSections || current.title !== draft.blueprint.title;
   const listeningGroups = draft.blueprint.sections.find((section) => section.code === "listening")?.groups ?? [];
   const savedAudioReady = listeningGroups.length > 0 && listeningGroups.every((group) => group.stimulus?.type === "audio_script" && Boolean(group.stimulus.audioSrc?.trim()));
+  const savedAudioReviewed = exam?.audio.status === "REVIEWED";
+  const audioLabel = savedAudioReviewed ? "Audio đã nghe soát" : savedAudioReady ? "Audio chờ nghe soát" : "Chưa có audio";
   const answerKey = useMemo(() => new Map(current.sections.flatMap((section) => section.groups.flatMap((group) => group.tasks.map((task) => [task.key, task.correctAnswer ?? ""] as const)))), [current]);
   const reviewDirty = Boolean(exam) && (
     audioReviewed !== (exam!.audio.status === "REVIEWED")
@@ -145,7 +146,9 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
     : draft.stale ? "Khung tháng đã thay đổi sau khi sinh đề — hãy sinh lại."
     : dirty ? "Còn thay đổi chưa lưu."
     : exam.status === "DRAFT" || exam.status === "INPUT_ERROR" ? "Sửa hết các việc còn thiếu trước khi phát hành."
-    : exam.audio.status !== "REVIEWED" ? "Chưa có audio: thêm audio, nghe soát và tick trước khi phát hành."
+    : !savedAudioReviewed ? savedAudioReady
+      ? "Hãy nghe soát hai bản nghe rồi xác nhận trước khi phát hành."
+      : "Thêm audio cho hai bản nghe, nghe soát và xác nhận trước khi phát hành."
     : exam.status !== "READY" ? "Còn mục cần người xác nhận."
     : null;
 
@@ -171,7 +174,7 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
     onDraftChange={setCurrent}
   >
     <section className="card flat monthly-final-review" aria-label="Kiểm duyệt đề thi tháng">
-      <header className="row between"><div><b>Trạng thái đề</b>{phone && published && status.description ? <InfoTip text={status.description} label="Trạng thái đề là gì?" /> : null} <span className={`badge ${status.tone}`} data-testid="monthly-final-status" data-status={published ? "PUBLISHED" : exam?.status ?? "DRAFT"}>{status.label}</span> <span className={`badge ${exam?.audio.status === "REVIEWED" ? "ok" : "warn"}`}>{AUDIO_LABEL[exam?.audio.status ?? "SCRIPT_ONLY"] ?? exam?.audio.status}</span></div>
+      <header className="row between"><div><b>Trạng thái đề</b>{phone && published && status.description ? <InfoTip text={status.description} label="Trạng thái đề là gì?" /> : null} <span className={`badge ${status.tone}`} data-testid="monthly-final-status" data-status={published ? "PUBLISHED" : exam?.status ?? "DRAFT"}>{status.label}</span> <span className={`badge ${savedAudioReviewed ? "ok" : "warn"}`}>{audioLabel}</span></div>
         {onPublish && !published ? <button type="button" className="btn btn-primary" disabled={Boolean(publishBlocker) || publishing} title={publishBlocker ?? undefined} onClick={() => void publish()}>{publishing ? "Đang phát hành…" : "Duyệt & phát hành"}</button> : null}</header>
       {phone && published ? null : <p className="small muted">{status.description}{publishBlocker && !published ? ` ${publishBlocker}` : ""}</p>}
       {exam ? <p className="xs muted">{exam.framework.cefr} · tháng {exam.framework.month} · ngày thi {draft.examDate} · {exam.allocation.l} câu Nghe · {exam.allocation.r} câu Đọc · Viết · Nói · {exam.source === "ai" ? "AI sinh" : "Soạn tay"}</p> : null}
