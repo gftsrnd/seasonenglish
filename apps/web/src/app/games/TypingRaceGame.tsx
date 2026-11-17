@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { ContentImageView, GameAnswerInput, GameEvidenceEventInput } from "@e4s/contracts";
+import type { GameAnswerInput, GameEvidenceEventInput } from "@e4s/contracts";
 import { Delete, Volume2 } from "lucide-react";
 import { isTypingWord, normalize, prepareGameAttempt, TYPING_ROUND_SIZE, type FinishGame, type GameWord } from "./types.js";
 import { typingMaximum } from "@e4s/domain/engagement";
 import { useExperience } from "../../features/experience/Experience.js";
-import { ContentImage } from "../shared/media/ContentImage.js";
 import { GameFeedback } from "./GameFeedback.js";
 
 const keyboardRows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
@@ -20,10 +19,8 @@ const HELD_KEY_FALLBACK_MS = 1_000;
 // A click/tap has no hold of its own once released, so it shows a short press.
 const TAP_PRESS_MS = 160;
 
-export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, imageSetId, resolveImage }: {
+export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0 }: {
   words: GameWord[]; onFinish: FinishGame; attemptSeed?: number;
-  imageSetId?: string;
-  resolveImage?: ((setId: string, wordId: string) => Promise<ContentImageView>) | undefined;
 }) {
   const words = useMemo(() => prepareGameAttempt(source.filter(isTypingWord), attemptSeed).slice(0, TYPING_ROUND_SIZE), [attemptSeed, source]);
   const [index, setIndex] = useState(0);
@@ -191,28 +188,10 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, image
   }, []);
   if (!word) return <p className="muted">Bộ từ chưa đủ từ phù hợp cho Typing race.</p>;
   const noticeTone = notice.startsWith("Đúng") ? "is-success" : notice.startsWith("Chưa") ? "is-error" : notice.startsWith("Hết giờ") ? "is-warning" : "";
-  const imageUrl = word.imageUrl?.trim() ?? "";
-  const hasDirectImage = Boolean(imageUrl);
-  const loadImage = async (): Promise<ContentImageView> => {
-    if (hasDirectImage) {
-      return {
-        status: "available",
-        imageUrl,
-        alt: word.english,
-        attribution: word.imageAttribution ?? { creator: null, licence: "", licenceUrl: "", sourceUrl: imageUrl }
-      };
-    }
-    if (!imageSetId || !resolveImage) return { status: "unavailable" };
-    const resolved = await resolveImage(imageSetId, word.id);
-    if (resolved.status === "available" && typeof resolved.imageUrl === "string" && resolved.imageUrl.trim()) {
-      return { ...resolved, imageUrl: resolved.imageUrl.trim() };
-    }
-    return { status: "unavailable" };
-  };
   return <div className="game-runner" aria-busy={busy || undefined}>
     <div className="game-hud"><h2>Từ {index + 1}/{words.length}</h2><span>Điểm <strong>{score}/{typingMaximum(words.length)}</strong></span><span>Combo ×{combo}</span></div>
     <div ref={sceneRef} className="typing-scene" role="application" aria-label="Màn chơi Đua gõ từ" tabIndex={0}>
-      <div className="typing-clue">{hasDirectImage || imageSetId && resolveImage ? <div className="typing-clue-image"><ContentImage term={word.english} load={loadImage} unavailable="hide" /></div> : null}<button type="button" className="typing-clue-speak" aria-label={`Nghe ${word.english}`} onClick={() => speak(word.english)}><Volume2 className="game-control-icon" size={18} strokeWidth={2} aria-hidden="true" /></button><div className="typing-clue-copy"><span className="eyebrow">Gợi ý</span><strong>{word.vietnamese}</strong><small>{word.definition} · {target.replace(/\s/g, "").length} chữ cái{target.includes(" ") ? ", có dấu cách" : ""}</small></div></div>
+      <div className="typing-clue"><button type="button" className="typing-clue-speak" aria-label={`Nghe ${word.english}`} onClick={() => speak(word.english)}><Volume2 className="game-control-icon" size={18} strokeWidth={2} aria-hidden="true" /></button><div className="typing-clue-copy"><span className="eyebrow">Gợi ý</span><strong>{word.vietnamese}</strong><small>{word.definition} · {target.replace(/\s/g, "").length} chữ cái{target.includes(" ") ? ", có dấu cách" : ""}</small></div></div>
       <div className="typing-timer" role="progressbar" aria-label="Thời gian còn lại" aria-valuemin={0} aria-valuemax={maximum} aria-valuenow={Math.round(remaining)}><i key={index} data-testid="typing-timer-fill" className={busy || locked ? "is-paused" : undefined} style={{ "--typing-time-limit": `${maximum}ms`, "--typing-time-left": `${Math.max(0, Math.min(100, remaining / maximum * 100))}%` } as CSSProperties} /></div>
       <div className="typing-word" aria-label="Từ đang gõ" aria-live="polite">{target.split("").map((character, characterIndex) => { const value = typed[characterIndex]; const state = value === undefined ? "" : value === character ? "is-correct" : "is-wrong"; return <span data-testid="typing-character" className={state} key={characterIndex}>{character === " " ? " " : value?.toUpperCase() ?? ""}</span>; })}</div>
       <div className="virtual-keyboard" role="group" aria-label="Bàn phím ảo">{keyboardRows.map((row) => <div className="keyboard-row" key={row}>{row.split("").map((letter) => <button key={letter} {...keyProps(letter)}>{letter}</button>)}</div>)}<div className="keyboard-row keyboard-row--actions">{target.includes("-") ? <button aria-label="Dấu gạch nối" {...keyProps("-")}>-</button> : null}{target.includes("'") ? <button aria-label="Dấu nháy đơn" {...keyProps("'")}>′</button> : null}{target.includes(" ") ? <button {...keyProps(" ")}>Dấu cách</button> : null}<button aria-label="Xoá ký tự cuối" {...keyProps("backspace", "is-backspace")}><Delete className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" /></button></div></div>

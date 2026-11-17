@@ -304,8 +304,6 @@ body > .vocabulary-relation-modal .vocabulary-relation-audio-item small {
   font-weight: 400;
 }
 
-.typing-clue-image .content-image__source { display: none; }
-
 @media (max-width: 560px) {
   .content-image,
   .content-image--available img { width: 58px; min-width: 58px; height: 58px; }
@@ -327,6 +325,3 @@ body > .vocabulary-relation-modal .vocabulary-relation-audio-item small {
 }
 
 @keyframes content-image-spin { to { transform: rotate(360deg); } }
-
-.typing-clue-image .content-image { width: 100%; min-width: 0; }
-.typing-clue-image .content-image--available img { width: 100%; }

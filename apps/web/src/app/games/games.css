@@ -1110,8 +1110,6 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
   gap: 16px;
 }
 
-/* Flex, not fixed grid columns: when the picture is hidden its slot disappears
-   and the copy takes all remaining width instead of a 44px column. */
 .typing-clue {
   display: flex;
   align-items: center;
@@ -1120,7 +1118,6 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
   text-align: left;
 }
 
-.typing-clue > .typing-clue-image,
 .typing-clue > .typing-clue-speak { flex: none; }
 
 .typing-clue-copy {
@@ -1136,38 +1133,6 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
   min-width: 0;
   overflow-wrap: break-word;
   word-break: normal;
-}
-
-/* No picture for this word (custom topics, or a monthly word without an illustration): drop the empty frame. */
-.typing-clue-image:has(> .content-image--hidden) {
-  display: none !important;
-}
-
-.typing-clue-image {
-  display: grid;
-  place-items: center;
-  width: 72px;
-  height: 72px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--primary-soft);
-  color: var(--muted);
-  font-size: 1.6rem;
-}
-
-.typing-clue-image .game-image-placeholder {
-  color: var(--muted);
-}
-
-.typing-clue-image .game-image-placeholder--loading {
-  animation: game-spin .9s linear infinite;
-}
-
-.typing-clue-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 .typing-clue-speak {
@@ -1412,10 +1377,6 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
 
   .typing-clue { gap: 10px; }
 
-  .typing-clue-image {
-    width: 60px;
-    height: 60px;
-  }
 
   .virtual-keyboard button {
     min-width: 0;
@@ -1446,10 +1407,6 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
     gap: 8px;
   }
 
-  .typing-clue-image {
-    width: 52px;
-    height: 52px;
-  }
 
   .typing-clue > div > strong {
     font-size: 1rem;

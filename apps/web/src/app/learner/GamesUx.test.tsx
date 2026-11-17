@@ -106,6 +106,18 @@ describe("learner game visual and interaction regressions", () => {
     expect(screen.getByRole("link", { name: "Chơi Đua gõ từ" })).toBeInTheDocument();
   });
 
+  it("gives all six ready tiles the same background", () => {
+    const compatibleWords = { ...wordSet, words: [
+      ...wordSet.words,
+      { id: "word-4", english: "organize", vietnamese: "tổ chức", definition: "arrange things", partOfSpeech: "verb" as const }
+    ] };
+    render(<LearnerGames view={{ ...hubView, wordSet: compatibleWords }} actions={actions} />, { wrapper: ModalProvider });
+
+    const ready = within(screen.getByRole("region", { name: /Chọn trò chơi/ })).getAllByRole("link", { name: /^Chơi / });
+    expect(ready).toHaveLength(6);
+    expect(new Set(ready.map((tile) => tile.style.background)).size).toBe(1);
+  });
+
   it("keeps games visible but disables rounds the active word set cannot build", () => {
     const incompatibleWords: GameWordSetView = {
       ...wordSet,
@@ -121,7 +133,9 @@ describe("learner game visual and interaction regressions", () => {
     expect(screen.getByText("Cần ít nhất 3 từ có chữ cái chung.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Phân loại từ chưa sẵn sàng" })).toBeDisabled();
     expect(screen.getByText("Cần ít nhất 4 từ có thông tin từ loại.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Chơi Xếp chữ" })).toBeInTheDocument();
+    const ready = screen.getByRole("link", { name: "Chơi Xếp chữ" });
+    const locked = screen.getByRole("button", { name: "Ô chữ chưa sẵn sàng" });
+    expect(ready.style.background).not.toBe(locked.style.background);
   });
 
   it("shows a short game introduction with one goal and no more than three steps", () => {
@@ -238,32 +252,27 @@ describe("learner game visual and interaction regressions", () => {
   });
 
 
-  it("loads Typing race artwork through the game media resolver and keeps a fallback when unavailable", async () => {
-    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
-    vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    const resolveGameWordImage = vi.fn().mockResolvedValue({
-      status: "available",
-      imageUrl: "https://provider.invalid/image.jpg",
-      alt: "colleague",
-      attribution: { creator: null, licence: "CC0", licenceUrl: "https://creativecommons.org/publicdomain/zero/1.0/", sourceUrl: "https://commons.wikimedia.org/wiki/File:Colleague.jpg" }
-    });
+  it("plays Typing race without requesting vocabulary artwork", () => {
+    const resolveGameWordImage = vi.fn().mockResolvedValue({ status: "unavailable" });
     const typing = descriptor("typing", []);
     render(<LearnerGame descriptor={typing} wordSet={wordSet} result={null} actions={{ ...actions, resolveGameWordImage } as unknown as LearnerCallbacks} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Bắt đầu chơi" }));
 
-    expect(await screen.findByRole("img", { name: "colleague" })).toHaveAttribute("src", "https://provider.invalid/image.jpg");
-    expect(resolveGameWordImage).toHaveBeenCalledWith("word-set-1", expect.any(String));
+    const scene = screen.getByRole("application", { name: "Màn chơi Đua gõ từ" });
+    expect(resolveGameWordImage).not.toHaveBeenCalled();
+    expect(within(scene).getByText("Gợi ý")).toBeVisible();
+    expect(within(scene).getByRole("button", { name: /^Nghe / })).toBeEnabled();
   });
 
-  it("hides the Typing illustration rather than showing a broken or unrelated fallback", async () => {
-    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
-    vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    const resolveGameWordImage = vi.fn().mockResolvedValue({ status: "unavailable" });
-    render(<TypingRaceGame words={[wordSet.words[0]!]} imageSetId="word-set-1" resolveImage={resolveGameWordImage} onFinish={vi.fn()} />);
+  it("omits a Typing illustration even when the word already has an image URL", () => {
+    render(<TypingRaceGame words={[{ ...wordSet.words[0]!, imageUrl: "https://example.invalid/colleague.jpg" }]} onFinish={vi.fn()} />);
 
-    expect(await screen.findByTestId("hidden-content-image")).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: /Minh hoạ colleague/i })).not.toBeInTheDocument();
+    const scene = screen.getByRole("application", { name: "Màn chơi Đua gõ từ" });
+    expect(within(scene).getByText("đồng nghiệp")).toBeVisible();
+    expect(within(scene).getByText(/a co-worker · 9 chữ cái/)).toBeVisible();
+    expect(within(scene).queryByRole("img")).not.toBeInTheDocument();
+    expect(scene.querySelector(".typing-clue-image")).toBeNull();
   });
 
   it("ignores browser modifier shortcuts instead of typing into the answer", () => {
