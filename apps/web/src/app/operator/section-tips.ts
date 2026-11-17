@@ -13,7 +13,7 @@ export const OPERATOR_TIPS = {
   approved: "Mức hiện tại và điểm đầu vào của từng người. Bấm Đổi level để chuyển mức, Mục tiêu để đặt mục tiêu tháng, Hồ sơ để xem chi tiết.",
   inProgress: "Người học đã bắt đầu bài đầu vào nhưng chưa nộp. Bấm Hồ sơ để xem thông tin đã điền.",
   unassessed: "Người học chưa bắt đầu bài đầu vào. Bấm Hồ sơ để xem thông tin trước khi nhắc họ làm bài.",
-  retry: "Bài test cần làm lại. Có thể cho học viên làm lại bài đầu vào một lần trên đề thi lại đã phát hành.",
+  retry: "Bài test cần làm lại. Học viên có thể dùng đề thi lại đã phát hành nếu Vận hành duyệt.",
   // Bài học (tháng)
   monthsPage: "Thiết kế chủ đề, tài nguyên và lịch học theo tháng.",
   cycle: "Chọn tháng cần soạn. Tháng đã qua ghi Chỉ xem và không sửa được.",

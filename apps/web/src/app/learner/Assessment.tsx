@@ -727,7 +727,7 @@ function assessmentPendingCopy(view: AssessmentView): { title: string; detail: s
   if (status === "approved") return { title: "Test đầu vào đã được duyệt", detail: "Mức học sẽ được mở theo hồ sơ của bạn ngay khi hệ thống cập nhật." };
   const retake = view.placementRetake;
   if (retake?.status === "used" && retake.retakeAttemptId === view.attempt?.id) {
-    return { title: "Bài thi lại đã được nộp", detail: "Bạn đã dùng lượt thi lại duy nhất. Vận hành sẽ xem kết quả và xếp lớp cho bạn; đây là quyết định cuối cùng, không có lượt thi lại thêm." };
+    return { title: "Bài thi lại đã được nộp", detail: "Vận hành sẽ xem kết quả và chốt mức học của bạn." };
   }
   if (status === "needs_retry") {
     if (retake?.status === "granted") return { title: "Đã duyệt thi lại", detail: "Đề thi lại đang được chuẩn bị. Khi đề sẵn sàng, bạn sẽ làm lại bài đầu vào trên trang này." };

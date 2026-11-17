@@ -43,7 +43,7 @@ describe("placement retake notice", () => {
     };
     render(<LearnerAssessment view={view} actions={actions} />);
     expect(screen.getByRole("heading", { name: "Bài thi lại đã được nộp" })).toBeInTheDocument();
-    expect(screen.getByText(/Vận hành sẽ xem kết quả và xếp lớp cho bạn/)).toBeInTheDocument();
+    expect(screen.getByText(/Vận hành sẽ xem kết quả và chốt mức học của bạn/)).toBeInTheDocument();
     expect(screen.queryByText(/không cần làm lại/i)).not.toBeInTheDocument();
   });
 
