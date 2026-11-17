@@ -1304,7 +1304,7 @@ class LearningRepository {
           rule: announcementKind === "top-level-redirect"
             ? "Mức C1 là mức cao nhất của lộ trình hiện tại."
             : announcementKind === "level-adjustment"
-              ? "Đường lên mức bắt đầu lại theo trình độ mới. Kết quả trước đây vẫn được lưu trong lịch sử."
+              ? "Lộ trình lên mức bắt đầu lại. Kết quả cũ vẫn có trong lịch sử."
               : "Mức mới chỉ được công nhận sau khi người vận hành duyệt bằng chứng học tập."
         })
       }
