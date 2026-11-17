@@ -95,6 +95,7 @@ function Kpi({ label, value, detail, state, tip }: { label: string; value: strin
 }
 
 function LearnerRow({ learner, monthly, weekStartDate, onOpen }: { learner: ManagerProgressView["learners"][number]; monthly?: ManagerMonthlyLearnerView | undefined; weekStartDate?: string; onOpen?: (id: string) => void }) {
+  const compactCard = useMediaQuery("(max-width: 768px)");
   const missed = learner.missedDays ?? 0; const reward = rewardSeasonOfLearner(learner);
   const status = managerLearnerStatus(learner, weekStartDate);
   const badgeDetailText = (learner.earnedBadgeDetails ?? []).map((badge) => `${badge.label}: ${badge.description}`).join(" · ");
@@ -112,10 +113,46 @@ function LearnerRow({ learner, monthly, weekStartDate, onOpen }: { learner: Mana
     : <span className="muted">Chưa vào học</span>;
   const statusBadge = <Badge tone={status.startsWith("Bỏ ") ? "danger" : status === "Chưa có hoạt động gần đây" ? "warn" : "ok"}>{status}</Badge>;
   const rewardTitle = `Cấp ${reward.index + 1}/4: ${reward.name}${learner.cefr ? ` · ${learner.cefr}` : ""} · ${reward.pointsInLevel.toLocaleString("vi-VN")} điểm trong trình độ · tổng ${learner.rewardPoints.toLocaleString("vi-VN")}${badgeDetailText ? ` · ${badgeDetailText}` : ""}`;
+  const hasAttendance = monthly && monthly.maxAbsences + monthly.elapsedDays > 0;
+  const absence = hasAttendance ? `Vắng ${monthly.absenceDays}/${monthly.maxAbsences}` : undefined;
+  const attendanceDots = <WeekDots count={learner.sessionsThisWeek} {...(weekStartDate ? { weekStartDate } : {})} {...(learner.activityDatesThisWeek ? { activityDates: learner.activityDatesThisWeek } : {})} />;
+  const profile = <button className="btn-sm" type="button" aria-label={`Hồ sơ ${learner.learnerName}`} disabled={!onOpen} title={!onOpen ? "Chưa có API hồ sơ học viên dành cho Quản lý" : undefined} onClick={() => onOpen?.(learner.learnerId)}><ActionLabel icon={UserRound} label="Hồ sơ" /></button>;
+
+  if (compactCard) return <tr className="manager-progress-card-row" role="row">
+    <td colSpan={12}>
+      <article className="manager-progress-learner-card" aria-label={learner.learnerName}>
+        <header>
+          <b>{learner.learnerName}</b>
+          <Badge tone="primary">{learner.cefr}</Badge>
+          {profile}
+        </header>
+        <div className="manager-progress-card-status">{statusBadge}</div>
+        <dl className="manager-progress-card-metrics">
+          <div className="manager-progress-card-attendance">
+            <dt>Điểm danh</dt>
+            <dd>{absence ? <b>{absence}</b> : <span>{learner.sessionsThisWeek} buổi trong tuần</span>}</dd>
+          </div>
+          <div><dt>Bài tháng</dt><dd>{lessonCount}</dd></div>
+          <div><dt>Season</dt><dd>{coach}</dd></div>
+          <div><dt>{monthly ? "Thi tháng" : "Đánh giá"}</dt><dd>{assessment}</dd></div>
+        </dl>
+        <details>
+          <summary>Chi tiết tiến độ</summary>
+          <dl className="manager-progress-card-metrics">
+            <div><dt>Nhịp học trong tuần</dt><dd>{attendanceDots} {learner.sessionsThisWeek}</dd></div>
+            <div><dt>Điểm thưởng</dt><dd aria-label={rewardTitle}>{rewardPoints}</dd></div>
+            <div><dt>Điểm đầu vào</dt><dd>{formatScore(learner.placementScore)}</dd></div>
+            <div><dt>Gần nhất</dt><dd>{lastActivity}</dd></div>
+          </dl>
+        </details>
+      </article>
+    </td>
+  </tr>;
+
   return <tr className="manager-progress-record" role="row">
     <td className="manager-progress-name"><b>{learner.learnerName}</b></td>
     <td className="manager-progress-level"><Badge tone="primary">{learner.cefr}</Badge></td>
-    <td className="manager-progress-rhythm"><span className="manager-progress-compact-label">Nhịp học </span><WeekDots count={learner.sessionsThisWeek} {...(weekStartDate ? { weekStartDate } : {})} {...(learner.activityDatesThisWeek ? { activityDates: learner.activityDatesThisWeek } : {})} /> <span className="xs muted">{learner.sessionsThisWeek}</span>{monthly && monthly.maxAbsences + monthly.elapsedDays > 0 ? <div className="xs muted">Vắng {monthly.absenceDays}/{monthly.maxAbsences}</div> : null}</td>
+    <td className="manager-progress-rhythm"><span className="manager-progress-compact-label">Nhịp học </span>{attendanceDots} <span className="xs muted">{learner.sessionsThisWeek}</span>{absence ? <div className="xs muted">{absence}</div> : null}</td>
     <td className="manager-progress-lessons"><span className="manager-progress-compact-label">Bài tháng </span>{lessonCount}</td>
     <td className="manager-progress-desktop-detail">{coach}</td>
     <td className="manager-progress-desktop-detail">{assessment}</td>
@@ -135,7 +172,7 @@ function LearnerRow({ learner, monthly, weekStartDate, onOpen }: { learner: Mana
         </dl>
       </details>
     </td>
-    <td className="manager-progress-profile"><div className="row manager-row-actions"><button className="btn-sm" type="button" aria-label={`Hồ sơ ${learner.learnerName}`} disabled={!onOpen} title={!onOpen ? "Chưa có API hồ sơ học viên dành cho Quản lý" : undefined} onClick={() => onOpen?.(learner.learnerId)}><ActionLabel icon={UserRound} label="Hồ sơ" /></button></div></td>
+    <td className="manager-progress-profile"><div className="row manager-row-actions">{profile}</div></td>
   </tr>;
 }
 
@@ -167,7 +204,7 @@ export function managerLearnerStatus(learner: ManagerProgressView["learners"][nu
 export function buildManagerProgressCsv(view: ManagerProgressView, today = new Date()): string {
   const headers = ["Tên học viên", "Mức hiện tại", "Tình trạng học", "Mức rủi ro", "Số ngày không học", "Hoạt động gần nhất", "Số buổi gần đây", "Bài hoàn thành tháng", "Tổng bài tháng", "Lượt AI Coach", "Trạng thái đánh giá", "Điểm đánh giá", "Trạng thái bài đầu vào", "Cách chấm đầu vào", "Điểm đầu vào", "Điểm thưởng", "Huy hiệu"];
   const rows = [headers, ...view.learners.map((learner) => {
-    const missed = learner.missedDays ?? 0;
+  const missed = learner.missedDays ?? 0;
     const status = managerLearnerStatus(learner, view.weekStartDate, today);
     const riskLevel = status.startsWith("Bỏ ") ? "Cao" : status === "Chưa có hoạt động gần đây" ? "Trung bình" : "Bình thường";
     const practiceStatus = learner.weeklyPracticeStatus === "scored" ? "Đã chấm" : learner.weeklyPracticeStatus === "pending_review" ? "Chờ chấm" : "Chưa nộp";

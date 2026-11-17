@@ -550,3 +550,89 @@
   :root:root:root:root .manager-root .manager-kpi-grid > .kpi > .kpi-label .info-tip-button { width: 16px !important; height: 16px !important; min-width: 16px !important; min-height: 16px !important; }
   :root:root:root:root .manager-root .manager-kpi-grid > .kpi > .kpi-label .info-tip-button svg { width: 13px; height: 13px; }
 }
+
+@media (max-width: 768px) {
+  .manager-root .manager-progress-card-row,
+  .manager-root .manager-progress-card-row > td {
+    display: block;
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box;
+  }
+
+  .manager-root .manager-progress-card-row > td {
+    padding: 6px 0 !important;
+    border: 0;
+    background: transparent !important;
+  }
+
+  .manager-progress-learner-card {
+    display: grid;
+    min-width: 0;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+
+  .manager-progress-learner-card > header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .manager-progress-learner-card > header > b {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .manager-progress-learner-card :is(button, summary) { min-height: 36px; }
+
+  .manager-progress-card-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+  }
+
+  .manager-progress-card-metrics > div {
+    min-width: 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--surface-2);
+  }
+
+  .manager-progress-card-metrics dt {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .manager-progress-card-metrics dd {
+    margin: 2px 0 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .manager-progress-card-metrics dd .badge {
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .manager-progress-card-metrics > .manager-progress-card-attendance {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .manager-progress-card-attendance dd { white-space: nowrap; }
+  .manager-progress-learner-card summary { padding-block: 7px; cursor: pointer; }
+}
+
+@media (max-width: 420px) {
+  .manager-progress-card-metrics { grid-template-columns: minmax(0, 1fr); }
+}

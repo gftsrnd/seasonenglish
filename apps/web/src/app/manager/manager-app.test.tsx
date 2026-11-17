@@ -111,7 +111,8 @@ describe("new Manager app branch", () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
-  it("shows the learner's monthly absence allowance and appeal status in group progress", () => {
+  it.each([false, true])("shows monthly absence allowance and appeal status with compact layout %s", (compact) => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: compact, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
     render(<ManagerProgress view={progress} monthly={{
       organizationName: "GFT Demo", month: "2026-12", currentMonth: "2026-12", cefr: null, generatedAt: "2026-12-31",
       survey: { submissions: 0, ratingResponses: 0, withoutRatingQuestion: 0, unansweredRating: 0, average: null },
@@ -127,6 +128,12 @@ describe("new Manager app branch", () => {
     const row = screen.getByRole("row", { name: /Học viên Demo/ });
     expect(within(row).getByText("Vắng 8/5")).toBeInTheDocument();
     expect(within(row).getAllByText("Cần kháng nghị").length).toBeGreaterThan(0);
+    if (compact) {
+      expect(within(row).getByText("Điểm danh").parentElement).toHaveTextContent("Điểm danhVắng 8/5");
+      expect(within(row).getByText("Thi tháng").parentElement).toHaveTextContent("Thi thángCần kháng nghị");
+      expect(within(row).getByText("Season").parentElement).toHaveTextContent("Season0 /78");
+    }
+    vi.unstubAllGlobals();
   });
 
   it("shows Managers when a placement was scored manually", () => {
