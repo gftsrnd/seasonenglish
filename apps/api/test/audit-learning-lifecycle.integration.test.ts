@@ -150,6 +150,12 @@ describe("audited monthly learning lifecycle", () => {
     expect(await learnerMonthlyAccess(pool, deferred.id)).toMatchObject({ state: "uncounted", startDate: "2026-12-01" });
     expect(await learnerConsecutiveLearningAbsences(pool, deferred.id)).toBe(0);
     expect(await monthlyExamEligibility(pool, deferred.id)).toMatchObject({ effectiveDays: 0, absenceDays: 0, accessEligible: false, seasonTurnsRequired: 0 });
+    const review = await app.inject({ url: "/api/v1/assessment-reviews/overview", headers: { cookie: managerCookie } });
+    expect(review.statusCode, review.body).toBe(200);
+    expect(review.json()).toMatchObject({ placementTrial: { month: "2026-11", countsFrom: "2026-12-01", levels: ["A1"] } });
+    const approved = review.json().approvedLearners as Array<{ learnerId: string; trialCountsFrom?: string }>;
+    expect(approved.find(row => row.learnerId === deferred.id)?.trialCountsFrom).toBe("2026-12-01");
+    expect(approved.find(row => row.learnerId === active.id)?.trialCountsFrom).toBeUndefined();
   });
 
   it("uses the late complaint for its original exam across a month boundary and resumes the same attempt", async () => {

@@ -100,6 +100,7 @@ export interface ApprovedLearner {
   testId?: string | null;
   /** Staff exception open: the learner may take the level-up test now. */
   levelUpAllowed?: boolean;
+  trialCountsFrom?: string;
   placementRetake?: PlacementRetakeState;
 }
 

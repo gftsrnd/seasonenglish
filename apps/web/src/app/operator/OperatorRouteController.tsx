@@ -789,7 +789,11 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
         return;
       }
       if (!cefr) return;
-      void modal.prompt({ title: "Duyệt mức đầu vào", message: `Mức được duyệt: ${cefr}. Hãy ghi rõ lý do để lưu quyết định.`, label: "Lý do", confirmLabel: "Duyệt mức" })
+      const trial = data.placementTrial;
+      const trialNote = trial?.levels.includes(cefr)
+        ? ` Học viên có thể học thử tháng ${trial.month.slice(5, 7)}. Tiến độ, điểm danh, điều kiện dự thi và xét lên mức bắt đầu tính từ ${trial.countsFrom.slice(8, 10)}/${trial.countsFrom.slice(5, 7)}.`
+        : "";
+      void modal.prompt({ title: "Duyệt mức đầu vào", message: `Mức được duyệt: ${cefr}.${trialNote} Hãy ghi rõ lý do để lưu quyết định.`, label: "Lý do", confirmLabel: "Duyệt mức" })
         .then(reason => {
           // null = Huỷ / Esc / backdrop: just close, no error toast.
           if (reason === null) return;

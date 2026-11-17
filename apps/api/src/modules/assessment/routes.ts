@@ -47,6 +47,7 @@ import {
   type StoredAssessmentTask
 } from "@e4s/database";
 import { calculateAutomaticSectionScore } from "@e4s/domain/assessment";
+import { monthlyLearnerWindow } from "@e4s/domain/progression";
 import { isLearnerProfileComplete } from "@e4s/domain/learning";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Pool } from "pg";
@@ -270,7 +271,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       .filter((item) => item.sectionScores.listening == null || item.sectionScores.reading == null)
       .map((item) => repairReviewObjectiveScores(repositories.assessments, request.e4sSession!.user.id, item.attemptId)));
     if (repaired.some(Boolean)) overview = await repositories.assessments.getReviewOverview(request.e4sSession!.user.id);
-    const [topicReports, learnerDashboards, weakSignalRows] = await Promise.all([pool.query<{
+    const [topicReports, learnerDashboards, weakSignalRows, publication] = await Promise.all([pool.query<{
       id: string; learner_id: string; learner_name: string; topic: string; reason: string;
       strike_count: number; status: "open" | "resolved"; created_at: Date;
     }>(
@@ -312,7 +313,22 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
        group by lw.learner_id, lw.learner_name, lw.current_level, pw.week_number
        order by lw.learner_id, pw.week_number`,
       [request.e4sSession!.user.id]
+    ), pool.query<{ month: string; exam_date: string; today: string; cefr: CefrLevel }>(
+      `select pm.month, pm.exam_date::text, organization_system_date(pm.organization_id)::text as today, f.cefr
+       from users reviewer
+       join program_months pm on pm.organization_id = reviewer.organization_id
+         and pm.month = to_char(organization_system_date(pm.organization_id), 'YYYY-MM')
+       join month_frameworks f on f.program_month_id = pm.id and f.status = 'approved' and f.published_at is not null
+       where reviewer.id = $1`,
+      [request.e4sSession!.user.id]
     )]);
+    const current = publication.rows[0];
+    const placementWindow = current ? monthlyLearnerWindow(current.month, current.exam_date, current.today) : null;
+    const approvedById = new Map(learnerDashboards.flatMap(dashboard => {
+      const countsFrom = dashboard?.monthlyProgress?.uncounted?.countsFrom;
+      return dashboard && countsFrom ? [[dashboard.learner.id, countsFrom] as const] : [];
+    }));
+
     const retakes = await listPlacementRetakeStates(pool, request.e4sSession!.user.id);
     const retakeOf = (learnerId: string) => retakes.get(learnerId)?.status ?? "not_granted";
     const queueView = (item: typeof overview.pending[number]): AssessmentReviewQueueItem => ({
@@ -343,9 +359,15 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     });
     return {
       openAppeals: overview.openAppeals,
+      ...(current && placementWindow && !placementWindow.canStudy ? {
+        placementTrial: { month: current.month, countsFrom: placementWindow.startDate, levels: publication.rows.map(row => row.cefr) }
+      } : {}),
       pendingAssessments: overview.pending.filter((item) => item.kind !== "level-up").map(queueView),
       pendingLevelUp: overview.pending.filter((item) => item.kind === "level-up").map(queueView),
-      approvedLearners: overview.approvedLearners.map((learner) => ({ ...learner, placementRetake: retakeOf(learner.learnerId) })),
+      approvedLearners: overview.approvedLearners.map((learner) => {
+        const trialCountsFrom = approvedById.get(learner.learnerId);
+        return { ...learner, placementRetake: retakeOf(learner.learnerId), ...(trialCountsFrom ? { trialCountsFrom } : {}) };
+      }),
       unassessedLearners: overview.unassessedLearners.map((learner) => ({ ...learner, lastAttemptAt: learner.lastAttemptAt?.toISOString() ?? null, placementRetake: retakeOf(learner.learnerId) })),
       inProgressLearners: overview.inProgressLearners.map((learner) => ({ ...learner, lastAttemptAt: learner.lastAttemptAt?.toISOString() ?? null, placementRetake: retakeOf(learner.learnerId) })),
       retryLearners: overview.retryLearners.map((learner) => ({ ...learner, lastAttemptAt: learner.lastAttemptAt?.toISOString() ?? null, placementRetake: retakeOf(learner.learnerId) })),

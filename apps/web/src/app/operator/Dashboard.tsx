@@ -46,6 +46,9 @@ export function OperatorDashboard({ view, actions, readOnly = false, unavailable
     {kind !== "flow" && <Button small disabled={readOnly || Boolean(blocked("changeLevel"))} onClick={() => actions.onChangeLevel(person.id)}>Đổi level</Button>}
   </div>;
 
+  const trialBadge = (item: OperatorDashboardView["approved"][number]) => item.trialCountsFrom
+    ? <Badge tone="primary">Học thử · tính từ {item.trialCountsFrom.slice(8, 10)}/{item.trialCountsFrom.slice(5, 7)}</Badge>
+    : null;
   const approvedProfile = (item: OperatorDashboardView["approved"][number]) => <Button small disabled={Boolean(blocked("viewProfile"))} onClick={() => actions.onViewProfile(item.id)}>Hồ sơ</Button>;
   // Staff exception: open the level-up test now. Managers see the badge only (readOnly screen).
   const levelUpBadge = (item: OperatorDashboardView["approved"][number]) => item.levelUpAllowed ? <span className="operator-levelup-badge" title="Đã mở thi lên mức cho học viên này"><Badge tone="warn">Đã mở thi</Badge></span> : null;
@@ -94,7 +97,7 @@ export function OperatorDashboard({ view, actions, readOnly = false, unavailable
               <div className="operator-approved-record-meta">
                 <LevelChip level={item.cefr} />
                 {item.pendingLevel && <Badge tone="warn">chờ → {item.pendingLevel}</Badge>}
-                {levelUpBadge(item)}
+                {levelUpBadge(item)}{trialBadge(item)}
                 <span className="small muted">{item.placementScore == null ? "Chưa có điểm đầu vào" : `Đầu vào ${formatScoreOutOf(item.placementScore, 100)}`}</span>
               </div>
             </div>
@@ -109,7 +112,7 @@ export function OperatorDashboard({ view, actions, readOnly = false, unavailable
           </details>
         </li>)}
       </ul><Pager {...approvedPaged} label="học viên đã duyệt" /></> : <div className="card"><p className="muted">Chưa có.</p></div>)
-      : <div className="table-wrap operator-action-table-wrap"><table className="operator-action-table"><thead><tr><th>Người học</th><th>Mức</th><th>Điểm đầu vào</th><th aria-label="Thao tác" /></tr></thead><tbody>{view.approved.length ? view.approved.map(item => <tr key={item.id} data-testid={`approved-${item.id}`}><td data-label="Người học">{item.name}<br /><span className="xs muted">{item.profileSummary}</span></td><td data-label="Mức"><LevelChip level={item.cefr} /> {item.pendingLevel && <Badge tone="warn">chờ → {item.pendingLevel}</Badge>} {levelUpBadge(item)}</td><td data-label="Điểm đầu vào">{item.placementScore == null ? "—" : formatScoreOutOf(item.placementScore, 100)}</td><td data-label="Thao tác"><div className="operator-approved-actions">{approvedActions(item)}{approvedProfile(item)}</div></td></tr>) : <tr><td colSpan={4} className="muted">Chưa có.</td></tr>}</tbody></table></div>}
+      : <div className="table-wrap operator-action-table-wrap"><table className="operator-action-table"><thead><tr><th>Người học</th><th>Mức</th><th>Điểm đầu vào</th><th aria-label="Thao tác" /></tr></thead><tbody>{view.approved.length ? view.approved.map(item => <tr key={item.id} data-testid={`approved-${item.id}`}><td data-label="Người học">{item.name}<br /><span className="xs muted">{item.profileSummary}</span></td><td data-label="Mức"><LevelChip level={item.cefr} /> {item.pendingLevel && <Badge tone="warn">chờ → {item.pendingLevel}</Badge>} {levelUpBadge(item)}{trialBadge(item)}</td><td data-label="Điểm đầu vào">{item.placementScore == null ? "—" : formatScoreOutOf(item.placementScore, 100)}</td><td data-label="Thao tác"><div className="operator-approved-actions">{approvedActions(item)}{approvedProfile(item)}</div></td></tr>) : <tr><td colSpan={4} className="muted">Chưa có.</td></tr>}</tbody></table></div>}
     </section>
 
     {inProgress.length > 0 && <section className="section" data-guide="op-in-progress"><h3>Đang làm test ({inProgress.length}){<SectionTip text={OPERATOR_TIPS.inProgress} desktop label="Đang làm test là gì?" />}</h3><div className="list operator-bounded-list">{inProgressPaged.visible.map(item => <div className="item" key={item.id}><div className="body"><div className="title">{item.name}</div><div className="xs muted">{item.placementRetake === "used" ? phone ? "Đang thi lại" : "Đang làm bài thi lại (lượt duy nhất)" : phone ? "Đang làm" : "Đã bắt đầu bài test"} · {profileNote(item.profileSummary)}</div></div><Button small disabled={Boolean(blocked("viewProfile"))} onClick={() => actions.onViewProfile(item.id)}>Hồ sơ</Button></div>)}</div><Pager {...inProgressPaged} label="học viên đang làm test" /></section>}

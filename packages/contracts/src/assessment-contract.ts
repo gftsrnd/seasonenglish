@@ -266,6 +266,7 @@ export interface AssessmentApprovedLearnerView {
   currentLevel: CefrLevel;
   placementScore: number | null;
   monthlyGoal: string | null;
+  trialCountsFrom?: string;
   /** Open staff exception letting the learner take the level-up test now. */
   levelUpOverride?: AssessmentLevelUpOverrideSummary | null;
   placementRetake?: AssessmentRetakeStatus;
@@ -296,6 +297,7 @@ export interface AssessmentReviewFlowView {
 }
 
 export interface AssessmentReviewOverviewView {
+  placementTrial?: { month: string; countsFrom: string; levels: CefrLevel[] };
   openAppeals?: number;
   pendingAssessments: AssessmentReviewQueueItem[];
   pendingLevelUp: AssessmentReviewQueueItem[];

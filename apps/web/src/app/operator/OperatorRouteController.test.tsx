@@ -844,16 +844,20 @@ describe("OperatorRouteController", () => {
   it("closes the placement approval prompt on cancel or Escape without an error toast", async () => {
     const user = userEvent.setup();
     const overview = {
+      placementTrial: { month: "2026-11", countsFrom: "2026-12-01", levels: ["B1"] },
       pendingAssessments: [{ attemptId: "a1", learnerId: "u1", learnerName: "Lan", kind: "placement", title: "Đầu vào", submittedAt: "2026-10-14", sectionScores: { listening: 70 }, suggestedLevel: "B1" }],
-      pendingLevelUp: [], approvedLearners: [], unassessedLearners: [],
+      pendingLevelUp: [], approvedLearners: [{ learnerId: "already-approved", learnerName: "Học viên học thử", currentLevel: "B1", trialCountsFrom: "2026-12-01" }], unassessedLearners: [],
       levelSignals: { windowDays: 14, ready: [], weak: [] }, topicReports: []
     };
     const decideAssessment = vi.fn().mockResolvedValue({});
     render(<MemoryRouter initialEntries={["/op"]}><OperatorRouteController session={operator} client={{ getAssessmentReviewOverview: vi.fn().mockResolvedValue(overview), decideAssessment } as any} /></MemoryRouter>);
 
+    expect(await screen.findByText("Học thử · tính từ 01/12")).toBeInTheDocument();
     await user.selectOptions(await screen.findByRole("combobox", { name: "Mức duyệt cho Lan" }), "B1");
     await user.click(screen.getByRole("button", { name: "Duyệt mức" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Duyệt mức đầu vào" })).getByRole("button", { name: /Huỷ|Hủy/ }));
+    const approval = screen.getByRole("dialog", { name: "Duyệt mức đầu vào" });
+    expect(approval).toHaveTextContent(/học thử tháng 11.*xét lên mức bắt đầu tính từ 01\/12/iu);
+    await user.click(within(approval).getByRole("button", { name: /Huỷ|Hủy/ }));
     await user.click(screen.getByRole("button", { name: "Duyệt mức" }));
     screen.getByRole("dialog", { name: "Duyệt mức đầu vào" });
     await user.keyboard("{Escape}");
