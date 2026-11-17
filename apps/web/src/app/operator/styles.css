@@ -4326,10 +4326,32 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 .operator-request-expanded .operator-review-action-footer { justify-content: flex-end; }
 .operator-request-expanded .operator-review-appeal-compact { padding: 0; border: 0; background: transparent; box-shadow: none; }
 .operator-request-expanded .operator-review-appeal-compact .operator-review-action-footer { justify-content: flex-end; flex-wrap: wrap; gap: 6px; padding: 0; }
-.operator-requests .request-table .request-actions:has(> .request-retake-collapse) { justify-content: flex-end; }
+.operator-requests .request-table { --retake-toggle-width: 5.25rem; }
+@media (max-width: 1024px) {
+  .operator-requests .request-table { --retake-toggle-width: 36px; }
+}
+.operator-requests .request-table .request-retake-toggle {
+  width: var(--retake-toggle-width);
+  justify-content: center;
+}
+.operator-requests .request-expanded-spacer + td > .operator-request-expanded {
+  width: var(--retake-toggle-width);
+  display: flex;
+  justify-content: flex-end;
+}
+.operator-requests .request-expanded-spacer + td .operator-review-appeal-compact {
+  flex: 0 0 auto;
+  width: max-content;
+}
+.operator-requests .request-expanded-spacer + td .operator-review-action-footer { flex-wrap: nowrap; }
 @container (max-width: 640px) {
-  .operator-requests .request-table .request-commands:has(.request-retake-collapse) { margin-inline-start: auto; }
-  .operator-requests .request-expanded-row:has(.operator-review-appeal-compact) > td { padding-inline: 4px; }
+  .operator-requests .request-table .request-record > .request-commands:has(.request-retake-toggle) { flex-basis: 100%; }
+  .operator-requests .request-table .request-actions:has(.request-retake-toggle) { justify-content: flex-end; }
+  .operator-requests .request-table .request-expanded-row > .request-expanded-spacer { display: none; }
+  .operator-requests .request-expanded-spacer + td { padding-inline: 4px; }
+  .operator-requests .request-expanded-spacer + td > .operator-request-expanded { width: 100%; }
+  .operator-requests .request-expanded-spacer + td .operator-review-appeal-compact { max-width: 100%; }
+  .operator-requests .request-expanded-spacer + td .operator-review-action-footer { flex-wrap: wrap; }
 }
 .app-operator .operator-review-action-footer .operator-retake-approve:not(:disabled) {
   border-color: #17603e;
@@ -4353,7 +4375,7 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 .operator-requests .request-table .request-actions .request-collapse {
   display: inline-grid;
   place-items: center;
-  width: 36px;
+  width: var(--retake-toggle-width);
   padding: 0;
 }
 .operator-request-expanded .request-view-icon { display: inline-flex; align-items: center; gap: 4px; }

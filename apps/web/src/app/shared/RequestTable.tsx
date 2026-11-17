@@ -9,6 +9,7 @@ type RequestRow = {
   date: string;
   action?: ReactNode;
   detail?: ReactNode;
+  detailInActionColumn?: boolean;
 };
 
 const requestTime = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" });
@@ -31,7 +32,10 @@ export function RequestTable({ label, rows, empty }: {
         <td role="cell" className="request-state">{row.status}</td>
         <td role="cell" className="request-date"><RequestDate date={row.date} /></td>
         <td role="cell" className="request-commands" data-empty={row.action == null || undefined}>{row.action == null ? null : <div className="row request-actions">{row.action}</div>}</td>
-      </tr>{row.detail ? <tr className="request-expanded-row" role="row"><td role="cell" colSpan={5}>{row.detail}</td></tr> : null}</Fragment>) : <tr><td className="muted" colSpan={5}>{empty}</td></tr>}</tbody>
+      </tr>{row.detail ? <tr className="request-expanded-row" role="row">
+        {row.detailInActionColumn ? <td className="request-expanded-spacer" colSpan={4} aria-hidden="true" /> : null}
+        <td role="cell" colSpan={row.detailInActionColumn ? undefined : 5}>{row.detail}</td>
+      </tr> : null}</Fragment>) : <tr><td className="muted" colSpan={5}>{empty}</td></tr>}</tbody>
     </table>
   </div>;
 }
