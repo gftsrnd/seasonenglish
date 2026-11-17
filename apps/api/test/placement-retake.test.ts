@@ -114,7 +114,7 @@ describe("placement retake form generation (level-up generator, placement mode)"
     }
     const [, target, blueprint] = repositories.assessments.createLevelFormDraft.mock.calls[0]!;
     expect(target).toBe("placement-retake");
-    expect(blueprint).toEqual(expect.objectContaining({ key: "placement-retake", kind: "placement", totalMinutes: 75, totalScore: 100 }));
+    expect(blueprint).toEqual(expect.objectContaining({ key: "placement-retake", placementRetakeSource: "ai", kind: "placement", totalMinutes: 75, totalScore: 100 }));
     expect(blueprint.targetLevel).toBeUndefined();
     const count = (code: string) => blueprint.sections.find((section: { code: string }) => section.code === code)
       .groups.reduce((total: number, group: { tasks: unknown[] }) => total + group.tasks.length, 0);
@@ -141,6 +141,7 @@ describe("placement retake form generation (level-up generator, placement mode)"
     const server = await app();
     const response = await server.inject({ method: "POST", url: "/api/v1/assessment-level-forms/placement-retake/manual-draft" });
     expect(response.statusCode).toBe(201);
+    expect(repositories.assessments.createLevelFormDraft.mock.calls[0]![2].placementRetakeSource).toBe("manual");
     expect(placementRetakeStructureIssues(repositories.assessments.createLevelFormDraft.mock.calls[0]![2])).toEqual([]);
     await server.close();
   });

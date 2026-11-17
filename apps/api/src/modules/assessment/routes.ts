@@ -621,7 +621,8 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const form = await repositories.assessments.createLevelFormDraft(
       request.e4sSession!.user.id,
       params.data.targetLevel,
-      manualLevelFormBlueprint(params.data.targetLevel)
+      { ...manualLevelFormBlueprint(params.data.targetLevel),
+        ...(params.data.targetLevel === PLACEMENT_RETAKE_TARGET ? { placementRetakeSource: "manual" as const } : {}) }
     );
     return reply.code(201).send({ ...form, publishedAt: null });
   });
@@ -680,7 +681,9 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       const previous = await previousLevelFormAudio(repositories.assessments, actorId, params.data.targetLevel);
       const withAudio = await withBlueprintListeningAudio(assembled.blueprint, listeningAudio, actorId, { previous });
       if (withAudio.failed) request.log.warn({ failed: withAudio.failed }, "Level form listening audio synthesis failed");
-      const form = await repositories.assessments.createLevelFormDraft(actorId, params.data.targetLevel, withAudio.blueprint);
+      const form = await repositories.assessments.createLevelFormDraft(actorId, params.data.targetLevel, {
+        ...withAudio.blueprint, ...(placementRetake ? { placementRetakeSource: "ai" as const } : {})
+      });
       return reply.code(201).send({ ...form, publishedAt: null });
     } catch (error) {
       if (error instanceof LevelFormQualityError) {

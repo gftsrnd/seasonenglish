@@ -55,7 +55,7 @@ export function PlacementRetakeCard({ slot, aiConnected, generating, readOnly = 
       const deleteReason = unavailable.delete || readOnlyReason || (isPublished ? "Chỉ xoá được bản nháp" : undefined) || (form.attemptCount ? "Đề này đã có bài thi nên không xoá được" : undefined);
       return <article className="item operator-assessment-form-row" key={form.versionId}>
         <div className="operator-assessment-form-info">
-          <b>{form.title}</b>
+          <b>{form.title}</b>{form.placementRetakeSource ? <> <Badge>{form.placementRetakeSource === "ai" ? "Do AI sinh" : "Soạn tay"}</Badge></> : null}
           <p className="small muted">Phiên bản {form.version} · {isPublished ? `Đã phát hành${form.publishedAt ? ` ${operatorDateTime(form.publishedAt)}` : ""}` : "Bản nháp"} · {form.listeningTaskCount} câu nghe · {form.readingTaskCount} câu đọc · {form.attemptCount} lượt thi</p>
           {!isPublished && form.publicationReady === false ? <p className="xs muted">Chờ hoàn thiện {form.publicationBlockerCount ?? "các"} mục trước khi phát hành.</p> : null}
         </div>

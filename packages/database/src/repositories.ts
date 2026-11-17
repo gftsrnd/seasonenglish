@@ -568,6 +568,7 @@ export interface AssessmentLevelFormRecord {
   listeningTaskCount: number;
   readingTaskCount: number;
   attemptCount: number;
+  placementRetakeSource?: "ai" | "manual";
   status: "draft" | "published" | "retired";
 }
 
@@ -8083,6 +8084,7 @@ class AssessmentRepository {
         listeningTaskCount: sectionCount("listening"),
         readingTaskCount: sectionCount("reading"),
         attemptCount: Number(row.attempt_count),
+        ...(row.blueprint.placementRetakeSource ? { placementRetakeSource: row.blueprint.placementRetakeSource } : {}),
         publicationReady: publicationBlockerCount === 0,
         publicationBlockerCount
         ,status: row.published_at ? "published" : "draft"
@@ -8132,6 +8134,7 @@ class AssessmentRepository {
         listeningTaskCount: sectionCount("listening"),
         readingTaskCount: sectionCount("reading"),
         attemptCount: Number(row.attempt_count),
+        ...(row.blueprint.placementRetakeSource ? { placementRetakeSource: row.blueprint.placementRetakeSource } : {}),
         publicationReady: publicationBlockerCount === 0,
         publicationBlockerCount,
         status: row.status
@@ -8177,6 +8180,7 @@ class AssessmentRepository {
       listeningTaskCount: sectionTaskCount(row.blueprint, "listening"),
       readingTaskCount: sectionTaskCount(row.blueprint, "reading"),
       attemptCount: Number(row.attempt_count),
+      ...(row.blueprint.placementRetakeSource ? { placementRetakeSource: row.blueprint.placementRetakeSource } : {}),
       status: row.status,
       publicationReady: publicationBlockerCount === 0,
       publicationBlockerCount

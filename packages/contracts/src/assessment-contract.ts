@@ -364,6 +364,7 @@ export interface AssessmentLevelFormView {
   /** Derived from the same publication gates the server enforces. */
   publicationReady?: boolean;
   publicationBlockerCount?: number;
+  placementRetakeSource?: "ai" | "manual";
 }
 
 /**

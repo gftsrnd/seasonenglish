@@ -17,6 +17,7 @@ export interface StoredAssessmentTask extends AssessmentTaskView {
 
 export interface StoredAssessmentDefinition extends Omit<AssessmentDefinitionView, "sections"> {
   targetLevel?: CefrLevel;
+  placementRetakeSource?: "ai" | "manual";
   /** Immutable monthly resource snapshot for a generated monthly final. */
   monthlyScope?: { month: string; cefr: CefrLevel; contractVersion: number; coreTermIds: string[]; grammarStepIds: string[]; soundIds: string[] };
   /** Monthly final v2.0 Operator/grader package. Never part of the learner package. */
