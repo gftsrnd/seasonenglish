@@ -4320,7 +4320,12 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 .operator-request-expanded .operator-review-action-footer { justify-content: flex-end; }
 .operator-request-expanded .operator-review-appeal-compact { padding: 0; border: 0; background: transparent; box-shadow: none; }
 .operator-request-expanded .operator-review-appeal-compact .operator-review-action-footer { flex-wrap: nowrap; gap: 6px; padding: 0; }
-.operator-requests .request-table .request-actions .request-collapse { display: inline-flex; justify-content: center; width: 36px; padding-inline: 0; font-size: 12px; }
+.operator-requests .request-table .request-actions .request-collapse {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  padding: 0;
+}
 .operator-request-expanded .request-view-icon { display: inline-flex; align-items: center; gap: 4px; }
 @media (max-width: 768px) {
   .operator-request-expanded .operator-review-appeal-compact .operator-review-action-footer button { min-width: 0; padding-inline: 8px; font-size: 13px; white-space: nowrap; }

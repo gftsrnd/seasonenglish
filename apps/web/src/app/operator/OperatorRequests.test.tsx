@@ -8,7 +8,10 @@ import type { ContentReviewView, SessionView } from "@e4s/contracts";
 import { ToastProvider } from "../shared/design-system.js";
 import { OperatorRouteController, type OperatorApiClient } from "./OperatorRouteController.js";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const session = { role: "operator", user: { id: "op", displayName: "Operator", email: null } } as SessionView;
 const appeal: ContentReviewView["appeals"][number] = {
@@ -61,6 +64,23 @@ it("opens a focused practice appeal from the old review link and shows the saved
   await user.click(within(confirmation).getByRole("button", { name: "Xóa" }));
   expect(deleteContentReviewAppeal).toHaveBeenCalledWith("appeal-1");
   expect(await screen.findByText("Chưa có kháng nghị đã xử lý.")).toBeVisible();
+});
+
+it.each([false, true])("uses the compact retake collapse icon only on phone or tablet (%s)", async (compact) => {
+  vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+    matches: compact && query === "(max-width: 1024px)",
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  })));
+  const getContentReviewAppeals = vi.fn(async () => ({
+    appeals: [{ ...appeal, kind: "assessment", requestKind: "retake", assessmentKind: "placement" }], hasMore: false,
+  }));
+  openRoute("/op/review?tab=appeals&id=appeal-1", { getContentReviewAppeals });
+
+  const toggle = await screen.findByRole("link", { name: "Thu gọn" });
+  expect(toggle).toHaveAttribute("aria-expanded", "true");
+  if (compact) expect(toggle.querySelector("svg")).toBeInTheDocument();
+  else expect(toggle).toHaveTextContent("Thu gọn");
 });
 
 it("redirects the old month hash and shows decisions directly in the manager request list", async () => {

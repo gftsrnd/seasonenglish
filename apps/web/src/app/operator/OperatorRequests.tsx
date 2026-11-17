@@ -6,6 +6,7 @@ import type { OperatorApiClient } from "../../api/operator.js";
 import { ApiError } from "../../api/runtime.js";
 import { RequestDate, RequestTable } from "../shared/RequestTable.js";
 import { useModal } from "../shared/ModalProvider.js";
+import { useCompactUi } from "../shared/CompactUi.js";
 import { adaptReviewAppeal } from "./adapters.js";
 import { AppealReviewCard, OperatorReviewAssessmentDetail, promptExerciseCorrection } from "./Review.js";
 import { Badge, Button } from "./primitives.js";
@@ -73,6 +74,7 @@ function LoadError({ children, retry }: { children: ReactNode; retry?: (() => vo
 }
 
 function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClient; id: string | undefined; status: AppealStatus; page: number }) {
+  const compact = useCompactUi();
   const modal = useModal();
   const navigate = useNavigate();
   const [data, setData] = useState<{ appeals: Appeal[]; hasMore: boolean; status: AppealStatus; page: number }>();
@@ -223,6 +225,7 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
     <RequestTable label="Danh sách kháng nghị"
       rows={loadFailed ? [] : data?.appeals.map(item => {
         const open = item.id === id;
+        const compactCollapse = compact && open && item.requestKind === "retake";
         const view = adaptReviewAppeal(item);
         const detailId = `appeal-detail-${item.id}`;
         return {
@@ -233,10 +236,12 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
           status: item.overdue ? <Badge tone="warn">Quá hạn xử lý</Badge> : <StatusBadge status={item.status} />,
           date: item.createdAt,
           action: <>
-            <Link to={requestSearch("appeals", listStatus, open ? undefined : item.id, listPage)} className={open && item.requestKind === "retake" ? "btn-sm request-collapse" : "btn-sm"}
+            <Link to={requestSearch("appeals", listStatus, open ? undefined : item.id, listPage)} className={compactCollapse ? "btn-sm request-collapse" : "btn-sm"}
               aria-expanded={open} aria-controls={open ? detailId : undefined}
-              {...(open && item.requestKind === "retake" ? { title: "Thu gọn", "aria-label": "Thu gọn" } : {})}>
-              {open && item.requestKind === "retake" ? <span aria-hidden="true">▼</span> : open ? "Thu gọn" : item.status === "pending" ? "Xử lý" : "Chi tiết"}
+              {...(compactCollapse ? { title: "Thu gọn", "aria-label": "Thu gọn" } : {})}>
+              {compactCollapse ? <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16">
+                <path fill="currentColor" d="M3 5h10l-5 6z" />
+              </svg> : open ? "Thu gọn" : item.status === "pending" ? "Xử lý" : "Chi tiết"}
             </Link>
             {item.status !== "pending" ? <button className="btn-sm btn-danger request-delete" type="button" title="Xóa" aria-label="Xóa" disabled={removingId !== undefined || decisionId !== undefined}
               onClick={() => void remove(item)}><Trash2 size={15} aria-hidden="true" />{removingId === item.id ? "Đang xóa…" : <span>Xóa</span>}</button> : null}
