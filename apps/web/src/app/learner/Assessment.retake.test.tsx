@@ -32,7 +32,7 @@ describe("placement retake notice", () => {
     };
     render(<LearnerAssessment view={view} actions={actions} />);
     expect(screen.getByText(/Đã duyệt thi lại\./)).toBeInTheDocument();
-    expect(screen.getByText(/Vận hành sẽ xếp lớp cho bạn/)).toBeInTheDocument();
+    expect(screen.getByText(/Vận hành sẽ xếp lớp sau khi bạn nộp bài/)).toBeInTheDocument();
     expect(screen.getByText("Kết quả phần Nói chưa phản ánh đúng.")).toBeInTheDocument();
   });
 

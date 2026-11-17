@@ -33,20 +33,20 @@ const actions = (overrides: Partial<OperatorDashboardActions> = {}): OperatorDas
 });
 
 describe("Operator placement retake status", () => {
-  it("offers 'Cho thi lại 1 lần' once for a sent-back learner, next to the manual placement", async () => {
+  it("offers 'Cho thi lại' once for a sent-back learner, next to the manual placement", async () => {
     const user = userEvent.setup();
     const onGrantPlacementRetake = vi.fn();
     render(<OperatorDashboard view={adaptAssessmentOverview(overview("not_granted"), { aiConnected: true, openAppeals: 0 })} actions={actions({ onGrantPlacementRetake })} />);
     expect(screen.getByTestId("retake-learner-1")).toHaveTextContent("Chưa cho thi lại");
-    await user.click(screen.getByRole("button", { name: "Cho thi lại 1 lần" }));
+    await user.click(screen.getByRole("button", { name: "Cho thi lại" }));
     expect(onGrantPlacementRetake).toHaveBeenCalledWith("learner-1");
     expect(screen.getByRole("button", { name: "Đánh giá thủ công" })).toBeInTheDocument();
   });
 
   it("shows granted and used states without a second grant button", () => {
     render(<OperatorDashboard view={adaptAssessmentOverview(overview("granted"), { aiConnected: true, openAppeals: 0 })} actions={actions()} />);
-    expect(screen.getByTestId("retake-learner-1")).toHaveTextContent("Đã cho thi lại 1 lần");
-    expect(screen.queryByRole("button", { name: "Cho thi lại 1 lần" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("retake-learner-1")).toHaveTextContent("Đã duyệt thi lại");
+    expect(screen.queryByRole("button", { name: "Cho thi lại" })).not.toBeInTheDocument();
     cleanup();
     render(<OperatorDashboard view={adaptAssessmentOverview(overview("used"), { aiConnected: true, openAppeals: 0 })} actions={actions()} />);
     expect(screen.getByTestId("retake-learner-1")).toHaveTextContent("Đã dùng lượt thi lại");
@@ -58,12 +58,12 @@ describe("Operator placement retake status", () => {
     const onRetryPlacementOnce = vi.fn();
     render(<OperatorDashboard view={adaptAssessmentOverview(overview("granted", { isPlacementRetake: false, placementRetake: "not_granted" }), { aiConnected: true, openAppeals: 0 })} actions={actions({ onRetryPlacementOnce })} />);
     const pending = screen.getByLabelText("Chờ duyệt Minh");
-    await user.click(within(pending).getByRole("button", { name: "Cho thi lại 1 lần" }));
+    await user.click(within(pending).getByRole("button", { name: "Cho thi lại" }));
     expect(onRetryPlacementOnce).toHaveBeenCalledWith("attempt-9");
     cleanup();
     render(<OperatorDashboard view={adaptAssessmentOverview(overview("granted", { isPlacementRetake: true, placementRetake: "used" }), { aiConnected: true, openAppeals: 0 })} actions={actions()} />);
     const final = screen.getByLabelText("Chờ duyệt Minh");
     expect(within(final).getByRole("note")).toHaveTextContent("đây là quyết định cuối cùng");
-    expect(within(final).queryByRole("button", { name: "Cho thi lại 1 lần" })).not.toBeInTheDocument();
+    expect(within(final).queryByRole("button", { name: "Cho thi lại" })).not.toBeInTheDocument();
   });
 });
