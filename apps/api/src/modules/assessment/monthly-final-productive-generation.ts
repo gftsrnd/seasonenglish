@@ -9,6 +9,8 @@ import {
   type AiTaskRunner,type AiRunResult,type MonthlyFinalGenerationInput,type MonthlyFinalProductiveOutput,type MonthlyFinalSampleRepairInput
 } from "@e4s/ai";
 
+import { monthlyFinalProductivePromptLanguageProblems } from "./monthly-final-checks.js";
+
 const A1_WRITING_HINT = 'Bắt đầu bằng câu gợi ý: "Here is a short update."';
 /** Smallest natural read-aloud sentence that still holds two taught words per pool. */
 const MIN_READ_ALOUD_SENTENCE_WORDS = 6;
@@ -56,9 +58,9 @@ export function withAcceptedGrammarReviewMemo(runner:AiTaskRunner):AiTaskRunner{
 export async function generateMonthlyFinalProductive(baseRunner:AiTaskRunner,input:MonthlyFinalGenerationInput,prompt:string):Promise<AiRunResult>{
   const runner=withAcceptedGrammarReviewMemo(baseRunner);
   const result=await generateProductiveCandidate(runner,input,prompt);
-  const candidate=monthlyFinalProductiveOutputSchema.parse(result.output);
+  const candidate=await repairProductivePromptLanguage(runner, input, monthlyFinalProductiveOutputSchema.parse(result.output));
   const review=await reviewGrammarEvidence(runner,input,candidate);
-  if(!review.length)return result;
+  if(!review.length)return {...result,output:candidate};
   const draft=structuredClone(candidate);
   await Promise.all((["writing","speakingB"] as const).filter(kind=>review.some(issue=>issue.key.startsWith(kind))).map(async kind=>{
     const feedback=review.filter(issue=>issue.key.startsWith(kind)).map(issue=>`${issue.key}: ${issue.reason}`);
@@ -105,7 +107,8 @@ async function generateProductiveCandidate(runner:AiTaskRunner,input:MonthlyFina
       ? `\nEnd the A1 writing task with ${A1_WRITING_HINT} The sample starts with the quoted sentence. Choose complementary taught forms that each fit a short clause. Plan one coherent situation with short notes for past work, current status and a proposed next step. Use at most one named future day in the Writing facts. If asking the client to confirm, do not add another deadline for that request. Do not say a future action already happened. The 35–45 word sample must include each key fact and requested action in plain English.`
       : "";
     return await runner.runTask("monthly_final_productive_generation", input, {
-      systemPrompt: prompt + openingGuide,
+      systemPrompt: prompt + openingGuide + (input.cefr === "A1" || input.cefr === "A2" ? "" :
+        "\nWrite writing.task, writing.facts, each writing.requirements item, speakingB.task, speakingB.facts and each speakingB.requirements item entirely in clear English. Input notes can be Vietnamese; translate them, including any stock task instructions, before returning."),
       maxOutputTokens: 5000,
       maxAttempts: 2
     });
@@ -290,13 +293,47 @@ async function repairReadAloud(runner:AiTaskRunner,input:MonthlyFinalGenerationI
   return {...repaired,output:{text,positions}};
 }
 
-async function repairSample(runner:AiTaskRunner,input:MonthlyFinalGenerationInput,candidate:MonthlyFinalProductiveOutput,kind:"writing"|"speakingB",feedback:readonly string[]=[]):Promise<AiRunResult>{
+async function repairProductivePromptLanguage(runner: AiTaskRunner, input: MonthlyFinalGenerationInput, candidate: MonthlyFinalProductiveOutput) {
+  if (input.cefr === "A1" || input.cefr === "A2") return candidate;
+  const problems = (section: Pick<MonthlyFinalProductiveOutput["writing"], "task" | "facts" | "requirements">) =>
+    monthlyFinalProductivePromptLanguageProblems([section.task, section.facts, ...section.requirements].join("\n"), "en");
+  await Promise.all((["writing", "speakingB"] as const).map(async kind => {
+    const section = candidate[kind];
+    if (!problems(section).length) return;
+    const repairInput = productiveRepairInput(input, candidate, kind);
+    let notes = { task: section.task, facts: section.facts, requirements: section.requirements };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await runner.runTask("monthly_final_writing_notes_repair", { ...repairInput, ...notes }, {
+        systemPrompt: "Translate only task, facts and requirements into clear English for the given CEFR level. Preserve the audience, situation, all facts, times, word or time limits, and requested actions. Keep every learner-facing field in English, including headings and stock instructions. Do not add sample text, grammar labels, opening hints, or an answer. Return only the three translated fields.",
+        maxOutputTokens: 1200, maxAttempts: 2
+      });
+      notes = monthlyFinalWritingNotesSchema.parse(result.output);
+      if (!problems(notes).length) {
+        Object.assign(section, notes);
+        return;
+      }
+    }
+    throw Object.assign(new Error("Productive prompt is not in the required English"), {
+      code: "AI_OUTPUT_INVALID", issues: problems(notes).map(message => ({ path: `${kind}.task`, message }))
+    });
+  }));
+  const issues = validateMonthlyFinalProductiveOutput(candidate, input);
+  if (issues.length) throw Object.assign(new Error("Productive prompt repair is invalid"), { code: "AI_OUTPUT_INVALID", issues });
+  return candidate;
+}
+
+function productiveRepairInput(input: MonthlyFinalGenerationInput,candidate: MonthlyFinalProductiveOutput,kind: "writing" | "speakingB"): MonthlyFinalSampleRepairInput {
   const section=candidate[kind];
-  const repairInput:MonthlyFinalSampleRepairInput={kind,cefr:input.cefr,targets:input.targets[kind==="writing" ? "writing" : "speaking"],theme:input.theme.title,task:section.task,facts:section.facts,requirements:section.requirements,previousSample:section.sample,
+  return {kind,cefr:input.cefr,targets:input.targets[kind==="writing" ? "writing" : "speaking"],theme:input.theme.title,task:section.task,facts:section.facts,requirements:section.requirements,previousSample:section.sample,
     grammar:input.grammar.map(topic=>{
       const chosen=candidate.grammarComponents.find(component=>component.code===topic.code)!;
       return {code:topic.code,main:topic.taughtSteps.find(step=>step.stepId===chosen.mainStepId),...(kind==="writing" ? {secondary:topic.taughtSteps.find(step=>step.stepId===chosen.secondaryStepId)} : {})};
     }),profile:input.levelProfile[kind==="writing" ? "writing" : "speakingB"] as Record<string,unknown>};
+}
+
+async function repairSample(runner:AiTaskRunner,input:MonthlyFinalGenerationInput,candidate:MonthlyFinalProductiveOutput,kind:"writing"|"speakingB",feedback:readonly string[]=[]):Promise<AiRunResult>{
+  const section=candidate[kind];
+  const repairInput=productiveRepairInput(input,candidate,kind);
   if(kind==="writing"){
     const planned=writingBlocksInput(repairInput);
     let writingFeedback = [...feedback];

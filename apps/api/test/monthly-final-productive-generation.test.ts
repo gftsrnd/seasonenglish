@@ -201,6 +201,32 @@ it("uses the validated December B1 passage when the provider omits pinned terms"
  expect((result.output as any).speakingA.positions.map(({word}: {word:string}) => word)).toEqual(pairs.flat());
 });
 
+it("repairs only the B1 learner prompts when generation returns Vietnamese", async () => {
+ const input = buildMonthlyFinalGenerationInput(monthlyFinalContract("B1"), frameworkRef);
+ const original = fakeMonthlyFinalAiOutput(input).productive;
+ const candidate = structuredClone(original);
+ candidate.writing.task = "Viết một email ngắn gửi quản lý.";
+ candidate.speakingB.task = "Ghi âm một tin nhắn thoại ngắn.";
+ const metadata = { traceId: "productive" };
+ const repaired: string[] = [];
+ const runner = { runTask: async (id: string, raw: any, options: any) => {
+  if (id === "monthly_final_productive_generation") {
+   expect(options.systemPrompt).toContain("each speakingB.requirements item entirely in clear English");
+   return { output: candidate, metadata };
+  }
+  if (id === "monthly_final_grammar_evidence_review") return { output: { items: raw.items.map((item: any) => ({ key: item.key, matches: true, reason: "Matches." })) }, metadata: {} };
+  expect(id).toBe("monthly_final_writing_notes_repair");
+  repaired.push(raw.kind);
+  const { task, facts, requirements, sample } = original[raw.kind as "writing" | "speakingB"];
+  expect(raw.previousSample).toBe(sample);
+  return { output: { task, facts, requirements }, metadata: {} };
+ }} as unknown as AiTaskRunner;
+ const result = await generateMonthlyFinalProductive(runner, input, "Generate exam");
+ expect(repaired).toEqual(["writing", "speakingB"]);
+ expect(result.metadata).toBe(metadata);
+ expect(result.output).toEqual(original);
+});
+
 it("does not send an already accepted grammar quote to the reviewer again, but re-reviews rejected ones",async()=>{
  let reviews=0;
  const base={runTask:async(_taskId:string,raw:any)=>{reviews++;return {output:{items:raw.items.map((item:any)=>({key:item.key,matches:item.quote.startsWith("Good"),reason:"r"}))},metadata:{}};}} as unknown as AiTaskRunner;

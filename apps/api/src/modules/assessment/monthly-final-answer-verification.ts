@@ -24,15 +24,15 @@ export interface MonthlyFinalVerificationFinding {
 
 interface VerificationItem { ref: string; section: MonthlyFinalVerificationFinding["section"]; prompt: string; options: string[]; key?: string; context?: string }
 
-const PRODUCTIVE_OK = "OK: the Vietnamese task is clear, natural and consistent (one opening hint at most), and the facts give a natural place to use every required word";
-const PRODUCTIVE_PROBLEM = "PROBLEM: the Vietnamese is garbled, ungrammatical or contradictory, gives two different opening hints, or a required word has no natural use in the situation";
+const PRODUCTIVE_OK = "OK: the learner task is clear, natural and consistent (one opening hint at most), and the facts give a natural place to use every required word";
+const PRODUCTIVE_PROBLEM = "PROBLEM: the learner wording is garbled, ungrammatical or contradictory, gives two different opening hints, or a required word has no natural use in the situation";
 
 export const MONTHLY_FINAL_VERIFICATION_PROMPT = [
   "You are an independent English teacher checking a monthly workplace English exam before learners see it. You did not write it.",
   "Objective items (listening, reading): solve each item yourself - the key is NOT given. Read the prompt, the context (listening script) when there is one, and every option.",
   "correctOptions = EVERY option, copied exactly, that you would mark fully correct: grammatical British English, natural, and the meaning fits the sentence or is stated in the script. If two options both make a correct, natural sentence (Please ____ your results in the report: write and explain), list both. If none is acceptable, return an empty list.",
   "For a listening question an option is correct only when the script states it; an option that is only partly supported or mixes two details is not correct.",
-  `Task items (ref W or SB): the prompt is a Vietnamese learner task with facts and the required English words (the line "Dùng đủ N từ sau: ..."). Return in correctOptions the one option that is true: "${PRODUCTIVE_OK}" or "${PRODUCTIVE_PROBLEM}". In note, name the garbled sentence or the word with no natural use.`,
+  `Task items (ref W or SB): the prompt is a learner task in Vietnamese (A1–A2) or English (B1–C1), with facts and a required English word list. Return in correctOptions the one option that is true: "${PRODUCTIVE_OK}" or "${PRODUCTIVE_PROBLEM}". In note, name the garbled sentence or the word with no natural use.`,
   "note: one short English sentence. Return one entry per input item with its ref unchanged."
 ].join("\n");
 
@@ -73,7 +73,7 @@ export function monthlyFinalVerificationFindings(items: readonly VerificationIte
     const note = verdict.note?.trim() ? ` (${verdict.note.trim()})` : "";
     if (!item.key) {
       if (accepted.has(normalized(PRODUCTIVE_PROBLEM)) && !accepted.has(normalized(PRODUCTIVE_OK))) {
-        findings.push({ code: "GEN12", taskKey: item.ref, section: item.section, message: `${item.ref}: người kiểm độc lập thấy đề tiếng Việt rối hoặc ép dùng từ không tự nhiên${note}`, hint: `The task is garbled or forces a required word${note}` });
+        findings.push({ code: "GEN12", taskKey: item.ref, section: item.section, message: `${item.ref}: người kiểm độc lập thấy lời đề khó hiểu hoặc ép dùng từ không tự nhiên${note}`, hint: `The task is garbled or forces a required word${note}` });
       }
       continue;
     }
