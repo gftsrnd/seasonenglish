@@ -39,6 +39,17 @@ describe("app profile avatar dialog affordances", () => {
     expect(screen.getByRole("region", { name: "Điểm đầu ra" })).toHaveTextContent("15/20");
   });
 
+  it("labels approved retake scores and offers separate review entries", () => {
+    render(<LearnerProfile view={{ ...view, assessments: { placement: {
+      isPlacementRetake: true, totalScore: 66, approvedLevel: "B1", sections: { listening: 15 }, sectionMaxScores: { listening: 20 }
+    } } }} actions={actions} />);
+    const result = screen.getByRole("region", { name: "Điểm thi lại đầu vào" });
+    expect(result).toHaveTextContent("B1");
+    expect(result).toHaveTextContent("15/20");
+    expect(within(result).getByRole("button", { name: "Xem bài thi lại" })).toBeInTheDocument();
+    expect(within(result).getByRole("button", { name: "Xem bài lần đầu" })).toBeInTheDocument();
+  });
+
   it("uses the persisted monthly cycle instead of legacy weekly stages", () => {
     const monthlyView = {
       ...view,

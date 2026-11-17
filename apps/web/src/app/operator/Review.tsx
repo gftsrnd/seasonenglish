@@ -346,7 +346,7 @@ const assessmentStatusLabels: Record<string, string> = {
   submitted: "Đã nộp", pending_review: "Chờ duyệt", approved: "Đã duyệt", in_progress: "Đang làm", needs_retry: "Cần làm lại", retry: "Cần làm lại", completed: "Đã hoàn thành"
 };
 
-export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualScore, savingManualScore = false, onDeleteAudio, onRescore, rescoring = false, learnerFeedback }: { detail: ContentReviewAssessmentDetailView; learnerFeedback?: string | null; onClose(): void; onSaveManualScore?: (input: ManualScoreInput) => void; savingManualScore?: boolean; onDeleteAudio?: (evidence: AudioEvidence) => void | Promise<void>; onRescore?: () => void; rescoring?: boolean }) {
+export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualScore, savingManualScore = false, onDeleteAudio, onRescore, rescoring = false, learnerFeedback, learnerTitle }: { detail: ContentReviewAssessmentDetailView; learnerFeedback?: string | null; learnerTitle?: string; onClose(): void; onSaveManualScore?: (input: ManualScoreInput) => void; savingManualScore?: boolean; onDeleteAudio?: (evidence: AudioEvidence) => void | Promise<void>; onRescore?: () => void; rescoring?: boolean }) {
   const learnerView = learnerFeedback !== undefined;
   const compact = useMediaQuery("(max-width: 900px)");
   const dialogRef = useRef<HTMLElement>(null);
@@ -568,7 +568,7 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     }
   ];
 
-  return <div className="modal-backdrop operator-modal-scope operator-detail-modal" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} className={`dialog wide operator-detail-dialog operator-assessment-dialog${learnerView ? " learner-original-placement-dialog" : ""}`} role="dialog" aria-modal="true" aria-label={learnerView ? "Bài đầu vào đã nộp" : `Chi tiết bài test của ${detail.learnerName}`} tabIndex={-1}>
+  return <div className="modal-backdrop operator-modal-scope operator-detail-modal" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} className={`dialog wide operator-detail-dialog operator-assessment-dialog${learnerView ? " learner-original-placement-dialog" : ""}`} role="dialog" aria-modal="true" aria-label={learnerView ? learnerTitle ?? "Bài đầu vào đã nộp" : `Chi tiết bài test của ${detail.learnerName}`} tabIndex={-1}>
     <div className="row between"><div><h3 id="operator-review-detail-title">{learnerView ? "Bài đầu vào đã nộp" : `Bài test · ${detail.learnerName}`}</h3><p className="small muted">{learnerView ? null : <>{detail.title} · </>}{assessmentStatusLabels[detail.status] ?? detail.status}{detail.submittedAt ? <> · Nộp {operatorDateTime(detail.submittedAt)}</> : null}{learnerView ? null : <> · Bắt đầu {operatorDateTime(detail.startedAt)}</>} · Tổng điểm: {detail.totalScore == null ? "Chờ đủ 4 kỹ năng" : formatScoreOutOf(detail.totalScore, 100)}</p></div><ModalCloseButton onClick={onClose} /></div>
     <div ref={scroll.start} className="app-scroll-edge" aria-hidden="true" />
     {learnerFeedback ? <p className="operator-answer-value"><b>Phản hồi của Vận hành</b><br />{learnerFeedback}</p> : null}

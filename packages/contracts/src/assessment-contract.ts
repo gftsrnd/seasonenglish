@@ -181,14 +181,17 @@ export interface AssessmentPlacementRetakeView {
  * Learner support for placement. The original submission remains viewable after the retake
  * request window ends and while the learner is taking the retake.
  */
-export interface AssessmentPlacementRetakeRequestView {
-  original: {
+export interface AssessmentPlacementSubmissionView {
     definition: AssessmentDefinitionView;
     attempt: AssessmentAttemptView;
     submittedAt?: string | null;
     feedback: string | null;
     objectiveAnswerKeys?: Partial<Record<"listening" | "reading", Record<string, string>>>;
-  } | null;
+}
+
+export interface AssessmentPlacementRetakeRequestView {
+  original: AssessmentPlacementSubmissionView | null;
+  completedRetake?: AssessmentPlacementSubmissionView & { approvedLevel: CefrLevel | null };
   target: { attemptId: string; title: string; availableUntil: string | null } | null;
   request: { id: string; reason?: string; status: "pending" | "accepted" | "rejected"; resolution: string | null; createdAt: string; resolvedAt: string | null } | null;
   retake: AssessmentRetakeStatus;

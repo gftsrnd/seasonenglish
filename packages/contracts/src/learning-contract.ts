@@ -495,6 +495,7 @@ export interface BadgeRoadmapItem {
 }
 
 export interface AssessmentSnapshot {
+  isPlacementRetake?: true;
   totalScore: number;
   approvedLevel: CefrLevel | null;
   sections: Partial<Record<"listening" | "reading" | "writing" | "speaking", number>>;

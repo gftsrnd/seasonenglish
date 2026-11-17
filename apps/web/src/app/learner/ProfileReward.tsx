@@ -81,7 +81,7 @@ export function LearnerProfile({ view, actions, courseCompleted = false }: { vie
         {view.badgeCertificateAvailable ? "Xem chứng nhận huy hiệu" : "Xem trước chứng nhận"}
       </AppLink>
     } /> : null}
-    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá" style={{ background: "var(--mint)" }}><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Kết quả đánh giá</h2></div></div><div className={`profile-assessment-grid${courseCompleted || view.assessments.passCourse ? " grid cols-2" : ""}`}><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} action={view.assessments.placement ? <PlacementSubmissionReview /> : null} />{courseCompleted ? <CourseAssessmentResult /> : view.assessments.passCourse ? <AssessmentResult label="Điểm đầu ra" result={view.assessments.passCourse} /> : null}</div>{view.surveyAvailable && !view.monthlyProgress && !view.monthlyPreparation ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
+    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá" style={{ background: "var(--mint)" }}><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Kết quả đánh giá</h2></div></div><div className={`profile-assessment-grid${courseCompleted || view.assessments.passCourse ? " grid cols-2" : ""}`}><AssessmentResult label={view.assessments.placement?.isPlacementRetake ? "Điểm thi lại đầu vào" : "Điểm đầu vào"} result={view.assessments.placement} action={view.assessments.placement ? <PlacementSubmissionReview hasRetake={view.assessments.placement.isPlacementRetake === true} /> : null} />{courseCompleted ? <CourseAssessmentResult /> : view.assessments.passCourse ? <AssessmentResult label="Điểm đầu ra" result={view.assessments.passCourse} /> : null}</div>{view.surveyAvailable && !view.monthlyProgress && !view.monthlyPreparation ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
     {avatarOpen ? <AvatarDialog initial={view.learner.profile.avatar} name={view.learner.displayName} onClose={closeAvatar} onSave={async (avatar) => { await actions.saveAvatar(avatar); closeAvatar(); }} /> : null}
   </div>;
 }
@@ -133,17 +133,18 @@ function AssessmentResult({ label, result, action }: { label: string; result: Pr
   </div>;
 }
 
-function PlacementSubmissionReview() {
-  const [submission, setSubmission] = useState<AssessmentPlacementRetakeRequestView["original"]>();
+function PlacementSubmissionReview({ hasRetake }: { hasRetake: boolean }) {
+  const [submission, setSubmission] = useState<{ attempt: NonNullable<AssessmentPlacementRetakeRequestView["original"]>; retake: boolean }>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
-  async function open() {
+  async function open(retake: boolean) {
     setLoading(true);
     setError(false);
     try {
       const view = await learnerApiClient.getPlacementRetakeRequest?.();
-      if (view?.original) setSubmission(view.original);
+      const attempt = retake ? view?.completedRetake : view?.original;
+      if (attempt) setSubmission({ attempt, retake });
       else setError(true);
     } catch {
       setError(true);
@@ -153,9 +154,12 @@ function PlacementSubmissionReview() {
   }
 
   return <>
-    <button type="button" className="btn" disabled={loading} onClick={() => void open()}>Xem lại bài làm</button>
+    <div className="row">
+      {hasRetake ? <button type="button" className="btn" disabled={loading} onClick={() => void open(true)}>Xem bài thi lại</button> : null}
+      <button type="button" className="btn" disabled={loading} onClick={() => void open(false)}>{hasRetake ? "Xem bài lần đầu" : "Xem lại bài làm"}</button>
+    </div>
     {error ? <ErrorText message="Chưa mở được bài làm. Vui lòng thử lại." /> : null}
-    {submission ? <OriginalPlacementModal submission={submission} onClose={() => setSubmission(undefined)} /> : null}
+    {submission ? <OriginalPlacementModal submission={submission.attempt} retake={submission.retake} onClose={() => setSubmission(undefined)} /> : null}
   </>;
 }
 function Avatar({ avatar, name, size = 88 }: { avatar: Partial<LearnerAvatarData> | undefined; name: string; size?: number }) { const acc = avatar?.acc ?? "none"; const color = avatar?.color ?? "olive"; const bg = avatar?.bg ?? 0; const dimension = `var(--profile-avatar-size, ${size}px)`; return <span className="app-avatar" style={{ width: dimension, height: dimension, minWidth: dimension, minHeight: dimension, boxSizing: "border-box", background: AVATAR_BG[bg], color: AVATAR_COLOR_HEX[color] }} aria-label={`Avatar của ${name}`}>{acc !== "none" ? <AvatarMark acc={acc} size={Math.round(size * .58)} /> : name.split(/\s+/).slice(-2).map((word) => word[0]).join("").toUpperCase()}</span>; }

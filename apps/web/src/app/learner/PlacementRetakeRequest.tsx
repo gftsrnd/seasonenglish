@@ -70,7 +70,7 @@ export function PlacementRetakeRequest({ api = learnerApiClient, onSent, onViewC
 }
 
 
-export function OriginalPlacementModal({ submission, onClose }: { submission: NonNullable<AssessmentPlacementRetakeRequestView["original"]>; onClose: () => void }) {
+export function OriginalPlacementModal({ submission, onClose, retake = false }: { retake?: boolean; submission: NonNullable<AssessmentPlacementRetakeRequestView["original"]>; onClose: () => void }) {
   const { attempt, definition, feedback } = submission;
   const detail: ContentReviewAssessmentDetailView = {
     attemptId: attempt.id,
@@ -123,5 +123,5 @@ export function OriginalPlacementModal({ submission, onClose }: { submission: No
     decision: null,
     appeal: null
   };
-  return <OperatorReviewAssessmentDetail detail={detail} learnerFeedback={feedback} onClose={onClose} />;
+  return <OperatorReviewAssessmentDetail detail={detail} learnerFeedback={feedback} {...(retake ? { learnerTitle: "Bài thi lại đã nộp" } : {})} onClose={onClose} />;
 }

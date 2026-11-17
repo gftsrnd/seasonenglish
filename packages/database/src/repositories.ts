@@ -2199,22 +2199,23 @@ class LearningRepository {
          order by coalesce(ps.reviewed_at, ps.submitted_at, ps.updated_at) desc limit 1`, [learnerId, thresholds.days]
       ),
       this.pool.query<{
-        kind: string; total_score: string; approved_level: CefrLevel | null;
+        kind: string; assessment_key: string; total_score: string; approved_level: CefrLevel | null;
         section: "listening" | "reading" | "writing" | "speaking"; section_score: string; section_max: string | null;
       }>(
         `with latest as (
-           select distinct on (ad.kind) aa.id, ad.kind, av.blueprint, dec.approved_level
+           select distinct on (ad.kind) aa.id, ad.kind, ad.assessment_key, av.blueprint, dec.approved_level
            from assessment_attempts aa
            join assessment_versions av on av.id = aa.assessment_version_id
            join assessment_definitions ad on ad.id = av.definition_id
            left join assessment_decisions dec on dec.attempt_id = aa.id
            where aa.learner_id = $1 and (
-             (ad.kind = 'placement' and aa.status in ('submitted', 'pending_review', 'approved'))
+             (ad.kind = 'placement' and aa.status in ('submitted', 'pending_review', 'approved')
+               and (ad.assessment_key <> 'placement-retake' or aa.status = 'approved'))
              or (ad.kind = 'pass_course' and aa.status in ('approved', 'needs_retry') and dec.decided_at is not null)
            ) and exists (select 1 from assessment_scores score where score.attempt_id = aa.id)
            order by ad.kind, aa.submitted_at desc nulls last, aa.started_at desc
          )
-         select latest.kind, sum(score.score) over (partition by latest.id)::text as total_score,
+         select latest.kind, latest.assessment_key, sum(score.score) over (partition by latest.id)::text as total_score,
                 latest.approved_level, score.section, score.score::text as section_score,
                 (select item->>'maxScore' from jsonb_array_elements(latest.blueprint->'sections') item
                  where item->>'code' = score.section) as section_max
@@ -2826,17 +2827,19 @@ function buildLevelReadiness(input: {
 }
 
 function buildAssessmentSnapshots(rows: Array<{
-  kind: string; total_score: string; approved_level: CefrLevel | null;
+  kind: string; assessment_key: string; total_score: string; approved_level: CefrLevel | null;
   section: "listening" | "reading" | "writing" | "speaking"; section_score: string; section_max: string | null;
 }>): { placement: AssessmentSnapshot | null; passCourse?: AssessmentSnapshot } {
   const build = (kind: string): AssessmentSnapshot | null => {
     const selected = rows.filter((row) => row.kind === kind);
     if (!selected.length || (kind === "pass_course" && selected.length !== 4)) return null;
+    const isPlacementRetake = selected[0]?.assessment_key === PLACEMENT_RETAKE_ASSESSMENT_KEY;
     return {
+      ...(isPlacementRetake ? { isPlacementRetake: true as const } : {}),
       totalScore: Number(selected[0]?.total_score ?? 0),
       approvedLevel: selected[0]?.approved_level ?? null,
       sections: Object.fromEntries(selected.map((row) => [row.section, Number(row.section_score)])),
-      ...(kind === "pass_course" ? { sectionMaxScores: Object.fromEntries(selected.filter(row => row.section_max !== null).map(row => [row.section, Number(row.section_max)])) } : {})
+      ...(kind === "pass_course" || isPlacementRetake ? { sectionMaxScores: Object.fromEntries(selected.filter(row => row.section_max !== null).map(row => [row.section, Number(row.section_max)])) } : {})
     };
   };
   const passCourse = build("pass_course");

@@ -864,22 +864,31 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
   const placementRetakeRequestView = async (learnerId: string): Promise<AssessmentPlacementRetakeRequestView> => {
     const state = await findPlacementRetakeRequestState(pool, learnerId);
     const activity = state.retake === "used" ? await readPlacementRetakeActivity(pool, learnerId) : null;
-    const attempt = state.original ? await repositories.assessments.findAttempt(learnerId, state.original.attemptId) : null;
-    const definition = attempt && attempt.learnerId === learnerId && attempt.status !== "in_progress"
-      ? await definitionForAttempt(repositories.assessments, attempt)
-      : null;
-    const originalDefinition = definition?.kind === "placement" && definition.assessmentKey !== PLACEMENT_RETAKE_ASSESSMENT_KEY
-      && definition.blueprint.key !== PLACEMENT_RETAKE_ASSESSMENT_KEY ? definition.blueprint : null;
-    return {
-      original: attempt && originalDefinition ? {
-        definition: publicAssessmentDefinition(originalDefinition),
-        objectiveAnswerKeys: Object.fromEntries(originalDefinition.sections
+    const submission = async (source: typeof state.original, retake: boolean) => {
+      const attempt = source ? await repositories.assessments.findAttempt(learnerId, source.attemptId) : null;
+      if (!attempt || attempt.learnerId !== learnerId || attempt.status === "in_progress"
+        || (retake && attempt.status !== "approved")) return null;
+      const definition = await definitionForAttempt(repositories.assessments, attempt);
+      if (definition?.kind !== "placement") return null;
+      const blueprint = definition.blueprint;
+      const isRetake = definition.assessmentKey === PLACEMENT_RETAKE_ASSESSMENT_KEY || blueprint.key === PLACEMENT_RETAKE_ASSESSMENT_KEY;
+      if (isRetake !== retake) return null;
+      return {
+        definition: publicAssessmentDefinition(blueprint),
+        objectiveAnswerKeys: Object.fromEntries(blueprint.sections
           .filter(section => section.code === "listening" || section.code === "reading")
           .map(section => [section.code, Object.fromEntries(section.groups.flatMap(group => group.tasks.flatMap(task => task.correctAnswer ? [[task.key, task.correctAnswer]] : [])))])),
         attempt: attemptView(attempt),
         submittedAt: attempt.submittedAt?.toISOString() ?? null,
-        feedback: state.original?.feedback ?? null
-      } : null,
+        feedback: source?.feedback ?? null
+      };
+    };
+    const [original, completedRetake] = await Promise.all([
+      submission(state.original, false), submission(state.completedRetake ?? null, true)
+    ]);
+    return {
+      original,
+      ...(completedRetake ? { completedRetake: { ...completedRetake, approvedLevel: state.completedRetake?.approvedLevel ?? null } } : {}),
       target: state.target ? { ...state.target, availableUntil: state.target.availableUntil?.toISOString() ?? null } : null,
       request: state.request ? { ...state.request, createdAt: state.request.createdAt.toISOString(), resolvedAt: state.request.resolvedAt?.toISOString() ?? null } : null,
       retake: state.retake,

@@ -57,7 +57,7 @@ export function LearnerRequestHistory() {
   const [revision, setRevision] = useState(0);
   const [notice, setNotice] = useState("");
   const [retakeView, setRetakeView] = useState<AssessmentPlacementRetakeRequestView>();
-  const [originalOpen, setOriginalOpen] = useState(false);
+  const [submissionOpen, setSubmissionOpen] = useState<"original" | "completedRetake" | null>(null);
   const surveys = useLearnerMonthlySurveys();
   const refresh = () => setRevision(value => value + 1);
   const setComplaintFormOpen = (open: boolean) => {
@@ -145,17 +145,20 @@ export function LearnerRequestHistory() {
   });
   const retake = retakeView?.request;
   const original = retakeView?.original;
+  const completedRetake = retakeView?.completedRetake;
+  const selectedSubmission = submissionOpen === "original" ? original : submissionOpen === "completedRetake" ? completedRetake : undefined;
   const retakeRows = retake && (filter === "all" || filter === "appeals") ? [{
     id: `support-request-${retake.id}`,
     kind: "Yêu cầu thi lại",
     date: retake.createdAt,
-    content: <><b>Test đầu vào</b>{retake.reason ? <p>{retake.reason}</p> : null}{original?.feedback ? <p className="small">Phản hồi bài đầu vào: {original.feedback}</p> : null}{retake.resolution ? <p className="small">Phản hồi yêu cầu: {retake.resolution}</p> : null}</>,
+    content: <><b>Test đầu vào</b>{retake.reason ? <p>{retake.reason}</p> : null}{original?.feedback ? <p className="small">Phản hồi bài đầu vào: {original.feedback}</p> : null}{retake.resolution ? <p className="small">Phản hồi yêu cầu: {retake.resolution}</p> : null}{completedRetake ? <p className="small"><b>Mức cuối: {completedRetake.approvedLevel ?? "—"}</b>{completedRetake.feedback ? <> · {completedRetake.feedback}</> : null}</p> : null}</>,
     status: <span className={`badge ${retake.status === "pending" ? "warn" : retake.status === "rejected" ? "danger" : "ok"}`}>{retake.status === "pending" ? "Chờ xử lý" : retake.status === "rejected" ? "Đã từ chối" : "Đã duyệt"}</span>,
     action: <>
       {retake.status === "accepted" && retakeView?.retake !== "used" ? <Link className="btn btn-sm" to="/test/placement">Mở bài thi lại</Link>
         : retake.status === "accepted" && retakeView?.retakeActivity === "in_progress" ? <Link className="btn btn-sm" to="/test/placement">Tiếp tục bài thi lại</Link>
           : retake.status === "accepted" && retakeView?.retake === "used" ? <span className="small muted">Đã dùng lượt thi lại</span> : null}
-      {original ? <button className="btn btn-sm" type="button" onClick={() => setOriginalOpen(true)}>Xem bài làm</button> : null}
+      {original ? <button className="btn btn-sm" type="button" onClick={() => setSubmissionOpen("original")}>{completedRetake ? "Xem bài lần đầu" : "Xem bài làm"}</button> : null}
+      {completedRetake ? <button className="btn btn-sm" type="button" onClick={() => setSubmissionOpen("completedRetake")}>Xem bài thi lại</button> : null}
     </>
   }] : [];
   const rows = [...history, ...retakeRows, ...feedbackRows].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
@@ -201,7 +204,7 @@ export function LearnerRequestHistory() {
       {requestError || (surveyError && filter !== "feedback") ? <p role="alert">Chưa tải được đầy đủ lịch sử. <button type="button" className="btn" onClick={() => { refresh(); surveys.retry(); }}>Thử lại</button></p> : null}
       <RequestTable label={listLabel} rows={rows} empty={loading ? <span role="status">Đang tải…</span> : "Chưa có mục nào."} />
     </section>
-    {original && originalOpen ? <OriginalPlacementModal submission={original} onClose={() => setOriginalOpen(false)} /> : null}
+    {selectedSubmission ? <OriginalPlacementModal submission={selectedSubmission} retake={submissionOpen === "completedRetake"} onClose={() => setSubmissionOpen(null)} /> : null}
   </div>;
 }
 

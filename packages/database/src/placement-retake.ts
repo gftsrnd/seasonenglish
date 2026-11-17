@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import type { AssessmentRetakeStatus, AssessmentSectionCode } from "@e4s/contracts";
+import type { AssessmentRetakeStatus, AssessmentSectionCode, CefrLevel } from "@e4s/contracts";
 import { placementDefinition, type StoredAssessmentDefinition } from "./assessment-blueprints.js";
 
 /**
@@ -164,6 +164,7 @@ export interface PlacementRetakeRequestState {
   request: { id: string; reason: string; status: "pending" | "accepted" | "rejected"; resolution: string | null; createdAt: Date; resolvedAt: Date | null } | null;
   retake: AssessmentRetakeStatus;
   original: { attemptId: string; feedback: string | null } | null;
+  completedRetake?: { attemptId: string; feedback: string | null; approvedLevel: CefrLevel | null };
 }
 
 export async function findPlacementRetakeRequestState(db: Db, learnerId: string, now: Date = new Date()): Promise<PlacementRetakeRequestState> {
@@ -198,7 +199,14 @@ export async function findPlacementRetakeRequestState(db: Db, learnerId: string,
   const original = row && row.status !== "in_progress" && (row.submitted_at || row.decided_at)
     ? { attemptId: row.id, feedback: row.feedback }
     : null;
-  return { target, request, retake: placementRetakeStatus(grant), original };
+  const final = grant?.retakeAttemptId ? (await db.query<{ id: string; reason: string; approved_level: CefrLevel | null }>(
+    `select aa.id, decision.reason, decision.approved_level from assessment_attempts aa
+     join assessment_decisions decision on decision.attempt_id = aa.id and decision.status = 'approved'
+     where aa.id = $1 and aa.learner_id = $2 and aa.status = 'approved'`,
+    [grant.retakeAttemptId, learnerId]
+  )).rows[0] : undefined;
+  return { target, request, retake: placementRetakeStatus(grant), original,
+    ...(final ? { completedRetake: { attemptId: final.id, feedback: final.reason, approvedLevel: final.approved_level } } : {}) };
 }
 
 /**

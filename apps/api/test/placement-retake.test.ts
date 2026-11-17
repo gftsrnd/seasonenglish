@@ -325,6 +325,22 @@ describe("learner retake request ('Xin thi lại') and the Operator's decision",
     await server.close();
   });
 
+  it.each(["approved", "pending_review"] as const)("exposes a separately versioned retake only after final approval (%s)", async status => {
+    retakeDb.findPlacementRetakeRequestState.mockResolvedValueOnce({
+      original: null, target: null, request: null, retake: "used",
+      completedRetake: { attemptId: RETAKE_ATTEMPT_ID, feedback: "Quyết định cuối", approvedLevel: "B1" }
+    });
+    repositories.assessments.findAttempt.mockResolvedValueOnce(attempt(RETAKE_ATTEMPT_ID, status, RETAKE_VERSION_ID));
+    const server = await app();
+    const response = await server.inject({ url: "/api/v1/learner/placement-retake-request" });
+    expect(response.statusCode).toBe(200);
+    if (status === "approved") expect(response.json().completedRetake).toMatchObject({
+      definition: { key: "placement-retake" }, attempt: { id: RETAKE_ATTEMPT_ID }, feedback: "Quyết định cuối", approvedLevel: "B1"
+    });
+    else expect(response.json().completedRetake).toBeUndefined();
+    await server.close();
+  });
+
   it("refuses the request once the window has expired", async () => {
     retakeDb.createPlacementRetakeRequest.mockResolvedValue(null);
     const server = await app();
