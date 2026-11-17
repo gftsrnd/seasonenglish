@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createRepositories, learnerConsecutiveLearningAbsences, learnerMonthlyAccess, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
+import { createRepositories, learnerConsecutiveLearningAbsences, learnerMonthlyAccess, learnerMonthlyAttendanceDates, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { DEMO_IDS } from "@e4s/test-support";
 import { monthlyExamEligibility } from "../src/modules/learning/routes.js";
 
@@ -12,6 +12,7 @@ const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL ?? "post
 const repositories = createRepositories(pool);
 const month = "2026-11";
 const frameworkId = randomUUID();
+const decemberLessonId = randomUUID();
 const lessonDates: string[] = [];
 for (const date = new Date("2026-11-02T00:00:00Z"); date < new Date("2026-11-28T00:00:00Z"); date.setUTCDate(date.getUTCDate() + 1)) {
   if (date.getUTCDay() >= 1 && date.getUTCDay() <= 5) lessonDates.push(date.toISOString().slice(0, 10));
@@ -68,6 +69,26 @@ describe("mid-month catch-up learners", () => {
       await pool.query("insert into month_lessons (id, framework_id, lesson_number, lesson_date, lesson_id, scope_hash, status) values ($1, $2, $3, $4, $5, 'scope', 'approved')",
         [randomUUID(), frameworkId, day.lessonNumber, day.date, day.lessonId]);
     }
+    const decemberId = randomUUID();
+    const decemberFramework = randomUUID();
+    const decemberSet = randomUUID();
+    const decemberVersion = randomUUID();
+    await pool.query("insert into program_months (id, organization_id, month, exam_date, lesson_count, brief_status) values ($1, $2, '2026-12', '2026-12-31', 1, 'approved')",
+      [decemberId, DEMO_IDS.organization]);
+    await pool.query(`insert into month_frameworks (id, program_month_id, cefr, status, curriculum_contract, scope_hash, published_at, published_on)
+      values ($1, $2, 'A1', 'approved', '{"daySpecs":[{"lessonNumber":1,"date":"2026-12-01","kind":"new"}],"coreTerms":[]}', 'scope', now(), '2026-12-01')`,
+      [decemberFramework, decemberId]);
+    await pool.query("insert into lesson_sets (id, month_framework_id, cefr) values ($1, $2, 'A1')", [decemberSet, decemberFramework]);
+    await pool.query("insert into lesson_set_versions (id, lesson_set_id, version, status) values ($1, $2, 1, 'published')", [decemberVersion, decemberSet]);
+    await pool.query("insert into lessons (id, lesson_set_version_id, day_number, title) values ($1, $2, 1, 'December lesson')", [decemberLessonId, decemberVersion]);
+    await pool.query("insert into lesson_versions (id, lesson_id, version, status, content) values ($1, $2, 1, 'published', '{}'::jsonb)", [randomUUID(), decemberLessonId]);
+    await pool.query("insert into month_lessons (id, framework_id, lesson_number, lesson_date, lesson_id, scope_hash, status) values ($1, $2, 1, '2026-12-01', $3, 'scope', 'approved')",
+      [randomUUID(), decemberFramework, decemberLessonId]);
+    const definitionId = randomUUID();
+    await pool.query("insert into assessment_definitions (id, organization_id, kind, assessment_key, title) values ($1, $2, 'final', 'monthly-final-2026-11-a1', 'November final')",
+      [definitionId, DEMO_IDS.organization]);
+    await pool.query("insert into assessment_versions (id, definition_id, version, status, blueprint, published_at) values ($1, $2, 1, 'published', '{}'::jsonb, now())",
+      [randomUUID(), definitionId]);
   }, 60_000);
 
   afterAll(async () => { await pool.end(); });
@@ -123,13 +144,39 @@ describe("mid-month catch-up learners", () => {
     expect(await learnerMonthlyAccess(pool, id)).toMatchObject({ state: "uncounted", startDate: "2026-12-01", approvalDate: "2026-11-12" });
     const lessons = await repositories.learning.listMonthlyLessons(id, month);
     expect(lessons.map((lesson) => lesson.dayNumber)).toEqual(days.map((day) => day.lessonNumber));
-    // Catch-up from lesson 1; a Friday review before the approval date does not gate later lessons.
+    expect(await lockOf(id)).toEqual(new Map(days.map((day) => [day.lessonNumber, day.date <= "2026-11-12" ? null : { reason: "date", blocker: undefined }])));
+    expect((await repositories.learning.findLesson(id, days[4]!.lessonId))?.lock).toBeNull();
+    expect((await repositories.learning.findLesson(id, days[9]!.lessonId))?.lock).toMatchObject({ reason: "date" });
     expect((await lockOf(id)).get(1)).toBeNull();
-    await complete(id, 1);
-    expect((await lockOf(id)).get(2)).toBeNull();
+    const laterLesson = days[7]!.lessonId;
+    const saved = await repositories.learning.saveLessonProgress({ learnerId: id, lessonId: laterLesson,
+      progress: { status: "completed", completedPartCodes: [], evidence: {} } });
+    expect(saved.status).toBe("completed");
+    expect((await repositories.learning.findLesson(id, laterLesson))?.progress.status).toBe("completed");
+    expect(await repositories.learning.getProgressDashboard(id)).toMatchObject({
+      points: 0, studyDays: 0, monthlyProgress: { completedLessons: 0, totalLessons: 0, uncounted: { countsFrom: "2026-12-01" } }
+    });
     // Nothing counts: no absences, no attendance window, no monthly final eligibility.
     await systemDate("2026-11-20");
     expect(await learnerConsecutiveLearningAbsences(pool, id)).toBe(0);
-    expect(await monthlyExamEligibility(pool, id)).toMatchObject({ effectiveDays: 0, absenceDays: 0, accessEligible: false });
+    expect(await monthlyExamEligibility(pool, id)).toMatchObject({ effectiveDays: 0, absenceDays: 0, accessEligible: false, formPublished: true });
+
+    // The published November exam was never taken. December still opens as a counted month.
+    await systemDate("2026-12-01");
+    expect(await learnerMonthlyAccess(pool, id)).toMatchObject({ state: "active", startDate: "2026-12-01" });
+    expect(await repositories.learning.listMonthlyLessons(id, "2026-12")).toMatchObject([{ id: decemberLessonId, lock: null }]);
+    expect(await repositories.learning.getProgressDashboard(id)).toMatchObject({
+      monthlyProgress: { month: "2026-12", completedLessons: 0, totalLessons: 1 }
+    });
+    // Completing a November trial lesson after December opens must not earn December attendance.
+    await repositories.learning.saveLessonProgress({ learnerId: id, lessonId: days[0]!.lessonId,
+      progress: { status: "completed", completedPartCodes: [], evidence: {} } });
+    expect((await learnerMonthlyAttendanceDates(pool, id, ["2026-12"], { cefr: "A1" })).get("2026-12")).toEqual([]);
+    await repositories.learning.saveLessonProgress({ learnerId: id, lessonId: decemberLessonId,
+      progress: { status: "completed", completedPartCodes: [], evidence: {} } });
+    expect((await learnerMonthlyAttendanceDates(pool, id, ["2026-12"], { cefr: "A1" })).get("2026-12")).toEqual(["2026-12-01"]);
+    const progress = await repositories.learning.getProgressDashboard(id);
+    expect(progress?.points).toBe(30); // December completion and full-month bonus only.
+    expect(progress?.monthlyProgress?.completedLessons).toBe(1);
   });
 });

@@ -8,6 +8,7 @@ import { BadgeCertificate, CertificateActions } from "./CertificateDocument.js";
 import { CourseAssessmentResult } from "./CourseCompletion.js";
 import { SeasonProgressCard } from "../shared/SeasonProgressCard.js";
 import { useCompactUi } from "../shared/CompactUi.js";
+import { monthlyUncountedText } from "../shared/monthly-uncounted.js";
 import { formatPercent, formatScore, formatScoreOutOf } from "../shared/format-score.js";
 
 export function LearnerSurvey({ view, actions }: { view: SurveyView; actions: LearnerCallbacks }) {
@@ -63,6 +64,7 @@ export function LearnerProfile({ view, actions, courseCompleted = false }: { vie
   const detail = level ? `Trình độ ${level} – ${CEFR_LABELS[level]}${goals ? ` · ${goals}.` : ""}` : "Chưa duyệt trình độ";
   return <div className="app-learner-page profile-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}>
     <PageTitle eyebrow="Tiến độ & hồ sơ" title={view.learner.displayName} detail={detail} aside={level ? <span className={`badge lvl lvl-${level}`}>{level}</span> : null} />
+    {view.monthlyProgress?.uncounted ? <section className="card" role="status"><p style={{ margin: 0 }}>{monthlyUncountedText(view.monthlyProgress.uncounted.countsFrom)}</p></section> : null}
     <section className="card learner-summary-card learner-summary-card--profile profile-identity-card" aria-label="Hồ sơ cá nhân">
       <div className="profile-identity-header">
         <button ref={avatarReturnRef} className="btn-ghost profile-avatar-button" type="button" aria-label="Đổi avatar" onClick={openAvatar}><Avatar avatar={view.learner.profile.avatar} name={view.learner.displayName} /></button>

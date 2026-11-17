@@ -257,9 +257,9 @@ export function registerLearningRoutes(
       ...(lesson.monthlyKind ? { kind: lesson.monthlyKind } : {})
     }));
     // Friday reviews are not lessons: they never count toward k/N lesson progress.
-    const dailyLessons = summaries.filter((lesson) => lesson.kind !== "review");
+    const dailyLessons = uncounted ? [] : summaries.filter((lesson) => lesson.kind !== "review");
     const completedLessons = dailyLessons.filter((lesson) => lesson.status === "completed").length;
-    const reviewLessons = summaries.filter((lesson) => lesson.kind === "review");
+    const reviewLessons = uncounted ? [] : summaries.filter((lesson) => lesson.kind === "review");
     const completedReviews = reviewLessons.filter((lesson) => lesson.status === "completed").length;
     const totalReviews = reviewLessons.length;
     const pastMonthlyAttempt = monthlyEligibility.month !== monthlyContext?.month && monthlyEligibility.formPublished && !monthlyAttempt
@@ -312,7 +312,10 @@ export function registerLearningRoutes(
         certificateEligible: (monthlyContext?.cefr ?? progress.learner.cefr) === "C1"
       } : null,
       lessons: summaries,
-      nextLesson: summaries.find((lesson) => lesson.status !== "completed") ?? null,
+      nextLesson: (uncounted
+        ? summaries.find((lesson) => lesson.status === "in_progress" && !lesson.lock)
+          ?? summaries.find((lesson) => lesson.status !== "completed" && !lesson.lock)
+        : summaries.find((lesson) => lesson.status !== "completed")) ?? null,
       microLesson: microLesson ? {
         id: microLesson.id, topic: microLesson.topic, durationMinutes: microLesson.durationMinutes,
         completed: Boolean(microLesson.completedAt)
@@ -322,7 +325,7 @@ export function registerLearningRoutes(
         completedLessons,
         totalLessons: dailyLessons.length,
         studyDays: monthlyContext ? progress.studyDays : 0,
-        streakDays: monthlyContext ? calculateCurrentStreak(progress.activity.map((item) => item.occurredAt), organizationDate) : 0,
+        streakDays: monthlyContext && !uncounted ? calculateCurrentStreak(progress.activity.map((item) => item.occurredAt), organizationDate) : 0,
         points,
         // The ring climbs the current level's Season ladder (points earned since entering the level).
         ...(monthlyContext ? { seasonPoints: progress.season.pointsInLevel ?? points } : {}),
@@ -333,7 +336,7 @@ export function registerLearningRoutes(
       },
       ...(inactiveDays >= 3 ? { inactivityReminder: { inactiveDays } } : {}),
       schedule: monthlyContext
-        ? buildMonthlySchedule(summaries, monthlyContext.systemDate, Number(progress.learner.profile.durationMinutes ?? 10), monthlyAccess?.state === "active" || uncounted ? monthlyAccess!.startDate : undefined)
+        ? buildMonthlySchedule(uncounted ? [] : summaries, monthlyContext.systemDate, Number(progress.learner.profile.durationMinutes ?? 10), monthlyAccess?.state === "active" ? monthlyAccess.startDate : undefined)
         : buildSchedule(Number(progress.learner.profile.durationMinutes ?? 10), [], organizationDate),
       coach: { turnsToday: monthlyContext ? progress.stats.coachTurnsToday ?? 0 : 0, turnsThisWeek: monthlyContext ? progress.stats.coachTurns : 0, targetTurns: coachTarget, href: "/coach" },
       practice: {
@@ -1157,6 +1160,7 @@ export async function monthlyExamEligibility(pool: Pool, learnerId: string, opti
                where ml.framework_id = d.framework_id and ml.status = 'approved' and not ${MONTH_LESSON_IS_REVIEW_SQL})::text as completed_lessons,
               (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
                where cs.learner_id = $1 and ct.speaker = 'learner'
+                 and cs.scenario->>'uncounted' is distinct from 'true'
                  and to_char(ct.created_at at time zone 'Asia/Ho_Chi_Minh', 'YYYY-MM') = d.month
                  and (ct.created_at at time zone 'Asia/Ho_Chi_Minh')::date < d.exam_date
                  and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true)))::text as season_turns,
@@ -1181,6 +1185,7 @@ export async function monthlyExamEligibility(pool: Pool, learnerId: string, opti
   const systemDate = row.system_date;
   const examDate = row.exam_date ?? access!.examDate;
   const cohortEligible = access?.state === "active";
+  const uncounted = access?.state === "uncounted";
   // December 2026: a past weekday without an approved lesson of the level is never an absence.
   const lessonDates = cohortEligible && access.cefr ? (await learnerMonthlyLessonDates(pool, learnerId, [row.month], access.cefr)).get(row.month) ?? new Set<string>() : new Set<string>();
   const effectiveDates = cohortEligible ? monthlyAttendanceCountedDates(access.effectiveDates, lessonDates, systemDate) : [];
@@ -1192,8 +1197,9 @@ export async function monthlyExamEligibility(pool: Pool, learnerId: string, opti
   const eligibility = evaluateMonthlyExamEligibility({
     systemDate, examDate, effectiveDays: effectiveDates.length, elapsedEffectiveDays: elapsedDates.length,
     attendedDays: attended.length, attendedElapsedDays: attended.filter(date => date < systemDate).length,
-    scheduledLessons: Number(row.scheduled_lessons) || 0,
-    completedLessons: Number(row.completed_lessons) || 0, seasonTurns: Number(row.season_turns) || 0,
+    scheduledLessons: uncounted ? 0 : Number(row.scheduled_lessons) || 0,
+    completedLessons: uncounted ? 0 : Number(row.completed_lessons) || 0,
+    seasonTurns: uncounted ? 0 : Number(row.season_turns) || 0,
     attendanceOverride: Boolean(row.attendance_appeal_approved),
     frameworkApproved: Boolean(row.framework_approved), formPublished: Boolean(row.form_published),
     seasonTarget: learnerMonthlySeasonTarget(access), learnerEligible: cohortEligible,

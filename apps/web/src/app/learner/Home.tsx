@@ -54,12 +54,12 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
     </section> : null}
     {!monthlyPreparation ? <section data-home-block="metrics" aria-label="Tiến độ tháng" style={{ marginTop: 16, padding: "16px 18px", borderRadius: 18, background: "var(--mint)", border: "1px solid var(--border)" }}>
       <div><div className="eyebrow">Theo tháng</div><h2 style={{ margin: "2px 0 0" }}>Tiến độ học tập</h2></div>
-      <div className="stats monthly-home-metrics" style={{ marginTop: 12 }}>
+      {view.monthlyUncounted ? <p>Bạn có thể học hoặc ôn tự do các bài đã mở trong tháng học thử.</p> : <div className="stats monthly-home-metrics" style={{ marginTop: 12 }}>
         <Metric metric="lessons" label="Bài theo lịch" value={`${view.metrics.completedLessons}/${view.metrics.totalLessons}`} percent={ratio(view.metrics.completedLessons, view.metrics.totalLessons)} />
         <Metric metric="reviews" label="Bài ôn" value={`${view.metrics.completedReviews ?? 0}/${view.metrics.totalReviews ?? 0}`} percent={ratio(view.metrics.completedReviews ?? 0, view.metrics.totalReviews ?? 0)} color="var(--primary)" />
         <HomeAttendanceMetric eligibility={view.monthlyEligibility} />
         <HomePointsMetric points={view.metrics.seasonPoints ?? view.metrics.points} totalPoints={view.metrics.points} level={view.learner.cefr} nextTier={view.metrics.nextPointsTier ?? null} />
-      </div>
+      </div>}
       {view.monthlyEligibility ? <AbsenceChip absenceDays={view.monthlyEligibility.absenceDays} maxAbsences={view.monthlyEligibility.maxAbsences} /> : null}
     </section> : null}
     {monthly ? <MonthlyCalendar month={monthly} lessons={view.lessons} actions={actions} /> : null}
@@ -159,6 +159,7 @@ function PrimaryLesson({ view, next, actions }: { view: LearnerHomeView; next: L
   if (!monthly) return <HomeInfoCard title="Lộ trình tháng đang được chuẩn bị" text={`Người vận hành đang chuẩn bị và duyệt bộ bài tháng cho mức ${view.learner.cefr ?? "—"}. Bạn có thể luyện với Season trong lúc chờ.`} />;
   const period = `Tháng ${formatMonth(monthly.month)}`;
   if (!next && !view.lessons.length) return <HomeInfoCard title={`${period}: ${monthly.themeTitle}`} text="Bộ bài tháng đang được chuẩn bị và duyệt. Quay lại sau nhé." />;
+  if (!next && view.monthlyUncounted) return <HomeInfoCard title="Bạn đã học hết các bài đang mở" text="Bạn có thể chọn bài đã học trong lịch để ôn lại." />;
   if (!next) return <section className="hero" style={{ background: "var(--mint)", color: "var(--text)" }} data-home-block="primary"><div className="eyebrow">{period}</div><h2>Xong hết {view.lessons.length} bài rồi!</h2><p>Ôn lại bài hoặc luyện thêm với Season nhé.</p></section>;
   if (next.lock) {
     const blocker = next.lock.blocker;
@@ -167,8 +168,8 @@ function PrimaryLesson({ view, next, actions }: { view: LearnerHomeView; next: L
     const reviewLabel = next.lock.reviewWeekNumber ? `bài ôn tuần ${next.lock.reviewWeekNumber}` : "bài ôn tuần trước";
     return <section className="hero" style={{ background: "var(--mint)", color: "var(--text)" }} data-home-block="primary"><div className="eyebrow">{period}</div><h2>{dateLocked ? next.lock.opensAt ? `Bài này mở vào ${formatLessonDate(next.lock.opensAt)}` : "Bài này chưa mở" : reviewGate ? `Hoàn thành ${reviewLabel} để mở bài này` : "Học bù bài trước đã nhé"}</h2><p>{dateLocked ? "Chưa đến ngày học nên chưa có nút học bài này." : reviewGate ? "Bài đầu tuần mới chỉ mở khi đã xong bài ôn của tuần trước." : "Hoàn thành bài trước để mở bài này."}</p>{!dateLocked && blocker ? <AppLink className="btn btn-primary" href={`/lesson/${blocker.id}`} navigate={actions.navigate}>{reviewGate ? `Làm ${reviewLabel}` : `Học ${blocker.label ? learnerLessonPhrase(blocker.label) : monthly ? `bài ${blocker.dayNumber}` : `bài T${blocker.dayNumber + 1}`} ngay`}</AppLink> : null}</section>;
   }
-  const catchUp = isCatchUp(view, next);
-  return <section className={`hero home-primary-lesson${catchUp ? " home-primary-lesson--catch-up" : ""}`} data-home-block="primary"><div><div className="eyebrow">{catchUp ? "Bài học bù" : "Bài hôm nay"} · {learnerLessonLabel(next)} · {period}</div><h2>{catchUp ? "Học bù bài trước đã nhé" : next.title}</h2>{catchUp ? <p style={{ margin: 0 }}>Hoàn thành {learnerLessonPhrase(learnerLessonLabel(next))}: {next.title}</p> : <div style={{ fontWeight: 700 }}>{monthly.themeTitle}</div>}</div><div className="row" style={{ gap: 14, fontWeight: 800, fontSize: ".9rem" }}><span className="row" style={{ gap: 6 }}><ClockIcon /> {view.schedule.lessonMinutes} phút</span><span>{view.metrics.completedLessons}/{view.metrics.totalLessons} bài đã học</span></div><AppLink className="btn btn-primary btn-lg btn-block" href={`/lesson/${next.id}`} navigate={actions.navigate}>{catchUp ? `Học ${learnerLessonPhrase(learnerLessonLabel(next))} ngay` : "Học ngay"}</AppLink></section>;
+  const catchUp = !view.monthlyUncounted && isCatchUp(view, next);
+  return <section className={`hero home-primary-lesson${catchUp ? " home-primary-lesson--catch-up" : ""}`} data-home-block="primary"><div><div className="eyebrow">{view.monthlyUncounted ? "Gợi ý học thử" : catchUp ? "Bài học bù" : "Bài hôm nay"} · {learnerLessonLabel(next)} · {period}</div><h2>{catchUp ? "Học bù bài trước đã nhé" : next.title}</h2>{catchUp ? <p style={{ margin: 0 }}>Hoàn thành {learnerLessonPhrase(learnerLessonLabel(next))}: {next.title}</p> : <div style={{ fontWeight: 700 }}>{monthly.themeTitle}</div>}</div><div className="row" style={{ gap: 14, fontWeight: 800, fontSize: ".9rem" }}><span className="row" style={{ gap: 6 }}><ClockIcon /> {view.schedule.lessonMinutes} phút</span>{view.monthlyUncounted ? null : <span>{view.metrics.completedLessons}/{view.metrics.totalLessons} bài đã học</span>}</div><AppLink className="btn btn-primary btn-lg btn-block" href={`/lesson/${next.id}`} navigate={actions.navigate}>{next.status === "in_progress" && view.monthlyUncounted ? "Học tiếp" : catchUp ? `Học ${learnerLessonPhrase(learnerLessonLabel(next))} ngay` : "Học ngay"}</AppLink></section>;
 }
 
 function lessonTimingLabel(view: LearnerHomeView, lesson: LearnerHomeView["lessons"][number]) {
@@ -334,18 +335,22 @@ export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actio
   return <div className="app-learner-page monthly-assessment-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
     <PageTitle {...(monthLabel ? { eyebrow: `Tháng ${formatMonth(monthLabel)}` } : {})} title="Bài thi tháng" detail={month?.themeTitle} />
     <section className="monthly-assessment-landing" aria-label="Bài thi tháng">
-      <header className="monthly-assessment-header">
-        <div>
-          <div className="eyebrow">Lịch thi</div>
-          <h2>{examDate ? formatLessonDate(examDate) : "Đang chờ lịch thi"}</h2>
-        </div>
-        <span className={`badge ${exam?.status === "ready" || exam?.status === "completed" ? "ok" : "warn"}`}>{publishState}</span>
-      </header>
-      {formNote || canStart ? <div className="monthly-assessment-form-state" aria-label="Trạng thái đề thi">
-        {formNote ? <p>{formNote}</p> : null}
-        {canStart ? <AppLink className="btn btn-primary" href="/test/monthly" navigate={actions.navigate}>{exam.inProgress ? "Tiếp tục bài thi" : "Vào bài thi"}</AppLink> : null}
-      </div> : null}
-      {eligibility ? <MonthlyEligibilitySummary eligibility={eligibility} actions={actions} /> : <p className="monthly-assessment-inline-note">Điều kiện điểm danh đang được tải từ hệ thống.</p>}
+      {view.monthlyUncounted ? <div className="monthly-assessment-form-state">
+        <p>Tháng học thử không có bài thi. {monthlyUncountedText(view.monthlyUncounted.countsFrom)}</p>
+      </div> : <>
+        <header className="monthly-assessment-header">
+          <div>
+            <div className="eyebrow">Lịch thi</div>
+            <h2>{examDate ? formatLessonDate(examDate) : "Đang chờ lịch thi"}</h2>
+          </div>
+          <span className={`badge ${exam?.status === "ready" || exam?.status === "completed" ? "ok" : "warn"}`}>{publishState}</span>
+        </header>
+        {formNote || canStart ? <div className="monthly-assessment-form-state" aria-label="Trạng thái đề thi">
+          {formNote ? <p>{formNote}</p> : null}
+          {canStart ? <AppLink className="btn btn-primary" href="/test/monthly" navigate={actions.navigate}>{exam.inProgress ? "Tiếp tục bài thi" : "Vào bài thi"}</AppLink> : null}
+        </div> : null}
+        {eligibility ? <MonthlyEligibilitySummary eligibility={eligibility} actions={actions} /> : <p className="monthly-assessment-inline-note">Điều kiện điểm danh đang được tải từ hệ thống.</p>}
+      </>}
     </section>
   </div>;
 }

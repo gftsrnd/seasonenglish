@@ -21,13 +21,14 @@ export function monthlySeasonTurnTarget(approvalDate: string, month: string, exa
  * learner is actually in this month's cohort; otherwise the full target holds.
  */
 export function learnerMonthlySeasonTarget(access: { readonly state: string; readonly seasonTarget: number } | null | undefined): number {
+  if (access?.state === "uncounted") return 0;
   return monthlyAccessCounts(access?.state) ? access!.seasonTarget : MONTHLY_SEASON_TURN_TARGET;
 }
 
 /**
  * Monthly access states of a learner. `uncounted` ("học thử tháng này"): the level was approved
  * (or the month published) after more than 25% of the month's school days, so the learner studies
- * the whole month (catch-up from lesson 1) but nothing in it counts: no attendance, absences,
+ * any published lesson through the system date without sequence gates. There are no counted attendance days,
  * absence lock or warnings, monthly final eligibility, Season target or level-up month. Counting
  * starts with the next month.
  */

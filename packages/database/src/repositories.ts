@@ -1358,7 +1358,7 @@ class LearningRepository {
 
   async listMonthlyLessons(learnerId: string, month: string): Promise<LearnerLessonRecord[]> {
     const access = await learnerMonthlyAccess(this.pool, learnerId, month);
-    // An uncounted (học thử) month is studied like an active one, with catch-up from lesson 1.
+
     if (!access || !monthlyAccessCanStudy(access.state)) return [];
     const result = await this.pool.query<LearnerLessonQueryRow & { organization_id: string; review_gates_next_week: boolean | null; review_from_previous_month: boolean | null }>(
       `select l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content, mf.curriculum_contract->'coreTerms' as monthly_core_terms,
@@ -1389,11 +1389,17 @@ class LearningRepository {
        order by ml.lesson_number`,
       [learnerId, month, access.cefr]
     );
+    // For trial study, the SQL-provided date is the only lock.
+    const records = result.rows.map(mapLessonRow);
+    if (access.state === "uncounted") {
+      return records.map((record) => record.lock
+        ? { ...record, lock: { ...record.lock, message: "Bài này sẽ mở khi đến ngày học." } }
+        : record);
+    }
     // A learner who joins mid-month (≥ 75% window) still studies the whole month
     // from lesson 1 in sequence (catch-up). The start date only bounds the
     // attendance window; a Friday review dated before it never gates later lessons.
-    // An uncounted month's startDate is next month: its own study start is the approval date.
-    const studyStart = access.state === "uncounted" ? access.approvalDate : access.startDate;
+    const studyStart = access.startDate;
     for (const row of result.rows) {
       if (row.monthly_kind === "review" && row.lesson_date && row.lesson_date < studyStart) row.review_gates_next_week = false;
     }
@@ -1404,7 +1410,6 @@ class LearningRepository {
        where organization_id = $1 and to_char(holiday_date, 'YYYY-MM') = $2`,
       [first.organization_id, month]
     );
-    const records = result.rows.map(mapLessonRow);
     return applyMonthlyLessonAccess(records, result.rows, month, first.system_date ?? `${month}-01`, mergedVietnamHolidays(month, holidays.rows.map(row => ({ date: row.holiday_date }))).map(day => day.date));
   }
 
@@ -1576,6 +1581,7 @@ class LearningRepository {
     lessonId: string;
     progress: LessonProgressView;
   }): Promise<LessonProgressView> {
+    const uncounted = input.progress.status === "completed" && await isTrialLesson(this.pool, input.learnerId, input.lessonId);
     const result = await this.pool.query<{
       status: LessonProgressView["status"];
       score: string | null;
@@ -1588,7 +1594,8 @@ class LearningRepository {
        on conflict (learner_id, lesson_id) do update
        set status = excluded.status,
            score = coalesce(excluded.score, progress_records.score),
-           evidence = excluded.evidence,
+           evidence = case when progress_records.evidence->>'uncounted' = 'true'
+             then excluded.evidence || '{"uncounted":true}'::jsonb else excluded.evidence end,
            completed_at = case when excluded.status = 'completed' then coalesce(progress_records.completed_at, now()) else progress_records.completed_at end,
            updated_at = now()
        returning status, score::text, evidence, updated_at`,
@@ -1597,13 +1604,14 @@ class LearningRepository {
         input.progress.score ?? null,
         JSON.stringify({
           completedPartCodes: input.progress.completedPartCodes,
-          evidence: input.progress.evidence
+          evidence: input.progress.evidence,
+          ...(uncounted ? { uncounted: true } : {})
         })
       ]
     );
     const row = result.rows[0];
     if (!row) throw new Error("Could not persist lesson progress");
-    if (input.progress.status === "completed") await withLearnerRewardLock(this.pool, input.learnerId, async (client) => {
+    if (input.progress.status === "completed" && !uncounted) await withLearnerRewardLock(this.pool, input.learnerId, async (client) => {
       const [previousActivities, lessonDuration] = await Promise.all([
         client.query<{ count: string }>(
           `select count(*)::text as count from activities
@@ -1789,7 +1797,7 @@ class LearningRepository {
               JSON.stringify({ completedPartCodes, evidence: mergedEvidence })]
           );
           if (!keepCorrect && storedEvidence.status === "correct" && storedEvidence.score && storedEvidence.score > 0) {
-            await awardLessonPartPoints(client, input.learnerId, attemptId, Math.max(1, 6 - storedEvidence.attempts));
+            await awardLessonPartPoints(client, input.learnerId, input.lessonId, attemptId, Math.max(1, 6 - storedEvidence.attempts));
           }
           await client.query("commit");
         }
@@ -1872,7 +1880,7 @@ class LearningRepository {
       const evidence = mapPartEvidence(row);
       await applyLessonAttemptEvidence(client, input.learnerId, row, evidence);
       if (input.status === "correct") {
-        await awardLessonPartPoints(client, input.learnerId, row.id, Math.max(1, 6 - row.attempt_number));
+        await awardLessonPartPoints(client, input.learnerId, row.lesson_id, row.id, Math.max(1, 6 - row.attempt_number));
       }
       if (input.transcript !== undefined && row.artifact_key) {
         await client.query(
@@ -2088,6 +2096,7 @@ class LearningRepository {
 
     const monthlyContext = await this.getActiveMonthlyContext(learnerId);
     const monthlyLessons = monthlyContext ? await this.listMonthlyLessons(learnerId, monthlyContext.month) : [];
+    const countedMonth = monthlyContext && !monthlyContext.uncounted;
     const [reward, weeks, study, activity, badgeRoadmap, coach, practice, assessments, availability, firstTry, monthlyFinal, monthlyFinalPublished] = await Promise.all([
       this.pool.query<{ points: string; badges: Array<{ key: string; label: string }> }>(
         `select coalesce(sum(re.points), 0)::text as points,
@@ -2166,7 +2175,7 @@ class LearningRepository {
                 and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true))
            )::text as rubric_average
          from coach_sessions cs left join coach_turns ct on ct.session_id = cs.id
-         where cs.learner_id = $1`, [learnerId, thresholds.days, Boolean(monthlyContext)]
+         where cs.learner_id = $1 and cs.scenario->>'uncounted' is distinct from 'true'`, [learnerId, thresholds.days, Boolean(monthlyContext)]
       ),
       this.pool.query<{ status: string; total: string | null }>(
         `select ps.status, ps.score->>'total' as total
@@ -2202,14 +2211,14 @@ class LearningRepository {
                and av.blueprint->>'targetLevel' = $1) as levelup_available`,
         [nextCefr(row.cefr)]
       ),
-      monthlyContext ? this.pool.query<{ evidence: { evidence?: Record<string, PartEvidence> } }>(
+      countedMonth ? this.pool.query<{ evidence: { evidence?: Record<string, PartEvidence> } }>(
         `select pr.evidence from progress_records pr
          join month_lessons ml on ml.lesson_id = pr.lesson_id and ml.status = 'approved'
          join month_frameworks mf on mf.id = ml.framework_id and mf.status = 'approved'
          join program_months pm on pm.id = mf.program_month_id
          where pr.learner_id = $1 and pm.month = $2 and mf.cefr = $3 and not ${MONTH_LESSON_IS_REVIEW_SQL}`, [learnerId, monthlyContext.month, monthlyContext.cefr]
       ) : Promise.resolve({ rows: [] as Array<{ evidence: { evidence?: Record<string, PartEvidence> } }> }),
-      monthlyContext ? this.pool.query<{ status: string; total_score: string | null }>(
+      countedMonth ? this.pool.query<{ status: string; total_score: string | null }>(
         `select aa.status, sum(s.score)::text as total_score
          from assessment_attempts aa
          join assessment_versions av on av.id = aa.assessment_version_id
@@ -2220,7 +2229,7 @@ class LearningRepository {
          order by aa.submitted_at desc nulls last, aa.started_at desc nulls last
          limit 1`, [learnerId, monthlyContext.month, monthlyContext.cefr]
       ) : Promise.resolve({ rows: [] as Array<{ status: string; total_score: string | null }> }),
-      monthlyContext ? this.pool.query<{ published: boolean }>(
+      countedMonth ? this.pool.query<{ published: boolean }>(
         `select exists(
            select 1
            from assessment_definitions ad
@@ -2252,10 +2261,11 @@ class LearningRepository {
         ...(known ? { threshold: rewardBadgeThreshold(known, rewardLevel) } : {})
       };
     });
-    const coachSummary = coach.rows[0] ?? { turns_today: "0", turns_this_week: "0", turns_14_days: "0", rubric_average: null };
+    const coachSummary = (!monthlyContext?.uncounted ? coach.rows[0] : undefined)
+      ?? { turns_today: "0", turns_this_week: "0", turns_14_days: "0", rubric_average: null };
 
     // Friday reviews are not lessons: excluded from k/N progress and the level-up path.
-    const dailyMonthlyLessons = monthlyLessons.filter((lesson) => lesson.monthlyKind !== "review");
+    const dailyMonthlyLessons = countedMonth ? monthlyLessons.filter((lesson) => lesson.monthlyKind !== "review") : [];
     const totalLessons = monthlyContext ? dailyMonthlyLessons.length : 0;
     const completedLessons = monthlyContext
       ? dailyMonthlyLessons.filter((lesson) => lesson.progress.status === 'completed').length
@@ -2311,6 +2321,7 @@ class LearningRepository {
           examDate: monthlyContext.examDate,
           completedLessons,
           totalLessons,
+          ...(monthlyContext.uncounted ? { uncounted: monthlyContext.uncounted } : {}),
           days: monthlyLessons.map((lesson) => ({
             lessonNumber: lesson.dayNumber,
             status: lesson.progress.status,
@@ -2324,8 +2335,7 @@ class LearningRepository {
               return { status: 'completed' as const, totalScore: attempt.total_score === null ? null : Number(attempt.total_score) };
             }
             if (attempt) return { status: 'locked' as const, totalScore: null };
-            // Học thử: the monthly final does not apply to an uncounted month.
-            if (monthlyContext.uncounted) return { status: 'locked' as const, totalScore: null };
+
             if (totalLessons === 0 || completedLessons < totalLessons) return { status: 'locked' as const, totalScore: null };
             if (!monthlyFinalPublished.rows[0]?.published) return { status: 'unpublished' as const, totalScore: null };
             return { status: 'ready' as const, totalScore: null };
@@ -2333,7 +2343,7 @@ class LearningRepository {
         }
       } : {}),
       monthlyPreparation: !monthlyContext,
-      studyDays: monthlyContext ? Number(study.rows[0]?.count ?? 0) : 0,
+      studyDays: countedMonth ? Number(study.rows[0]?.count ?? 0) : 0,
       activity: activity.rows.map((item) => ({
         type: item.activity_type,
         minutes: item.minutes,
@@ -2375,7 +2385,7 @@ class LearningRepository {
         completedLessons,
         coachTurns: monthlyContext ? Number(coachSummary.turns_this_week) : 0,
         coachTurnsToday: monthlyContext ? Number(coachSummary.turns_today) : 0,
-        studyDays: monthlyContext ? Number(study.rows[0]?.count ?? 0) : 0
+        studyDays: countedMonth ? Number(study.rows[0]?.count ?? 0) : 0
       },
       assessments: assessmentViews
     };
@@ -2445,6 +2455,7 @@ class LearningRepository {
                    and (d::date >= (select identity.system_date from identity) or exists (select 1 from month_lessons available where available.framework_id = m.framework_id and available.status = 'approved' and available.lesson_date = d::date))) as effective_days,
                 (select count(*)::int from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
                   where cs.learner_id = $1 and ct.speaker = 'learner'
+                    and cs.scenario->>'uncounted' is distinct from 'true'
                     and ct.created_at >= $3::timestamptz
                     and (ct.created_at at time zone 'Asia/Ho_Chi_Minh')::date >= (m.month || '-01')::date
                     and (ct.created_at at time zone 'Asia/Ho_Chi_Minh')::date < ((m.month || '-01')::date + interval '1 month')
@@ -2934,14 +2945,16 @@ export async function learnerMonthlyAttendanceDates(pool: Pool | PoolClient, lea
   const result = new Map<string, string[]>();
   if (!months.length) return result;
   const [completions, context] = await Promise.all([
-    pool.query<{ completed_date: string; kind: "new" | "review" }>(
+    pool.query<{ completed_date: string; scheduled_month: string | null; kind: "new" | "review" }>(
       // completed_on is the organisation (test) date of the completion, matching the system date used below.
-      `select pr.completed_on::text as completed_date,
+      `select pr.completed_on::text as completed_date, pm.month as scheduled_month,
               case when ml.id is not null and ${MONTH_LESSON_IS_REVIEW_SQL} then 'review' else 'new' end as kind
          from progress_records pr
          left join month_lessons ml on ml.lesson_id = pr.lesson_id
          left join month_frameworks mf on mf.id = ml.framework_id
+         left join program_months pm on pm.id = mf.program_month_id
         where pr.learner_id = $1 and pr.status = 'completed' and pr.completed_on is not null
+          and pr.evidence->>'uncounted' is distinct from 'true'
           and to_char(pr.completed_on, 'YYYY-MM') = any($2::text[])
           and ($3::text is null or mf.cefr = $3)
           and ($4::timestamptz is null or pr.completed_at >= $4)`,
@@ -2957,6 +2970,9 @@ export async function learnerMonthlyAttendanceDates(pool: Pool | PoolClient, lea
       [learnerId, months]
     )
   ]);
+  const priorMonths = new Set(completions.rows.flatMap((row) =>
+    row.scheduled_month && row.scheduled_month < row.completed_date.slice(0, 7) ? [row.scheduled_month] : []));
+  const trialMonths = await uncountedMonthsForLearner(pool, learnerId, priorMonths);
   const facts = context.rows[0];
   const levelStartLocal = scope?.from && new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" }).format(scope.from);
   // A level started after a rolled-back system date counts from the system date.
@@ -2969,7 +2985,7 @@ export async function learnerMonthlyAttendanceDates(pool: Pool | PoolClient, lea
         ...(examDate ? { examDate } : {}),
         ...(facts?.system_date ? { systemDate: facts.system_date } : {}),
         completions: completions.rows
-          .filter((row) => row.completed_date.startsWith(month))
+          .filter((row) => row.completed_date.startsWith(month) && !trialMonths.has(row.scheduled_month ?? ""))
           .map((row) => ({ completedDate: row.completed_date, kind: row.kind })),
         holidays: mergedVietnamHolidays(month, (facts?.holidays ?? []).map(date => ({ date }))).map(day => day.date)
       }).filter(date => !levelStartDate || date >= levelStartDate));
@@ -3056,13 +3072,30 @@ export async function learnerMonthlyAccess(db: Pool | PoolClient, learnerId: str
     .filter((date): date is string => date !== null).sort().at(-1)!;
   const window = monthlyLearnerWindow(row.month, examDate, approvalDate);
   // Fewer than 75% of the school days left: "uncounted" (học thử) — the learner studies the whole
-  // month with catch-up, but the month never counts; counting starts next month.
+  // month through the current date, and counting starts next month.
   let state: LearnerMonthlyAccess["state"] = monthlyAccessState({ cefr: row.cefr, publishedOn, approvalDate, systemDate: row.system_date, canStudy: window.canStudy });
   if (row.cefr && !row.graduated && !row.unlocked_on && row.month === row.system_date.slice(0, 7)
       && await learnerMissedPreviousExam(db, learnerId, row.month, row.cefr)) {
     state = "missed_exam";
   }
   return { ...window, state, approvalDate, month: row.month, systemDate: row.system_date, examDate, cefr: row.cefr, resetOn: row.reset_on, graduated: row.graduated };
+}
+
+async function uncountedMonthsForLearner(db: Pool | PoolClient, learnerId: string, months: ReadonlySet<string>): Promise<Set<string>> {
+  const states = await Promise.all([...months].map(async (month) =>
+    (await learnerMonthlyAccess(db, learnerId, month))?.state === "uncounted" ? month : null));
+  return new Set(states.filter((month) => month !== null));
+}
+
+async function isTrialLesson(db: Pool | PoolClient, learnerId: string, lessonId: string): Promise<boolean> {
+  const { rows: [row] } = await db.query<{ month: string; uncounted: boolean | null }>(
+    `select pm.month, pr.evidence->>'uncounted' = 'true' as uncounted from month_lessons ml
+     join month_frameworks mf on mf.id = ml.framework_id
+     join program_months pm on pm.id = mf.program_month_id
+     left join progress_records pr on pr.lesson_id = ml.lesson_id and pr.learner_id = $2
+     where ml.lesson_id = $1`, [lessonId, learnerId]
+  );
+  return Boolean(row && (row.uncounted || (await learnerMonthlyAccess(db, learnerId, row.month))?.state === "uncounted"));
 }
 
 function previousLearningMonth(month: string): string {
@@ -5999,8 +6032,8 @@ class AssessmentRepository {
   }
 
   async findMonthlyFinalAttempt(learnerId: string, month?: string): Promise<AssessmentAttemptRecord | null> {
-    const { rows: [row] } = await this.pool.query<{ id: string }>(
-      `select a.id from assessment_attempts a
+    const { rows: [row] } = await this.pool.query<{ id: string; month: string }>(
+      `select a.id, substring(d.assessment_key from '^monthly-final-([0-9]{4}-[0-9]{2})-') as month from assessment_attempts a
        join assessment_versions v on v.id = a.assessment_version_id
        join assessment_definitions d on d.id = v.definition_id
        where a.learner_id = $1 and d.kind = 'final'
@@ -6010,7 +6043,8 @@ class AssessmentRepository {
        order by a.started_at desc limit 1`,
       [learnerId, month ?? null]
     );
-    return row ? this.findAttempt(learnerId, row.id) : null;
+    if (!row || (row.month && (await learnerMonthlyAccess(this.pool, learnerId, row.month))?.state === "uncounted")) return null;
+    return this.findAttempt(learnerId, row.id);
   }
 
   async resumePlacementAttempt(
@@ -8771,6 +8805,7 @@ class CoachRepository {
       title: activeTopic,
       persona: rememberedPersona === "formal" ? "formal" : "informal",
       month: row.system_month,
+      uncounted: Boolean(monthlyContext?.uncounted),
       openingQuestion
     };
     if (!sessionId) {
@@ -8797,6 +8832,7 @@ class CoachRepository {
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean,
                coalesce((ct.feedback->>'relevant')::boolean, true)))::text as daily_used,
            count(*) filter (where ct.speaker = 'learner' and ct.created_at >= date_trunc('month', organization_system_date((select organization_id from users where id = $1)))
+             and cs.scenario->>'uncounted' is distinct from 'true'
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean,
                coalesce((ct.feedback->>'relevant')::boolean, true)))::text as monthly_turns
          from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
@@ -8936,7 +8972,7 @@ class CoachRepository {
       persona: scenario.persona === "formal" ? "formal" : "informal",
       aiAvailable, daily: { used: Number(count.daily_used), limit: row.coach_daily_limit },
       chatAvailability,
-      monthly: { label: `Tháng ${row.system_month}`, turns: Number(count.monthly_turns), target: learnerMonthlySeasonTarget(await learnerMonthlyAccess(this.pool, learnerId, row.system_month)) },
+      monthly: { label: `Tháng ${row.system_month}`, turns: monthlyContext?.uncounted ? 0 : Number(count.monthly_turns), target: learnerMonthlySeasonTarget(await learnerMonthlyAccess(this.pool, learnerId, row.system_month)) },
       messages, vocabulary,
       questionHistory,
       ...(monthlyContext ? { vocabularyProgress: { opened: openedVocabularyCount, total: allMonthlyVocabulary.size } } : {})
@@ -9110,7 +9146,8 @@ class CoachRepository {
       });
       if (input.output.evaluation.countsTowardGoal) await client.query(
         `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
-         values ($1, $2, 'coach', 'coach_turn', $3, 2, $4::jsonb)`,
+         select $1, $2, 'coach', 'coach_turn', $3, 2, $4::jsonb
+         from coach_sessions where id = $5 and scenario->>'uncounted' is distinct from 'true'`,
         [randomUUID(), input.learnerId, turnId, JSON.stringify({
           countsTowardGoal: input.output.evaluation.countsTowardGoal,
           status: input.output.evaluation.status,
@@ -9119,7 +9156,7 @@ class CoachRepository {
             vocabulary: input.output.rubric.vocabulary.score,
             grammar: input.output.rubric.grammar.score
           }
-        })]
+        }), input.sessionId]
       );
       if (input.challengeAttemptId) {
         const challenge = await client.query<{ completed_turns: string; average: string | null; off_topic: string }>(
@@ -12253,6 +12290,7 @@ class ManagerRepository {
           : historicalWindow && facts.framework_published && historicalWindow.canStudy ? "active"
           : access?.state === "active" || access?.state === "uncounted" || access?.state === "waiting_next_month" || access?.state === "missed_exam" ? access.state
           : "waiting_content";
+        const uncounted = access?.state === "uncounted" && cefr === access.cefr;
         const hasAttendance = state === "active" || state === "graduated" || (state === "locked" && (access?.state === "active" || historicalWindow?.canStudy));
         // Past weekdays without an approved lesson of this level are not absences (December 2026).
         const lessonDates = cefr && hasAttendance ? (await learnerMonthlyLessonDates(this.pool, row.id, [month], cefr)).get(month) ?? new Set<string>() : new Set<string>();
@@ -12286,14 +12324,17 @@ class ManagerRepository {
           lastActivityAt: row.last_activity?.toISOString() ?? null,
           attendedDays: attended.size, elapsedDays: effective.filter(date => date <= systemDate).length,
           absenceDays, maxAbsences, consecutiveAbsences,
-          lessons: { completed: facts.completed, scheduled: facts.scheduled },
-          reviews: { completed: facts.reviewed, scheduled: facts.reviews },
-          season: { turns: facts.turns, target: hasAttendance ? (learningWindow?.seasonTarget ?? 100) : 100 },
-          exam: { status: facts.exam_status, scores, total: examTotal }, levelCriteria, complaintCount: facts.complaints,
+          lessons: uncounted ? { completed: 0, scheduled: 0 } : { completed: facts.completed, scheduled: facts.scheduled },
+          reviews: uncounted ? { completed: 0, scheduled: 0 } : { completed: facts.reviewed, scheduled: facts.reviews },
+          season: uncounted ? { turns: 0, target: 0 } : { turns: facts.turns, target: hasAttendance ? (learningWindow?.seasonTarget ?? 100) : 100 },
+          exam: uncounted
+            ? { status: "unpublished", scores: { listening: null, reading: null, writing: null, speaking: null }, total: null }
+            : { status: facts.exam_status, scores, total: examTotal },
+          levelCriteria, complaintCount: facts.complaints,
           attendanceEligible: state === "active" && (absenceDays <= maxAbsences || facts.attendance_override),
           onTrack: elapsed.length > 0 && daysAttended / elapsed.length >= 0.7,
-          completedToDate: facts.elapsed_lessons > 0 && facts.completed_elapsed === facts.elapsed_lessons,
-          lessonsToDate: { completed: facts.completed_elapsed, expected: facts.elapsed_lessons },
+          completedToDate: !uncounted && facts.elapsed_lessons > 0 && facts.completed_elapsed === facts.elapsed_lessons,
+          lessonsToDate: uncounted ? { completed: 0, expected: 0 } : { completed: facts.completed_elapsed, expected: facts.elapsed_lessons },
           atRisk: state === "active" && (consecutiveAbsences >= 3 || (absenceDays > 0 && absenceDays >= Math.floor(2 * maxAbsences / 3) + 1)
             || (!facts.attendance_override && systemDate < examDate && absenceDays === maxAbsences))
         };
@@ -14795,7 +14836,8 @@ async function applyScheduledLevelChanges(
  * the first correct answer of that part: answering the same part again later
  * (new request, another attempt after a correct answer) never adds points.
  */
-async function awardLessonPartPoints(client: PoolClient, learnerId: string, attemptId: string, points: number): Promise<void> {
+async function awardLessonPartPoints(client: PoolClient, learnerId: string, lessonId: string, attemptId: string, points: number): Promise<void> {
+  if (await isTrialLesson(client, learnerId, lessonId)) return;
   await lockLearnerRewards(client, learnerId);
   await client.query(
     `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
@@ -14901,7 +14943,7 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
        ))
        and not (a.activity_type = 'coach' and exists (
          select 1 from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
-         where ct.id = a.reference_id and coalesce(cs.scenario->>'kind', 'practice') = 'level_up'
+         where ct.id = a.reference_id and (coalesce(cs.scenario->>'kind', 'practice') = 'level_up' or cs.scenario->>'uncounted' = 'true')
        ))
        and not exists (select 1 from reward_events re where re.learner_id = a.learner_id
          and re.source_type = 'activity_points' and re.source_id = a.id and re.badge_id is null)
@@ -14940,20 +14982,29 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
   const state = await learnerSeasonState(db, learnerId);
   if (!state) return;
   const cefr = state.cefr;
-  const [lessons, calendar, coach, words, firstTry, finals, facts] = await Promise.all([
-    db.query<{ count: string }>("select count(*)::text as count from progress_records where learner_id = $1 and status = 'completed'", [learnerId]),
+  const [completed, calendar, coach, words, finals, facts] = await Promise.all([
+    db.query<{ month: string | null; evidence: Record<string, unknown> }>(
+      `select scheduled.month, pr.evidence from progress_records pr
+       left join lateral (
+         select pm.month from month_lessons ml
+         join month_frameworks mf on mf.id = ml.framework_id
+         join program_months pm on pm.id = mf.program_month_id
+         where ml.lesson_id = pr.lesson_id limit 1
+       ) scheduled on true
+       where pr.learner_id = $1 and pr.status = 'completed'`, [learnerId]
+    ),
     learnerMonthlyCalendarProgress(db, learnerId),
     db.query<{ count: string }>(`select count(*)::text as count from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
       where cs.learner_id = $1 and ct.speaker = 'learner' and coalesce(cs.scenario->>'kind', 'practice') = 'practice'
+        and cs.scenario->>'uncounted' is distinct from 'true'
         and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true))`, [learnerId]),
     db.query<{ count: string }>(`select count(distinct word)::text as count from coach_turns ct
       join coach_sessions cs on cs.id = ct.session_id
       cross join lateral jsonb_array_elements_text(coalesce(ct.feedback->'usedWords', '[]'::jsonb)) word
       where cs.learner_id = $1 and coalesce(cs.scenario->>'kind', 'practice') = 'practice'
+        and cs.scenario->>'uncounted' is distinct from 'true'
         and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true))`, [learnerId]),
-    db.query<{ evidence: Record<string, unknown> }>(
-      "select evidence from progress_records where learner_id = $1 and status = 'completed'", [learnerId]
-    ),
+
     // Approved monthly finals: total of the four skills and the weakest skill (monthly pass rule).
     db.query<{ total: number; sections: number; weakest: number }>(
       `select sum(s.score)::float8 as total,
@@ -14972,7 +15023,13 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
        from users u where u.id = $1`, [learnerId]
     )
   ]);
-  const monthly = monthlyCalendarAchievements(calendar);
+  const months = new Set(completed.rows.flatMap((row) => row.month ? [row.month] : []));
+  const markedTrialMonths = completed.rows.flatMap((row) => row.month && row.evidence.uncounted === true ? [row.month] : []);
+  const trialMonths = await uncountedMonthsForLearner(db, learnerId, months);
+  for (const month of markedTrialMonths) trialMonths.add(month);
+  const countedCompletions = completed.rows.filter((row) => row.month === null || !trialMonths.has(row.month));
+  const countedCalendar = calendar.filter((day) => !trialMonths.has(day.lessonDate?.slice(0, 7) ?? ""));
+  const monthly = monthlyCalendarAchievements(countedCalendar);
   for (const monthId of monthly.completedMonthIds) {
     await db.query(
       `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
@@ -14986,7 +15043,7 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
   // counters are lifetime (their thresholds never drop, so arrival alone never meets them).
   const levelStartDate = state.levelStartedAt
     ? new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" }).format(state.levelStartedAt) : null;
-  const inLevel = calendar.filter((day) => !levelStartDate
+  const inLevel = countedCalendar.filter((day) => !levelStartDate
     || (day.lessonDate !== null && day.lessonDate >= levelStartDate && (!cefr || !day.cefr || day.cefr === cefr)));
   const levelCalendar = monthlyCalendarAchievements(inLevel);
   const today = facts.rows[0]?.today;
@@ -15000,13 +15057,13 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
   );
   const finalThreshold = rewardBadgeThreshold("monthly_final_score", cefr);
   const earned = new Set<string>();
-  if (Number(lessons.rows[0]?.count ?? 0) >= rewardBadgeThreshold("starter", cefr)) earned.add("starter");
+  if (countedCompletions.length >= rewardBadgeThreshold("starter", cefr)) earned.add("starter");
   if (streak >= rewardBadgeThreshold("streak", cefr)) earned.add("streak");
   if (levelCalendar.completeWeeks >= rewardBadgeThreshold("week_complete", cefr)) earned.add("week_complete");
   if (levelCalendar.onTimeReviews >= rewardBadgeThreshold("friday", cefr)) earned.add("friday");
   if (Number(coach.rows[0]?.count ?? 0) >= rewardBadgeThreshold("coach_friend", cefr)) earned.add("coach_friend");
   if (Number(words.rows[0]?.count ?? 0) >= rewardBadgeThreshold("wordsmith", cefr)) earned.add("wordsmith");
-  if (firstTry.rows.filter((row) => isFirstTryLesson(row.evidence)).length >= rewardBadgeThreshold("first_try", cefr)) earned.add("first_try");
+  if (countedCompletions.filter((row) => isFirstTryLesson(row.evidence)).length >= rewardBadgeThreshold("first_try", cefr)) earned.add("first_try");
   if (finals.rows.some((row) => finalThreshold === "passed"
     ? Number(row.total) >= 70 && Number(row.sections) === 4 && Number(row.weakest) >= 15
     : Number(row.total) >= finalThreshold)) earned.add("monthly_final_score");

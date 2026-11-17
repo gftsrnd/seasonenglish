@@ -145,12 +145,11 @@ describe("monthly Season quota", () => {
 });
 
 it("uses one Season target rule for Coach and monthly-exam eligibility", () => {
-  // Approved after a third of November: the prorated window target (65) is not a
-  // cohort target because the learner joins next month; both screens show 100.
+  // Trial study has no counted Season target.
   const late = monthlyLearnerWindow("2026-11", "2026-11-30", "2026-11-11");
   expect(late.canStudy).toBe(false);
   expect(learnerMonthlySeasonTarget({ ...late, state: "waiting_next_month" })).toBe(100);
-  expect(learnerMonthlySeasonTarget({ ...late, state: "uncounted" })).toBe(100);
+  expect(learnerMonthlySeasonTarget({ ...late, state: "uncounted" })).toBe(0);
   const prorated = monthlyLearnerWindow("2026-11", "2026-11-30", "2026-11-09");
   expect(learnerMonthlySeasonTarget({ ...prorated, state: "active" })).toBe(prorated.seasonTarget);
   expect(learnerMonthlySeasonTarget(null)).toBe(100);

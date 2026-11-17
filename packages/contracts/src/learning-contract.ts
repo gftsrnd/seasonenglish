@@ -515,6 +515,7 @@ export interface LearnerProgressView {
   }>;
   /** Present only while the learner is enrolled in an approved monthly learning cycle. */
   monthlyProgress?: {
+    uncounted?: { countsFrom: string };
     month: string;
     themeTitle: string;
     examDate: string;

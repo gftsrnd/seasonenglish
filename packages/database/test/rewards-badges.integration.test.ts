@@ -82,7 +82,7 @@ describe("reward points and Season badges", () => {
     await pool.query("delete from coach_sessions where learner_id = $1", [learnerId]);
     await pool.query("delete from assessment_attempts where learner_id = $1 and assessment_version_id = $2", [learnerId, finalVersionId]);
     // The demo learner is at A2 since long ago (one level period: every point counts).
-    await pool.query("update enrollments set cefr = 'A2', cefr_approved = true where learner_id = $1", [learnerId]);
+    await pool.query("update enrollments set cefr = 'A2', cefr_approved = true, cefr_started_on = '2026-10-01' where learner_id = $1", [learnerId]);
     await pool.query("delete from learner_level_periods where learner_id = $1", [learnerId]);
     await pool.query("insert into learner_level_periods (learner_id, cefr, started_at, source) values ($1, 'A2', now() - interval '1 year', 'test')", [learnerId]);
   });
@@ -546,6 +546,7 @@ describe("reward points and Season badges", () => {
     async function setLevel(cefr: string, startedAt?: string) {
       await pool.query("update enrollments set cefr = $2 where learner_id = $1", [learnerId, cefr]);
       if (startedAt) {
+        await pool.query("update enrollments set cefr_started_on = ($2::timestamptz at time zone 'Asia/Ho_Chi_Minh')::date where learner_id = $1", [learnerId, startedAt]);
         await pool.query(
           `update learner_level_periods set started_at = $2 where id = (
              select id from learner_level_periods where learner_id = $1 order by started_at desc, seq desc limit 1)`,

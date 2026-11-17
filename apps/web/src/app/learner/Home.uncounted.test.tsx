@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { LearnerHome } from "./Home.js";
+import { LearnerHome, LearnerMonthly } from "./Home.js";
 import type { LearnerCallbacks, LearnerHomeView } from "./contracts.js";
 
 afterEach(cleanup);
@@ -37,8 +37,15 @@ describe("uncounted (học thử) month on Home", () => {
     expect(document.querySelector('[data-home-metric="absence"]')).toBeNull();
   });
 
+  it("shows the exam exemption on the monthly landing page", () => {
+    render(<LearnerMonthly view={homeView()} actions={actions} />);
+    expect(screen.getByText(/Tháng học thử không có bài thi/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Vào bài thi" })).toBeNull();
+  });
+
   it("shows no notice in a counted month", () => {
-    render(<LearnerHome view={homeView({ monthlyUncounted: undefined })} actions={actions} />);
+    const { monthlyUncounted: _trial, ...counted } = homeView();
+    render(<LearnerHome view={counted} actions={actions} />);
     expect(screen.queryByText(/học thử/)).not.toBeInTheDocument();
   });
 });
