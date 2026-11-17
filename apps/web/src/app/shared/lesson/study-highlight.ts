@@ -721,7 +721,7 @@ const cleanPiece = (value: string) => value.replace(/^[\s/;,.()]+|[\s/;,(]+$/gu,
 export function grammarFormulaBoxes(formula: string, language: "vi" | "en", splitLines: (formula: string) => string[] = monthlyGrammarFormulaLines, names: readonly string[] = []): GrammarFormulaBox[] {
   const displayFormula = formula
     .replace(/(\bam\s*\/\s*is\s*\/\s*are\b)\s*(?:\+\s*)?\((?:không\s+(?:được\s+)?(?:bỏ(?:\s+quên)?|lược\s+bỏ)|do\s+not\s+omit|don['’]t\s+omit)\)/giu, "$1")
-    .replace(/^(.*\bdo(?:\s*\/\s*|\s+or\s+)does\b.*?\+\s*V)\s*\?/gimu, "$1 (base form)?")
+    .replace(/^(.*\b(?:do(?:\s*\/\s*|\s+or\s+)does|do|does)\b.*?\+\s*V)\s*\?/gimu, "$1 (base form)?")
     .replace(/\b(I\s*\/\s*you\s*\/\s*we\s*\/\s*they)(?=\s*\+\s*V\b(?!\s*-))/giu, language === "vi" ? "$1/chủ ngữ số nhiều" : "$1/plural subject")
     .replace(/\b(he\s*\/\s*she\s*\/\s*it)(?=\s*\+\s*V\s*-\s*s\b)/giu, language === "vi" ? "$1/chủ ngữ số ít" : "$1/singular subject");
   const text = displayFormula.replace(/\s+/gu, " ").trim();
