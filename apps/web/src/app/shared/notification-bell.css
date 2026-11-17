@@ -109,7 +109,8 @@
   display: flex;
   flex: 1;
   min-width: 0;
-  gap: 10px;
+  min-block-size: 32px;
+  gap: 8px;
   align-items: flex-start;
   padding: 8px;
   border: 0;
@@ -118,6 +119,7 @@
   color: inherit;
   font: inherit;
   text-align: start;
+  box-shadow: none;
   cursor: pointer;
 }
 .inbox-arrival-open:hover, .inbox-arrival-open:focus-visible { background: var(--primary-soft); }
@@ -132,15 +134,19 @@
   font-size: .8rem;
 }
 .inbox-arrival-close {
+  --hci-touch-target: 32px;
   display: grid;
   flex: none;
   place-items: center;
   width: 32px;
   height: 32px;
+  min-block-size: 32px;
+  min-inline-size: 32px;
   padding: 0;
   border: 0;
   border-radius: 8px;
   background: transparent;
+  box-shadow: none;
   color: inherit;
   cursor: pointer;
 }
