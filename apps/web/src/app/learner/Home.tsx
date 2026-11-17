@@ -46,12 +46,7 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
   const monthly = view.month ?? null;
   const monthlyPreparation = view.monthlyPreparation === true;
   const trial = view.monthlyUncounted;
-  const trialLessons = trial ? view.lessons.filter(lesson => lesson.kind !== "review") : [];
-  const trialReviews = trial ? view.lessons.filter(lesson => lesson.kind === "review") : [];
-  const completedLessons = trial ? trialLessons.filter(lesson => lesson.status === "completed").length : view.metrics.completedLessons;
-  const completedReviews = trial ? trialReviews.filter(lesson => lesson.status === "completed").length : view.metrics.completedReviews ?? 0;
-  const totalLessons = trial ? trialLessons.length : view.metrics.totalLessons;
-  const totalReviews = trial ? trialReviews.length : view.metrics.totalReviews ?? 0;
+  const { completedLessons, totalLessons, completedReviews = 0, totalReviews = 0 } = view.metrics;
   return <div className="app-learner-page home-page" data-monthly-preparation={monthlyPreparation || !monthly || (!next && !view.lessons.length)} style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
     <PageTitle eyebrow={monthly ? `Tháng ${formatMonth(monthly.month)} · ${monthly.themeTitle}` : "Lộ trình tháng đang được chuẩn bị"} title={`Chào ${view.learner.displayName}!`} aside={<span className={`badge lvl lvl-${view.learner.cefr}`}>Trình độ {view.learner.cefr}</span>} />
     <div className="bao-row" style={{ marginBottom: 16 }} aria-label="Lời chào của Season AI Coach"><div className="bubble home-today-heading" style={{ flex: 1 }}>Hôm nay học gì nào?</div></div>
@@ -73,11 +68,11 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
     {!monthlyPreparation ? <section data-home-block="metrics" aria-label="Tiến độ tháng" style={{ marginTop: 16, padding: "16px 18px", borderRadius: 18, background: "var(--mint)", border: "1px solid var(--border)" }}>
       <div><div className="eyebrow">Theo tháng</div><h2 style={{ margin: "2px 0 0" }}>Tiến độ học tập</h2></div>
       {trial ? <p className="small muted" style={{ margin: "6px 0 0" }}>Tháng học thử. Tiến độ bắt đầu tính từ {trial.countsFrom.slice(8, 10)}/{trial.countsFrom.slice(5, 7)}.</p> : null}
-      <div className="stats monthly-home-metrics" style={{ marginTop: 12 }}>
-        <Metric metric="lessons" label="Bài theo lịch" value={`${completedLessons}/${totalLessons}`} percent={ratio(completedLessons, totalLessons)} />
-        <Metric metric="reviews" label="Bài ôn" value={`${completedReviews}/${totalReviews}`} percent={ratio(completedReviews, totalReviews)} color="var(--primary)" />
-        {trial ? <Metric metric="attendance" label="Điểm danh" value="—" percent={0} color="var(--peach)" /> : <HomeAttendanceMetric eligibility={view.monthlyEligibility} />}
-        <HomePointsMetric points={view.metrics.seasonPoints ?? view.metrics.points} totalPoints={view.metrics.points} level={view.learner.cefr} nextTier={view.metrics.nextPointsTier ?? null} />
+      <div className="stats monthly-home-metrics" data-trial={trial ? "" : undefined} style={{ marginTop: 12 }}>
+        <Metric metric="lessons" label="Bài theo lịch" value={trial ? "–" : `${completedLessons}/${totalLessons}`} percent={trial ? 0 : ratio(completedLessons, totalLessons)} />
+        <Metric metric="reviews" label="Bài ôn" value={trial ? "–" : `${completedReviews}/${totalReviews}`} percent={trial ? 0 : ratio(completedReviews, totalReviews)} color="var(--primary)" />
+        {trial ? <Metric metric="attendance" label="Điểm danh" value="–" percent={0} color="var(--peach)" /> : <HomeAttendanceMetric eligibility={view.monthlyEligibility} />}
+        {trial ? <Metric metric="points" label="Điểm huy hiệu" value="–" percent={0} color="var(--primary)" /> : <HomePointsMetric points={view.metrics.seasonPoints ?? view.metrics.points} totalPoints={view.metrics.points} level={view.learner.cefr} nextTier={view.metrics.nextPointsTier ?? null} />}
       </div>
       {!trial && view.monthlyEligibility ? <AbsenceChip absenceDays={view.monthlyEligibility.absenceDays} maxAbsences={view.monthlyEligibility.maxAbsences} /> : null}
     </section> : null}

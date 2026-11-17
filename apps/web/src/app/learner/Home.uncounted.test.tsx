@@ -34,10 +34,9 @@ describe("uncounted (học thử) month on Home", () => {
     expect(screen.queryByText(/Tháng này bạn học thử để làm quen/)).not.toBeInTheDocument();
     const progress = screen.getByRole("region", { name: "Tiến độ tháng" });
     expect(within(progress).getByText("Tháng học thử. Tiến độ bắt đầu tính từ 01/12.")).toBeInTheDocument();
-    expect(progress.querySelector('[data-home-metric="lessons"]')).toHaveTextContent("1/2");
-    expect(progress.querySelector('[data-home-metric="reviews"]')).toHaveTextContent("1/1");
-    expect(progress.querySelector('[data-home-metric="attendance"]')).toHaveTextContent("—");
-    expect(progress.querySelector('[data-home-metric="points"]')).toHaveTextContent("Điểm huy hiệu");
+    expect(within(progress).getAllByText("–", { exact: true })).toHaveLength(4);
+    expect(within(progress).getByText("Điểm huy hiệu")).toBeInTheDocument();
+    expect(screen.getByRole("gridcell", { name: "2026-11-03" })).toHaveTextContent("Đã học");
     expect(screen.getByText(/Gợi ý học thử/)).toBeInTheDocument();
     // The learner is not told to wait: lesson 1 is offered as a catch-up lesson.
     expect(screen.queryByText(/Bạn sẽ bắt đầu học từ ngày/)).not.toBeInTheDocument();
