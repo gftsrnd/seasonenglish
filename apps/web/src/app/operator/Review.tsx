@@ -447,6 +447,7 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     const objective = section === "listening" || section === "reading";
     const answerValue = answer?.value ?? "";
     const isCorrect = Boolean(task.correctAnswer && answerValue === task.correctAnswer);
+    const selectedOption = answerValue && task.options?.some(option => option.value === answerValue);
     const evidenceLabel = answer?.evidenceType === "typed_proxy" ? "Câu trả lời văn bản thay thế"
       : answer?.evidenceType === "transcript" ? "Bản chép lời từ hệ thống"
         : answer?.evidenceType === "audio" ? "Bản ghi âm" : null;
@@ -455,12 +456,13 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
       {objective ? <p className="operator-answer-question"><b>{itemLabel}{normalizeBlankPrompt(task.prompt)}</b><span className="muted">{points}</span></p> : <>{showTitle && task.title ? <p className="operator-answer-task-title"><b>{task.title}</b></p> : null}{task.prompt ? <p className="operator-answer-question"><b>{itemLabel}{normalizeBlankPrompt(task.prompt)}</b></p> : null}</>}
       {objective && learnerView ? <>
         {task.options?.length ? <ul className="learner-placement-review-options" role="list">
-          {task.options.map(option => <li key={option.value}>
+          {task.options.map(option => <li key={option.value} className={option.value === answerValue ? "is-selected" : undefined}>
             <span>{answerText(task, option.value)}</span>
+            {option.value === answerValue ? <span className="learner-placement-review-selected">Bạn đã chọn</span> : null}
             {option.value === task.correctAnswer ? <span className="operator-answer-correct">Đáp án đúng</span> : null}
           </li>)}
         </ul> : task.correctAnswer ? <p className="operator-answer-result">Đáp án đúng: {answerText(task, task.correctAnswer)}</p> : null}
-        {answerValue ? <p className="operator-answer-result">Bạn đã chọn: <strong>{answerText(task, answerValue)}</strong></p>
+        {answerValue ? selectedOption ? null : <p className="operator-answer-result">Bạn đã chọn: <strong>{answerText(task, answerValue)}</strong></p>
           : missingItemEvidence ? null : <p className="operator-answer-result">Chưa trả lời</p>}
       </> : objective ? <p className="operator-answer-result">{answerValue ? <><span className={isCorrect ? "operator-answer-correct" : task.correctAnswer ? "operator-answer-wrong" : ""}>{answerText(task, answerValue)}</span>{task.correctAnswer && !isCorrect ? <> <span className="operator-answer-arrow">→</span> {answerText(task, task.correctAnswer)}</> : null}</> : <>bỏ qua{task.correctAnswer ? <> <span className="operator-answer-arrow">→</span> {answerText(task, task.correctAnswer)}</> : null}</>}</p> : <div className="operator-answer-response">
         {evidenceLabel ? <div className="xs muted"><b>{evidenceLabel}</b></div> : null}

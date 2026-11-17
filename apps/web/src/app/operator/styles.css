@@ -4726,6 +4726,19 @@ body > .operator-modal-scope .operator-editor-section textarea.line-field { min-
   overflow-wrap: anywhere;
 }
 
+.learner-placement-review-options li.is-selected {
+  border-radius: 7px;
+  padding: 3px 6px;
+  background: var(--primary-soft);
+}
+
+.learner-placement-review-selected {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 1px 7px;
+  color: var(--primary);
+}
+
 @media (min-width: 1025px) {
   .operator-detail-modal > .dialog.learner-original-placement-dialog {
     width: min(960px, calc(100vw - 32px));

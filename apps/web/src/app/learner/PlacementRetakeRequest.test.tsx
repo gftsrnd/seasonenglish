@@ -128,6 +128,35 @@ describe("placement retake request: bell → support page → 'Xin thi lại' �
     } finally { vi.unstubAllGlobals(); }
   });
 
+  it.each(["A", "B", "Legacy text"])("marks saved answer %s on the matching choice, or preserves unmatched text", async (value) => {
+    const user = userEvent.setup();
+    const reading = original.definition.sections.find(section => section.code === "reading")!;
+    const task = reading.groups[0]!.tasks[0]!;
+    const reviewed: NonNullable<AssessmentPlacementRetakeRequestView["original"]> = {
+      ...original,
+      objectiveAnswerKeys: { reading: { [task.key]: "B" } },
+      attempt: { ...original.attempt, responses: [...original.attempt.responses, { section: "reading", taskKey: task.key, value, evidenceType: "text", savedAt: "2026-11-16T03:00:00Z" }] },
+      definition: { ...original.definition, sections: original.definition.sections.map(section => section.code === "reading" ? {
+        ...section, groups: [{ ...reading.groups[0]!, tasks: [{ ...task, options: [{ value: "A", label: "First choice" }, { value: "B", label: "Second choice" }] }] }]
+      } : section) }
+    };
+    mockHistory(view({ original: reviewed, target: { attemptId: "a1", title: "Test đầu vào", availableUntil: null } }));
+    await user.click(await screen.findByRole("button", { name: "Xem bài làm" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Bài đầu vào đã nộp" }));
+    await user.click(dialog.getByText(/^Đọc ·/u));
+    await user.click(dialog.getByText("Group reading", { exact: true }));
+    const first = dialog.getByText("A. First choice").closest("li")!;
+    const second = dialog.getByText("B. Second choice").closest("li")!;
+    expect(within(second).getByText("Đáp án đúng")).toBeVisible();
+    if (value === "Legacy text") {
+      expect(dialog.getByText("Legacy text")).toBeVisible();
+      expect(dialog.queryByText("Bạn đã chọn", { exact: true })).not.toBeInTheDocument();
+    } else {
+      expect(within(value === "A" ? first : second).getByText("Bạn đã chọn", { exact: true })).toBeVisible();
+      expect(dialog.queryByText(/Bạn đã chọn:/u)).not.toBeInTheDocument();
+    }
+  });
+
   it("shows the review answer key and keeps an aggregate-only reading score without inventing skipped items", async () => {
     const user = userEvent.setup();
     const reading = original.definition.sections.find(section => section.code === "reading")!;
