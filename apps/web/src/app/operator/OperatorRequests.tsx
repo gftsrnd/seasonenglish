@@ -1,4 +1,4 @@
-import { Eye, Trash2 } from "lucide-react";
+import { Eye, Trash2, Triangle } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import type { ContentReviewAssessmentDetailView, ContentReviewView, ReopenRequestView } from "@e4s/contracts";
@@ -239,9 +239,7 @@ function IncomingAppeals({ client, id, status, page }: { client: OperatorApiClie
             <Link to={requestSearch("appeals", listStatus, open ? undefined : item.id, listPage)} className={compactCollapse ? "btn-sm request-collapse" : "btn-sm"}
               aria-expanded={open} aria-controls={open ? detailId : undefined}
               {...(compactCollapse ? { title: "Thu gọn", "aria-label": "Thu gọn" } : {})}>
-              {compactCollapse ? <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16">
-                <path fill="currentColor" d="M3 5h10l-5 6z" />
-              </svg> : open ? "Thu gọn" : item.status === "pending" ? "Xử lý" : "Chi tiết"}
+              {compactCollapse ? <Triangle size={12} strokeWidth={0} fill="currentColor" aria-hidden="true" style={{ rotate: "180deg" }} /> : open ? "Thu gọn" : item.status === "pending" ? "Xử lý" : "Chi tiết"}
             </Link>
             {item.status !== "pending" ? <button className="btn-sm btn-danger request-delete" type="button" title="Xóa" aria-label="Xóa" disabled={removingId !== undefined || decisionId !== undefined}
               onClick={() => void remove(item)}><Trash2 size={15} aria-hidden="true" />{removingId === item.id ? "Đang xóa…" : <span>Xóa</span>}</button> : null}
