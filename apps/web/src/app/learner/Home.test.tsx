@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearnerHome, LearnerMonthly } from "./Home.js";
+import { OPEN_LEARNER_HOME_GUIDE } from "../shared/AppGuide.js";
 import type { LearnerCallbacks, LearnerHomeView } from "./contracts.js";
 
 afterEach(() => {
@@ -29,6 +30,29 @@ function view(overrides: Partial<LearnerHomeView> = {}): LearnerHomeView {
 }
 
 describe("monthly learner home", () => {
+  it.each(["Kháng nghị đầu vào", "Xem hướng dẫn"] as const)("uses the level announcement layout and opens %s", async (action) => {
+    const navigate = vi.fn();
+    const acknowledgeRewardAnnouncement = vi.fn().mockResolvedValue(undefined);
+    const openGuide = vi.fn();
+    window.addEventListener(OPEN_LEARNER_HOME_GUIDE, openGuide);
+    try {
+      render(<LearnerHome view={view({ rewardAnnouncement: {
+        kind: "placement-approved", points: 0, nextPoints: 500, seasonName: "Mùa xuân",
+        level: "A2", announcementId: "placement-approved:attempt-1"
+      } })} actions={{ ...actions, navigate, acknowledgeRewardAnnouncement }} />);
+      const dialog = screen.getByRole("dialog", { name: "Bạn đã được xếp mức A2" });
+      expect(dialog).toHaveClass("learner-reward-dialog");
+      expect(dialog.querySelector(".modal-illustration svg")).toBeInTheDocument();
+      expect(dialog).toHaveAccessibleDescription("Vào Kháng nghị đầu vào để xem bài làm, phản hồi hoặc xin thi lại.");
+      fireEvent.click(within(dialog).getByRole("button", { name: action }));
+      await waitFor(() => expect(dialog).not.toBeInTheDocument());
+      expect(acknowledgeRewardAnnouncement).toHaveBeenCalledWith("placement-approved:attempt-1");
+      if (action === "Kháng nghị đầu vào") expect(navigate).toHaveBeenCalledWith("/support?tab=appeals");
+      else expect(openGuide).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener(OPEN_LEARNER_HOME_GUIDE, openGuide);
+    }
+  });
   it("shows no learning-support card before the level is approved", () => {
     render(<LearnerHome view={view({ learner: { displayName: "Học viên mới", cefr: null } })} actions={actions} />);
     expect(screen.queryByRole("link", { name: "Hỗ trợ học tập" })).not.toBeInTheDocument();

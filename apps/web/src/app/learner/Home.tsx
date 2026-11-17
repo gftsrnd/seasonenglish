@@ -1,6 +1,6 @@
 import { RequestEvidenceFields, requestEvidenceArgs, type RequestEvidenceDraft } from "../shared/RequestEvidence.js";
 import { useEffect, useState, type CSSProperties } from "react";
-import { BookOpen, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MessageCircle, Play } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Clock3, GraduationCap, LockKeyhole, MessageCircle, Play } from "lucide-react";
 import type { LearnerHomeView, LearnerCallbacks } from "./contracts.js";
 import { Button, Modal, Notice, PageTitle, Progress, AppLink, learnerLessonLabel, learnerLessonPhrase } from "./ui.js";
 import { buildMonthlyTeachingCalendar } from "@e4s/domain/monthly";
@@ -95,8 +95,9 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
       </div>
     </section>
     {celebration?.kind === "placement-approved" ? <Modal
-      className="placement-retake-confirm"
+      className="learner-reward-dialog"
       title={`Bạn đã được xếp mức ${celebration.level ?? view.learner.cefr}`}
+      illustration={<GraduationCap size={36} strokeWidth={1.8} />}
       description="Vào Kháng nghị đầu vào để xem bài làm, phản hồi hoặc xin thi lại."
       onClose={() => void finishPlacementWelcome(false)}
       dismissOnBackdrop
