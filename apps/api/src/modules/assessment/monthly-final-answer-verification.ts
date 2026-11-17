@@ -87,6 +87,7 @@ export function monthlyFinalVerificationFindings(items: readonly VerificationIte
 /** Runs the check (one call). `only` limits it to some task keys (re-check after a repair). */
 export async function verifyMonthlyFinalAnswers(runner: AiTaskRunner, cefr: string, blueprint: StoredAssessmentDefinition, only?: ReadonlySet<string>): Promise<MonthlyFinalVerificationFinding[]> {
   const items = monthlyFinalVerificationItems(blueprint).filter((item) => !only || only.has(item.ref));
+  if (only && items.length !== only.size) throw new Error("Disputed item is missing from the repaired monthly final");
   if (!items.length) return [];
   try {
     const result = await runner.runTask("monthly_answer_verification", {

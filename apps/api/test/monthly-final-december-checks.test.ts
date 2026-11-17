@@ -112,6 +112,7 @@ describe("independent answer check per form (GEN05 / GEN12)", () => {
     const unavailable = { runTask: async () => { throw new Error("down"); } } as never;
     expect(await verifyMonthlyFinalAnswers(unavailable, contract.cefr, blueprint)).toEqual([]);
     await expect(verifyMonthlyFinalAnswers(unavailable, contract.cefr, blueprint, new Set([r01.ref]))).rejects.toThrow("down");
+    await expect(verifyMonthlyFinalAnswers(runner as never, contract.cefr, blueprint, new Set(["missing"]))).rejects.toThrow("Disputed item is missing");
     const incomplete = { runTask: async () => ({ output: { items: [] }, metadata: {} }) } as never;
     await expect(verifyMonthlyFinalAnswers(incomplete, contract.cefr, blueprint, new Set([r01.ref]))).rejects.toThrow("Missing independent recheck");
     const duplicate = { runTask: async () => ({ output: { items: [r01, r01].map(item => ({ ref: item.ref, correctOptions: [item.key] })) }, metadata: {} }) } as never;
