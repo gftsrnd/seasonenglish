@@ -1,4 +1,4 @@
-import { containsVietnameseLearnerText, isExerciseTranslationKey, isVietnameseTranslationKey, monthlyMinimalPairPartners, monthlyMinimalPairRepairAdvice, monthlyPronunciationContrastIssue, monthlyPronunciationContrastRule, monthlyPronunciationExampleText, type MonthlyCurriculumContract, type MonthlyDaySpec, type MonthlyPronunciationContrastRule } from "@e4s/domain";
+import { containsVietnameseLearnerText, isExerciseTranslationKey, isVietnameseTranslationKey, monthlyMinimalPairPartners, monthlyMinimalPairRepairAdvice, monthlyPronunciationContrastIssue, monthlyPronunciationContrastRule, monthlyPronunciationExampleText, normalizeWeeklyReviewReadAloud, type MonthlyCurriculumContract, type MonthlyDaySpec, type MonthlyPronunciationContrastRule } from "@e4s/domain";
 import type { MonthlyQualityFinding } from "./monthly-quality.js";
 
 /**
@@ -107,7 +107,7 @@ export function evaluateMonthlyReviewSections(
     : `reading.items must contain exactly ${target.reading} comprehension questions; it has ${readingItems.length} (remove ${readingItems.length - target.reading})`);
   checkChoices("reading", readingItems, 4);
 
-  const speaking = sectionItems("speaking");
+  const speaking = sectionItems("speaking").map(normalizeWeeklyReviewReadAloud);
   // Listen-and-choose items are recognised by their options (any count), so an
   // item with 4 options is reported as such instead of as "0 minimal pairs".
   const minimalPairs = speaking.filter((item) => strings(item.options).length > 0);

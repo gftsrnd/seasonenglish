@@ -1,3 +1,4 @@
+import { normalizeWeeklyReviewReadAloud } from "@e4s/domain/monthly";
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { OperatorPracticeReview, type OperatorLessonPart } from "./adapters.js";
 import { AudioSynthesisNotice } from "./AudioSynthesisNotice.js";
@@ -31,7 +32,7 @@ export function MonthlyReviewPractice({ parts, english = false }: { parts: reado
       <ul className="lesson-instruction-list">{steps.map((step) => <li key={step}>{step}</li>)}</ul>
     </section>
     {SECTIONS.map((section, sectionIndex) => {
-      const items = itemsOf(section.code);
+      const items = section.code === "speaking" ? itemsOf(section.code).map(normalizeWeeklyReviewReadAloud) : itemsOf(section.code);
       // B1+ previews show what the learner reads: English section names.
       const title = english ? section.titleEn : section.title;
       return <section className="card monthly-review-block" id={`review-section-${section.code}`} key={section.code} aria-label={title}>

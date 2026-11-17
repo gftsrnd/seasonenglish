@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModalProvider } from "../shared/ModalProvider.js";
@@ -464,6 +464,30 @@ describe("operator granular lesson editor", () => {
     type Lesson = ReturnType<typeof reviewLesson>;
     const partJson = (lesson: Lesson, code: string) => JSON.stringify(lesson.parts.find(item => item.code === code));
     const wordUseItems = (lesson: Lesson) => lesson.parts.find(item => item.code === "word_use")!.content.items as Array<Record<string, unknown>>;
+
+
+    it("saves an AI read-aloud question as a passage without choice fields", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const base = reviewLesson();
+      const initial = { ...base, parts: base.parts.map(part => part.code !== "speaking" ? part : {
+        ...part,
+        content: { items: [
+          { id: "speaking-3", prompt: "Đọc to câu sau", passage: "The report is ready.", audioText: "The report is ready.",
+            audioUrl: "/wrong.mp3", options: [""], answer: "The report is ready.", explanation: "Speak clearly." }
+        ] }
+      }) };
+      render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A2" monthly kind="review" vocabularyCount={1} initial={initial} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
+      const group = within(screen.getByRole("group", { name: "Phát âm & Nói – Viết câu 1" }));
+      expect(group.getByLabelText(/Câu đọc to/)).toHaveValue("The report is ready.");
+      expect(group.queryAllByLabelText(/Lựa chọn|Đáp án đúng|Từ app đọc/)).toHaveLength(0);
+      fireEvent.change(group.getByLabelText(/Âm cần chú ý/), { target: { value: "/iː/" } });
+      await saveLesson(user);
+      const saved = onSave.mock.calls[0]![0] as Lesson;
+      expect(saved.parts.find(part => part.code === "speaking")!.content.items).toEqual([
+        { id: "speaking-3", prompt: "Đọc to câu sau", passage: "The report is ready.", focus: "/iː/", explanation: "Speak clearly." }
+      ]);
+    });
 
     it("shows every question and retry version of every part, with fixed counts", () => {
       render(<ModalProvider><LessonFormEditor weekNumber={0} cefr="A2" monthly kind="review" vocabularyCount={1} initial={reviewLesson()} onSave={vi.fn()} onCancel={() => undefined} /></ModalProvider>);

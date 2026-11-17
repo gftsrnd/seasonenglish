@@ -70,6 +70,17 @@ export interface WeeklyReviewSessionState {
   completedAt: string | null;
 }
 
+/** Review speaking uses a visible passage for read-aloud; choice and hidden audio fields belong to listen-and-choose. */
+export function normalizeWeeklyReviewReadAloud(item: Record<string, unknown>): Record<string, unknown> {
+  const prompt = firstText(item.prompt);
+  const readAloudPrompt = /^(?:đọc to|read aloud)\b/iu;
+  if (!firstText(item.passage) && !readAloudPrompt.test(prompt ?? "")) return item;
+  const passage = firstText(item.passage, item.audioText) ?? "";
+  const { options, answer, audioText, audioUrl, audioSynthesis, variants, answerTranslation, requiredWords, minRequiredWords, ...rest } = item;
+  const instruction = passage && prompt && readAloudPrompt.test(prompt) && prompt.endsWith(passage) ? prompt.slice(0, -passage.length).replace(/:\s*$/u, "").trim() : prompt;
+  return { ...rest, ...(instruction ? { prompt: instruction } : {}), passage };
+}
+
 /** Builds review sections from the published lesson parts. */
 export function weeklyReviewSectionsFromParts(parts: readonly LessonPart[]): WeeklyReviewSectionDefinition[] {
   return WEEKLY_REVIEW_SECTION_ORDER.flatMap((code) => {
@@ -226,9 +237,10 @@ function reviewItemsFromContent(code: WeeklyReviewSectionCode, content: Record<s
   if (Array.isArray(content.items)) {
     return content.items.flatMap((raw, index) => {
       if (!raw || typeof raw !== "object") return [];
-      const item = toVariant(raw as Record<string, unknown>, `${code}-${index + 1}`, code);
+      const question = code === "speaking" ? normalizeWeeklyReviewReadAloud(raw as Record<string, unknown>) : raw as Record<string, unknown>;
+      const item = toVariant(question, `${code}-${index + 1}`, code);
       if (!item) return [];
-      const rawVariants = (raw as Record<string, unknown>).variants;
+      const rawVariants = question.variants;
       const variants = Array.isArray(rawVariants)
         ? rawVariants.flatMap((variant, variantIndex) => {
           if (!variant || typeof variant !== "object") return [];
@@ -239,7 +251,7 @@ function reviewItemsFromContent(code: WeeklyReviewSectionCode, content: Record<s
       return [{ ...item, ...(variants.length ? { variants } : {}) }];
     });
   }
-  const single = toVariant(content, `${code}-1`, code);
+  const single = toVariant(code === "speaking" ? normalizeWeeklyReviewReadAloud(content) : content, `${code}-1`, code);
   return single ? [single] : [];
 }
 

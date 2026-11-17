@@ -1,3 +1,4 @@
+import { normalizeWeeklyReviewReadAloud } from "@e4s/domain/monthly";
 import { MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
 
 /**
@@ -107,11 +108,13 @@ export function monthlyLessonIntegrityIssues(kind: "new" | "review", parts: Read
       continue;
     }
     const choice = (REVIEW_CHOICE_SECTIONS as readonly string[]).includes(code);
-    items.forEach((item, index) => {
+    items.forEach((raw, index) => {
+      const item = code === "speaking" ? normalizeWeeklyReviewReadAloud(raw) : raw;
       const versions: Array<[string, Content, { item: number; variant?: number }]> = [[`câu ${index + 1}`, item, { item: index + 1 }], ...(Array.isArray(item.variants) ? item.variants.filter(isRecord) : []).map((variant, variantIndex): [string, Content, { item: number; variant?: number }] => [`câu ${index + 1} bản làm lại ${variantIndex + 1}`, variant, { item: index + 1, variant: variantIndex + 1 }])];
       for (const [label, question, at] of versions) {
         if (!text(question.prompt) && !text(question.question)) add(code, `${label} chưa có câu hỏi`, at);
         if (code === "listening" && !text(question.audioText) && !text(question.script) && !text(question.audioUrl)) add(code, `${label} không có từ để phát`, at);
+        if (code === "speaking" && typeof question.passage === "string" && !Array.isArray(question.options) && !question.passage.trim()) add(code, `${label} thiếu câu đọc to`, at);
         if (choice || Array.isArray(question.options)) {
           const problem = choiceProblem(question);
           if (problem) add(code, `${label} ${problem}`, at);

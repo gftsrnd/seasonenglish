@@ -1,3 +1,4 @@
+import { normalizeWeeklyReviewReadAloud } from "@e4s/domain/monthly";
 import { EditorSection, Field, LineField, OptionFields } from "./LessonEditorFields.js";
 import { MONTHLY_REVIEW_SECTIONS } from "./monthly-failure-findings.js";
 
@@ -22,7 +23,11 @@ export function reviewItemKey(code: string, item: number, variant?: number): str
 export function readReviewContents(parts: ReadonlyArray<{ code: string; content: unknown }>): ReviewContents {
   return Object.fromEntries(REVIEW_SECTION_CODES.flatMap((code) => {
     const content = parts.find((part) => part.code === code)?.content;
-    return content && typeof content === "object" && !Array.isArray(content) ? [[code, content as Record<string, unknown>]] : [];
+    if (!content || typeof content !== "object" || Array.isArray(content)) return [];
+    const section = content as Record<string, unknown>;
+    if (code !== "speaking" || !Array.isArray(section.items)) return [[code, section]];
+    const items = section.items.map((item) => item && typeof item === "object" && !Array.isArray(item) ? normalizeWeeklyReviewReadAloud(item) : item);
+    return [[code, { ...section, items }]];
   }));
 }
 
@@ -88,6 +93,7 @@ export function validateReviewContents(contents: ReviewContents): string[] {
     reviewQuestions(content).forEach((item, itemIndex) => {
       [item, ...variantsOf(item)].forEach((question, position) => {
         const where = `Phần ${sectionIndex + 1} · ${section.title} · câu ${itemIndex + 1}${position ? ` (bản làm lại ${position})` : ""}`;
+        if (section.code === "speaking" && typeof question.passage === "string" && !Array.isArray(question.options) && !question.passage.trim()) problems.push(where + ": thiếu câu đọc to");
         if (!text(question.prompt).trim()) problems.push(`${where}: thiếu câu hỏi`);
         if (!isStringList(question.options) || !question.options.length) return;
         const options = question.options.map((option) => option.trim());
@@ -134,6 +140,11 @@ export function ReviewSectionEditor({ code, sectionNumber, title, content, disab
 
 function QuestionEditor({ code, label, question, onChange }: { code: string; label: string; question: Question; onChange(change: (question: Question) => Question): void }) {
   const set = (key: string, value: unknown) => onChange((current) => ({ ...current, [key]: value }));
+  if (code === "speaking" && typeof question.passage === "string" && !Array.isArray(question.options)) return <>
+    <Field label="Câu đọc to"><textarea aria-label={label + " – Câu đọc to"} value={question.passage} onChange={(event) => set("passage", event.target.value)} /></Field>
+    <Field label="Âm cần chú ý"><LineField aria-label={label + " – Âm cần chú ý"} value={text(question.focus)} onChange={(event) => set("focus", event.target.value)} /></Field>
+    <Field label="Giải thích"><textarea aria-label={label + " – Giải thích"} value={text(question.explanation)} onChange={(event) => set("explanation", event.target.value)} /></Field>
+  </>;
   const options = isStringList(question.options) ? question.options : null;
   const answer = question.answer;
   const hasTranslation = typeof question.questionTranslation === "string" || typeof question.answerTranslation === "string";

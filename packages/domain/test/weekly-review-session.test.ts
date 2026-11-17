@@ -39,6 +39,16 @@ describe("weekly review session", () => {
     expect(weeklyReviewWarmupCards(parts).map((card) => card.word)).toEqual(["deadline", "budget"]);
   });
 
+  it("presents a mixed legacy read-aloud item as a visible recording task", () => {
+    const [section] = weeklyReviewSectionsFromParts([{ code: "speaking", title: "Nói", content: { items: [{
+      id: "s3", prompt: "Đọc to câu sau: The report is ready.", passage: "The report is ready.",
+      audioText: "The report is ready.", options: [""], answer: "The report is ready."
+    }] } }]);
+    expect(section?.items).toEqual([{
+      id: "s3", prompt: "Đọc to câu sau", passage: "The report is ready.", acceptsAudio: true
+    }]);
+  });
+
   it("explains a wrong answer and asks the item again at the end of the section", () => {
     let state = resumeWeeklyReviewSession(null, sections);
     const wrong = answer(state, "ngân sách");
