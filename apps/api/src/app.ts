@@ -7,6 +7,7 @@ import type { ObjectStorage } from "@e4s/storage";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { registerApiErrorHandler } from "./error-handler.js";
+import { registerArenaRoutes } from "./modules/arena/index.js";
 import { registerAssessmentRoutes } from "./modules/assessment/index.js";
 import type { EdgeTtsRunner } from "./modules/assessment/edge-tts.js";
 import { registerCoachRoutes } from "./modules/coach/index.js";
@@ -99,6 +100,7 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
   registerNotificationRoutes(app, options.pool);
   registerCoachRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory, options.storage);
   registerEngagementRoutes(app, options.pool, options.aiRunner, options.mediaService, options.aiRunnerFactory, options.storage);
+  registerArenaRoutes(app, options.pool);
   registerSystemRoutes(app, options.pool, options.storage, Boolean(options.aiRunner), maintenanceEnabled, options.imageProviders, options.aiRunnerFactory);
   if (options.storage) {
     void app.register(multipart, { limits: { files: 1, fileSize: 20 * 1024 * 1024 } });

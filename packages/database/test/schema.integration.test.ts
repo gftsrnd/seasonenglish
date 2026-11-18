@@ -8,7 +8,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 
 const expectedTables = [
-  "activities", "ai_runs", "ai_tasks", "appeals", "assessment_attempts", "assessment_audio_plays",
+  "activities", "ai_runs", "ai_tasks", "appeals", "arena_matches", "arena_ratings", "arena_seasons", "assessment_attempts", "assessment_audio_plays",
   "assessment_decisions", "assessment_definitions", "assessment_responses", "assessment_retake_grants",
   "assessment_scores", "assessment_versions", "audit_events", "auth_challenges", "badges",
   "coach_sessions", "coach_turns", "duels", "enrollments", "file_deletion_confirmations", "files", "game_results",

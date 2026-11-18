@@ -20,7 +20,7 @@ export class InboxNotificationRepository {
                     and retake.retake_attempt_id = substring(owned.event_key from '^assessment:([0-9a-fA-F-]{36}):(?:approved|saved)$')::uuid
                 ) then 'placement_retake' else context end as context,
                 created_at as "createdAt", read_at as "readAt",
-                substring(event_key from '^(?:complaint:|appeal:[a-z]+:|reopen:[a-z]+:|audit:|assessment:|topic:)([0-9a-fA-F-]{36}):') as "relatedId",
+                substring(event_key from '^(?:complaint:|appeal:[a-z]+:|reopen:[a-z]+:|audit:|assessment:|topic:|arena:)([0-9a-fA-F-]{36}):') as "relatedId",
                 case when kind = 'level_changed' and recipient_role = 'learner' then (
                   select nullif(btrim(event.payload->>'reason'), '')
                   from audit_events event

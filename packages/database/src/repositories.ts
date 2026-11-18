@@ -10307,6 +10307,23 @@ class EngagementRepository {
     };
   }
 
+  /**
+   * The two word sources an arena match can snapshot (DOT 2): the learner's learned
+   * curriculum vocabulary of the month ("Bộ đang học") and the personal AI Mini game set.
+   */
+  async arenaWordSources(learnerId: string): Promise<{
+    cefr: CefrLevel; curriculum: GameWordSetView | null; personal: GameWordSetView | null;
+  } | null> {
+    const context = await this.activeGameContext(learnerId);
+    if (!context) return null;
+    const [learned, hub] = await Promise.all([this.monthlyLearnedGameWords(learnerId, context), this.gameHub(learnerId)]);
+    const personal = hub?.wordSet?.source === "custom" ? hub.wordSet : null;
+    const curriculum: GameWordSetView | null = learned.length
+      ? { id: hub?.wordSet?.source === "monthly" ? hub.wordSet.id : "", topic: context.topic?.trim() || "Bộ đang học", cefr: context.cefr, source: "monthly", words: learned }
+      : null;
+    return { cefr: context.cefr, curriculum, personal };
+  }
+
   private async monthlyLearnedGameWords(learnerId: string, context: { month: string; monthId: string | null; cefr: CefrLevel }): Promise<GameWordView[]> {
     if (!context.monthId) return [];
     const lessons = await new LearningRepository(this.pool).listMonthlyLessons(learnerId, context.month);
@@ -15006,7 +15023,7 @@ const FIRST_ACTIVITY_OF_REFERENCE_SQL = `(a.reference_id is null or not exists (
  * reached Season of the current level's ladder (points earned in the level) is
  * recorded once per level (bell + congratulation modal).
  */
-async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Promise<void> {
+export async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Promise<void> {
   if (!("release" in db)) {
     await withLearnerRewardLock(db, learnerId, (client) => syncLearnerRewards(client, learnerId));
     return;

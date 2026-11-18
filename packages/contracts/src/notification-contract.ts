@@ -35,7 +35,7 @@ export type InboxNotificationKind =
   | "learning_reminder" | "security_report"
   | "deletion_received" | "deletion_resolved" | "level_changed" | "credential_changed" | "account_reopened"
   | "lesson_availability_changed" | "lesson_published" | "monthly_exam_published" | "level_exam_published"
-  | "topic_report_received" | "topic_report_resolved" | "duel_invited" | "duel_completed"
+  | "topic_report_received" | "topic_report_resolved" | "duel_invited" | "duel_completed" | "arena_turn" | "arena_result"
   | "course_ready" | "certificate_issued" | "challenge_received" | "challenge_passed" | "challenge_retry"
   | "monthly_exam_ready" | "level_exam_ready" | "monthly_survey_open"
   | "lesson_window_unapproved" | "lesson_window_unapproved_manager" | "test_date_active"

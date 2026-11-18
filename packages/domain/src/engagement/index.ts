@@ -277,3 +277,4 @@ function stringSeed(value: string): number {
 export * from "./season-rewards.js";
 export * from "./round-scoring.js";
 export * from "./crossword-layout.js";
+export * from "./arena-rating.js";

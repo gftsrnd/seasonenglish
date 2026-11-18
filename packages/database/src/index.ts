@@ -1,3 +1,4 @@
+export * from "./arena-repository.js";
 export * from "./assessment-blueprints.js";
 export * from "./assessment-bank.js";
 export * from "./assessment-bank-manifest.js";
