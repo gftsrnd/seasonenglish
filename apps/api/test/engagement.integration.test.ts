@@ -2,6 +2,7 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createPinHash } from "@e4s/domain/identity";
+import { gameRoundWords } from "@e4s/domain/engagement";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 import type { ContentMediaService } from "../src/modules/media/index.js";
@@ -491,41 +492,59 @@ describe("practice, games, arena, rewards and survey API", () => {
     ]);
     expect(hub.json().wordSet.words).toHaveLength(15);
 
-    const words = hub.json().wordSet.words as Array<{ id: string; english: string }>;
+    const words = hub.json().wordSet.words as Array<{ id: string; english: string; partOfSpeech: string }>;
+    const scramble = gameRoundWords("scramble", words, 0);
     const completed = await app.inject({
       method: "POST", url: "/api/v1/engagement/games/scramble/results", headers: { cookie },
       payload: {
         requestId: "10000000-0000-4000-8000-000000000002",
         claimedScore: 999,
         answers: [
-          { wordId: words[0]!.id, answer: words[0]!.english, attempts: 1, usedHint: false },
-          { wordId: words[1]!.id, answer: "wrong", attempts: 1, usedHint: false }
+          { wordId: scramble[0]!.id, answer: scramble[0]!.english, attempts: 1, usedHint: false, combo: 5, ms: 1_200 },
+          { wordId: scramble[1]!.id, answer: "wrong", attempts: 2, usedHint: false, ms: 800 }
         ]
       }
     });
     expect(completed.statusCode, completed.body).toBe(200);
-    expect(completed.json()).toMatchObject({ score: 2, maxScore: 16, correct: 1 });
+    // 10 raw of 110 (8 units fixed by the server) -> 9/100.
+    expect(completed.json()).toMatchObject({ score: 9, maxScore: 100, correct: 1, total: 8 });
     expect(completed.json().score).not.toBe(999);
+    const stored = await pool.query(
+      `select score, max_score, arena_score, raw_score, raw_max, gameplay_ms, units_assigned, rules_version
+       from game_results where learner_id = $1 and request_key = $2`, [DEMO_IDS.learner, "10000000-0000-4000-8000-000000000002"]);
+    expect(stored.rows).toEqual([{ score: 9, max_score: 100, arena_score: 9, raw_score: 10, raw_max: 110, gameplay_ms: 2_000, units_assigned: 8, rules_version: 2 }]);
 
+    // Replaying the same request key returns the first result and is scored only once.
     const duplicate = await app.inject({
       method: "POST", url: "/api/v1/engagement/games/scramble/results", headers: { cookie },
       payload: {
         requestId: "10000000-0000-4000-8000-000000000002",
         claimedScore: 0,
-        answers: [{ wordId: words[0]!.id, answer: "wrong" }]
+        answers: scramble.map((word) => ({ wordId: word.id, answer: word.english }))
       }
     });
-    expect(duplicate.json()).toMatchObject({ score: 2, maxScore: 16 });
+    expect(duplicate.json()).toMatchObject({ id: completed.json().id, score: 9, maxScore: 100 });
+    const replayed = await pool.query(
+      `select (select count(*)::int from game_results where learner_id = $1 and request_key = $2) as results,
+              (select count(*)::int from activities where learner_id = $1 and reference_type = 'game_result' and reference_id = $3) as activities`,
+      [DEMO_IDS.learner, "10000000-0000-4000-8000-000000000002", completed.json().id]);
+    expect(replayed.rows[0]).toEqual({ results: 1, activities: 1 });
 
+    // Crossword: N is the number of words the server places in the grid, whatever the client sends.
+    const placed = gameRoundWords("crossword", words, 0);
     const crossword = await app.inject({
       method: "POST", url: "/api/v1/engagement/games/crossword/results", headers: { cookie },
       payload: {
-        requestId: "10000000-0000-4000-8000-000000000022", hintsUsed: 1,
-        answers: words.slice(0, 3).map((word) => ({ wordId: word.id, answer: word.english }))
+        requestId: "10000000-0000-4000-8000-000000000022", hintsUsed: 0,
+        answers: words.map((word) => ({ wordId: word.id, answer: word.english, usedHint: word.id === placed[0]!.id }))
       }
     });
     expect(crossword.statusCode, crossword.body).toBe(200);
-    expect(crossword.json()).toMatchObject({ score: 2, maxScore: 3, correct: 3 });
+    expect(crossword.json()).toMatchObject({ maxScore: 100, correct: placed.length, total: placed.length });
+    expect(crossword.json().score).toBeLessThan(100);
+    const crosswordRow = await pool.query("select units_assigned, gameplay_ms from game_results where learner_id = $1 and request_key = $2",
+      [DEMO_IDS.learner, "10000000-0000-4000-8000-000000000022"]);
+    expect(crosswordRow.rows[0]).toEqual({ units_assigned: placed.length, gameplay_ms: null });
     const count = await pool.query("select count(*)::int as count from game_results where learner_id = $1", [DEMO_IDS.learner]);
     expect(count.rows[0].count).toBe(2);
   });
@@ -572,27 +591,37 @@ describe("practice, games, arena, rewards and survey API", () => {
     expect(mediaService.resolveForUser).not.toHaveBeenCalled();
   });
 
-  it("shows a legacy Season catch record on the current ten-point scale", async () => {
+  it("restarts records with the 0-100 rule: older results stay stored but are not shown", async () => {
     await pool.query("delete from game_results where learner_id = $1 and game_key = 'eggs'", [DEMO_IDS.learner]);
     await pool.query(
       `insert into game_results
          (id, game_set_id, learner_id, game_key, score, max_score, request_key, details)
-       values (gen_random_uuid(), $1, $2, 'eggs', 1, 2, gen_random_uuid()::text,
-               '{"correct":1,"total":2}'::jsonb)`,
+       values (gen_random_uuid(), $1, $2, 'eggs', 10, 10, gen_random_uuid()::text,
+               '{"correct":10,"total":10}'::jsonb)`,
       [monthlySetId, DEMO_IDS.learner]
     );
+    const eggsBest = async () => (await app.inject({ method: "GET", url: "/api/v1/engagement/games", headers: { cookie } }))
+      .json().games.find((game: { key: string }) => game.key === "eggs").best;
+    expect(await eggsBest()).toBeNull();
 
     const hub = await app.inject({ method: "GET", url: "/api/v1/engagement/games", headers: { cookie } });
-    expect(hub.statusCode, hub.body).toBe(200);
-    expect(hub.json().games.find((game: { key: string }) => game.key === "eggs").best)
-      .toEqual({ score: 5, maxScore: 10 });
+    const [first] = gameRoundWords("eggs", hub.json().wordSet.words as Array<{ id: string; english: string }>, 0);
+    const played = await app.inject({
+      method: "POST", url: "/api/v1/engagement/games/eggs/results", headers: { cookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000025", answers: [{ wordId: first!.id, answer: first!.english }] }
+    });
+    expect(played.statusCode, played.body).toBe(200);
+    expect(await eggsBest()).toEqual({ score: 7, maxScore: 100 });
+    const kept = await pool.query("select count(*)::int as count from game_results where learner_id = $1 and game_key = 'eggs' and rules_version = 1", [DEMO_IDS.learner]);
+    expect(kept.rows[0].count).toBe(1);
 
+    await pool.query("delete from activities where learner_id = $1 and reference_type = 'game_result' and reference_id in (select id from game_results where learner_id = $1 and game_key = 'eggs')", [DEMO_IDS.learner]);
     await pool.query("delete from game_results where learner_id = $1 and game_key = 'eggs'", [DEMO_IDS.learner]);
   });
 
   it("persists Season catch wrong-catch evidence separately from the server-scored answer", async () => {
     const hub = await app.inject({ method: "GET", url: "/api/v1/engagement/games", headers: { cookie } });
-    const words = hub.json().wordSet.words as Array<{ id: string; english: string }>;
+    const words = gameRoundWords("eggs", hub.json().wordSet.words as Array<{ id: string; english: string }>, 0);
     const target = words[0]!;
     const firstWrong = words[1]!;
     const secondWrong = words[2]!;
@@ -610,7 +639,8 @@ describe("practice, games, arena, rewards and survey API", () => {
       }
     });
     expect(completed.statusCode, completed.body).toBe(200);
-    expect(completed.json()).toMatchObject({ score: 1, correct: 1, total: 10 });
+    // A single first-try catch of 10 units: 10/140 -> 7/100.
+    expect(completed.json()).toMatchObject({ score: 7, maxScore: 100, correct: 1, total: 10 });
 
     const stored = await pool.query<{ details: { evidence: { events: Array<{ type: string; wordId: string; answer: string }> } } }>(
       "select details from game_results where learner_id = $1 and request_key = $2",
@@ -626,7 +656,7 @@ describe("practice, games, arena, rewards and survey API", () => {
       method: "POST", url: "/api/v1/engagement/games/eggs/results", headers: { cookie },
       payload: { requestId, answers: [{ wordId: target.id, answer: "wrong" }], events: [] }
     });
-    expect(duplicate.json()).toMatchObject({ id: completed.json().id, score: 1, correct: 1 });
+    expect(duplicate.json()).toMatchObject({ id: completed.json().id, score: 7, correct: 1 });
   });
 
   it("creates and removes a private AI vocabulary set without falling back to weekly vocabulary", async () => {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import type { ArenaView, DuelView, GameDescriptor, GameHubView, GameKey, GameTopicModeration, GameWordSetView } from "@e4s/contracts";
-import { seasonRioRoundPlan, typingMaximum } from "@e4s/domain/engagement";
+import { seasonRioRoundPlan } from "@e4s/domain/engagement";
 import { ArrowLeft, ArrowLeftRight, LogOut, Trash2, ArrowRight, Flag, Gift, Grid3X3, Heart, Keyboard, Layers3, Lightbulb, MousePointerClick, Play, ScanText, ShoppingBasket, Shuffle, Sun, Target, Timer, Trophy, Volume2, type LucideIcon } from "lucide-react";
 import { CrosswordGame, ScrambleGame, SeasonCatchGame, SeasonRioGame, TypingRaceGame, WordSortGame } from "../games/index.js";
 import { crosswordEntryCount } from "../games/CrosswordGame.js";
@@ -36,7 +36,7 @@ const compactTutorial: Record<GameKey, string[]> = {
   ],
   eggs: [
     "Di chuyển rổ để hứng từ đúng với gợi ý.",
-    "Hứng đúng được điểm; hứng sai mất một mạng.",
+    "Hứng đúng được điểm; hứng sai hoặc để rơi mất một mạng.",
     "Mất đủ 3 mạng thì lượt chơi kết thúc."
   ],
   mario: [
@@ -97,27 +97,23 @@ export function getGameAvailability(key: GameKey, words: readonly GameWord[]): G
   return { available: true };
 }
 
+/** The shared "Điểm" line of all six tutorials (RULE A.3); Season catch adds its lives rule. */
+export const GAME_SCORING_LINE = "Đúng ngay +10, từ câu thứ 3 liên tiếp +15; gợi ý hoặc thử lại +5; sai 0. Điểm ván tối đa 100.";
+export const CATCH_LIVES_LINE = "Hứng sai hoặc để rơi: mất 1 mạng.";
+
 export function getGameRoundSummary(descriptor: Pick<GameDescriptor, "key" | "goal" | "scoring">, words: readonly GameWord[]) {
   // Server descriptors hard-code the largest round size ("10 từ", "8 từ",
   // "10 lượt"); the real round depends on the word set (HUD "Từ 1/8"), so the
   // counts in the copy are replaced with the values the game will actually use.
-  if (descriptor.key === "typing") {
-    const rounds = gameRoundWordCount("typing", words);
-    return {
-      goal: descriptor.goal.replace(/\d+ từ/, `${rounds} từ`),
-      scoring: descriptor.scoring.replace(/tối đa \d+ từ/, `${rounds} từ, tối đa ${typingMaximum(rounds)} điểm`)
-    };
-  }
-  if (descriptor.key === "scramble") return { goal: descriptor.goal.replace(/\(\d+ từ\)/, `(${gameRoundWordCount("scramble", words)} từ)`), scoring: descriptor.scoring };
-  if (descriptor.key === "eggs") {
-    const rounds = gameRoundWordCount("eggs", words);
-    return { goal: descriptor.goal.replace(/\d+ lượt/, `${rounds} lượt`), scoring: descriptor.scoring.replace(/tối đa \d+/, `tối đa ${rounds}`) };
-  }
-  if (descriptor.key !== "mario") return { goal: descriptor.goal, scoring: descriptor.scoring };
+  const scoring = descriptor.key === "eggs" ? `${GAME_SCORING_LINE} ${CATCH_LIVES_LINE}` : GAME_SCORING_LINE;
+  if (descriptor.key === "typing") return { goal: descriptor.goal.replace(/\d+ từ/, `${gameRoundWordCount("typing", words)} từ`), scoring };
+  if (descriptor.key === "scramble") return { goal: descriptor.goal.replace(/\(\d+ từ\)/, `(${gameRoundWordCount("scramble", words)} từ)`), scoring };
+  if (descriptor.key === "eggs") return { goal: descriptor.goal.replace(/\d+ lượt/, `${gameRoundWordCount("eggs", words)} lượt`), scoring };
+  if (descriptor.key !== "mario") return { goal: descriptor.goal, scoring };
   const plan = seasonRioRoundPlan(words);
   return {
-    goal: `Vượt ${plan.gateCount} cổng, trả lời ${plan.bossQuestions} câu Boss rồi chạm cờ.`,
-    scoring: `+1 điểm mỗi câu đúng, tối đa ${plan.total} điểm.`
+    goal: plan.bossQuestions ? `Vượt ${plan.gateCount} cổng, trả lời ${plan.bossQuestions} câu Boss rồi chạm cờ.` : `Vượt ${plan.gateCount} cổng rồi chạm cờ.`,
+    scoring
   };
 }
 

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { GameAnswerInput, GameEvidenceEventInput } from "@e4s/contracts";
 import { Delete, Volume2 } from "lucide-react";
-import { isTypingWord, normalize, prepareGameAttempt, TYPING_ROUND_SIZE, type FinishGame, type GameWord } from "./types.js";
-import { typingMaximum } from "@e4s/domain/engagement";
+import { gameRoundWords, normalize, type FinishGame, type GameWord } from "./types.js";
+import { GameHud, useGameClock, useRoundTally } from "./GameHud.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import { GameFeedback } from "./GameFeedback.js";
 
@@ -20,12 +20,14 @@ const TAP_PRESS_MS = 160;
 export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0 }: {
   words: GameWord[]; onFinish: FinishGame; attemptSeed?: number;
 }) {
-  const words = useMemo(() => prepareGameAttempt(source.filter(isTypingWord), attemptSeed).slice(0, TYPING_ROUND_SIZE), [attemptSeed, source]);
+  const words = useMemo(() => gameRoundWords("typing", source, attemptSeed), [attemptSeed, source]);
   const [index, setIndex] = useState(0);
   const [typed, setTyped] = useState("");
-  const [score, setScore] = useState(0);
-  const [combo, setCombo] = useState(1);
   const [answers, setAnswers] = useState<GameAnswerInput[]>([]);
+  // Wrong full-word tries on the current word: right after a wrong try is a retry (+5).
+  const wrongTries = useRef(0);
+  const clock = useGameClock();
+  const tally = useRoundTally("typing", words, answers);
   const [events, setEvents] = useState<GameEvidenceEventInput[]>([]);
   const [remaining, setRemaining] = useState(() => timeFor(words[0]?.english ?? ""));
   const [busy, setBusy] = useState(false);
@@ -36,8 +38,8 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0 }: {
   const deadline = useRef(performance.now() + remaining);
   const transitionTimer = useRef<number | null>(null);
   const transitioning = useRef(false);
-  const state = useRef({ index, typed, combo, answers, events, busy });
-  state.current = { index, typed, combo, answers, events, busy };
+  const state = useRef({ index, typed, answers, events, busy });
+  state.current = { index, typed, answers, events, busy };
   const word = words[index];
   const target = normalize(word?.english ?? "");
   const maximum = timeFor(target);
@@ -46,16 +48,17 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0 }: {
     if (!word || busy || transitioning.current) return;
     if (!correct && !timedOut) {
       play("error");
-      setCombo(1);
+      wrongTries.current += 1;
       // Never reveal the word before time runs out (13/11); the answer is shown only on timeout.
       setNotice("Chưa đúng · Thử lại nhé.");
       setTyped("");
       return;
     }
-    const nextAnswers = [...answers, { wordId: word.id, answer, attempts: 1, usedHint: false, combo }];
+    const nextAnswers = [...answers, { wordId: word.id, answer, attempts: wrongTries.current + 1, usedHint: false, ms: clock.lap() }];
+    clock.pause();
     const nextEvents = timedOut ? [...events, { type: "timeout" as const, wordId: word.id, answer }] : events;
-    if (correct) { play("success"); setScore((value) => value + 10 * combo); setCombo((value) => Math.min(5, value + 1)); setNotice(`Đúng · ${word.english}`); }
-    else { play(timedOut ? "warning" : "error"); setCombo(1); setNotice(timedOut ? `Hết giờ · Đáp án: ${word.english}` : `Chưa đúng · Đáp án đúng: ${word.english}`); }
+    if (correct) { play("success"); setNotice(`Đúng · ${word.english}`); }
+    else { play(timedOut ? "warning" : "error"); setNotice(timedOut ? `Hết giờ · Đáp án: ${word.english}` : `Chưa đúng · Đáp án đúng: ${word.english}`); }
     transitioning.current = true;
     setLocked(true);
     setAnswers(nextAnswers);
@@ -68,6 +71,7 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0 }: {
       }
       setIndex((value) => value + 1);
       setTyped("");
+      wrongTries.current = 0;
       const nextMaximum = timeFor(words[index + 1]?.english ?? "");
       setRemaining(nextMaximum); deadline.current = performance.now() + nextMaximum;
       setNotice("");
@@ -137,6 +141,7 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0 }: {
   // under prefers-reduced-motion.
   useEffect(() => {
     if (!word || busy || locked) return;
+    clock.start();
     const sample = () => setRemaining(Math.max(0, deadline.current - performance.now()));
     sample();
     const interval = window.setInterval(sample, 1_000);
@@ -186,7 +191,7 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0 }: {
   if (!word) return <p className="muted">Bộ từ chưa đủ từ phù hợp cho Typing race.</p>;
   const noticeTone = notice.startsWith("Đúng") ? "is-success" : notice.startsWith("Chưa") ? "is-error" : notice.startsWith("Hết giờ") ? "is-warning" : "";
   return <div className="game-runner" aria-busy={busy || undefined}>
-    <div className="game-hud"><h2>Từ {index + 1}/{words.length}</h2><span>Điểm <strong>{score}/{typingMaximum(words.length)}</strong></span><span>Combo ×{combo}</span></div>
+    <GameHud title={<h2>Từ {index + 1}/{words.length}</h2>} raw={tally.raw} combo={tally.combo} clock={clock} />
     <div ref={sceneRef} className="typing-scene" role="application" aria-label="Màn chơi Đua gõ từ" tabIndex={0}>
       <div className="typing-clue"><button type="button" className="typing-clue-speak" aria-label={`Nghe ${word.english}`} onClick={() => speak(word.english)}><Volume2 className="game-control-icon" size={18} strokeWidth={2} aria-hidden="true" /></button><div className="typing-clue-copy"><span className="eyebrow">Gợi ý</span><strong>{word.vietnamese}</strong><small>{word.definition} · {target.replace(/\s/g, "").length} chữ cái{target.includes(" ") ? ", dấu cách tự điền" : ""}</small></div></div>
       <div className="typing-timer" role="progressbar" aria-label="Thời gian còn lại" aria-valuemin={0} aria-valuemax={maximum} aria-valuenow={Math.round(remaining)}><i key={index} data-testid="typing-timer-fill" className={busy || locked ? "is-paused" : undefined} style={{ "--typing-time-limit": `${maximum}ms`, "--typing-time-left": `${Math.max(0, Math.min(100, remaining / maximum * 100))}%` } as CSSProperties} /></div>

@@ -133,7 +133,10 @@ export interface GameAnswerInput {
   answer: string;
   attempts?: number;
   usedHint?: boolean;
+  /** Legacy: the server computes the shared streak itself. */
   combo?: number;
+  /** Active gameplay ms spent on this unit (no loading, countdown or transitions). */
+  ms?: number;
 }
 
 export interface GameEvidenceEventInput {

@@ -10,6 +10,7 @@ import { SeasonRioGame } from "../games/SeasonRioGame.js";
 import { TypingRaceGame } from "../games/TypingRaceGame.js";
 import { WordSortGame } from "../games/WordSortGame.js";
 import { prepareGameAttempt } from "../games/types.js";
+import { buildCrosswordLayout } from "@e4s/domain/engagement";
 import { createGameAttemptSeed, nextGameAttemptSeed, LearnerGame, LearnerGames } from "./Games.js";
 import { ModalProvider } from "../shared/ModalProvider.js";
 import type { LearnerCallbacks } from "./contracts.js";
@@ -202,8 +203,9 @@ describe("learner game visual and interaction regressions", () => {
     expect(screen.getByText("Di chuyển, nhảy và mở từng hộp câu hỏi.")).toBeInTheDocument();
     expect(screen.getByText("Trả lời để mở cổng; trả lời sai mất một mạng.")).toBeInTheDocument();
     expect(screen.getByText("Vượt thử thách cuối rồi chạm cờ để hoàn thành.")).toBeInTheDocument();
-    expect(screen.getByText("Vượt 3 cổng, trả lời 3 câu Boss rồi chạm cờ.")).toBeInTheDocument();
-    expect(screen.getByText(/tối đa 6 điểm/i)).toBeInTheDocument();
+    // Boss questions never reuse gate words: a 3-word set has 3 gates and no boss.
+    expect(screen.getByText("Vượt 3 cổng rồi chạm cờ.")).toBeInTheDocument();
+    expect(screen.getByText(/Điểm ván tối đa 100/i)).toBeInTheDocument();
     expect(screen.queryByText(/Mỗi hộp quà \? đứng trên một cột gỗ chắn ngang đường/i)).not.toBeInTheDocument();
     const tutorialMeta = document.querySelector(".game-tutorial-meta");
     expect(tutorialMeta).not.toBeNull();
@@ -215,7 +217,7 @@ describe("learner game visual and interaction regressions", () => {
     await waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 0));
   });
 
-  it("derives the Typing race tutorial word count and max score from the actual word set", () => {
+  it("derives the Typing race tutorial word count from the actual word set and shows the shared score line", () => {
     const typing = descriptor("typing", []);
     typing.name = "Typing race";
     typing.goal = "Gõ đúng 10 từ thật nhanh, giữ chuỗi combo càng dài càng nhiều điểm.";
@@ -224,7 +226,8 @@ describe("learner game visual and interaction regressions", () => {
     render(<LearnerGame descriptor={typing} wordSet={eightWords} result={null} actions={actions} />);
 
     expect(screen.getByText("Gõ đúng 8 từ thật nhanh, giữ chuỗi combo càng dài càng nhiều điểm.")).toBeInTheDocument();
-    expect(screen.getByText(/10 điểm × combo cho mỗi từ đúng; 8 từ, tối đa 300 điểm\./)).toBeInTheDocument();
+    expect(screen.getByText(/Đúng ngay \+10, từ câu thứ 3 liên tiếp \+15; gợi ý hoặc thử lại \+5; sai 0\. Điểm ván tối đa 100\.$/)).toBeInTheDocument();
+    expect(screen.queryByText(/× combo/)).not.toBeInTheDocument();
     expect(screen.queryByText(/10 từ/)).not.toBeInTheDocument();
   });
 
@@ -237,7 +240,7 @@ describe("learner game visual and interaction regressions", () => {
     const eggs = { ...descriptor("eggs", []), goal: "Hứng đúng vật phẩm khớp với gợi ý, 10 lượt.", scoring: "+1 điểm mỗi vật phẩm hứng đúng, tối đa 10." };
     render(<LearnerGame descriptor={eggs} wordSet={wordSet} result={null} actions={actions} />);
     expect(screen.getByText("Hứng đúng vật phẩm khớp với gợi ý, 3 lượt.")).toBeInTheDocument();
-    expect(screen.getByText(/\+1 điểm mỗi vật phẩm hứng đúng, tối đa 3\./)).toBeInTheDocument();
+    expect(screen.getByText(/Điểm ván tối đa 100\. Hứng sai hoặc để rơi: mất 1 mạng\./)).toBeInTheDocument();
   });
 
   it("resets the learner main scroll container when a game starts", async () => {
@@ -391,16 +394,20 @@ describe("learner game visual and interaction regressions", () => {
       expect(screen.queryByText(/^Đúng/)).not.toBeInTheDocument();
       fireEvent.keyDown(window, { key: first.slice(-1).toUpperCase() });
       expect(screen.getByText(`Đúng · ${first}`)).toBeInTheDocument();
-      expect(container.querySelector(".game-hud strong")).toHaveTextContent(/^10\//);
+      expect(container.querySelector('[data-hud="raw"]')).toHaveTextContent("Điểm 10");
       act(() => { vi.advanceTimersByTime(500); });
       expect(screen.getByRole("heading", { name: "Từ 2/2" })).toBeInTheDocument();
-      expect(screen.getByText("Combo ×2")).toBeInTheDocument();
+      expect(container.querySelector('[data-hud="combo"]')).toHaveTextContent("Combo 1");
       for (const key of second) fireEvent.keyDown(window, { key });
       act(() => { vi.advanceTimersByTime(500); });
-      expect(onFinish).toHaveBeenCalledWith({ answers: [
-        expect.objectContaining({ wordId: first, answer: first, combo: 1 }),
-        expect.objectContaining({ wordId: second, answer: second, combo: 2 })
-      ] });
+      // No x1–x5 multiplier any more: two first tries are +10, +10 and no combo field is sent.
+      expect(container.querySelector('[data-hud="raw"]')).toHaveTextContent("Điểm 20");
+      const answers = onFinish.mock.calls[0]![0].answers as Array<Record<string, unknown>>;
+      expect(answers).toEqual([
+        expect.objectContaining({ wordId: first, answer: first, attempts: 1 }),
+        expect.objectContaining({ wordId: second, answer: second, attempts: 1 })
+      ]);
+      expect(answers.every((answer) => answer.combo === undefined && typeof answer.ms === "number")).toBe(true);
     } finally {
       vi.useRealTimers();
     }
@@ -423,7 +430,9 @@ describe("learner game visual and interaction regressions", () => {
       fireEvent.keyDown(window, { key: "Enter" });
       act(() => { vi.advanceTimersByTime(500); });
       expect(onFinish).toHaveBeenCalledTimes(1);
-      expect(onFinish).toHaveBeenCalledWith({ answers: [expect.objectContaining({ wordId: "role", answer: "role", combo: 1 })] });
+      // Wrong then right within the time is a retry: attempts 2 (+5 on the server).
+      expect(onFinish).toHaveBeenCalledWith({ answers: [expect.objectContaining({ wordId: "role", answer: "role", attempts: 2 })] });
+      expect(container.querySelector('[data-hud="raw"]')).toHaveTextContent("Điểm 5");
     } finally {
       vi.useRealTimers();
     }
@@ -613,6 +622,55 @@ describe("learner game visual and interaction regressions", () => {
     expect(screen.getAllByRole("textbox").filter((input) => (input as HTMLInputElement).value === "A")).toHaveLength(1);
     expect(container.querySelector(".crossword-active-clue")).toHaveTextContent(activeClue ?? "");
     expect(screen.getByRole("button", { name: "Gợi ý 1 chữ" })).toBeEnabled();
+  });
+
+  it("records crossword hints and wrong tries per word, with N fixed by the shared layout", () => {
+    const onFinish = vi.fn();
+    const { container } = render(<CrosswordGame words={wordSet.words} onFinish={onFinish} />);
+    const layout = buildCrosswordLayout(prepareGameAttempt(wordSet.words, 0));
+    const [typed, ...hinted] = layout.placed;
+    const clueButton = (entry: (typeof layout.placed)[number]) => container.querySelector<HTMLButtonElement>(`#crossword-clue-${entry.direction}-${entry.number} button`)!;
+    const typeWord = (letters: string) => { for (const key of letters) fireEvent.keyDown(document.activeElement!, { key }); };
+
+    // A completely filled wrong word is a wrong try; a half-typed word is not an answer yet.
+    fireEvent.click(clueButton(typed!));
+    typeWord("z".repeat(typed!.value.length));
+    fireEvent.click(screen.getByRole("button", { name: "Kiểm tra" }));
+    fireEvent.click(clueButton(typed!));
+    typeWord(typed!.value.toLowerCase());
+    for (const entry of hinted) {
+      fireEvent.click(clueButton(entry));
+      for (let index = 0; index < entry.value.length; index += 1) fireEvent.click(screen.getByRole("button", { name: "Gợi ý 1 chữ" }));
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Kiểm tra" }));
+
+    expect(onFinish).toHaveBeenCalledTimes(1);
+    const { answers, hintsUsed } = onFinish.mock.calls[0]![0] as { answers: Array<{ wordId: string; attempts: number; usedHint: boolean; ms: number }>; hintsUsed?: number };
+    expect(hintsUsed).toBeUndefined();
+    expect(answers.map((answer) => answer.wordId)).toEqual(layout.placed.map((entry) => entry.word.id));
+    expect(answers[0]).toMatchObject({ wordId: typed!.word.id, attempts: 2, usedHint: false });
+    for (const answer of answers.slice(1)) expect(answer).toMatchObject({ attempts: 1, usedHint: true });
+    expect(answers.every((answer) => Number.isInteger(answer.ms) && answer.ms >= 0)).toBe(true);
+  });
+
+  it("costs a Season catch life when the right item drops to the ground", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame", "performance"] });
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({ top: 0, left: 0, right: 400, bottom: 400, width: 400, height: 400, x: 0, y: 0, toJSON: () => ({}) });
+    try {
+      const onFinish = vi.fn();
+      const { container } = render(<SeasonCatchGame words={wordSet.words} cefr="A2" onFinish={onFinish} />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_200); });
+      expect(screen.getByText("Chưa hứng được · Mất 1 mạng.")).toBeInTheDocument();
+      expect(container.querySelector('[data-hud="raw"]')).toHaveTextContent("Điểm 0");
+      for (let index = 0; index < 3; index += 1) await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+      expect(onFinish).toHaveBeenCalledTimes(1);
+      const { answers, events } = onFinish.mock.calls[0]![0] as { answers: Array<{ answer: string }>; events: Array<{ type: string }> };
+      expect(answers).toHaveLength(3);
+      expect(answers.every((answer) => answer.answer === "")).toBe(true);
+      expect(events.map((event) => event.type)).toEqual(["timeout", "timeout", "timeout"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("starts every game session from a fresh shared attempt seed", () => {

@@ -16,7 +16,7 @@ export const REWARD_POINT_RULES: ReadonlyArray<readonly [label: string, points: 
   ["Mỗi phần bài học làm đúng", "+5 lần 1, giảm 1 điểm mỗi lần làm lại (tối thiểu +1); chỉ tính lần đúng đầu tiên"],
   ["Hoàn thành bài Ôn tuần (thứ Sáu)", "+15"],
   ["1 lượt luyện hợp lệ với Season", "+2"],
-  ["Mini game đạt từ 50% điểm tối đa", "+5, tối đa 3 lượt có điểm mỗi ngày (chơi thêm vẫn được, không cộng điểm)"],
+  ["Mini game đạt từ 50/100", "+5, tối đa 3 lượt có điểm mỗi ngày (chơi thêm vẫn được, không cộng điểm)"],
   ["Nộp bài thi cuối tháng", "+15"],
   ["Bài kiểm tra đầu vào, thi lên mức", "+10"],
   ["Hoàn thành trọn lịch học tháng (mọi bài mới và bài ôn)", "+20, một lần mỗi tháng"]

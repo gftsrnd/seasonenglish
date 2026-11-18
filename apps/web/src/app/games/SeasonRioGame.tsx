@@ -4,6 +4,7 @@ import { seasonRioRoundPlan } from "@e4s/domain/engagement";
 import { choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
 import { SeasonHearts, SeasonImage, SeasonStageGround, SeasonStageSky, seasonAssetUrl, useGameSeason, useSeasonGameSound } from "./seven-season-art.js";
 import { GameFeedback } from "./GameFeedback.js";
+import { GameHud, useGameClock, useRoundTally } from "./GameHud.js";
 import { InfoTitle, useCompactUi } from "../shared/CompactUi.js";
 import "./seven-season-games.css";
 
@@ -24,6 +25,9 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   const playSound = useSeasonGameSound();
   const words = useMemo(() => prepareGameAttempt(source, attemptSeed), [attemptSeed, source]);
   const roundPlan = useMemo(() => seasonRioRoundPlan(words), [words]);
+  // The round's units: 8 gates, then boss questions with words the gates did not use.
+  const units = useMemo(() => [...roundPlan.gateWords, ...roundPlan.bossWords], [roundPlan]);
+  const clock = useGameClock();
   const { gates: activeGateLayout, platforms } = useMemo(() => {
     // The opening staircase uses the proportions supplied for this season.
     const [positions, widths, tiers, gateIndex] = season.layout;
@@ -52,11 +56,11 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   const [gateStates, setGateStates] = useState<GateState[]>(() => Array.from({ length: roundPlan.gateCount }, () => "closed"));
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [lives, setLives] = useState(3);
-  const [score, setScore] = useState(0);
   const [bossHealth, setBossHealth] = useState(roundPlan.bossQuestions);
   const [bossSeconds, setBossSeconds] = useState(10);
   const [bossStarted, setBossStarted] = useState(false);
   const [answers, setAnswers] = useState<GameAnswerInput[]>([]);
+  const tally = useRoundTally("mario", units, answers);
   const [notice, setNotice] = useState("Chạy tới hộp quà đầu tiên.");
   const [busy, setBusy] = useState(false);
   const [ending, setEnding] = useState<Ending | null>(null);
@@ -89,13 +93,15 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   const finish = useCallback((nextAnswers: GameAnswerInput[], outcome: Ending) => {
     if (finished.current) return;
     finished.current = true;
+    clock.pause();
     setBusy(true);
     setQuiz(null);
     setEnding(outcome);
     setNotice(outcome === "won" ? "Đã về đích!" : outcome === "expired" ? "Hết giờ!" : "Hết mạng!");
     playSound(outcome === "won" ? "boss-win" : outcome === "expired" ? "timeout" : "game-over");
-    finishTimer.current = window.setTimeout(() => void onFinish({ answers: nextAnswers }), 850);
-  }, [onFinish, playSound]);
+    const played = nextAnswers.filter((answer): answer is GameAnswerInput => Boolean(answer));
+    finishTimer.current = window.setTimeout(() => void onFinish({ answers: played }), 850);
+  }, [clock, onFinish, playSound]);
 
   useEffect(() => {
     for (const asset of ["rio-run-1", "rio-run-2", "boss-quiz", "boss-smug", "boss-recoil", "fx/chest-fireworks"]) {
@@ -126,7 +132,10 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
       ? window.requestAnimationFrame(() => scene.scrollIntoView?.({ block: "nearest" }))
       : 0;
     scene?.focus({ preventScroll: true });
+    // Running between gates is gameplay too, so the clock runs from the start to the finish.
+    clock.start();
     return () => {
+      clock.pause();
       if (frame) window.cancelAnimationFrame(frame);
       window.clearTimeout(reactionTimer.current);
       window.clearTimeout(heroReactionTimer.current);
@@ -216,7 +225,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
           nextY = 0;
           velocityY.current = 0;
           const bossIndex = roundPlan.bossQuestions - current.bossHealth;
-          const word = roundPlan.bossWords[bossIndex % Math.max(1, roundPlan.bossWords.length)];
+          const word = roundPlan.bossWords[bossIndex];
           if (word) {
             const nextQuiz = { phase: "boss" as const, index: bossIndex, word };
             state.current = { ...current, bossStarted: true, quiz: nextQuiz };
@@ -280,11 +289,13 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     answeringQuiz.current = true;
     const correct = selected.id === quiz.word.id;
     playSound(!correct ? "catch-wrong" : quiz.phase === "gate" ? "gate-open" : bossHealth === 1 ? "boss-win" : "boss-hit");
-    const answer: GameAnswerInput = { wordId: quiz.word.id, answer: selected.english, attempts: 1, usedHint: false, combo: 1 };
+    const slot = quiz.phase === "gate" ? quiz.index : roundPlan.gateCount + quiz.index;
+    const previous = answers[slot];
+    // A wrong Boss answer costs a life but keeps the same question. The slot keeps
+    // counting tries, so a later right answer is a retry (+5), never a first try.
+    const answer: GameAnswerInput = { wordId: quiz.word.id, answer: selected.english, attempts: (previous?.attempts ?? 0) + 1, usedHint: false, ms: (previous?.ms ?? 0) + clock.lap() };
     const nextAnswers = [...answers];
-    // A wrong Boss answer costs a life, but retains the same question. Save
-    // one result per slot so the server scores a subsequent correct try.
-    nextAnswers[quiz.phase === "gate" ? quiz.index : roundPlan.gateCount + quiz.index] = answer;
+    nextAnswers[slot] = answer;
     const feedback: RioReaction = { id: ++effectId.current, phase: quiz.phase, index: quiz.index, correct };
     setReaction(feedback);
     setHeroReaction(correct ? "rio-joy" : "rio-lose");
@@ -293,8 +304,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     window.clearTimeout(reactionTimer.current);
     reactionTimer.current = window.setTimeout(() => setReaction(null), 1280);
     let nextLives = lives;
-    if (correct) setScore((value) => value + 1);
-    else { nextLives -= 1; setLives(nextLives); }
+    if (!correct) { nextLives -= 1; setLives(nextLives); }
     if (quiz.phase === "gate") {
       setGateStates((current) => current.map((value, index) => index === quiz.index ? (correct ? "correct" : "wrong") : value));
       setNotice(correct ? "Đúng · Cổng đã mở." : `Chưa đúng · Đáp án là “${quiz.word.english}”, cổng vẫn mở.`);
@@ -361,7 +371,9 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     ? (bossHealth === 0 ? "fx/boss-clear" : reaction.correct ? "fx/boss-hit" : "fx/boss-wrong")
     : null;
   const flagReady = gateStates.every(gate => gate !== "closed") && bossHealth <= 0;
-  const help = "Chạy và nhảy tới hộp quà. Trả lời xong cổng mở, sai mất một tim. Vượt boss với 3 câu đúng trong 10 giây rồi chạm cờ.";
+  const help = roundPlan.bossQuestions
+    ? `Chạy và nhảy tới hộp quà. Trả lời xong cổng mở, sai mất một tim. Vượt boss với ${roundPlan.bossQuestions} câu đúng trong 10 giây rồi chạm cờ.`
+    : "Chạy và nhảy tới hộp quà. Trả lời xong cổng mở, sai mất một tim. Mở hết hộp quà rồi chạm cờ.";
   const quizPanel = quiz ? <div ref={quizDialogRef} className={`rio-quiz${bossQuiz ? " rio-quiz--boss" : ""}`} role="dialog" aria-modal="true" aria-label={quiz.phase === "gate" ? "Câu hỏi hộp quà" : "Câu hỏi Boss"} tabIndex={-1} onKeyDown={trapQuizFocus}>
     <div>
       <span className="eyebrow">{quiz.phase === "gate" ? `Hộp quà ${quiz.index + 1}/${roundPlan.gateCount}` : `Boss ${season.boss} · ${bossSeconds}s`}</span>
@@ -370,14 +382,12 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     </div>
   </div> : null;
   return <div className="game-runner" aria-busy={busy || undefined}>
-    <div className="game-hud">
-      {compactUi ? <InfoTitle as="h2" title="Season-rio" tip={help} label="Cách chơi Season-rio" /> : <h2>Season-rio</h2>}
-      <span><SeasonImage season={season} asset="hud/score" className="season-hud-icon" /><strong>{score}/{roundPlan.total}</strong></span>
+    <GameHud title={compactUi ? <InfoTitle as="h2" title="Season-rio" tip={help} label="Cách chơi Season-rio" /> : <h2>Season-rio</h2>} raw={tally.raw} combo={tally.combo} clock={clock}>
       <span><SeasonImage season={season} asset="hud/gifts" className="season-hud-icon" />Quà <strong>{gateStates.filter(gate => gate !== "closed").length}/{roundPlan.gateCount}</strong></span>
       {bossStarted ? <span className="rio-boss-status">{bossHealth > 0 ? <>Boss <SeasonImage season={season} asset="hud/timer" className="season-hud-icon" />{bossSeconds}s</>
         : <strong>Đã vượt boss</strong>}</span> : null}
       <SeasonHearts season={season} lives={lives} />
-    </div>
+    </GameHud>
     <div ref={sceneRef} className={`rio-scene seasonal-rio${bossQuiz ? " is-boss-quiz" : ""}`} role="application" aria-label="Màn chơi Season-rio" tabIndex={0}
       onKeyDown={event => { if (["ArrowLeft", "ArrowRight", "ArrowUp", " ", "a", "d", "w"].includes(event.key)) event.preventDefault(); }}
       onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { keys.current = {}; setMotion(null); } }}>

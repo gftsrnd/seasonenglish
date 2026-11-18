@@ -113,9 +113,10 @@ describe("reward points and Season badges", () => {
     );
   }
 
-  /** A mini game result; 6/10 passes the 50 % threshold. */
-  const game = (requestId: string, score = 6) => repositories.engagement.saveGameResult({
-    learnerId, setId: gameSetId, game: "typing", requestId, score, maxScore: 10, correct: score, total: 10, details: {}
+  /** A mini game round scored 0–100; 60/100 passes the 50/100 threshold. */
+  const game = (requestId: string, score = 60) => repositories.engagement.saveGameResult({
+    learnerId, setId: gameSetId, game: "typing", requestId, score, raw: score, rawMax: 100, unitsAssigned: 10, gameplayMs: null,
+    correct: Math.round(score / 10), total: 10, details: {}
   });
 
   it("starts a learner with no reward history at 0 points in the first Season", async () => {
@@ -280,16 +281,38 @@ describe("reward points and Season badges", () => {
   }
 
   describe("mini games", () => {
-    it("pays +5 only for a result of at least 50 % of the maximum", async () => {
-      await game(randomUUID(), 4);
+    it("pays +5 only for a round of at least 50/100", async () => {
+      await game(randomUUID(), 49);
       expect(await totalPoints()).toBe(0);
-      await game(randomUUID(), 5);
+      await game(randomUUID(), 50);
       expect(await totalPoints()).toBe(5);
+      const stored = await pool.query<{ arena_score: number; max_score: number; rules_version: number }>(
+        "select arena_score, max_score, rules_version from game_results where learner_id = $1 order by arena_score", [learnerId]);
+      expect(stored.rows).toEqual([{ arena_score: 49, max_score: 100, rules_version: 2 }, { arena_score: 50, max_score: 100, rules_version: 2 }]);
+    });
+
+    it("keeps paying results from before the 0–100 rule by 50 % of their maximum, within the same daily cap", async () => {
+      const legacy = async (score: number, maxScore: number) => {
+        const resultId = randomUUID();
+        await pool.query(
+          `insert into game_results (id, game_set_id, learner_id, game_key, score, max_score, request_key)
+           values ($1, $2, $3, 'typing', $4, $5, $6)`, [resultId, gameSetId, learnerId, score, maxScore, randomUUID()]);
+        await pool.query(
+          `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
+           values ($1, $2, 'game', 'game_result', $3, 5, $4::jsonb)`,
+          [randomUUID(), learnerId, resultId, JSON.stringify({ game: "typing", score, maxScore })]);
+      };
+      await legacy(4, 10);
+      await legacy(5, 10);
+      await game(randomUUID(), 0);
+      expect(await totalPoints()).toBe(5);
+      for (let play = 0; play < 3; play += 1) await game(randomUUID(), 90);
+      expect(await totalPoints()).toBe(15);
     });
 
     it("pays at most three results a day but keeps recording every play", async () => {
       expect(PAID_GAME_RESULTS_PER_DAY).toBe(3);
-      for (let play = 0; play < 5; play += 1) await expect(game(randomUUID(), 8)).resolves.toMatchObject({ score: 8 });
+      for (let play = 0; play < 5; play += 1) await expect(game(randomUUID(), 80)).resolves.toMatchObject({ score: 80, maxScore: 100 });
       expect(await totalPoints()).toBe(15);
       const plays = await pool.query<{ count: number }>("select count(*)::int as count from activities where learner_id = $1 and activity_type = 'game'", [learnerId]);
       expect(plays.rows[0]?.count).toBe(5);
@@ -304,8 +327,8 @@ describe("reward points and Season badges", () => {
     });
 
     it("does not count a failed result toward the daily cap", async () => {
-      await game(randomUUID(), 1);
-      await game(randomUUID(), 2);
+      await game(randomUUID(), 10);
+      await game(randomUUID(), 20);
       for (let play = 0; play < 3; play += 1) await game(randomUUID());
       expect(await totalPoints()).toBe(15);
     });

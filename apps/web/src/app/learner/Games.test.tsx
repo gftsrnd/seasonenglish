@@ -236,7 +236,7 @@ describe("app games affordances", () => {
     expect(onFinish).not.toHaveBeenCalled();
   });
 
-  it("clamps the submitted Word sort combo to the API range after a long correct streak", async () => {
+  it("scores Word sort with the shared streak (+10, +10, then +15) and sends no own combo", async () => {
     vi.useFakeTimers();
     const onFinish = vi.fn();
     const words = Array.from({ length: 8 }, (_, index) => ({ id: `noun-${index}`, english: `noun${index}`, vietnamese: `danh từ ${index}`, definition: "a thing", partOfSpeech: "noun" }));
@@ -248,8 +248,11 @@ describe("app games affordances", () => {
     }
 
     expect(onFinish).toHaveBeenCalledTimes(1);
-    const combos = (onFinish.mock.calls[0]![0] as { answers: Array<{ combo: number }> }).answers.map((answer) => answer.combo);
-    expect(combos).toEqual([1, 2, 3, 4, 5, 5, 5, 5]);
+    const answers = (onFinish.mock.calls[0]![0] as { answers: Array<{ combo?: number; attempts?: number }> }).answers;
+    expect(answers.map((answer) => answer.combo)).toEqual(Array(8).fill(undefined));
+    expect(answers.every((answer) => answer.attempts === 1)).toBe(true);
+    expect(document.querySelector('[data-hud="raw"]')).toHaveTextContent("Điểm 110");
+    expect(document.querySelector('[data-hud="combo"]')).toHaveTextContent("Combo 8");
   });
 
   it("restores Scramble focus and clears transient feedback before the retry", async () => {
@@ -300,7 +303,7 @@ describe("app games affordances", () => {
       { answer: "", usedHint: true, attempts: 1 },
       { answer: "", usedHint: false, attempts: 1 }
     ]);
-    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(document.querySelector('[data-hud="raw"]')).toHaveTextContent("Điểm 0");
   });
 
   it("keeps the correct prefix and adds one letter when the Scramble hint is used after a wrong pick", async () => {
@@ -318,7 +321,7 @@ describe("app games affordances", () => {
 
     fireEvent.click(tileFor("a"));
     fireEvent.click(tileFor("t"));
-    expect(screen.getByText("Đúng · cat +1")).toBeInTheDocument();
+    expect(screen.getByText("Đúng · cat +5")).toBeInTheDocument();
     await act(async () => { await vi.advanceTimersByTimeAsync(1_200); });
     const answers = (onFinish.mock.calls[0]![0] as { answers: Array<{ answer: string; usedHint?: boolean }> }).answers;
     expect(answers).toEqual([expect.objectContaining({ answer: "cat", usedHint: true, attempts: 1 })]);

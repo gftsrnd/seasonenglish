@@ -39,7 +39,7 @@ describe("profile 'Cách tính điểm'", () => {
       "Mỗi phần bài học làm đúng: +5 lần 1, giảm 1 điểm mỗi lần làm lại (tối thiểu +1); chỉ tính lần đúng đầu tiên",
       "Hoàn thành bài Ôn tuần (thứ Sáu): +15",
       "1 lượt luyện hợp lệ với Season: +2",
-      "Mini game đạt từ 50% điểm tối đa: +5, tối đa 3 lượt có điểm mỗi ngày (chơi thêm vẫn được, không cộng điểm)",
+      "Mini game đạt từ 50/100: +5, tối đa 3 lượt có điểm mỗi ngày (chơi thêm vẫn được, không cộng điểm)",
       "Nộp bài thi cuối tháng: +15",
       "Bài kiểm tra đầu vào, thi lên mức: +10",
       "Hoàn thành trọn lịch học tháng (mọi bài mới và bài ôn): +20, một lần mỗi tháng"
@@ -181,7 +181,7 @@ describe("manager reward simulator", () => {
     expect(screen.queryByRole("button", { name: /Chuỗi 3 ngày|Chuỗi 5 ngày/, hidden: true })).not.toBeInTheDocument();
     const rules = screen.getByTestId("reward-point-rules");
     expect(rules).toHaveTextContent("Hoàn thành bài Ôn tuần (thứ Sáu): +15");
-    expect(rules).toHaveTextContent("Mini game đạt từ 50% điểm tối đa");
+    expect(rules).toHaveTextContent("Mini game đạt từ 50/100");
     expect(rules).not.toHaveTextContent(/bí mật/);
   });
 });

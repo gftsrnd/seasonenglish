@@ -1,23 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameAnswerInput } from "@e4s/contracts";
 import { Delete, Lightbulb, SkipForward } from "lucide-react";
-import { letters, prepareGameAttempt, SCRAMBLE_ROUND_SIZE, seededShuffle, type FinishGame, type GameWord } from "./types.js";
+import { gameRoundWords, letters, seededShuffle, type FinishGame, type GameWord } from "./types.js";
+import { GameHud, roundGain, useGameClock, useRoundTally } from "./GameHud.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import { GameFeedback } from "./GameFeedback.js";
 
 export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { words: GameWord[]; onFinish: FinishGame; attemptSeed?: number }) {
-  const words = useMemo(() => prepareGameAttempt(source.filter((word) => letters(word.english).length >= 3), attemptSeed).slice(0, SCRAMBLE_ROUND_SIZE), [attemptSeed, source]);
+  const words = useMemo(() => gameRoundWords("scramble", source, attemptSeed), [attemptSeed, source]);
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<number[]>([]);
   const [wrong, setWrong] = useState(0);
   const [usedHint, setUsedHint] = useState(false);
-  const [points, setPoints] = useState(0);
   const [answers, setAnswers] = useState<GameAnswerInput[]>([]);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [locked, setLocked] = useState(false);
   const [revealed, setRevealed] = useState("");
   const { play } = useExperience();
+  const clock = useGameClock();
+  const tally = useRoundTally("scramble", words, answers);
   const timer = useRef<number | null>(null);
   const sceneRef = useRef<HTMLDivElement | null>(null);
   const bankRef = useRef<HTMLDivElement | null>(null);
@@ -34,7 +36,7 @@ export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { wor
   }, [attemptSeed, index, target]);
   const assembled = revealed || picked.map((tileIndex) => tiles[tileIndex]?.character ?? "").join("");
 
-  useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
+  useEffect(() => { clock.start(); return () => { if (timer.current !== null) window.clearTimeout(timer.current); }; }, [clock]);
 
   useEffect(() => {
     sceneRef.current?.focus({ preventScroll: true });
@@ -48,6 +50,7 @@ export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { wor
   }, [busy, index, locked, notice, picked]);
 
   const scheduleNext = (nextAnswers: GameAnswerInput[], delay: number) => {
+    clock.pause();
     setLocked(true);
     setAnswers(nextAnswers);
     if (timer.current !== null) window.clearTimeout(timer.current);
@@ -65,6 +68,7 @@ export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { wor
       setRevealed("");
       setNotice("");
       setLocked(false);
+      clock.start();
     }, delay);
   };
 
@@ -85,11 +89,10 @@ export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { wor
       }, 450);
       return;
     }
-    const nextAnswer: GameAnswerInput = { wordId: word.id, answer: correct ? word.english : answer, attempts: wrong + 1, usedHint: hintWasUsed, combo: 1 };
+    const nextAnswer: GameAnswerInput = { wordId: word.id, answer: correct ? word.english : answer, attempts: wrong + 1, usedHint: hintWasUsed, ms: clock.lap() };
     const nextAnswers = [...answers, nextAnswer];
-    const earned = hintWasUsed || wrong ? 1 : 2;
+    const earned = roundGain("scramble", words, answers, nextAnswers);
     play(correct ? "success" : "error");
-    if (correct) setPoints((value) => value + earned);
     if (!correct) setWrong((value) => value + 1);
     setRevealed(target);
     setNotice(correct ? `Đúng · ${word.english} +${earned}` : `Chưa đúng · Từ đúng: ${word.english}`);
@@ -122,7 +125,7 @@ export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { wor
   // Skipping records the word as not solved (empty answer → 0 points on the server).
   const skip = () => {
     if (!word || busy || locked) return;
-    const nextAnswers = [...answers, { wordId: word.id, answer: "", attempts: wrong + 1, usedHint, combo: 1 } satisfies GameAnswerInput];
+    const nextAnswers = [...answers, { wordId: word.id, answer: "", attempts: wrong + 1, usedHint, ms: clock.lap() } satisfies GameAnswerInput];
     play("error");
     setRevealed(target);
     setNotice(`Đã bỏ qua · Từ đúng: ${word.english}`);
@@ -147,7 +150,7 @@ export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { wor
   if (!word) return <p className="muted">Bộ từ chưa đủ từ phù hợp cho Word scramble.</p>;
   const noticeTone = notice.startsWith("Đúng") ? "is-success" : notice.startsWith("Chưa") ? "is-error" : "";
   return <div className="game-runner" aria-busy={busy || undefined}>
-    <div className="game-hud"><h2>Từ {index + 1}/{words.length}</h2><span>Điểm <strong>{points}</strong></span><span className={wrong ? "is-danger" : ""}>Sai {wrong}/2</span></div>
+    <GameHud title={<h2>Từ {index + 1}/{words.length}</h2>} raw={tally.raw} combo={tally.combo} clock={clock}><span className={wrong ? "is-danger" : ""}>Sai {wrong}/2</span></GameHud>
     <div ref={sceneRef} className={`scramble-scene ${notice.startsWith("Chưa") ? "is-shaking" : ""}`} tabIndex={0}>
       <p><span className="eyebrow">Gợi ý</span><strong>{word.vietnamese}</strong><small>{word.definition} · {target.length} chữ cái</small></p>
       <div className="answer-slots" aria-label="Từ đang xếp">{target.split("").map((_, slot) => <span key={slot}>{assembled[slot]?.toUpperCase() ?? ""}</span>)}</div>

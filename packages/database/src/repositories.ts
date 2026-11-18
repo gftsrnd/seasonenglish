@@ -3,7 +3,7 @@ import type { Pool, PoolClient } from "pg";
 import { buildLevelReadiness as calculateLevelReadiness, consecutiveLearningAbsences, learningAbsenceStreak, monthlyAttendanceAllowance, monthlyAttendanceCountedDates, evaluateMonthlyLevelUpReadiness, MONTHLY_EXAM_ENTRY_CUTOFF, passesLevelUpExam, createLevelRetryPlan, monthlyLearnerWindow, learnerMonthlySeasonTarget, monthlyAccessCanStudy, monthlyAccessCounts, monthlyAccessState, LEVEL_READINESS_THRESHOLDS, type LearnerMonthlyAccessState, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
-import { longestScheduledLessonStreak, nextRewardSeason, rewardBadgeDescription, rewardBadgeThreshold, rewardSeasonFor, rewardSeasonLabel, REWARD_BADGE_KEYS, REWARD_SEASONS, pickGameWordExample, type RewardSeason } from "@e4s/domain/engagement";
+import { longestScheduledLessonStreak, nextRewardSeason, rewardBadgeDescription, rewardBadgeThreshold, rewardSeasonFor, rewardSeasonLabel, REWARD_BADGE_KEYS, REWARD_SEASONS, pickGameWordExample, GAME_RULES_VERSION, type RewardSeason } from "@e4s/domain/engagement";
 import { formatDisplayScore } from "./score-format.js";
 import { buildMonthlyCalendar, formatMonthlyDayLabel, monthlyLessonDisplayTitle, evaluateMonthlyLessonAccess, monthlyAttendanceDates, mergedVietnamHolidays, withMonthlyExpandedTerms, monthlyGrammarDayTopicName, withMonthlyGrammarTopicName, withMonthlyReadAloudTargets, type MonthlyReadAloudSoundSource, type MonthlyGrammarTopicSource, type MonthlyLessonAccess, type MonthlyVocabularyCore } from "@e4s/domain/monthly";
 import { FROZEN_MONTHLY_ILLUSTRATIONS_SQL, withFrozenMonthlyIllustrations, type FrozenMonthlyIllustration } from "./monthly-illustration-projection.js";
@@ -10289,11 +10289,13 @@ class EngagementRepository {
     const distractors = Array.isArray(payload.distractors) ? payload.distractors as GameWordSetView["words"] : undefined;
     // The record belongs to the learner and the game, not to one word set: learning new words retires the
     // set and creates a new one, and the record must survive that (same rule as the leaderboard).
-    const bestRows = await this.pool.query<{ game_key: GameKey; score: number; max_score: number }>(
-      `select distinct on (game_key) game_key, score, max_score
-       from game_results where learner_id = $1 and game_key is not null
-       order by game_key, (score::numeric / greatest(max_score, 1)) desc, score desc, completed_at asc`,
-      [learnerId]
+    // Records restart with the 0–100 rule: only rules_version 2+ rounds count; older results stay stored.
+    // Same score → the faster comparable round (known gameplay time) is kept.
+    const bestRows = await this.pool.query<{ game_key: GameKey; score: number }>(
+      `select distinct on (game_key) game_key, arena_score as score
+       from game_results where learner_id = $1 and game_key is not null and rules_version >= $2 and arena_score is not null
+       order by game_key, arena_score desc, gameplay_ms asc nulls last, completed_at asc`,
+      [learnerId, GAME_RULES_VERSION]
     );
     return {
       cefr: context.cefr,
@@ -10301,7 +10303,7 @@ class EngagementRepository {
       wordSet: { id: row.id, topic: String(payload.topic ?? context.topic), cefr: context.cefr,
         source: payload.source === "learned" ? "monthly" : "custom", words, ...(distractors ? { distractors } : {}),
         ...(examplesPending ? { examplesPending } : {}) },
-      best: Object.fromEntries(bestRows.rows.map((item) => [item.game_key, normalizedGameBest(item)]))
+      best: Object.fromEntries(bestRows.rows.map((item) => [item.game_key, { score: item.score, maxScore: 100 }]))
     };
   }
 
@@ -10532,21 +10534,30 @@ class EngagementRepository {
     return row ? gameResultView(row) : null;
   }
 
+  /**
+   * Stores one round under the shared 0–100 rule (rules_version 2): `score`/`max_score`
+   * hold the round score out of 100 so every reader shows /100; raw points, N and the
+   * active gameplay time sit in their own columns. A repeated request key returns the
+   * first stored row and never scores twice.
+   */
   async saveGameResult(input: {
     learnerId: string; setId: string; game: GameKey; requestId: string;
-    score: number; maxScore: number; correct: number; total: number; details: unknown; duelId?: string;
+    score: number; raw: number; rawMax: number; unitsAssigned: number; gameplayMs: number | null;
+    correct: number; total: number; details: unknown; duelId?: string;
   }): Promise<GameResultView> {
     const id = randomUUID();
     const result = await this.pool.query<{
       id: string; game_key: GameKey; score: number; max_score: number; details: Record<string, unknown>; completed_at: Date;
     }>(
       `insert into game_results
-         (id, game_set_id, learner_id, game_key, score, max_score, request_key, duel_id, details)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+         (id, game_set_id, learner_id, game_key, score, max_score, request_key, duel_id, details,
+          arena_score, raw_score, raw_max, gameplay_ms, units_assigned, rules_version)
+       values ($1, $2, $3, $4, $5, 100, $6, $7, $8::jsonb, $5, $9, $10, $11, $12, $13)
        on conflict (learner_id, request_key) where request_key is not null do update set request_key = excluded.request_key
        returning id, game_key, score, max_score, details, completed_at`,
-      [id, input.setId, input.learnerId, input.game, input.score, input.maxScore, input.requestId,
-        input.duelId ?? null, JSON.stringify({ correct: input.correct, total: input.total, evidence: input.details })]
+      [id, input.setId, input.learnerId, input.game, input.score, input.requestId,
+        input.duelId ?? null, JSON.stringify({ correct: input.correct, total: input.total, evidence: input.details }),
+        input.raw, input.rawMax, input.gameplayMs, input.unitsAssigned, GAME_RULES_VERSION]
     );
     const row = result.rows[0]!;
     await withLearnerRewardLock(this.pool, input.learnerId, async (client) => {
@@ -10554,7 +10565,9 @@ class EngagementRepository {
         `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
          select $1, $2, 'game', 'game_result', $3, 5, $4::jsonb
          where not exists (select 1 from activities where learner_id = $2 and reference_type = 'game_result' and reference_id = $3)`,
-        [randomUUID(), input.learnerId, row.id, JSON.stringify({ game: input.game, score: input.score, maxScore: input.maxScore })]
+        [randomUUID(), input.learnerId, row.id, JSON.stringify({
+          game: input.game, score: row.score, maxScore: row.max_score, arenaScore: row.score, rulesVersion: GAME_RULES_VERSION
+        })]
       );
       await syncLearnerRewards(client, input.learnerId);
     });
@@ -10911,13 +10924,6 @@ function gameResultView(row: {
     id: row.id, game: row.game_key, score: row.score, maxScore: row.max_score,
     correct: Number(row.details.correct ?? 0), total: Number(row.details.total ?? 0), completedAt: row.completed_at.toISOString()
   };
-}
-
-function normalizedGameBest(item: { game_key: GameKey; score: number; max_score: number }) {
-  if (item.game_key === "eggs" && item.max_score > 0 && item.max_score !== 10) {
-    return { score: Math.max(0, Math.min(10, Math.round(10 * item.score / item.max_score))), maxScore: 10 };
-  }
-  return { score: item.score, maxScore: item.max_score };
 }
 
 function normalizeGamePartOfSpeech(value: unknown): string {
@@ -14970,6 +14976,8 @@ async function withLearnerRewardLock<T>(pool: Pool, learnerId: string, work: (cl
 
 /** Mini game results that earn points per learner per day (Asia/Ho_Chi_Minh). Further plays earn 0. */
 export const PAID_GAME_RESULTS_PER_DAY = 3;
+/** A 0–100 round earns the mini game reward from this score. */
+export const GAME_REWARD_MIN_ARENA_SCORE = 50;
 
 /**
  * One activity earns points once. When the same action was recorded twice (a
@@ -15038,8 +15046,9 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
      on conflict (learner_id, source_type, source_id) where badge_id is null do nothing`,
     [learnerId]
   );
-  // Mini games: +5 for a result of at least 50 % of its maximum, the first three
-  // such results of each Vietnam day. Results already paid keep their slot.
+  // Mini games: +5 for a round scoring at least 50/100 (results from before the 0–100
+  // rule: at least 50 % of their maximum), the first three such results of each Vietnam
+  // day. Results already paid keep their slot.
   await db.query(
     `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
      select gen_random_uuid(), ranked.learner_id, null, 5, 'activity_points', ranked.id
@@ -15054,9 +15063,11 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
          and paid.source_id = a.id and paid.badge_id is null and paid.points > 0
        where a.learner_id = $1 and a.activity_type = 'game'
          and (paid.id is not null or (
-           jsonb_typeof(a.evidence->'score') = 'number' and jsonb_typeof(a.evidence->'maxScore') = 'number'
-           and (a.evidence->>'maxScore')::numeric > 0
-           and (a.evidence->>'score')::numeric * 2 >= (a.evidence->>'maxScore')::numeric
+           (case when jsonb_typeof(a.evidence->'arenaScore') = 'number'
+             then (a.evidence->>'arenaScore')::numeric >= ${GAME_REWARD_MIN_ARENA_SCORE}
+             else jsonb_typeof(a.evidence->'score') = 'number' and jsonb_typeof(a.evidence->'maxScore') = 'number'
+               and (a.evidence->>'maxScore')::numeric > 0
+               and (a.evidence->>'score')::numeric * 2 >= (a.evidence->>'maxScore')::numeric end)
            and not exists (select 1 from reward_events done where done.learner_id = a.learner_id
              and done.source_type = 'activity_points' and done.source_id = a.id and done.badge_id is null)
            and ${FIRST_ACTIVITY_OF_REFERENCE_SQL}))

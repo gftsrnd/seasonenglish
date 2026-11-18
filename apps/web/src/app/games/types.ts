@@ -1,30 +1,15 @@
 import type { GameFinishInput, GameWordSetView } from "@e4s/contracts";
-import { prepareGameAttempt } from "@e4s/domain/engagement";
+import { CATCH_ROUND_SIZE, gameRoundWords, isTypingWord, prepareGameAttempt, SCRAMBLE_ROUND_SIZE, SORT_ROUND_SIZE, TYPING_ROUND_SIZE } from "@e4s/domain/engagement";
 
-export { prepareGameAttempt };
+// Round building lives in @e4s/domain/engagement: the server scores the very same units.
+export { CATCH_ROUND_SIZE, gameRoundWords, isTypingWord, prepareGameAttempt, SCRAMBLE_ROUND_SIZE, SORT_ROUND_SIZE, TYPING_ROUND_SIZE };
 
 export type GameWord = GameWordSetView["words"][number];
 export type FinishGame = (input: GameFinishInput) => void | Promise<void>;
 
-// The result API accepts combo 1–5 per answer (see engagement routes). A longer
-// streak is still shown in the HUD but must be clamped before it is submitted.
-export const MAX_GAME_COMBO = 5;
-export function gameCombo(streak: number) {
-  return Math.min(MAX_GAME_COMBO, Math.max(1, Math.trunc(streak)));
-}
-
-// Round sizes mirror `scoreGameAttempt` in @e4s/domain/engagement. Tutorials
-// read them too, so the copy always matches the HUD ("Từ 1/8") and max score.
-export const SCRAMBLE_ROUND_SIZE = 8;
-export const CATCH_ROUND_SIZE = 10;
-export const TYPING_ROUND_SIZE = 10;
-export function isTypingWord(word: Pick<GameWord, "english">) {
-  return /^[a-z][a-z\s'-]*$/i.test(word.english);
-}
-export function gameRoundWordCount(key: "scramble" | "eggs" | "typing", words: readonly GameWord[]) {
-  if (key === "scramble") return Math.min(SCRAMBLE_ROUND_SIZE, words.filter((word) => letters(word.english).length >= 3).length);
-  if (key === "eggs") return Math.min(CATCH_ROUND_SIZE, words.length);
-  return Math.min(TYPING_ROUND_SIZE, words.filter(isTypingWord).length);
+/** Number of units a round of this game deals from the word set (the tutorial and HUD "x/N"). */
+export function gameRoundWordCount(key: "scramble" | "eggs" | "typing" | "sort", words: readonly GameWord[]) {
+  return gameRoundWords(key, words).length;
 }
 
 export function normalize(value: string) {

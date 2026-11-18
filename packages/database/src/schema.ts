@@ -507,13 +507,15 @@ export const gameSets = pgTable("game_sets", {
   id: uuid("id").primaryKey(), programWeekId: uuid("program_week_id").references(() => programWeeks.id), gameKey: text("game_key").notNull(),
   programMonthId: uuid("program_month_id").references(() => programMonths.id),
   learnerId: uuid("learner_id").references(() => users.id), status: text("status").notNull().default("draft"),
-  payload: jsonb("payload").notNull(), createdAt: now()
+  payload: jsonb("payload").notNull(), roundUnits: jsonb("round_units"), createdAt: now()
 });
 
 export const gameResults = pgTable("game_results", {
   id: uuid("id").primaryKey(), gameSetId: uuid("game_set_id").notNull().references(() => gameSets.id), learnerId: uuid("learner_id").notNull().references(() => users.id),
   score: integer("score").notNull(), gameKey: text("game_key"), maxScore: integer("max_score"), requestKey: text("request_key"),
-  duelId: uuid("duel_id"), details: jsonb("details").notNull().default(emptyObject), completedAt: now()
+  duelId: uuid("duel_id"), details: jsonb("details").notNull().default(emptyObject), completedAt: now(),
+  arenaScore: integer("arena_score"), rawScore: integer("raw_score"), rawMax: integer("raw_max"), gameplayMs: integer("gameplay_ms"),
+  unitsAssigned: integer("units_assigned"), rulesVersion: integer("rules_version").notNull().default(1)
 });
 
 export const duels = pgTable("duels", {

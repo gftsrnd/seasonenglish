@@ -1,7 +1,7 @@
 import type { AudioArtifactInput, AudioArtifactView, GameDescriptor, GameKey, GameTopicModeration, WeeklyPracticeView } from "@e4s/contracts";
 import { randomUUID } from "node:crypto";
 import { vocabularyExamplesOutputSchema, vocabularyOutputSchema, weeklyPracticeOutputSchema, type AiTaskRunner } from "@e4s/ai";
-import { arenaEligible, scoreGameAttempt, validGameWordExample } from "@e4s/domain/engagement";
+import { arenaEligible, scoreGameRound, validGameWordExample, type ScoredGameRound } from "@e4s/domain/engagement";
 import { hasSensitiveTopicText, SENSITIVE_TOPIC_MESSAGE_VI, sensitiveTopicIssue, sensitiveTopicSeverity, UNSUITABLE_TOPIC_MESSAGE_VI } from "@e4s/domain/content";
 import { validateWeeklyPractice } from "@e4s/domain/progression";
 import { createRepositories } from "@e4s/database";
@@ -27,13 +27,17 @@ const audioArtifactInput = z.object({
   cleanupEligible: z.boolean().optional(), deletedAt: z.string().max(100).optional().nullable(), deletedBy: z.uuid().optional().nullable()
 });
 
+/** The shared "Điểm" line of the six game tutorials (RULE A.3). */
+const GAME_SCORING_LINE = "Đúng ngay +10, từ câu thứ 3 liên tiếp +15; gợi ý hoặc thử lại +5; sai 0. Điểm ván tối đa 100.";
+const CATCH_LIVES_LINE = "Hứng sai hoặc để rơi: mất 1 mạng.";
+
 const GAME_DESCRIPTORS: ReadonlyArray<Omit<GameDescriptor, "best">> = [
-  { key: "scramble", icon: "🔤", name: "Word scramble", description: "Các chữ cái bị xáo trộn, xếp lại thành đúng từ", goal: "Xếp đúng càng nhiều từ càng tốt (8 từ).", instructions: ["Đọc gợi ý (nghĩa tiếng Việt / định nghĩa) và các ô chữ cái bị xáo trộn.", "Bấm từng chữ cái theo đúng thứ tự (hoặc gõ phím) để xếp vào ô trống; ⌫ để bỏ chữ cuối.", "Xếp đủ chữ mà sai thì ô rung và xoá để xếp lại; mỗi từ được 2 lần sai.", "Bí quá thì bấm Gợi ý: mở chữ cái tiếp theo (trừ nửa điểm của từ đó)."], scoring: "+2 điểm mỗi từ xếp đúng ngay, +1 nếu dùng gợi ý hoặc sai một lần." },
-  { key: "crossword", icon: "🧩", name: "Crosswords", description: "Điền lưới ô chữ theo gợi ý dọc / ngang", goal: "Điền đúng toàn bộ lưới ô chữ.", instructions: ["Mỗi số trên lưới ứng với một gợi ý Ngang → hoặc Dọc ↓ bên dưới.", "Bấm vào ô và gõ chữ; gõ xong tự nhảy sang ô kế, phím mũi tên để di chuyển.", "Bấm Kiểm tra: ô đúng xanh, ô sai đỏ, sửa rồi kiểm tra lại.", "Bí quá thì bấm Gợi ý 1 chữ (mỗi lần trừ 1 điểm)."], scoring: "Điểm = số từ trong lưới trừ số gợi ý đã dùng." },
-  { key: "eggs", icon: "🧺", name: "Season catch", description: "Đưa rổ hứng vật phẩm theo mùa mang đúng từ: lá (thu), hoa (xuân), kem (hè), tuyết (đông), lì xì (Tết), quà (Giáng sinh)", goal: "Hứng đúng vật phẩm khớp với gợi ý, 10 lượt.", instructions: ["Gợi ý (nghĩa / định nghĩa) hiện to ở phía trên màn chơi.", "4 vật phẩm của mùa mang 4 từ rơi xuống; kéo chuột / chạm để di chuyển nhân vật (hoặc phím ← →) và đặt rổ dưới vật phẩm đúng.", "Hứng đúng: +1 điểm, lượt mới. Hứng nhầm: mất 1 ❤️ (tim vỡ); hết mạng thì khủng long xuất hiện. Tốc độ rơi theo mức CEFR: A1 ×1, mỗi mức cao hơn cộng thêm ×0,5 (C1 ×3).", "Để vật phẩm đúng rơi xuống đất cũng mất 1 ❤️. Hết 3 ❤️ là kết thúc."], scoring: "+1 điểm mỗi vật phẩm hứng đúng, tối đa 10." },
-  { key: "mario", icon: "🍄", name: "Season-rio", description: "Qua từng cổng hộp quà (chắn kín, không nhảy qua được), ăn hết món khoái khẩu khổng lồ trong 10 giây rồi lấy cờ! Nhân vật đổi theo mùa: thỏ, dế, sóc, cánh cụt, én, tuần lộc", goal: "Trả lời đủ 8 hộp quà chắn đường, ăn hết món khổng lồ trong 10 giây và chạm cờ.", instructions: ["Chạy bằng phím ← →, nhảy bằng Space hoặc ↑ (điện thoại: 3 nút dưới màn hình).", "Mỗi hộp quà ? đứng trên một cột gỗ chắn ngang đường: chạm vào hộp hoặc cột → câu hỏi từ vựng, chọn 1 trong 4. Đúng: 🍄 (+1). Sai: mất 1 ❤️. Trả lời xong (đúng hay sai) cổng mới mở, nên không bỏ qua hộp nào được.", "Đường khúc khuỷu: có hộp đặt trên bục gỗ, có hộp trên bục cao phải leo bậc. Cuối màn là món ăn khoái khẩu KHỔNG LỒ của nhân vật: chạm vào là đồng hồ 10 giây chạy; mỗi câu đúng ăn 1 miếng (3 miếng), sai mất 1 ❤️; quá 10 giây món ăn bị hỏng → thua.", "Ăn hết món khổng lồ rồi chạm cờ để về đích. Hết 3 ❤️ hoặc để món ăn hỏng là thua."], scoring: "+1 điểm mỗi hộp quà đúng, +1 mỗi miếng ăn đúng ở Boss (tối đa 11)." },
-  { key: "sort", icon: "🗂️", name: "Word sort", description: "Xếp từng từ vào đúng nhóm từ loại", goal: "Phân loại đúng càng nhiều từ càng tốt.", instructions: ["Mỗi lượt hiện một từ trong câu ví dụ (A1–A2 kèm nghĩa) và các nhóm: Noun, Verb, Adjective, Adverb, Preposition, Phrase…", "Bấm vào nhóm bạn cho là đúng từ loại của từ đó.", "Đúng: +1 và chuỗi tăng; sai: app hiện nhóm đúng, chuỗi về 0.", "Mẹo: nhìn hậu tố (-tion → noun, -ly → adverb) và cách dùng trong cụm từ."], scoring: "+1 điểm mỗi từ đúng; chuỗi đúng liên tiếp dài nhất được ghi lại." },
-  { key: "typing", icon: "⌨️", name: "Typing race", description: "Type đúng từ trước khi thanh thời gian cạn!", goal: "Gõ đúng 10 từ thật nhanh, giữ chuỗi combo càng dài càng nhiều điểm.", instructions: ["Mỗi từ có gợi ý: nghĩa tiếng Việt, định nghĩa tiếng Anh và nút nghe phát âm.", "Thanh thời gian chạy rất nhanh – gõ từ bằng bàn phím thật hoặc bàn phím ảo. Hệ thống tự kiểm tra khi bạn gõ đủ chữ.", "Đúng: +10 điểm × combo (combo tăng mỗi từ đúng liên tiếp, tối đa ×5). Sai hoặc hết giờ: combo về 1.", "Chữ đã gõ đúng hiện xanh, sai hiện đỏ – sửa ngay bằng ⌫."], scoring: "10 điểm × combo cho mỗi từ đúng; tối đa 10 từ." }
+  { key: "scramble", icon: "🔤", name: "Word scramble", description: "Các chữ cái bị xáo trộn, xếp lại thành đúng từ", goal: "Xếp đúng càng nhiều từ càng tốt (8 từ).", instructions: ["Đọc gợi ý (nghĩa tiếng Việt / định nghĩa) và các ô chữ cái bị xáo trộn.", "Bấm từng chữ cái theo đúng thứ tự (hoặc gõ phím) để xếp vào ô trống; ⌫ để bỏ chữ cuối.", "Xếp đủ chữ mà sai thì ô rung và xoá để xếp lại; mỗi từ được 2 lần sai.", "Bí quá thì bấm Gợi ý: mở chữ cái tiếp theo (từ đó chỉ còn +5)."], scoring: GAME_SCORING_LINE },
+  { key: "crossword", icon: "🧩", name: "Crosswords", description: "Điền lưới ô chữ theo gợi ý dọc / ngang", goal: "Điền đúng toàn bộ lưới ô chữ.", instructions: ["Mỗi số trên lưới ứng với một gợi ý Ngang → hoặc Dọc ↓ bên dưới.", "Bấm vào ô và gõ chữ; gõ xong tự nhảy sang ô kế, phím mũi tên để di chuyển.", "Bấm Kiểm tra: ô đúng xanh, ô sai đỏ, sửa rồi kiểm tra lại.", "Bí quá thì bấm Gợi ý 1 chữ (từ đó chỉ còn +5)."], scoring: GAME_SCORING_LINE },
+  { key: "eggs", icon: "🧺", name: "Season catch", description: "Đưa rổ hứng vật phẩm theo mùa mang đúng từ: lá (thu), hoa (xuân), kem (hè), tuyết (đông), lì xì (Tết), quà (Giáng sinh)", goal: "Hứng đúng vật phẩm khớp với gợi ý, 10 lượt.", instructions: ["Gợi ý (nghĩa / định nghĩa) hiện to ở phía trên màn chơi.", "4 vật phẩm của mùa mang 4 từ rơi xuống; kéo chuột / chạm để di chuyển nhân vật (hoặc phím ← →) và đặt rổ dưới vật phẩm đúng.", "Hứng đúng: được điểm, lượt mới. Hứng nhầm: mất 1 ❤️ (tim vỡ); hết mạng thì khủng long xuất hiện. Tốc độ rơi theo mức CEFR: A1 ×1, mỗi mức cao hơn cộng thêm ×0,5 (C1 ×3).", "Để vật phẩm đúng rơi xuống đất cũng mất 1 ❤️. Hết 3 ❤️ là kết thúc."], scoring: `${GAME_SCORING_LINE} ${CATCH_LIVES_LINE}` },
+  { key: "mario", icon: "🍄", name: "Season-rio", description: "Qua từng cổng hộp quà (chắn kín, không nhảy qua được), ăn hết món khoái khẩu khổng lồ trong 10 giây rồi lấy cờ! Nhân vật đổi theo mùa: thỏ, dế, sóc, cánh cụt, én, tuần lộc", goal: "Trả lời đủ 8 hộp quà chắn đường, ăn hết món khổng lồ trong 10 giây và chạm cờ.", instructions: ["Chạy bằng phím ← →, nhảy bằng Space hoặc ↑ (điện thoại: 3 nút dưới màn hình).", "Mỗi hộp quà ? đứng trên một cột gỗ chắn ngang đường: chạm vào hộp hoặc cột → câu hỏi từ vựng, chọn 1 trong 4. Đúng: 🍄. Sai: mất 1 ❤️. Trả lời xong (đúng hay sai) cổng mới mở, nên không bỏ qua hộp nào được.", "Đường khúc khuỷu: có hộp đặt trên bục gỗ, có hộp trên bục cao phải leo bậc. Cuối màn là món ăn khoái khẩu KHỔNG LỒ của nhân vật: chạm vào là đồng hồ 10 giây chạy; mỗi câu đúng ăn 1 miếng (3 miếng), sai mất 1 ❤️; quá 10 giây món ăn bị hỏng → thua.", "Ăn hết món khổng lồ rồi chạm cờ để về đích. Hết 3 ❤️ hoặc để món ăn hỏng là thua."], scoring: GAME_SCORING_LINE },
+  { key: "sort", icon: "🗂️", name: "Word sort", description: "Xếp từng từ vào đúng nhóm từ loại", goal: "Phân loại đúng càng nhiều từ càng tốt.", instructions: ["Mỗi lượt hiện một từ trong câu ví dụ (A1–A2 kèm nghĩa) và các nhóm: Noun, Verb, Adjective, Adverb, Preposition, Phrase…", "Bấm vào nhóm bạn cho là đúng từ loại của từ đó.", "Đúng: chuỗi tăng; sai: app hiện nhóm đúng, chuỗi về 0.", "Mẹo: nhìn hậu tố (-tion → noun, -ly → adverb) và cách dùng trong cụm từ."], scoring: GAME_SCORING_LINE },
+  { key: "typing", icon: "⌨️", name: "Typing race", description: "Type đúng từ trước khi thanh thời gian cạn!", goal: "Gõ đúng 10 từ thật nhanh, giữ chuỗi đúng liên tiếp.", instructions: ["Mỗi từ có gợi ý: nghĩa tiếng Việt, định nghĩa tiếng Anh và nút nghe phát âm.", "Thanh thời gian chạy rất nhanh – gõ từ bằng bàn phím thật hoặc bàn phím ảo. Hệ thống tự kiểm tra khi bạn gõ đủ chữ.", "Gõ sai thì sửa lại trong giờ (từ đó chỉ còn +5). Hết giờ: 0 điểm, chuỗi về 0.", "Chữ đã gõ đúng hiện xanh, sai hiện đỏ – sửa ngay bằng ⌫."], scoring: GAME_SCORING_LINE }
 ];
 
 export function registerEngagementRoutes(
@@ -336,12 +340,13 @@ export function registerEngagementRoutes(
     if (duplicate) return duplicate;
     const hub = await repositories.engagement.gameHub(learnerId);
     if (!hub?.wordSet) return reply.code(404).send({ code: "GAME_SET_NOT_FOUND" });
-    const scored = scoreGameAttempt(params.data.game, hub.wordSet.words, body.data.answers, { hintsUsed: body.data.hintsUsed, attemptSeed: body.data.attemptSeed });
+    const scored = scoreGameRound(params.data.game, hub.wordSet.words, body.data.answers, { attemptSeed: body.data.attemptSeed, events: body.data.events });
     return repositories.engagement.saveGameResult({
       learnerId, setId: hub.wordSet.id, game: params.data.game, requestId: body.data.requestId,
-      ...scored, details: {
-        hintsUsed: body.data.hintsUsed,
-        answers: body.data.answers.map(({ wordId, attempts, usedHint, combo }) => ({ wordId, attempts, usedHint, combo })),
+      ...roundResultFields(scored), details: {
+        attemptSeed: body.data.attemptSeed ?? 0,
+        units: scored.unitIds.map((wordId, index) => ({ wordId, outcome: scored.outcomes[index] })),
+        answers: body.data.answers.map(({ wordId, attempts, usedHint, ms }) => ({ wordId, attempts, usedHint, ms })),
         events: gameEvidence(hub.wordSet.words, body.data.answers, body.data.events ?? [])
       }
     });
@@ -398,10 +403,10 @@ export function registerEngagementRoutes(
       return result ? { ...duel, result } : reply.code(409).send({ code: "DUEL_RESULT_NOT_AVAILABLE" });
     }
     if (duel.myScore) return reply.code(409).send({ code: "DUEL_ALREADY_PLAYED" });
-    const scored = scoreGameAttempt(duel.game, duel.wordSet.words, body.data.answers, { hintsUsed: body.data.hintsUsed, attemptSeed: body.data.attemptSeed });
+    const scored = scoreGameRound(duel.game, duel.wordSet.words, body.data.answers, { attemptSeed: body.data.attemptSeed, events: body.data.events });
     const result = await repositories.engagement.saveGameResult({
       learnerId, setId: duel.wordSet.id, game: duel.game, requestId: body.data.requestId,
-      ...scored, duelId: duel.id, details: { duel: true }
+      ...roundResultFields(scored), duelId: duel.id, details: { duel: true }
     });
     const saved = await repositories.engagement.saveDuelScore({ learnerId, duelId: duel.id, result, requestId: body.data.requestId });
     if (saved === "already_played") return reply.code(409).send({ code: "DUEL_ALREADY_PLAYED" });
@@ -513,6 +518,13 @@ function validateVocabularyTopic(topic: string): { message: string; strike: bool
   }
   if (/[^a-z]/iu.test(letters)) return { message: "Nhập chủ đề bằng tiếng Anh, ví dụ coffee shop.", strike: false };
   return null;
+}
+
+function roundResultFields(scored: ScoredGameRound) {
+  return {
+    score: scored.score, raw: scored.raw, rawMax: scored.rawMax, unitsAssigned: scored.total,
+    gameplayMs: scored.gameplayMs, correct: scored.correct, total: scored.total
+  };
 }
 
 function gameEvidence(

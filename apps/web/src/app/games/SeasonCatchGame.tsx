@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameAnswerInput, GameEvidenceEventInput, GameWordSetView } from "@e4s/contracts";
-import { CATCH_ROUND_SIZE, choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
+import { choices, gameRoundWords, type FinishGame, type GameWord } from "./types.js";
+import { GameHud, useGameClock, useRoundTally } from "./GameHud.js";
 import { SeasonHearts, SeasonImage, SeasonStageGround, SeasonStageSky, useGameSeason, useSeasonGameSound } from "./seven-season-art.js";
 import { GameFeedback } from "./GameFeedback.js";
 import { InfoTitle, useCompactUi } from "../shared/CompactUi.js";
@@ -15,15 +16,18 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
   const compactUi = useCompactUi();
   const season = useGameSeason();
   const playSound = useSeasonGameSound();
-  const words = useMemo(() => prepareGameAttempt(source, attemptSeed).slice(0, CATCH_ROUND_SIZE), [attemptSeed, source]);
+  const words = useMemo(() => gameRoundWords("eggs", source, attemptSeed), [attemptSeed, source]);
   const [round, setRound] = useState(0);
-  const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const livesRef = useRef(3);
   const basketRef = useRef(50);
   const basketEdge = useRef(5);
   const answers = useRef<GameAnswerInput[]>([]);
   const events = useRef<GameEvidenceEventInput[]>([]);
+  // Answers so far as state, for the live HUD (refs feed the final submission).
+  const [played, setPlayed] = useState<GameAnswerInput[]>([]);
+  const clock = useGameClock();
+  const tally = useRoundTally("eggs", words, played);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [ending, setEnding] = useState<"lost" | "won" | null>(null);
@@ -99,20 +103,24 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
       wave.style.visibility = "hidden";
       const caught = options[caughtIndex];
       const correct = caught?.id === current.id;
-      const nextLives = caught && !correct ? livesRef.current - 1 : livesRef.current;
-      answers.current.push({ wordId: current.id, answer: caught?.english ?? "", attempts: 1, usedHint: false, combo: 1 });
+      // A wrong catch and a drop that reaches the ground both score 0 and cost a life.
+      const nextLives = correct ? livesRef.current : livesRef.current - 1;
+      answers.current.push({ wordId: current.id, answer: caught?.english ?? "", attempts: 1, usedHint: false, ms: clock.lap() });
+      clock.pause();
+      setPlayed([...answers.current]);
+      if (!correct) {
+        livesRef.current = nextLives;
+        setLives(nextLives);
+      }
       if (caught) {
-        if (correct) setScore(value => value + 1);
-        else {
-          events.current.push({ type: "wrong_catch", wordId: current.id, answer: caught.english });
-          livesRef.current = nextLives;
-          setLives(nextLives);
-        }
+        if (!correct) events.current.push({ type: "wrong_catch", wordId: current.id, answer: caught.english });
         setNotice(correct ? `Đúng · Đã hứng “${caught.english}”.` : `Chưa đúng · “${caught.english}” không khớp với gợi ý.`);
         setPose(correct ? "catch-correct" : "catch-wrong");
         setEffects([{ x: laneX(caughtIndex), y: rimY, id: ++effectId.current, asset: correct ? "fx/catch-correct" : "fx/catch-wrong" }]);
         soundLatest.current(correct ? "catch-correct" : "catch-wrong");
       } else {
+        events.current.push({ type: "timeout", wordId: current.id, answer: "" });
+        setNotice("Chưa hứng được · Mất 1 mạng.");
         setPose("catch-miss");
         setEffects(options.map((_, index) => ({ x: laneX(index), y: surfaceY, id: ++effectId.current, asset: "fx/drop-land" })));
         soundLatest.current("drop");
@@ -173,12 +181,14 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
       frame = window.requestAnimationFrame(step);
     };
     frame = window.requestAnimationFrame(step);
+    clock.start();
     return () => {
       window.cancelAnimationFrame(frame);
       window.clearTimeout(nextRoundTimer);
       observer?.disconnect();
+      clock.pause();
     };
-  }, [busy, cefr, current, options, round, words.length]);
+  }, [busy, cefr, clock, current, options, round, words.length]);
 
   const clearMovement = () => {
     keys.current.clear();
@@ -214,11 +224,9 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
   const help = `Hứng ${season.drop.toLocaleLowerCase("vi")} đúng. Dùng nút trái/phải, phím ← → hoặc A/D, hoặc kéo rổ.`;
   return <div ref={runnerRef} className="game-runner" aria-busy={busy || undefined}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) clearMovement(); }}>
-    <div className="game-hud">
-      {compactUi ? <InfoTitle as="h2" title={<>Lượt {round + 1}/{words.length}</>} tip={help} label="Cách chơi Season Catch" /> : <h2>Lượt {round + 1}/{words.length}</h2>}
-      <span><SeasonImage season={season} asset="hud/score" className="season-hud-icon" /> Điểm <strong>{score}</strong></span>
+    <GameHud title={compactUi ? <InfoTitle as="h2" title={<>Lượt {round + 1}/{words.length}</>} tip={help} label="Cách chơi Season Catch" /> : <h2>Lượt {round + 1}/{words.length}</h2>} raw={tally.raw} combo={tally.combo} clock={clock}>
       <SeasonHearts season={season} lives={lives} />
-    </div>
+    </GameHud>
     <div ref={sceneRef} className="catch-scene catch-arena seasonal-catch" role="application" aria-label="Màn chơi Season catch" tabIndex={0}
       onPointerMove={event => {
         const pointer = drag.current;

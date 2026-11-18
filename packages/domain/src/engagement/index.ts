@@ -1,4 +1,6 @@
 import type { CefrLevel, ContentImageAttribution } from "@e4s/contracts";
+import { buildCrosswordLayout } from "./crossword-layout.js";
+import { scoreRound, type RoundScore, type RoundUnitOutcome } from "./round-scoring.js";
 
 export type GameKey = "scramble" | "crossword" | "eggs" | "mario" | "sort" | "typing";
 
@@ -74,7 +76,16 @@ export interface GameAnswer {
   answer: string;
   attempts?: number | undefined;
   usedHint?: boolean | undefined;
+  /** Legacy client field; the shared rule computes the streak itself. */
   combo?: number | undefined;
+  /** Active gameplay time spent on this unit (no loading, countdown or transitions). */
+  ms?: number | undefined;
+}
+
+export interface GameEvent {
+  type: "wrong_catch" | "timeout";
+  wordId: string;
+  answer: string;
 }
 
 export interface SeasonRioRoundPlan<Word> {
@@ -93,12 +104,116 @@ export function prepareGameAttempt<Word extends { id: string }>(words: readonly 
   return [...baseOrder.slice(offset), ...baseOrder.slice(0, offset)];
 }
 
+/** 8 gates, then up to 3 boss questions with words the gates did not use (fewer words → smaller N). */
 export function seasonRioRoundPlan<Word>(words: readonly Word[]): SeasonRioRoundPlan<Word> {
   const gateWords = words.slice(0, 8);
-  const dedicatedBossWords = words.slice(gateWords.length, gateWords.length + 3);
-  const bossWords = dedicatedBossWords.length ? dedicatedBossWords : gateWords.slice(0, 3);
-  const bossQuestions = bossWords.length ? 3 : 0;
-  return { gateCount: gateWords.length, bossQuestions, total: gateWords.length + bossQuestions, gateWords, bossWords };
+  const bossWords = words.slice(gateWords.length, gateWords.length + 3);
+  return { gateCount: gateWords.length, bossQuestions: bossWords.length, total: gateWords.length + bossWords.length, gateWords, bossWords };
+}
+
+export const SCRAMBLE_ROUND_SIZE = 8;
+export const CATCH_ROUND_SIZE = 10;
+export const SORT_ROUND_SIZE = 12;
+export const TYPING_ROUND_SIZE = 10;
+
+export function isScrambleWord(word: { english: string }): boolean {
+  return normalize(word.english).replace(/[^a-z]/g, "").length >= 3;
+}
+export function isTypingWord(word: { english: string }): boolean {
+  return /^[a-z][a-z\s'-]*$/i.test(word.english);
+}
+export function isSortWord(word: { partOfSpeech?: string | undefined }): boolean {
+  return Boolean(word.partOfSpeech?.trim());
+}
+
+type RoundWord = { id: string; english: string; partOfSpeech?: string | undefined };
+
+/**
+ * The units of one round, in play order, fixed by the stored word set and the round seed.
+ * The web game builds its round with this same function and the server scores against it,
+ * so N (and the crossword grid) never comes from the client.
+ */
+export function gameRoundWords<Word extends RoundWord>(game: GameKey, words: readonly Word[], attemptSeed = 0): Word[] {
+  if (game === "scramble") return prepareGameAttempt(words.filter(isScrambleWord), attemptSeed).slice(0, SCRAMBLE_ROUND_SIZE);
+  if (game === "crossword") return buildCrosswordLayout(prepareGameAttempt(words, attemptSeed)).placed.map((entry) => entry.word);
+  if (game === "eggs") return prepareGameAttempt(words, attemptSeed).slice(0, CATCH_ROUND_SIZE);
+  if (game === "mario") {
+    const plan = seasonRioRoundPlan(prepareGameAttempt(words, attemptSeed));
+    return [...plan.gateWords, ...plan.bossWords];
+  }
+  if (game === "sort") return prepareGameAttempt(words.filter(isSortWord), attemptSeed).slice(0, SORT_ROUND_SIZE);
+  return prepareGameAttempt(words.filter(isTypingWord), attemptSeed).slice(0, TYPING_ROUND_SIZE);
+}
+
+/** Upper bounds for the reported gameplay time; beyond them the time is stored as unknown. */
+export const MAX_UNIT_GAMEPLAY_MS = 600_000;
+export const MAX_ROUND_GAMEPLAY_MS = 3_600_000;
+
+export interface ScoredGameRound extends RoundScore {
+  /** Round score 0–100 (also stored as the result's score, out of 100). */
+  score: number;
+  maxScore: 100;
+  correct: number;
+  total: number;
+  unitIds: string[];
+  outcomes: RoundUnitOutcome[];
+  /** Sum of the per-unit active times, or null when it is missing or implausible. */
+  gameplayMs: number | null;
+}
+
+/**
+ * Maps one answer per unit (the first matching answer in play order; repeats are ignored)
+ * to the shared outcome and scores the round. Never trusts a client score.
+ */
+export function scoreGameRound<Word extends RoundWord>(
+  game: GameKey,
+  words: readonly Word[],
+  answers: readonly GameAnswer[],
+  options: { attemptSeed?: number | undefined; events?: readonly GameEvent[] | undefined; units?: readonly Word[] | undefined } = {}
+): ScoredGameRound {
+  const units = options.units ?? gameRoundWords(game, words, options.attemptSeed ?? 0);
+  const assigned: Array<GameAnswer | undefined> = units.map(() => undefined);
+  for (const answer of answers) {
+    const index = units.findIndex((unit, unitIndex) => unit.id === answer.wordId && !assigned[unitIndex]);
+    if (index >= 0) assigned[index] = answer;
+  }
+  const timeouts = new Set((options.events ?? []).filter((event) => event.type === "timeout").map((event) => event.wordId));
+  const outcomes = units.map((unit, index) => gameUnitOutcome(game, unit, assigned[index], timeouts.has(unit.id)));
+  const scored = scoreRound(units, outcomes);
+  const answered = assigned.filter((answer): answer is GameAnswer => Boolean(answer));
+  return {
+    ...scored,
+    maxScore: 100,
+    correct: outcomes.filter((outcome) => outcome === "first_try" || outcome === "assisted").length,
+    total: units.length,
+    unitIds: units.map((unit) => unit.id),
+    outcomes,
+    gameplayMs: roundGameplayMs(answered)
+  };
+}
+
+function gameUnitOutcome(game: GameKey, word: RoundWord, answer: GameAnswer | undefined, timedOut: boolean): RoundUnitOutcome {
+  if (!answer) return "unanswered";
+  const expected = game === "sort" ? sortGroup(word.partOfSpeech ?? "") : word.english;
+  if (normalize(answer.answer) === normalize(expected)) {
+    return (answer.attempts ?? 1) > 1 || answer.usedHint ? "assisted" : "first_try";
+  }
+  if (timedOut || answer.answer === "[timeout]") return "timeout";
+  // Season catch: an empty answer is a drop that reached the ground.
+  if (!answer.answer.trim()) return game === "eggs" ? "timeout" : "skipped";
+  return "wrong";
+}
+
+/** Sum of per-unit active times when every answered unit reports a plausible value. */
+export function roundGameplayMs(answers: readonly Pick<GameAnswer, "ms">[]): number | null {
+  if (!answers.length) return null;
+  let total = 0;
+  for (const answer of answers) {
+    const ms = answer.ms;
+    if (typeof ms !== "number" || !Number.isInteger(ms) || ms < 0 || ms > MAX_UNIT_GAMEPLAY_MS) return null;
+    total += ms;
+  }
+  return total > 0 && total <= MAX_ROUND_GAMEPLAY_MS ? total : null;
 }
 
 export function weeklyPracticeAvailability(completed: number, total: number, submitted: boolean): {
@@ -108,88 +223,6 @@ export function weeklyPracticeAvailability(completed: number, total: number, sub
   const remaining = Math.max(0, total - completed);
   if (submitted) return { state: "submitted", remaining };
   return remaining === 0 && total > 0 ? { state: "open", remaining } : { state: "locked", remaining };
-}
-
-export function scoreGameAttempt(
-  game: GameKey,
-  words: readonly GameWord[],
-  answers: readonly GameAnswer[],
-  options: { hintsUsed?: number | undefined; attemptSeed?: number | undefined } = {}
-): {
-  score: number;
-  maxScore: number;
-  correct: number;
-  total: number;
-} {
-  const wordById = new Map(words.map((word) => [word.id, word]));
-  let score = 0;
-  let correct = 0;
-  const total = gameRoundTotal(game, words, answers);
-  const maxScore = game === "scramble" ? total * 2 : game === "typing" ? typingMaximum(total) : total;
-  const scoringWords = options.attemptSeed === undefined ? words : prepareGameAttempt(words, options.attemptSeed);
-  const remainingByWord = scoreableWordOccurrences(game, scoringWords);
-  let accepted = 0;
-  let typingCombo = 1;
-
-  for (const answer of answers) {
-    if (accepted >= total) break;
-    const remaining = remainingByWord.get(answer.wordId) ?? 0;
-    if (remaining <= 0) continue;
-    remainingByWord.set(answer.wordId, remaining - 1);
-    accepted += 1;
-    const word = wordById.get(answer.wordId);
-    if (!word) continue;
-    const expected = game === "sort" ? sortGroup(word.partOfSpeech) : word.english;
-    const matches = normalize(answer.answer) === normalize(expected);
-    if (game === "scramble") {
-      if (matches) score += answer.usedHint || (answer.attempts ?? 1) > 1 ? 1 : 2;
-    } else if (game === "crossword") {
-      if (matches) score += 1;
-    } else if (game === "typing") {
-      if (matches) {
-        score += 10 * typingCombo;
-        typingCombo = Math.min(5, typingCombo + 1);
-      } else typingCombo = 1;
-    } else {
-      if (matches) score += 1;
-    }
-    if (matches) correct += 1;
-  }
-
-  if (game === "crossword") score = Math.max(0, score - clamp(options.hintsUsed ?? 0, 0, maxScore));
-
-  return { score: Math.min(score, maxScore), maxScore, correct: Math.min(correct, total), total };
-}
-
-/** Typing starts at x1 and increases by one per correct word, capped at x5. */
-export function typingMaximum(rounds: number) {
-  const total = Math.max(0, Math.trunc(rounds));
-  return Array.from({ length: total }, (_, index) => 10 * Math.min(5, index + 1)).reduce((sum, score) => sum + score, 0);
-}
-
-function scoreableWordOccurrences(game: GameKey, words: readonly GameWord[]): Map<string, number> {
-  let rounds: readonly GameWord[];
-  if (game === "scramble") rounds = words.filter((word) => normalize(word.english).replace(/[^a-z]/g, "").length >= 3).slice(0, 8);
-  else if (game === "eggs") rounds = words.slice(0, 10);
-  else if (game === "sort") rounds = words.filter((word) => word.partOfSpeech.trim()).slice(0, 12);
-  else if (game === "typing") rounds = words.filter((word) => /^[a-z][a-z\s'-]*$/i.test(word.english)).slice(0, 10);
-  else if (game === "mario") {
-    const plan = seasonRioRoundPlan(words);
-    rounds = [...plan.gateWords, ...Array.from({ length: plan.bossQuestions }, (_, index) => plan.bossWords[index % plan.bossWords.length]!)];
-  } else rounds = words.slice(0, 10);
-
-  const occurrences = new Map<string, number>();
-  for (const word of rounds) occurrences.set(word.id, (occurrences.get(word.id) ?? 0) + 1);
-  return occurrences;
-}
-
-function gameRoundTotal(game: GameKey, words: readonly GameWord[], answers: readonly GameAnswer[]): number {
-  if (game === "scramble") return Math.min(8, words.filter((word) => normalize(word.english).replace(/[^a-z]/g, "").length >= 3).length);
-  if (game === "crossword") return Math.min(10, answers.length);
-  if (game === "eggs") return Math.min(10, words.length);
-  if (game === "mario") return seasonRioRoundPlan(words).total;
-  if (game === "sort") return Math.min(12, words.filter((word) => word.partOfSpeech.trim()).length);
-  return Math.min(10, words.filter((word) => /^[a-z][a-z\s'-]*$/i.test(word.english)).length);
 }
 
 export function arenaEligible(level: CefrLevel | null | undefined): boolean {
@@ -221,10 +254,6 @@ function sortGroup(partOfSpeech: string): string {
   return "phrase";
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, Math.trunc(value)));
-}
-
 function seededShuffle<T>(items: readonly T[], seed: number): T[] {
   const result = [...items];
   let value = (seed + 1) * 2_654_435_761;
@@ -246,3 +275,5 @@ function stringSeed(value: string): number {
 }
 
 export * from "./season-rewards.js";
+export * from "./round-scoring.js";
+export * from "./crossword-layout.js";

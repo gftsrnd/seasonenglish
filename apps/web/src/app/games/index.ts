@@ -8,3 +8,4 @@ export * from "./SeasonCatchGame.js";
 export * from "./SeasonRioGame.js";
 export * from "./WordSortGame.js";
 export * from "./TypingRaceGame.js";
+export * from "./GameHud.js";

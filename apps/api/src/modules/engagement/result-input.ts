@@ -5,7 +5,10 @@ export const MAX_GAME_COMBO = 5;
 
 const answer = z.object({
   wordId: z.string().min(1), answer: z.string().max(200), attempts: z.number().int().min(1).max(20).optional(),
-  usedHint: z.boolean().optional(), combo: z.number().int().min(1).max(MAX_GAME_COMBO).optional()
+  // Legacy field: the shared 0–100 rule computes the streak on the server and ignores it.
+  usedHint: z.boolean().optional(), combo: z.number().int().min(1).max(MAX_GAME_COMBO).optional(),
+  // Active gameplay time on this unit. Any number is accepted; the server only uses a plausible total.
+  ms: z.number().min(0).max(86_400_000).optional()
 });
 const gameEvent = z.object({
   type: z.enum(["wrong_catch", "timeout"]), wordId: z.string().min(1), answer: z.string().max(200)
