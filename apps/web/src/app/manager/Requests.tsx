@@ -8,7 +8,7 @@ import { managerApiClient } from "../../api/manager.js";
 import { useModal } from "../shared/ModalProvider.js";
 import { ManagerTitle, PageTitle } from "./shared.js";
 import { Archive, ArchiveRestore, Trash2 } from "lucide-react";
-import { ActionLabel, Description, useCompactUi } from "../shared/CompactUi.js";
+import { ActionLabel, Description, useCompactUi, useUiTier } from "../shared/CompactUi.js";
 import { Pager } from "../shared/Pager.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 
@@ -65,8 +65,9 @@ export function ManagerRequests() {
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
   const compact = useCompactUi();
+  const tablet = useUiTier() === "tablet";
   const phone = useMediaQuery("(max-width: 600px)");
-  const pageSize = phone ? PHONE_REQUESTS : compact ? TABLET_REQUESTS : desktopPageSize;
+  const pageSize = phone ? PHONE_REQUESTS : tablet ? TABLET_REQUESTS : desktopPageSize;
 
   const load = async () => {
     const [reopens, complaints] = await Promise.allSettled([managerApiClient.getManagerReopenRequests(), managerApiClient.getManagerComplaints()]);
@@ -219,7 +220,7 @@ export function ManagerRequests() {
           };
         })}
         empty={!rows ? <span role="status">Đang tải {tableLabel.toLocaleLowerCase("vi-VN")}…</span> : archivedOnly ? "Chưa có mục đã lưu trữ." : loadError ? "Danh sách hiện chưa đầy đủ." : complaintTab ? "Chưa có khiếu nại." : "Chưa có yêu cầu."} />
-      {compact ? <Pager page={currentPage + 1} pages={lastPage + 1} setPage={(next) => setPage(next - 1)} label={tableLabel.toLocaleLowerCase("vi-VN")} /> : lastPage > 0 ? <div className="row manager-requests-pagination">
+      {compact || tablet ? <Pager page={currentPage + 1} pages={lastPage + 1} setPage={(next) => setPage(next - 1)} label={tableLabel.toLocaleLowerCase("vi-VN")} /> : lastPage > 0 ? <div className="row manager-requests-pagination">
         <button className="btn-sm" type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Trước</button>
         <span className="small muted">Trang {currentPage + 1}/{lastPage + 1}</span>
         <button className="btn-sm" type="button" disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}>Sau</button>

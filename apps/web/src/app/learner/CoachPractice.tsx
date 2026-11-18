@@ -25,7 +25,7 @@ function speechRecognitionConstructor(): SpeechRecognitionConstructor | null {
 export function LearnerCoach({ view, actions }: { view: CoachView; actions: LearnerCallbacks }) {
   const [message, setMessage] = useState("");
   // Phones and tablets collapse the secret-word box to one line; desktop keeps it open.
-  const compactVocabulary = useMediaQuery("(max-width: 1024px)");
+  const compactVocabulary = useMediaQuery("(max-width: 600px)");
   const phoneComposer = useMediaQuery("(max-width: 480px)");
   const [pendingMessage, setPendingMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -33,7 +33,7 @@ export function LearnerCoach({ view, actions }: { view: CoachView; actions: Lear
   const [sendError, setSendError] = useState("");
   const [clearChatOpen, setClearChatOpen] = useState(false);
   // Phones/tablets start with each turn folded to its one-line summary; desktop keeps the full review open.
-  const [feedbackExpanded, setFeedbackExpanded] = useState(() => !(typeof window !== "undefined" && window.matchMedia?.("(max-width: 1024px)").matches));
+  const [feedbackExpanded, setFeedbackExpanded] = useState(() => !(typeof window !== "undefined" && window.matchMedia?.("(max-width: 600px)").matches));
   const [explanationExpanded, setExplanationExpanded] = useState(false);
   const clearChatButtonRef = useRef<HTMLButtonElement>(null);
   const clearDialogTitleId = useId();

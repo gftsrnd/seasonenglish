@@ -1692,13 +1692,13 @@
 }
 
 /* Phones and tablets: the progress list is part of the page scroll. */
-@media (max-width: 1023px) {
+@media (max-width: 1024px) {
   .manager-progress-page .manager-progress-table,
   .manager-progress-page .manager-progress-list { max-height: none; overflow-y: visible; }
   .manager-progress-table thead th { position: static; }
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1025px) {
   .manager-progress-page .manager-progress-table,
   .manager-progress-page .manager-progress-list { max-height: min(70vh, 720px); }
 }

@@ -1,0 +1,76 @@
+/*
+ * Tablet tier (601–1024px): a balance between desktop and phone.
+ *
+ * Structure comes from desktop (side-by-side panels, multi-column grids, real
+ * table columns, the desktop lesson/coach/games/exam flow, text labels on
+ * actions). Density comes from phone: a middle type scale, 16px card padding,
+ * 12px gaps, 40px touch targets, popups at most 80% of the screen.
+ *
+ * Phones (≤ 600px) and desktop (≥ 1025px) are untouched: every rule below sits
+ * in the 601–1024 media query, except the two helper classes the tablet tier
+ * of CompactUi.tsx renders (they never appear on phone or desktop).
+ * Loaded after responsive-phone.css; selectors start with `:root:root` to
+ * outrank the lazily loaded role stylesheets regardless of load order.
+ */
+
+/* One-line description under a title (Description / PageDescription, tablet tier):
+   the text ellipsises; the longer guidance is in the ⓘ next to it or the title. */
+.tier-desc { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.tier-desc > .tier-one-line { flex: 0 1 auto; min-width: 0; margin: 0; }
+.tier-one-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (min-width: 601px) and (max-width: 1024px) {
+  :root {
+    --tablet-text: 15px;
+    --tablet-h1: 24px;
+    --tablet-h2: 18px;
+    --tablet-h3: 16px;
+    --tablet-card-pad: 16px;
+    --tablet-gap: 12px;
+    --touch-min: 40px;
+    --icon-btn: 40px;
+  }
+
+  /* Type scale: body 15px, page titles 24px, section titles 18px, card titles 16px. */
+  :root:root body { font-size: var(--tablet-text); }
+  :root:root:root :is(main, .dialog, [role="dialog"]) h1 { font-size: var(--tablet-h1) !important; line-height: 1.25 !important; }
+  :root:root:root :is(main, .dialog, [role="dialog"]) h2 { font-size: var(--tablet-h2) !important; line-height: 1.3 !important; }
+  :root:root:root :is(main, .dialog, [role="dialog"]) h3 { font-size: var(--tablet-h3) !important; line-height: 1.3 !important; }
+
+  /* Moderate density: 16px card padding, 12px gaps. */
+  :root:root main :is(.card, .panel) { padding: var(--tablet-card-pad); }
+  :root:root main :is(.grid, .stack) { gap: var(--tablet-gap); }
+
+  /* Touch targets: at least 40px for every control. */
+  :root:root :is(button, .btn, a.btn, a.btn-sm, select, summary):not(.info-tip-button):not(.word-chip):not(.chip) { min-height: var(--touch-min); }
+
+  /* Popups: at most 80% of the screen height (sticky header and × come from responsive-phone.css). */
+  :root:root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]),
+  :root:root:root:root .monthly-resource-panel,
+  :root:root:root:root .inbox-backdrop > .dialog.inbox-dialog { max-height: min(80dvh, calc(100dvh - 32px)) !important; }
+  /* The resource panel is a flex column: its sticky header must not shrink under the content (it clipped the title). */
+  :root:root:root:root .monthly-resource-panel > header { flex-shrink: 0; }
+
+  /* No scroll box inside the page: paged tables flow with it (a wide one still scrolls sideways in its own box). */
+  :root:root:root #root .request-workspace .request-table,
+  :root:root:root #root main .bounded-scroll-region,
+  :root:root:root #root :is(.operator-approved-list, .operator-pending-list, .operator-bounded-list, .operator-action-table-wrap),
+  :root:root:root #root .manager-page :is(.manager-progress-table, .manager-progress-list) { max-height: none !important; overflow-y: visible !important; overflow-x: auto; }
+  :root:root:root #root main :is(.bounded-scroll-region, .manager-progress-table) thead th { position: static; }
+
+  /* Đã duyệt table: the row actions wrap so the level/status badges keep a readable column. */
+  :root:root:root .operator-action-table .operator-approved-actions { flex-wrap: wrap; justify-content: flex-end; }
+  :root:root:root .app-operator .operator-approved-panel .operator-action-table :is(th, td):nth-child(2) { width: 22%; }
+  :root:root:root .app-operator .operator-approved-panel .operator-action-table :is(th, td):last-child { width: 29%; }
+
+  /* Descriptions the phone layout hides stay visible as one short line. */
+  :root:root :is(
+    .section-tab-description,
+    .operator-months-header > p,
+    .operator-months-page .monthly-section-title + p.small.muted,
+    .operator-lesson-editor > .operator-editor-description,
+    .operator-level-retake-note,
+    .monthly-intro-detail,
+    [data-guide="op-signals"] > .grid > .card > p.small.muted
+  ) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

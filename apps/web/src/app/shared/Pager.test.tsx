@@ -27,10 +27,11 @@ it("pages a long list 3 rows at a time on a phone", () => {
   expect(screen.getByRole("button", { name: "Trang sau người học" })).toBeDisabled();
 });
 
-it("uses 5 rows per page on a tablet and shows everything on desktop", () => {
+it("uses medium pages (7 rows) on a tablet and shows everything on desktop", () => {
   media(768);
-  const { unmount } = render(<List />);
-  expect(names()).toHaveLength(5);
+  const many = [...items, "Khoa", "Lan"];
+  const { unmount } = render(<ul><PagedList items={many} label="người học">{(name) => <li>{name}</li>}</PagedList></ul>);
+  expect(names()).toHaveLength(7);
   expect(screen.getByText("Trang 1/2")).toBeInTheDocument();
   unmount();
   media(1280);

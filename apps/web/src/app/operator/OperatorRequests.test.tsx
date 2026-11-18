@@ -68,7 +68,7 @@ it("opens a focused practice appeal from the old review link and shows the saved
 
 it.each([false, true])("shows the full retake appeal card with the appropriate collapse control (%s)", async (compact) => {
   vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
-    matches: compact && query === "(max-width: 1024px)",
+    matches: compact && query === "(max-width: 600px)",
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
   })));

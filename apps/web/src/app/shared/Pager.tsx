@@ -4,19 +4,20 @@ import { useMediaQuery } from "./useMediaQuery.js";
 
 /** Rows per page on phones. */
 export const PHONE_PAGE_SIZE = 3;
-/** Rows per page on tablets. */
-export const TABLET_PAGE_SIZE = 5;
+/** Rows per page on tablets (medium pages: never fewer than 6 rows). */
+export const TABLET_PAGE_SIZE = 7;
+const TABLET_MIN_PAGE_SIZE = 6;
 
 /**
  * Long lists on phones and tablets are paged (3 rows per page on a phone,
- * 5 on a tablet) so the page keeps a fixed height; desktop (> 1024px) always
+ * 6–8 on a tablet) so the page keeps a fixed height; desktop (> 1024px) always
  * shows every row, exactly as before.
  */
 export function usePaged<T>(items: readonly T[], { phone = PHONE_PAGE_SIZE, tablet = TABLET_PAGE_SIZE }: { phone?: number; tablet?: number } = {}) {
   const isPhone = useMediaQuery("(max-width: 600px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const [requested, setPage] = useState(1);
-  const size = isPhone ? phone : isTablet ? tablet : Infinity;
+  const size = isPhone ? phone : isTablet ? Math.max(TABLET_MIN_PAGE_SIZE, tablet) : Infinity;
   const pages = Number.isFinite(size) ? Math.max(1, Math.ceil(items.length / size)) : 1;
   const page = Math.min(Math.max(1, requested), pages);
   const offset = pages > 1 ? (page - 1) * size : 0;
