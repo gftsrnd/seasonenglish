@@ -259,7 +259,8 @@ export function publicAssessmentDefinition(stored: StoredAssessmentDefinition, o
   const { monthlyExam, monthlyScope: _monthlyScope, ...definition } = normalizeLevelFormQuestionPrompts(stored);
   const hideScript = Boolean(monthlyExam) || options.hideListeningScript;
   return {
-    ...definition,
+    key: definition.key, kind: definition.kind, title: definition.title, version: definition.version,
+    totalMinutes: definition.totalMinutes, totalScore: definition.totalScore,
     sections: definition.sections.map((section) => ({
       ...section,
       groups: section.groups.map((group) => ({

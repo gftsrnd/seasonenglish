@@ -2,7 +2,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
-import { AppGuide, findSteps } from "./AppGuide.js";
+import { ModalProvider } from "./ModalProvider.js";
+import { AssessmentBank } from "../operator/AssessmentBank.js";
+import { AppGuide, findSteps, popupGuideHost } from "./AppGuide.js";
 import { allGuideSteps } from "./app-guide-steps.js";
 
 beforeEach(() => {
@@ -18,6 +20,13 @@ afterEach(() => {
 });
 
 describe("AppGuide", () => {
+  it("places popup help in the close button's action group rather than splitting the header", () => {
+    const dialog = document.createElement("section");
+    dialog.innerHTML = '<header><h2>Title</h2><div class="row"><button>Edit</button><button class="modal-close">Close</button></div></header>';
+    expect(popupGuideHost(dialog)).toBe(dialog.querySelector(".row"));
+    dialog.innerHTML = '<div class="assessment-bank-header"><h2>Title</h2><button class="modal-close">Close</button></div>';
+    expect(popupGuideHost(dialog)).toBe(dialog.firstElementChild);
+  });
   it("keeps every step within the writing rules in docs/guide-writing-rules.md", () => {
     const problems = allGuideSteps.flatMap(([route, steps]) => steps.flatMap(([selector, title, text]) => {
       const plain = text.replace(/\*\*/g, "");
@@ -380,12 +389,29 @@ describe("AppGuide", () => {
     expect(screen.queryByRole("button", { name: "Hướng dẫn sử dụng" })).toBeNull();
   });
 
-  it("guides the empty attempts tab and the test results page", () => {
-    const { rerender } = render(<><AppGuide role="operator" pathname="/op/review" compact={false} />
-      <main><nav className="request-tabs"><a href="?tab=attempts" aria-current="page">Cảnh báo bài tập</a></nav><div className="empty">Chưa có</div></main>
-    </>);
-    expect(walkSteps()).toEqual(["Cảnh báo bài tập"]);
-    rerender(<><AppGuide role="operator" pathname="/op/tests" compact={false} />
+  it("guides the bank and the delivery-confirmation workflow", async () => {
+    const client = {
+      getAssessmentBank: vi.fn().mockResolvedValue({ scope: "placement", desiredCount: 3, forms: [
+        { versionId: "one", title: "Bộ đầu vào", version: 1, status: "published", legacy: true }
+      ], policy: { mode: "single", sourceCount: 1, versionIds: ["one"] } }),
+      saveAssessmentBankPolicy: vi.fn(), createAssessmentBankForm: vi.fn(), getAssessmentBankForm: vi.fn(),
+      updateAssessmentBankForm: vi.fn(), validateAssessmentBankForm: vi.fn(), publishAssessmentBankForm: vi.fn(),
+      archiveAssessmentBankForm: vi.fn(), deleteAssessmentBankForm: vi.fn()
+    };
+    render(<ModalProvider><AppGuide role="operator" pathname="/op/tests" compact={false} />
+      <AssessmentBank scope="placement" client={client} />
+    </ModalProvider>);
+    const choose = await screen.findByRole("button", { name: "Cách giao đề" });
+    await screen.findByRole("button", { name: "Hướng dẫn sử dụng" });
+    expect(walkSteps()).toEqual(["Kho đề", "Công cụ đề", "Các phiên bản"]);
+    fireEvent.click(choose);
+    await screen.findByRole("dialog", { name: "Chọn cách giao đề" });
+    await screen.findByRole("button", { name: "Hướng dẫn sử dụng" });
+    expect(walkSteps()).toEqual(["Chọn cách giao", "Chọn bộ đề", "Áp dụng cấu hình"]);
+  });
+
+  it("guides the test results page", () => {
+    render(<><AppGuide role="operator" pathname="/op/tests" compact={false} />
       <main><div className="card"><table className="operator-results-table" /></div>
         <section className="card operator-assessment-form-list">Phiên bản</section></main>
     </>);
@@ -667,7 +693,7 @@ describe("AppGuide collapsed sections", () => {
 function walkSteps() {
   fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
   const steps: string[] = [];
-  const panel = within(screen.getByRole("dialog"));
+  const panel = within(screen.getByRole("dialog", { name: "Hướng dẫn sử dụng" }));
   for (let index = 0; index < 12; index++) {
     steps.push(panel.getByRole("heading").textContent ?? "");
     const done = panel.queryByRole("button", { name: "Đã hiểu" });

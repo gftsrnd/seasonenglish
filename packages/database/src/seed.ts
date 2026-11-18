@@ -651,7 +651,7 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
     await client.query(
       `insert into assessment_versions (id, definition_id, version, status, blueprint, published_at)
        values ($1, $2, 1, 'published', $3::jsonb, now())
-       on conflict (id) do update set blueprint = excluded.blueprint`,
+       on conflict (id) do nothing`,
       [versionId, definitionId, JSON.stringify(blueprint)]
     );
   }

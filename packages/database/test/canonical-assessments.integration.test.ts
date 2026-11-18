@@ -24,9 +24,9 @@ describe("canonical assessment deployment sync", () => {
 
   it("publishes one new version when the deployed placement blueprint is stale", async () => {
     await client.query(
-      `update assessment_versions
-       set blueprint = jsonb_set(blueprint, '{title}', '"Stale placement"'::jsonb)
-       where id = $1`,
+      `insert into assessment_versions(id,definition_id,version,status,blueprint,published_at)
+       select gen_random_uuid(),definition_id,2,'published',jsonb_set(blueprint,'{title}','"Stale placement"'::jsonb),now()
+       from assessment_versions where id=$1`,
       [DEMO_IDS.placementVersion]
     );
 
@@ -45,10 +45,10 @@ describe("canonical assessment deployment sync", () => {
        order by av.version`
     );
 
-    expect(rows.rows).toHaveLength(2);
+    expect(rows.rows).toHaveLength(3);
     expect(rows.rows[0]).toMatchObject({ version: 1, status: "retired" });
-    expect(rows.rows[1]).toMatchObject({ version: 3, status: "published" });
-    expect(rows.rows[1]?.blueprint).toEqual(placementDefinition);
+    expect(rows.rows[2]).toMatchObject({ version: 3, status: "published" });
+    expect(rows.rows[2]?.blueprint).toEqual(placementDefinition);
 
     const second = await syncCanonicalAssessmentBlueprints(client);
     expect(second).toEqual({ updated: 0, unchanged: 1 });

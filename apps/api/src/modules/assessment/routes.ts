@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  AssessmentBankScope,
   AssessmentDeletionRequestView,
   AssessmentAttemptView,
   AssessmentDecisionView,
@@ -28,6 +29,9 @@ import type {
 } from "@e4s/contracts";
 import { assessmentGradingOutputSchema, levelFormOutputSchema, type AiTaskRunner, type LevelFormTaskOutput } from "@e4s/ai";
 import {
+  AssessmentBankError,
+  bankPreparation,
+  assessmentProductiveRubric,
   createRepositories,
   findPlacementRetakeGrant,
   createPlacementRetakeRequest,
@@ -58,10 +62,11 @@ import type { EdgeTtsRunner } from "./edge-tts.js";
 import type { ObjectStorage } from "@e4s/storage";
 import { synthesizeListeningScript } from "./dialogue-tts.js";
 import { blueprintListeningAudioIndex, listeningAudioServiceFor, withBlueprintListeningAudio } from "./listening-audio.js";
-import { monthlyFinalTitle, registerMonthlyFinalRoutes } from "./monthly-final-routes.js";
+import { registerAssessmentBankRoutes } from "./assessment-bank-routes.js";
+import { monthlyFinalMonth, monthlyFinalTitle, registerMonthlyFinalRoutes } from "./monthly-final-routes.js";
 import { createRoleGuard } from "../identity/policy.js";
 import { monthlyExamEligibility } from "../learning/routes.js";
-import { gradeProductiveAssessment } from "./productive-grading.js";
+import { gradeProductiveAssessment, productiveTaskEvidence } from "./productive-grading.js";
 import { rebalanceAnswerPositions } from "../shared/answer-order.js";
 import {
   evaluateLevelFormQuality, levelFormExamTitle, levelFormQualityInputFromOutput, levelFormQualityInputFromSections, LevelFormQualityError,
@@ -240,6 +245,58 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     }
   });
 
+  async function generateLevelBlueprint(actorId: string, targetLevel: LevelFormTarget, log?: (message: string, details: Record<string, unknown>) => void) {
+    const runner = await runnerFor(actorId);
+    if (!runner) throw new AssessmentBankError("AI_UNAVAILABLE",503);
+    const task = await repositories.aiRuns.activeTaskPrompt(actorId, "level_form_generation");
+    // Placement retake mode: same generator, slices, token budget and guards, with a placement
+    // scope (mixed A1–C1 banding) instead of one target level, and never placement-a's items.
+    const placementRetake = targetLevel === PLACEMENT_RETAKE_TARGET;
+      const input = placementRetake
+        ? placementRetakeAiInput()
+        : { targetLevel: targetLevel as Exclude<LevelFormTarget, typeof PLACEMENT_RETAKE_TARGET>, context: "workplace_english" as const, listeningQuestions: 20 as const, readingQuestions: 40 as const };
+      const basePrompt = placementRetake ? PLACEMENT_RETAKE_FORM_PROMPT : task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT;
+      const sliceGuidance = placementRetake ? PLACEMENT_RETAKE_SLICE_GUIDANCE : {
+        listening: "Generate only the title of the whole promotion test (never a section name such as \"Listening Section\"), the listening script, and exactly 20 listening questions. The script must contain exactly five clearly labelled parts (Part 1 through Part 5), with four questions for each part in the same order.",
+        reading: "Generate only the reading passage and exactly 40 reading questions. Keep every prompt and option concise; questions 1–10, 11–20, 21–30 and 31–40 must each form a distinct workplace-reading part.",
+        production: "Generate only exactly two writing prompts and four speaking prompts."
+      };
+      // One 60-question tool result regularly hits the provider's practical
+      // output ceiling. Generate three independently schema-checked slices,
+      // then validate their assembled canonical form before persistence.
+      const [listening, reading, production] = await Promise.all([
+        runner.runTask("level_form_listening_generation", input, { systemPrompt: `${basePrompt}\n${sliceGuidance.listening} Write dialogue as one turn per line. Keep a stable speaker name for each person throughout the dialogue. Use Narrator only for a single speaker. ${LEVEL_FORM_QUESTION_GUIDANCE}`, maxOutputTokens: 7_000 }),
+        runner.runTask("level_form_reading_generation", input, { systemPrompt: `${basePrompt}\n${sliceGuidance.reading} ${LEVEL_FORM_QUESTION_GUIDANCE}`, maxOutputTokens: 12_000 }),
+        runner.runTask("level_form_production_generation", input, { systemPrompt: `${basePrompt}\n${sliceGuidance.production}`, maxOutputTokens: 2_000 })
+      ]);
+      const completedReading = await completeLevelFormReading(runner, targetLevel, reading.output as { passage: string; questions: LevelFormTaskOutput["reading"]["questions"][number][] });
+      // Auto-fix before the draft is shown: answer positions (deterministic) and one or two
+      // targeted AI repair rounds for the offending questions only; the rest stays for the Operator.
+      const assembled = await autoFixAssembledLevelForm(runner, assembleLevelFormFromAi(targetLevel, { listening: listening.output, reading: completedReading, production: production.output }),
+        log);
+      const completeOutput = assembled.output;
+      if (task) await repositories.aiRuns.recordSucceeded({
+        userId: actorId,
+        requestId: `level-form:${targetLevel}:${Date.now()}`,
+        taskId: task.taskId,
+        promptVersionId: task.promptVersionId,
+        output: completeOutput,
+        metadata: listening.metadata
+      });
+      if (!assembled.quality.passed) throw new LevelFormQualityError(assembled.quality.severe);
+      if (placementRetake) {
+        // Deterministic: placement-a's exact structure and scoring, and nothing copied from it.
+        const issues = [...placementRetakeStructureGateIssues(assembled.blueprint), ...placementRetakeCopyIssues(assembled.shuffled)];
+        if (issues.length) throw new LevelFormQualityError(issues);
+      }
+      // Listening audio right after generation; a TTS failure keeps the form (marked on the group) for the manual buttons.
+      // An unchanged part script keeps the audio of the earlier draft/published form (no new synthesis).
+      const previous = await previousLevelFormAudio(repositories.assessments, actorId, targetLevel);
+      const withAudio = await withBlueprintListeningAudio(assembled.blueprint, listeningAudio, actorId, { previous });
+      if (withAudio.failed) log?.("Level form listening audio synthesis failed",{failed:withAudio.failed});
+      return { ...withAudio.blueprint, ...(placementRetake ? {placementRetakeSource: "ai" as const} : {}) };
+  }
+  registerAssessmentBankRoutes(app,pool,runnerFor,listeningAudio,manualLevelFormBlueprint,generateLevelBlueprint);
   registerMonthlyFinalRoutes(app, pool, monthlyFinalOperators, runnerFor, listeningAudio);
 
   /**
@@ -632,60 +689,13 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const params = levelFormParam.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_TARGET_LEVEL" });
     const actorId = request.e4sSession!.user.id;
-    const runner = await runnerFor(actorId);
-    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
-    const task = await repositories.aiRuns.activeTaskPrompt(actorId, "level_form_generation");
-    // Placement retake mode: same generator, slices, token budget and guards, with a placement
-    // scope (mixed A1–C1 banding) instead of one target level, and never placement-a's items.
     const placementRetake = params.data.targetLevel === PLACEMENT_RETAKE_TARGET;
     try {
-      const input = placementRetake
-        ? placementRetakeAiInput()
-        : { targetLevel: params.data.targetLevel as Exclude<LevelFormTarget, typeof PLACEMENT_RETAKE_TARGET>, context: "workplace_english" as const, listeningQuestions: 20 as const, readingQuestions: 40 as const };
-      const basePrompt = placementRetake ? PLACEMENT_RETAKE_FORM_PROMPT : task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT;
-      const sliceGuidance = placementRetake ? PLACEMENT_RETAKE_SLICE_GUIDANCE : {
-        listening: "Generate only the title of the whole promotion test (never a section name such as \"Listening Section\"), the listening script, and exactly 20 listening questions. The script must contain exactly five clearly labelled parts (Part 1 through Part 5), with four questions for each part in the same order.",
-        reading: "Generate only the reading passage and exactly 40 reading questions. Keep every prompt and option concise; questions 1–10, 11–20, 21–30 and 31–40 must each form a distinct workplace-reading part.",
-        production: "Generate only exactly two writing prompts and four speaking prompts."
-      };
-      // One 60-question tool result regularly hits the provider's practical
-      // output ceiling. Generate three independently schema-checked slices,
-      // then validate their assembled canonical form before persistence.
-      const [listening, reading, production] = await Promise.all([
-        runner.runTask("level_form_listening_generation", input, { systemPrompt: `${basePrompt}\n${sliceGuidance.listening} ${LEVEL_FORM_QUESTION_GUIDANCE}`, maxOutputTokens: 7_000 }),
-        runner.runTask("level_form_reading_generation", input, { systemPrompt: `${basePrompt}\n${sliceGuidance.reading} ${LEVEL_FORM_QUESTION_GUIDANCE}`, maxOutputTokens: 12_000 }),
-        runner.runTask("level_form_production_generation", input, { systemPrompt: `${basePrompt}\n${sliceGuidance.production}`, maxOutputTokens: 2_000 })
-      ]);
-      const completedReading = await completeLevelFormReading(runner, params.data.targetLevel, reading.output as { passage: string; questions: LevelFormTaskOutput["reading"]["questions"][number][] });
-      // Auto-fix before the draft is shown: answer positions (deterministic) and one or two
-      // targeted AI repair rounds for the offending questions only; the rest stays for the Operator.
-      const assembled = await autoFixAssembledLevelForm(runner, assembleLevelFormFromAi(params.data.targetLevel, { listening: listening.output, reading: completedReading, production: production.output }),
-        (message, details) => request.log.warn(details, message));
-      const completeOutput = assembled.output;
-      if (task) await repositories.aiRuns.recordSucceeded({
-        userId: actorId,
-        requestId: `level-form:${params.data.targetLevel}:${Date.now()}`,
-        taskId: task.taskId,
-        promptVersionId: task.promptVersionId,
-        output: completeOutput,
-        metadata: listening.metadata
-      });
-      if (!assembled.quality.passed) throw new LevelFormQualityError(assembled.quality.severe);
-      if (placementRetake) {
-        // Deterministic: placement-a's exact structure and scoring, and nothing copied from it.
-        const issues = [...placementRetakeStructureGateIssues(assembled.blueprint), ...placementRetakeCopyIssues(assembled.shuffled)];
-        if (issues.length) throw new LevelFormQualityError(issues);
-      }
-      // Listening audio right after generation; a TTS failure keeps the form (marked on the group) for the manual buttons.
-      // An unchanged part script keeps the audio of the earlier draft/published form (no new synthesis).
-      const previous = await previousLevelFormAudio(repositories.assessments, actorId, params.data.targetLevel);
-      const withAudio = await withBlueprintListeningAudio(assembled.blueprint, listeningAudio, actorId, { previous });
-      if (withAudio.failed) request.log.warn({ failed: withAudio.failed }, "Level form listening audio synthesis failed");
-      const form = await repositories.assessments.createLevelFormDraft(actorId, params.data.targetLevel, {
-        ...withAudio.blueprint, ...(placementRetake ? { placementRetakeSource: "ai" as const } : {})
-      });
+      const blueprint = await generateLevelBlueprint(actorId,params.data.targetLevel,(message,details) => request.log.warn(details,message));
+      const form = await repositories.assessments.createLevelFormDraft(actorId,params.data.targetLevel,blueprint);
       return reply.code(201).send({ ...form, publishedAt: null });
     } catch (error) {
+      if (error instanceof AssessmentBankError) throw error;
       if (error instanceof LevelFormQualityError) {
         request.log.warn({ issues: error.issues }, "Level form generation failed the content gate");
         return reply.code(502).send({ code: "LEVEL_FORM_GENERATION_FAILED", issues: error.issues });
@@ -834,7 +844,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     } else {
       definition = activeAttempt
         ? await definitionForAttempt(repositories.assessments, activeAttempt)
-        : await repositories.assessments.findPublished(kind);
+        : await repositories.assessments.findPublished(kind,learnerId);
     }
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
     const resumed = kind === "placement"
@@ -848,6 +858,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       });
     }
     let attempt = resumed ? resumed.attempt : activeAttempt ?? await repositories.assessments.findActiveAttempt(learnerId, definition.versionId);
+    if ((kind === "level-up" || kind === "pass-course") && attempt?.status === "needs_retry") attempt = null;
     if (!resumed && attempt && !await canUseAttempt(request, attempt)) return reply.code(409).send(sessionConflict);
     attempt = await advanceExpiredSections(repositories.assessments, request.e4sSession!.user.id, definition, attempt);
     // A granted retake whose form is not published yet still tells the learner it was granted.
@@ -887,9 +898,6 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       if (isRetake !== retake) return null;
       return {
         definition: publicAssessmentDefinition(blueprint),
-        objectiveAnswerKeys: Object.fromEntries(blueprint.sections
-          .filter(section => section.code === "listening" || section.code === "reading")
-          .map(section => [section.code, Object.fromEntries(section.groups.flatMap(group => group.tasks.flatMap(task => task.correctAnswer ? [[task.key, task.correctAnswer]] : [])))])),
         attempt: attemptView(attempt),
         submittedAt: attempt.submittedAt?.toISOString() ?? null,
         feedback: source?.feedback ?? null
@@ -1009,7 +1017,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       if (!attempt) return reply.code(409).send({ code: "PLACEMENT_RETAKE_NOT_AVAILABLE" });
       if (!await canUseAttempt(request, attempt)) return reply.code(409).send(sessionConflict);
       const used = await placementRetakeContext(learnerId);
-      return reply.code(201).send({ ...assessmentView(retake.definition, attempt), placementRetake: used?.view ?? retake.view });
+      return reply.code(201).send({ ...assessmentView(used?.definition ?? retake.definition, attempt), placementRetake: used?.view ?? retake.view });
     }
     let definition: PublishedAssessmentRecord | null;
     if (kind === "level-up") {
@@ -1029,7 +1037,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       if (!progress?.levelReadiness.eligible || !progress.levelReadiness.targetLevel) {
         return reply.code(409).send({ code: "LEVEL_UP_NOT_READY" });
       }
-      definition = await repositories.assessments.findPublishedLevelUpForLearner(learnerId, progress.levelReadiness.targetLevel);
+      definition = progress.levelReadiness.targetLevel === "A1" ? null : await bankPreparation(pool,learnerId,progress.levelReadiness.targetLevel);
     } else if (kind === "final") {
       let active = await repositories.assessments.findMonthlyFinalAttempt(learnerId);
       if (!active) {
@@ -1050,9 +1058,9 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       if (!await repositories.assessments.passCourseEligibility(learnerId)) {
         return reply.code(409).send({ code: "PASS_COURSE_C1_NOT_READY" });
       }
-      definition = await repositories.assessments.findPublished(kind);
+      definition = await repositories.assessments.findPublished(kind,learnerId);
     } else {
-      definition = await repositories.assessments.findPublished(kind);
+      definition = await repositories.assessments.findPublished(kind,learnerId);
     }
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
     if (kind === "placement") {
@@ -1079,10 +1087,13 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       firstSection: first.code,
       durationMinutes: first.durationMinutes,
       violationLimit,
-      ownerSessionId: request.e4sSessionId!
+      ownerSessionId: request.e4sSessionId!,
+      ...(kind === "final" ? {} : {bankScope: kind === "placement" ? "placement" : kind === "pass-course" ? "pass_course" : definition.blueprint.targetLevel as AssessmentBankScope})
     });
     if (!await canUseAttempt(request, attempt)) return reply.code(409).send(sessionConflict);
-    return reply.code(201).send(assessmentView(definition, attempt));
+    const delivered = await definitionForAttempt(repositories.assessments,attempt);
+    if (!delivered) return reply.code(409).send({code:"ASSESSMENT_BANK_SOURCE_UNAVAILABLE"});
+    return reply.code(201).send(assessmentView(delivered, attempt));
   });
 
   app.put("/api/v1/assessment-attempts/:attemptId/responses/:section/:taskKey", { preHandler: learnerOnly }, async (request, reply) => {
@@ -1333,6 +1344,7 @@ async function assessmentFormPreviews(
     kind,
     forms: validRows.map((row): AssessmentFormPreviewView => {
       const monthlyFrameworkId = kind === "final" ? row.blueprint.monthlyExam?.framework?.id : undefined;
+      const month = kind === "final" ? monthlyFinalMonth(row.assessment_key, row.blueprint.monthlyExam?.framework?.month ?? row.blueprint.monthlyScope?.month) : undefined;
       const monthlyTitle = kind === "final" ? monthlyFinalTitle(row.assessment_key) : undefined;
       const listeningGroups = row.blueprint.sections
         .filter((section) => section.code === "listening")
@@ -1341,6 +1353,7 @@ async function assessmentFormPreviews(
         definitionId: row.definition_id,
         versionId: row.version_id,
         ...(monthlyFrameworkId ? { monthlyFrameworkId } : {}),
+        ...(month ? { month } : {}),
         kind: row.kind,
         title: monthlyTitle ?? row.title,
         version: row.version,
@@ -1581,7 +1594,7 @@ async function definitionForAttempt(
   repository: ReturnType<typeof createRepositories>["assessments"],
   attempt: AssessmentAttemptRecord
 ): Promise<PublishedAssessmentRecord | null> {
-  return repository.findPublishedByVersion(attempt.assessmentVersionId);
+  return repository.findPublishedByVersion(attempt.assessmentVersionId,attempt.id);
 }
 
 function monthlyExamLocked(entryClosed?: boolean) {
@@ -1623,7 +1636,7 @@ function validEvidence(task: StoredAssessmentTask, evidence: AssessmentEvidenceT
 }
 
 function assessmentView(definition: PublishedAssessmentRecord, attempt: AssessmentAttemptRecord | null): AssessmentView {
-  const publicDefinition = publicAssessmentDefinition(definition.blueprint, { hideListeningScript: definition.kind === "placement" });
+  const publicDefinition = publicAssessmentDefinition(definition.kind === "final" ? definition.blueprint : { ...definition.blueprint,version:definition.version }, { hideListeningScript: definition.kind === "placement" });
   if (!attempt) return { definition: publicDefinition, screenState: "preparation", attempt: null };
   const screenState = attempt.status === "in_progress"
     ? attempt.currentSection ?? "submitting"
@@ -1749,13 +1762,18 @@ async function gradeAssessment(
   output: { writingScore: number; speakingScore: number | null; rationale: string; suggestedLevel?: CefrLevel; monthlyGoal?: string; writingCriteria?: Record<string, unknown>; speakingCriteria?: Record<string, unknown> };
 }> {
   if (definition.kind === "final" || definition.kind === "pass-course") return gradeProductiveAssessment(runner, definition, attempt, transcriptFor);
-  const result = await runner.runTask("assessment_scoring", assessmentGradingInput(definition, attempt), { systemPrompt: prompt });
+  const input = await assessmentGradingInput(definition,attempt,transcriptFor);
+  const result = await runner.runTask("assessment_scoring", input, { systemPrompt: prompt +
+    "\nUse each supplied task rubric, maximum, instructions, context and actual learner response. A recording label is never a transcript. For text evidence, assess only language content; never infer pronunciation or delivery. Unavailable recordings require manual scoring." });
   const parsed = assessmentGradingOutputSchema.safeParse(result.output);
   if (!parsed.success) throw new Error("AI_OUTPUT_INVALID");
+  const pending = input.speaking.filter(t=>t.evidenceType==="technical_failure" || (t.evidenceType==="audio" && !t.answer.trim())).map(t=>t.taskKey);
+  const {suggestedLevel,...scores}=parsed.data;
   return { metadata: result.metadata, output: {
-    ...parsed.data,
-    writingScore: Math.min(sectionByCode(definition, "writing")!.maxScore, parsed.data.writingScore),
-    speakingScore: Math.min(sectionByCode(definition, "speaking")!.maxScore, parsed.data.speakingScore)
+    ...scores, ...(pending.length ? {} : {suggestedLevel}),
+    writingScore: Math.min(input.writingMaxScore, parsed.data.writingScore),
+    speakingScore: pending.length ? null : Math.min(input.speakingMaxScore,parsed.data.speakingScore),
+    ...(pending.length ? {writingCriteria:{pendingSpeakingCriteria:pending}} : {})
   } };
 }
 
@@ -1768,9 +1786,7 @@ async function assessmentAudioTranscript(
     : null;
 }
 
-function assessmentGradingInput(definition: StoredAssessmentDefinition, attempt: AssessmentAttemptRecord) {
-  const answerFor = (section: AssessmentSectionCode, taskKey: string) =>
-    attempt.responses.find((response) => response.section === section && response.taskKey === taskKey);
+async function assessmentGradingInput(definition: StoredAssessmentDefinition, attempt: AssessmentAttemptRecord, transcriptFor: (key:string)=>Promise<string|null>) {
   const objectiveScore = (sectionCode: "listening" | "reading") => {
     const section = sectionByCode(definition, sectionCode);
     if (!section) throw new Error("ASSESSMENT_OBJECTIVE_SECTION_MISSING");
@@ -1792,14 +1808,10 @@ function assessmentGradingInput(definition: StoredAssessmentDefinition, attempt:
   return {
     kind: definition.kind,
     objectiveScores: { listening: objectiveScore("listening"), reading: objectiveScore("reading") },
-    writing: writing.groups.flatMap((group) => group.tasks).map((item) => ({
-      prompt: item.prompt,
-      answer: answerFor("writing", item.key)?.value ?? ""
-    })),
-    speaking: speaking.groups.flatMap((group) => group.tasks).map((item) => {
-      const answer = answerFor("speaking", item.key);
-      return { prompt: item.prompt, answer: answer?.value ?? "", evidenceType: answer?.evidenceType ?? "technical_failure" };
-    }),
+    writing: await productiveTaskEvidence(definition,attempt,"writing",transcriptFor),
+    speaking: await productiveTaskEvidence(definition,attempt,"speaking",transcriptFor),
+    rubric: assessmentProductiveRubric(definition),
+    targetLevel: definition.targetLevel,
     writingMaxScore: writing.maxScore,
     speakingMaxScore: speaking.maxScore
   };

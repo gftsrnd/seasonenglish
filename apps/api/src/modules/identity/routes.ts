@@ -7,6 +7,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { identityEmailDeliveryFailure, type IdentityEmailSender, type IdentityOtpPurpose } from "./email.js";
+import { avatarInput } from "./avatar-input.js";
 
 const COOKIE_NAME = "e4s_session";
 /** Minimum seconds between two PIN-reset codes for the same email ("Gửi lại mã"). */
@@ -28,12 +29,6 @@ const challengeVerificationInput = z.object({ challengeId: z.string().uuid(), co
 const pinResetStartInput = z.object({ email: z.string().trim().email().max(320) }).strict();
 const staffPasswordHelpInput = z.object({ email: z.string().trim().email().max(320) }).strict();
 const pinResetCompleteInput = z.object({ resetToken: z.string().min(32).max(256), pin: z.string().regex(/^\d{6}$/) }).strict();
-const avatarInput = z.object({
-  acc: z.enum(["none", "leaf", "sun", "flower", "cloud", "star", "drop", "snow"]),
-  color: z.enum(["ink", "brown", "olive", "taupe", "orange", "rose"]),
-  bg: z.number().int().min(0).max(5)
-}).strict();
-
 export interface IdentityRouteOptions {
   pool: Pool;
   secureCookies: boolean;
@@ -295,7 +290,7 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
   app.patch("/api/v1/me/avatar", async (request, reply) => {
     const account = await resolveSession(request, repositories);
     if (!account) return reply.code(401).send({ code: "UNAUTHENTICATED" });
-    const parsed = avatarInput.safeParse(request.body);
+    const parsed = avatarInput.strict().safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_AVATAR" });
     const updated = await repositories.identity.updateAvatar(account.id, parsed.data as LearnerAvatarData);
     return sessionView(updated);

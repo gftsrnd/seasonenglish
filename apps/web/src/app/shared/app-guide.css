@@ -2,6 +2,12 @@
   flex: 0 0 auto;
 }
 
+.app-guide-help-actions { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 6px; flex: 0 0 auto; }
+.app-guide-help-header { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 8px; }
+.app-guide-help-header > :first-child:not(.account-avatar) { flex: 1 1 auto; min-width: 0; }
+:is(.app-guide-help-actions, .app-guide-help-header) > .app-guide-popup-trigger { order: 90; margin-inline-start: 0; }
+:is(.app-guide-help-actions, .app-guide-help-header) > .modal-close { order: 99; margin-inline-start: 0; }
+
 .shell-compact-controls > .app-guide-control:empty {
   display: none;
 }

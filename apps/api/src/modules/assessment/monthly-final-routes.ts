@@ -74,6 +74,12 @@ export function monthlyFinalTitle(assessmentKey: string): string | undefined {
   return match ? `Bài thi tháng ${match[2]}/${match[1]} · ${match[3]!.toUpperCase()}` : undefined;
 }
 
+/** Saved metadata wins; old month-scoped versions can use their canonical key. */
+export function monthlyFinalMonth(assessmentKey: string, storedMonth?: string): string | undefined {
+  if (storedMonth && /^\d{4}-(0[1-9]|1[0-2])$/u.test(storedMonth)) return storedMonth;
+  return /^monthly-final-(\d{4}-(?:0[1-9]|1[0-2]))-(a1|a2|b1|b2|c1)$/u.exec(assessmentKey)?.[1];
+}
+
 export function registerMonthlyFinalRoutes(
   app: FastifyInstance, pool: Pool, guard: preHandlerHookHandler, runnerFor: (actorId: string) => Promise<AiTaskRunner | undefined>,
   listeningAudio?: ListeningAudioService

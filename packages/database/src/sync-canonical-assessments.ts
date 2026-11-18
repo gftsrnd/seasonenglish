@@ -34,6 +34,8 @@ export async function syncCanonicalAssessmentBlueprints(
       const definitions = await client.query<{ id: string }>(
         `select id from assessment_definitions
          where assessment_key = $1 and kind = $2
+           and not exists (select 1 from assessment_versions av where av.definition_id=assessment_definitions.id
+             and (av.bank_managed or av.bank_archived or exists(select 1 from assessment_bank_policy_sources s where s.version_id=av.id)))
          order by id`,
         [assessment.key, assessment.kind]
       );

@@ -1,9 +1,9 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import { BookOpen, CalendarDays, ChartColumn, Check, CloudSnow, CloudSun, FileText, Flower2, Gamepad2, Gift, GraduationCap, House, Leaf, LogOut, MessageSquare, MoonStar, Music2, Pencil, Search, Settings, Snowflake, Sparkles, Sprout, Star, Sun, TreePine, UserRound, Volume2, Waves, Wind } from "lucide-react";
-import type { AccountRole, CefrLevel, SessionView } from "@e4s/contracts";
+import type { AccountRole, CefrLevel, LearnerAvatarData, SessionView } from "@e4s/contracts";
 import { SeasonMark } from "./SeasonMark.js";
-import { AVATAR_BG, AVATAR_COLOR_HEX, AvatarMark } from "../learner/ProfileReward.js";
+import { AccountAvatar } from "./AccountAvatar.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import { cancelAllExclusiveAudio } from "../../features/experience/audio-precedence.js";
 import "./shared.css";
@@ -108,13 +108,13 @@ const nav: Record<ShellRole, readonly NavItem[]> = {
   ]
 };
 
-export function AppShell({ session, children, onLogout, onAvatarClick, organisationName = "GFT", avatar, onboardingComplete = true, learnerHomeOnly = false, learnerCefr }: {
+export function AppShell({ session, children, onLogout, onAvatarClick, organisationName = "GFT", avatar = session.user.avatar, onboardingComplete = true, learnerHomeOnly = false, learnerCefr }: {
   session: SessionView;
   children: ReactNode;
   onLogout: () => void | Promise<void>;
-  onAvatarClick?: (() => void) | undefined;
+  onAvatarClick?: ((trigger: HTMLButtonElement | null) => void) | undefined;
   organisationName?: string;
-  avatar?: { color?: string; acc?: string; bg?: number } | undefined;
+  avatar?: LearnerAvatarData | undefined;
   onboardingComplete?: boolean;
   learnerHomeOnly?: boolean;
   learnerCefr?: CefrLevel;
@@ -131,6 +131,7 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
   const [guideActive, setGuideActive] = useState(false);
   const accountPanelId = useId();
   const accountPanel = useRef<HTMLDivElement>(null);
+  const accountTrigger = useRef<HTMLButtonElement>(null);
   const bottomNav = useRef<HTMLElement>(null);
   const [bottomNavHeight, setBottomNavHeight] = useState(0);
   const notificationBell = <NotificationBell key={`${session.user.id}:${role}`} deferArrival={guideActive} />;
@@ -199,13 +200,13 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
     }
     beginLogout();
   };
-  const avatarControl = <button className="btn-ghost" type="button" aria-label="Đổi avatar" title="Đổi avatar" disabled={!onAvatarClick} onClick={() => { accountPanel.current?.hidePopover?.(); onAvatarClick?.(); }} style={{ padding: 0, border: 0, background: "transparent" }}><AccountAvatar name={session.user.displayName} avatar={avatar} size={32} /></button>;
+  const avatarControl = <button className="btn-ghost" type="button" aria-label="Đổi avatar" title="Đổi avatar" disabled={!onAvatarClick} onClick={() => { accountPanel.current?.hidePopover?.(); onAvatarClick?.(accountTrigger.current); }} style={{ padding: 0, border: 0, background: "transparent" }}><AccountAvatar name={session.user.displayName} avatar={avatar} size={32} /></button>;
   const accountIdentity = <span className="small account-identity"><b className="account-name">{session.user.displayName}</b>{role === "learner" ? <span className="muted account-role" aria-label="Vai trò: Người học"><GraduationCap size={15} strokeWidth={2} aria-hidden="true" /> Người học</span> : <span className="muted">· {roleNames[role]}</span>}{role === "learner" && learnerCefr ? <span className={`badge account-level-badge lvl-${learnerCefr}`}>{learnerCefr}</span> : null}</span>;
   const logoutControl = <button className="btn-sm btn-ghost" type="button" data-action="logout" onClick={logout} disabled={logoutPending} title={logoutPending ? "Đang đăng xuất…" : "Đăng xuất khỏi tài khoản này"} aria-label={logoutPending ? "Đang đăng xuất…" : "Đăng xuất khỏi tài khoản này"}>{logoutPending ? <span className="logout-label">Đang đăng xuất…</span> : <><LogOut size={16} strokeWidth={2} aria-hidden="true" /><span className="logout-label">Đăng xuất</span></>}</button>;
   const logoutFeedback = <><span role="status" aria-label="Trạng thái đăng xuất" aria-live="polite" style={visuallyHiddenStyle}>{logoutPending ? "Đang đăng xuất…" : ""}</span>{logoutError ? <span role="alert" className="shell-logout-error">{logoutError}</span> : null}</>;
 
   const accountMenu = <>
-    <button className="btn-sm btn-ghost shell-account-trigger" type="button" aria-label="Tài khoản và âm thanh" popoverTarget={accountPanelId}><span aria-hidden="true"><AccountAvatar name={session.user.displayName} avatar={avatar} size={32} /></span></button>
+    <button ref={accountTrigger} className="btn-sm btn-ghost shell-account-trigger" type="button" aria-label="Tài khoản và âm thanh" popoverTarget={accountPanelId}><span aria-hidden="true"><AccountAvatar name={session.user.displayName} avatar={avatar} size={32} /></span></button>
     <div ref={accountPanel} id={accountPanelId} className="shell-account-panel" popover="auto">
       <div className="shell-account-info">{avatarControl}{accountIdentity}</div>
       <AudioControls />
@@ -221,7 +222,7 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
       </Link>
       <nav aria-label={role === "learner" ? "Điều hướng người học" : role === "operator" ? "Điều hướng người vận hành" : "Điều hướng quản lý"}>{links()}</nav>
       <SeasonDecoration className="shell-season-decoration" />
-      {compact ? <div className="shell-compact-controls" aria-busy={logoutPending || undefined}>
+      {compact ? <div className="shell-compact-controls" role="group" aria-label="Tiện ích ứng dụng" aria-busy={logoutPending || undefined}>
         <div className="audio-ctl">{notificationBell}</div>
         <div className="audio-ctl app-guide-control">{appGuide}</div>
         {accountMenu}
@@ -294,11 +295,4 @@ export function AudioControls() {
     <button className={`btn-sm btn-ghost ${bgm ? "on" : ""}`} type="button" onClick={() => { toggleMusic(); setFeedback(`Đã ${bgm ? "tắt" : "bật"} nhạc nền.`); }} disabled={!musicAllowed} title={!musicAllowed ? "Nhạc nền đã bị tắt bởi quản lý" : `Nhạc nền: ${bgm ? "bật" : "tắt"}`} aria-label={`Nhạc nền: ${bgm ? "bật" : "tắt"}`} aria-pressed={bgm}><Music2 {...audioIconProps} /></button>
     <span role="status" aria-label="Phản hồi âm thanh" aria-live="polite" style={visuallyHiddenStyle}>{feedback}</span>
   </span>;
-}
-
-function AccountAvatar({ name, avatar, size }: { name: string; avatar?: { color?: string; acc?: string; bg?: number } | undefined; size: number }) {
-  const initials = name.trim().split(/\s+/).slice(-2).map((word) => word[0]).join("").toUpperCase();
-  const colors: Record<string, string> = AVATAR_COLOR_HEX;
-  const mark = avatar?.acc && avatar.acc !== "none" ? avatar.acc as "leaf" | "sun" | "flower" | "cloud" | "star" | "drop" | "snow" : null;
-  return <span className="avatar" style={{ width: size, height: size, background: AVATAR_BG[avatar?.bg ?? 0] ?? AVATAR_BG[0], color: colors[avatar?.color ?? "ink"] ?? colors.ink, display: "inline-grid", placeItems: "center", fontSize: Math.max(10, Math.round(size * .36)) }}>{mark ? <AvatarMark acc={mark} size={Math.round(size * .65)} /> : initials || "?"}</span>;
 }

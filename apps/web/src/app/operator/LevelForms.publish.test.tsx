@@ -20,6 +20,38 @@ const detail = {
 } as unknown as AssessmentLevelFormDetailView;
 
 describe("level-up publish confirmation (D3)", () => {
+  it("authors writing messages and speaking tables without converting their stimulus types", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const form = structuredClone(detail);
+    form.sections.push(
+      { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: [], groups: [{ key: "W", title: "Email", instruction: "", stimulus: { type: "message", text: "" }, tasks: [{ key: "W1", prompt: "Reply", responseType: "long_text", maxScore: 20 }] }] },
+      { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: [], groups: [{ key: "S", title: "Report", instruction: "", stimulus: { type: "table", headers: [""], rows: [[""]] }, tasks: [{ key: "S1", prompt: "Describe", responseType: "speaking_evidence", maxScore: 20 }] }] }
+    );
+    render(<OperatorLevelFormDetail detail={form} editing onClose={vi.fn()} onSave={onSave} />);
+    await user.type(screen.getByRole("textbox", { name: "Hướng dẫn Email" }), "Write a reply.");
+    await user.type(screen.getByRole("textbox", { name: "Ngữ liệu Email" }), "Please send the report.");
+    await user.type(screen.getByRole("textbox", { name: "Tiêu đề cột 1 Report" }), "Quarter");
+    await user.type(screen.getByRole("textbox", { name: "Dòng 1 cột 1 Report" }), "Q1");
+    await user.click(screen.getByRole("button", { name: "Thêm cột Report" }));
+    await user.type(screen.getByRole("textbox", { name: "Tiêu đề cột 2 Report" }), "Sales");
+    await user.type(screen.getByRole("textbox", { name: "Dòng 1 cột 2 Report" }), "100");
+    await user.click(screen.getByRole("button", { name: "Lưu bản nháp" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ sections: expect.arrayContaining([
+      expect.objectContaining({ code: "writing", groups: [expect.objectContaining({ instruction: "Write a reply.", stimulus: { type: "message", text: "Please send the report." } })] }),
+      expect.objectContaining({ code: "speaking", groups: [expect.objectContaining({ stimulus: { type: "table", headers: ["Quarter", "Sales"], rows: [["Q1", "100"]] } })] })
+    ]) }));
+  });
+  it("preserves dialogue speaker labels for manual synthesis even in text-only editor mode", async () => {
+    const user = userEvent.setup();
+    const synthesizeEdgeTts = vi.fn().mockResolvedValue({ base64: "YQ==", filename: "dialogue.mp3", mimeType: "audio/mpeg" });
+    const uploadAudio = vi.fn().mockResolvedValue({ url: "/dialogue.mp3" });
+    const dialogue = structuredClone(detail);
+    dialogue.sections[0]!.groups[0]!.stimulus!.lines = [{ speaker: "Man", text: "Good morning." }, { speaker: "Woman", text: "Hello." }];
+    render(<OperatorLevelFormDetail detail={dialogue} editing speakTextOnly onClose={vi.fn()} synthesizeEdgeTts={synthesizeEdgeTts} uploadAudio={uploadAudio} />);
+    await user.click(screen.getByRole("button", { name: "Sinh audio Edge TTS" }));
+    await waitFor(() => expect(synthesizeEdgeTts).toHaveBeenCalledWith({ text: "Man: Good morning.\nWoman: Hello.", voice: "en-US-AvaMultilingualNeural" }));
+  });
   it("requires the answer-review checkbox before publishing and sends the confirmation", async () => {
     const user = userEvent.setup();
     const onPublish = vi.fn().mockResolvedValue(undefined);

@@ -21,7 +21,6 @@ const SETTINGS_TIPS = {
   operatorAccounts: "Danh sách tài khoản trong tổ chức. Người vận hành được chỉnh cấu hình vận hành nhưng không được thêm, xoá hoặc đổi thông tin học viên.",
   managerAccounts: "Đổi vai trò, khoá hoặc mở, đặt lại PIN / mật khẩu, xem PIN hiện tại hoặc xoá tài khoản. Tài khoản đang đăng nhập không đổi được vai trò và không khoá / xoá được.",
   policy: "Số ngày không hoạt động thì cần nhắc học, và có gửi báo cáo tháng hay không.",
-  examRequests: "Người vận hành không có quyền sửa trực tiếp thời lượng hoặc cấu trúc đề. Nhập email đội phát triển và mô tả phần cần đổi, rồi gửi yêu cầu cho đề đầu vào hoặc đề đầu ra; yêu cầu sẽ được ghi nhận.",
 } as const;
 
 export type AiConfigurationView = ManagerProviderSettingsView;
@@ -74,8 +73,6 @@ export type SettingsActions = {
   onExportCsv: () => void | Promise<void>;
   onSeedData: () => void | Promise<void>;
   onWipeData: () => void | Promise<void>;
-  onRequestPlacementTestChange: (developerEmail: string, note: string) => void | Promise<void>;
-  onRequestFinalTestChange: (developerEmail: string, note: string) => void | Promise<void>;
 };
 export type SettingsProps = {
   role: "manager" | "operator";
@@ -128,10 +125,6 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
     musicPanel,
     ...(operatorOverview && managerDraft ? [
       learningPanel,
-      { id: "exam-requests", label: "Yêu cầu đổi đề", tip: { label: "Yêu cầu đổi đề là gì?", text: SETTINGS_TIPS.examRequests }, content: <AssessmentTestChangeRequests
-        {...(actions.onRequestPlacementTestChange ? { onPlacementSend: actions.onRequestPlacementTestChange } : {})}
-        {...(actions.onRequestFinalTestChange ? { onFinalSend: actions.onRequestFinalTestChange } : {})}
-      /> },
       { id: "accounts", label: "Người dùng", tip: { label: "Người dùng là gì?", text: SETTINGS_TIPS.operatorAccounts }, content: <OperatorAccountsSection overview={operatorOverview} /> }
     ] satisfies SettingsPanel[] : [])
   ];
@@ -178,30 +171,6 @@ function SystemTestDateSection({ value, onChange, onSave }: ManagerSectionProps)
     <Field label="Ngày hệ thống thử"><input type="date" value={value.simulatedSystemDate} onChange={(event) => onChange({ ...value, simulatedSystemDate: event.target.value })} /></Field>
     <Save label="Lưu ngày hệ thống thử" onSave={onSave} />
   </section>;
-}
-
-function AssessmentTestChangeRequests({ onPlacementSend, onFinalSend }: { onPlacementSend?: (developerEmail: string, note: string) => void | Promise<void>; onFinalSend?: (developerEmail: string, note: string) => void | Promise<void> }) {
-  // Phones: one form with a "Đề đầu vào / Đề đầu ra" switch instead of two stacked forms.
-  const phone = useMediaQuery("(max-width: 480px)");
-  const [target, setTarget] = useState<"placement" | "final">("placement");
-  const placementForm = <TestChangeRequestForm title="Yêu cầu đổi đề đầu vào" description="Mô tả nội dung cần đổi trong đề đầu vào." buttonLabel="Gửi yêu cầu đổi đề đầu vào" {...(onPlacementSend ? { onSend: onPlacementSend } : {})} />;
-  const finalForm = <TestChangeRequestForm title="Yêu cầu đổi đề đầu ra" description="Mô tả nội dung cần đổi trong bài thi tháng hoặc đề C1." buttonLabel="Gửi yêu cầu đổi đề đầu ra" {...(onFinalSend ? { onSend: onFinalSend } : {})} />;
-  if (phone) return <section className="card settings-test-change-requests"><h3>Yêu cầu đổi đề</h3><p className="small muted">Gửi đội phát triển để đổi thời lượng hoặc cấu trúc đề.</p><div className="segmented settings-test-change-switch" role="group" aria-label="Chọn đề"><button type="button" aria-pressed={target === "placement"} className={target === "placement" ? "active" : undefined} onClick={() => setTarget("placement")}>Đề đầu vào</button><button type="button" aria-pressed={target === "final"} className={target === "final" ? "active" : undefined} onClick={() => setTarget("final")}>Đề đầu ra</button></div>{target === "placement" ? placementForm : finalForm}</section>;
-  return <section className="card"><h3>Yêu cầu đổi đề</h3><p className="small muted">Người vận hành không có quyền sửa trực tiếp thời lượng hoặc cấu trúc đề. Yêu cầu gửi tới đội phát triển sẽ được ghi nhận.</p><div className="grid cols-2">{placementForm}{finalForm}</div></section>;
-}
-
-function TestChangeRequestForm({ title, description, buttonLabel, onSend }: { title: string; description: string; buttonLabel: string; onSend?: (developerEmail: string, note: string) => void | Promise<void> }) {
-  const [developerEmail, setDeveloperEmail] = useState("");
-  const [note, setNote] = useState("");
-  const [error, setError] = useState("");
-  const send = async () => {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(developerEmail)) { setError("Nhập email đội phát triển hợp lệ."); return; }
-    if (!note.trim()) { setError(description); return; }
-    setError("");
-    await onSend?.(developerEmail.trim(), note.trim());
-    setNote("");
-  };
-  return <div className="settings-test-change-request"><h4>{title}</h4><Field label={`Email đội phát triển cho ${title.toLowerCase().replace("yêu cầu đổi ", "")}`}><input type="email" value={developerEmail} onChange={event => setDeveloperEmail(event.target.value)} placeholder="dev@example.com" /></Field><Field label={`Nội dung cần đổi cho ${title.toLowerCase().replace("yêu cầu đổi ", "")}`}><textarea rows={3} value={note} onChange={event => setNote(event.target.value)} placeholder="Mô tả rõ phần đề cần cập nhật…" /></Field>{error ? <p className="small danger" role="alert">{error}</p> : null}<Save label={buttonLabel} onSave={onSend ? send : undefined} /></div>;
 }
 
 function OperatorAccountsSection({ overview }: { overview: OperatorSettingsOverviewView }) {

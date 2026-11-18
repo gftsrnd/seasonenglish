@@ -27,6 +27,7 @@ export const DIALOGUE_VOICES = {
 export const DIALOGUE_RATE = "-8%";
 /** Placement pause between turns, after trimming each turn's own silence. */
 export const DIALOGUE_PAUSE_MS = 120;
+export const DIALOGUE_VOICE_POLICY = "dialogue-v2";
 
 export type SpeakerGender = "female" | "male";
 export interface DialogueTurn {
@@ -114,7 +115,11 @@ export function parseDialogueScript(script: string | readonly ScriptLine[]): Dia
 
 /** "Man: Hi. Woman: Hello." on one line, for labels already used at a line start. */
 function splitInlineTurns(turns: DialogueTurn[]): DialogueTurn[] {
-  const labels = [...new Set(turns.map((turn) => turn.speaker).filter((speaker): speaker is string => Boolean(speaker) && !isNarratorLabel(speaker)))];
+  const labels = [...new Set(turns.flatMap(turn => {
+    const inlineLabels = [...turn.text.matchAll(/(?<=[.!?…"”'’]\s+)([\p{Lu}][\p{L}\p{M}'’.-]*(?:\s+[\p{L}\p{M}'’.-]+){0,2}(?:\s+\d{1,2})?)\s*[:：]\s+/gu)]
+      .map(match => speakerLabelOf(`${match[1]}: speech`)?.speaker ?? null);
+    return [turn.speaker, ...inlineLabels].filter((speaker): speaker is string => Boolean(speaker) && !isNarratorLabel(speaker));
+  }))];
   if (labels.length < 2) return turns;
   const escaped = labels.sort((a, b) => b.length - a.length).map((label) => label.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"));
   const inline = new RegExp(`(?<=[.!?…"”'’]\\s+)(${escaped.join("|")})\\s*[:：]\\s+`, "gu");
@@ -243,7 +248,8 @@ export async function synthesizeListeningScript(
   runner: EdgeTtsRunner,
   input: { script: string | readonly ScriptLine[]; voice?: string; joiner?: AudioJoiner; concurrency?: number }
 ): Promise<ListeningSynthesisResult> {
-  const segments = planListeningSpeech(input.script, input.voice?.trim() || DEFAULT_NARRATOR_VOICE);
+  const segments = planListeningSpeech(input.script, input.voice?.trim() || DEFAULT_NARRATOR_VOICE).flatMap(segment =>
+    splitSpeechText(segment.text).map(text => ({ ...segment, text })));
   if (!segments.length) throw new Error("EDGE_TTS_TEXT_INVALID");
   if (segments.length === 1) {
     const only = await runner.synthesize({ text: segments[0]!.text, voice: segments[0]!.voice });
@@ -254,6 +260,23 @@ export async function synthesizeListeningScript(
   const bytes = await joiner.join(audio.map((item) => item.bytes), DIALOGUE_PAUSE_MS);
   if (!bytes.byteLength) throw new Error("EDGE_TTS_EMPTY_AUDIO");
   return { bytes, mimeType: "audio/mpeg", filename: "assessment-edge-tts-dialogue.mp3", segments };
+}
+
+// Long Edge requests can exceed the process timeout. Keep sentence/word boundaries
+// where possible and reuse the same voice and ordered MP3 join for each chunk.
+function splitSpeechText(text: string): string[] {
+  const chunks: string[] = [];
+  let remaining = text.trim();
+  while (remaining.length > 500) {
+    const window = remaining.slice(0, 501);
+    const sentences = [...window.matchAll(/[.!?]\s/gu)];
+    const sentenceEnd = sentences.at(-1)?.index;
+    const cut = sentenceEnd !== undefined ? sentenceEnd + 1 : window.lastIndexOf(" ") > 0 ? window.lastIndexOf(" ") : 500;
+    chunks.push(remaining.slice(0, cut));
+    remaining = remaining.slice(cut).trimStart();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
 }
 
 async function mapLimit<T, R>(items: readonly T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {

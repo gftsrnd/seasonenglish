@@ -231,7 +231,7 @@ describe("app profile avatar dialog affordances", () => {
     const trigger = screen.getAllByRole("button", { name: "Đổi avatar" })[0]!;
     await user.click(trigger);
     const dialog = screen.getByRole("dialog", { name: "Avatar của bạn" });
-    const first = within(dialog).getByRole("button", { name: "Chữ cái đầu" });
+    const first = within(dialog).getByRole("button", { name: "Thỏ hồng" });
     const save = within(dialog).getByRole("button", { name: "Lưu avatar" });
 
     save.focus();
@@ -326,6 +326,56 @@ describe("app end-of-pilot survey states", () => {
 });
 
 describe("app reward CTA hierarchy", () => {
+  it("shows earned badges and marks both preview layouts without issuance details", async () => {
+    const preview: RewardView = {
+      mode: "preview", learnerName: "Học viên Demo", cefr: "B1", cefrLabel: "Trung cấp",
+      points: 120, displayPoints: 120, season: { name: "Mùa hạ", description: "đón nắng" },
+      simulated: true, earnedBadgeCount: 1, requiredBadgeCount: 2, printable: false,
+      certificateNumber: "SE-PREVIEW-123", completedAt: "2026-10-15T00:00:00.000Z",
+      organizationName: "GFT", operatorName: "Vận hành", managerName: "Quản lý",
+      badges: [
+        { key: "first", label: "Khởi động", description: "Bài đầu tiên", earned: true },
+        { key: "streak", label: "Học đều", description: "Học liên tiếp", earned: false }
+      ]
+    };
+    render(<LearnerReward view={preview} actions={actions} />);
+
+    const certificate = screen.getByRole("region", { name: "Certificate of Completion" });
+    const summary = screen.getByRole("region", { name: "Tóm tắt Certificate of Completion" });
+    for (const layout of [certificate, summary]) {
+      expect(within(layout).getByText(/^Bản xem trước$/i)).toBeVisible();
+      expect(layout).toHaveTextContent("1/2");
+      expect(layout).not.toHaveTextContent(/Số chứng nhận|SE-PREVIEW-123|15\/10\/2026/);
+      expect(within(layout).getAllByRole("img", { name: "Đã đạt" })).toHaveLength(1);
+      expect(within(layout).getAllByRole("img", { name: "Chưa đạt" })).toHaveLength(1);
+    }
+    expect(certificate).toHaveTextContent("Chứng nhận hoàn thành");
+    expect(certificate).toHaveTextContent("đã đạt 1/2 huy hiệu Season English");
+    expect(Array.from(certificate.querySelectorAll(".cert-facts > div > span"), label => label.textContent))
+      .toEqual(["Ngày cấp", "Huy hiệu", "Điểm", "Season"]);
+    expect(certificate.querySelector(".cert-facts > div:first-child")).toHaveTextContent("Chưa cấp");
+    expect(certificate.querySelector(".cert-sign")).toHaveTextContent("Vận hành");
+    expect(certificate.querySelector(".cert-sign")).toHaveTextContent("Quản lý");
+    expect(certificate.querySelector("[aria-label='Đã đạt']")).toHaveTextContent("✓");
+    expect(within(summary).getByRole("img", { name: "Biểu tượng Khởi động" })).toHaveTextContent("🐣");
+    expect(within(summary).getByRole("img", { name: "Biểu tượng Học đều" })).toHaveTextContent("🔥");
+    expect(document.querySelector(".cert-print-only .cert-doc")?.innerHTML).toBe(certificate.innerHTML);
+    expect(screen.queryByRole("button", { name: /In \/ lưu chứng nhận/ })).not.toBeInTheDocument();
+
+    const print = vi.spyOn(window, "print").mockImplementation(() => {
+      expect(document.getElementById("e4s-reward-print-style")).toHaveTextContent("size: A4 landscape");
+    });
+    try {
+      const user = userEvent.setup();
+      await user.click(within(summary).getByRole("button", { name: "Xem bản in / PDF" }));
+      expect(print).toHaveBeenCalledOnce();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    } finally {
+      window.dispatchEvent(new Event("afterprint"));
+      print.mockRestore();
+    }
+  });
+
   it("keeps preview navigation primary and the real print action disabled when unavailable", () => {
     const reward: RewardView = {
       mode: "done",

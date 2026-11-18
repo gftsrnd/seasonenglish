@@ -1,4 +1,6 @@
 export * from "./assessment-blueprints.js";
+export * from "./assessment-bank.js";
+export * from "./assessment-bank-manifest.js";
 export * from "./client.js";
 export * from "./generation-findings.js";
 export * from "./inbox-notification-repository.js";

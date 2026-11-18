@@ -20,10 +20,12 @@ const client = vi.hoisted(() => ({
 }));
 
 const learnerClient = vi.hoisted(() => ({
+  getHome: vi.fn(),
   getProfile: vi.fn(),
   getProgress: vi.fn(),
   getAssessment: vi.fn(),
   saveProfile: vi.fn(),
+  saveProfileAvatar: vi.fn(),
   getLearnerComplaints: vi.fn(),
   getLearnerAppeals: vi.fn(),
   getAppealableAssessments: vi.fn(),
@@ -80,6 +82,7 @@ beforeEach(() => {
     version: 1
   });
   client.logout.mockRejectedValue(new Error("network unavailable"));
+  learnerClient.getHome.mockReset();
   learnerClient.getProfile.mockResolvedValue({
     profile: { fullName: "Nguyễn Minh Anh", avatar: { color: "olive", acc: "leaf", bg: 0 } },
     completed: true,
@@ -91,6 +94,45 @@ beforeEach(() => {
 });
 
 describe("App session shell", () => {
+  it("shares a saved character between the learner profile and header after selection and reload", async () => {
+    window.history.replaceState({}, "", "/profile");
+    let record = {
+      profile: { fullName: "Nguyễn Minh Anh", avatar: { color: "olive", acc: "leaf", bg: 0 } },
+      completed: true, version: 1
+    };
+    learnerClient.getProfile.mockImplementation(async () => record);
+    learnerClient.getHome.mockResolvedValue({ learner: { ...learnerSession.user, cefr: "A2" } });
+    learnerClient.getProgress.mockImplementation(async () => ({
+      learner: { ...learnerSession.user, cefr: "A2", profile: record.profile },
+      points: 120, badges: [], season: { current: { level: 2 }, next: null },
+      badgeRoadmap: [], assessments: { placement: null }
+    }));
+    learnerClient.saveProfileAvatar.mockImplementation(async avatar => {
+      record = { ...record, profile: { ...record.profile, avatar }, version: record.version + 1 };
+      return record;
+    });
+
+    const user = userEvent.setup();
+    function expectCharacter(container: HTMLElement) {
+      expect(container.querySelector(".profile-avatar-button img")).toHaveAttribute("src", "/media/avatars/penguin.webp");
+      expect(container.querySelector(".shell-account-trigger img")).toHaveAttribute("src", "/media/avatars/penguin.webp");
+    }
+    const { container, unmount } = render(<App />);
+    await screen.findByRole("heading", { name: "Hồ sơ cá nhân" });
+    await user.click(within(screen.getByRole("region", { name: "Hồ sơ cá nhân" })).getAllByRole("button", { name: "Đổi avatar" })[0]!);
+    const dialog = within(screen.getByRole("dialog", { name: "Avatar của bạn" }));
+    await user.click(dialog.getByRole("button", { name: "Cánh cụt" }));
+    expect(dialog.getByRole("button", { name: "Cánh cụt" })).toHaveAttribute("aria-pressed", "true");
+    expect(dialog.getByLabelText("Avatar của Nguyễn Minh Anh").querySelector("img")).toHaveAttribute("src", "/media/avatars/penguin.webp");
+    await user.click(dialog.getByRole("button", { name: "Lưu avatar" }));
+    await waitFor(() => expectCharacter(container));
+
+    unmount();
+    const reloaded = render(<App />);
+    await screen.findByRole("heading", { name: "Hồ sơ cá nhân" });
+    await waitFor(() => expectCharacter(reloaded.container));
+  });
+
   it("shows only the locked-account screen for a disabled learner session", async () => {
     client.currentSession.mockResolvedValue({ ...learnerSession, accountStatus: "disabled" });
     client.logout.mockResolvedValue(undefined);
@@ -137,11 +179,12 @@ describe("App session shell", () => {
       scores: [{ section: "listening", score: 20, maxScore: 20 }, { section: "reading", score: 40, maxScore: 40 }, { section: "writing", score: 18, maxScore: 20 }, { section: "speaking", score: 17, maxScore: 20 }], feedback: "Đạt C1."
     });
     render(<App />);
-    expect(await screen.findByText("E4S-C1-123")).toBeInTheDocument();
+    const certificate = await screen.findByRole("region", { name: "Chứng nhận hoàn thành E4S" });
+    expect(certificate).toHaveTextContent("E4S-C1-123");
     expect(screen.getByRole("button", { name: "In / lưu PDF" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Tiếp tục học" })).toHaveAttribute("href", "/home");
     expect(screen.getByRole("img", { name: "GFT Demo" })).toBeVisible();
-    expect(screen.getByText("Vận hành Demo")).toBeVisible();
+    expect(within(certificate).getByText("Vận hành Demo")).toBeVisible();
     expect(screen.queryByText("95/100")).not.toBeInTheDocument();
     expect(screen.queryByText("Kết quả bài thi")).not.toBeInTheDocument();
     expect(screen.queryByText("Đạt C1.")).not.toBeInTheDocument();

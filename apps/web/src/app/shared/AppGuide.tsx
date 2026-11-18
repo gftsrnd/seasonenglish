@@ -7,6 +7,14 @@ import { guideDefinitions, guidePopupDefinitions, type GuideRole, type GuideStep
 
 export const OPEN_LEARNER_HOME_GUIDE = "e4s:open-learner-home-guide";
 
+/** Help shares the close button's flex group, including custom dialog headers. */
+export function popupGuideHost(popup: HTMLElement): HTMLElement {
+  const close = popup.querySelector<HTMLElement>('.modal-close, button[aria-label="Đóng"]');
+  const parent = close?.parentElement;
+  if (parent && parent !== popup) return parent;
+  return popup.querySelector<HTMLElement>(":scope > header, :scope > .assessment-bank-header, :scope > .operator-level-form-dialog-header") ?? popup;
+}
+
 const SCROLL_KEYS = new Set([" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home", "End"]);
 
 type ActiveStep = { selector: string; target: HTMLElement; title: string; text: string; prioritize?: true };
@@ -172,7 +180,9 @@ export function AppGuide({ role, pathname, compact, onOpenChange }: { role: Guid
     }
     // Opening (or re-opening) the guide always starts from step 1; a prioritized step only jumps ahead
     // when its card appears while the guide is already open (see updateContext).
-    setState(current => ({ ...current, isOpen: true, index: 0 }));
+    if (!definitions) return;
+    const current = currentContext(role, path, definitions);
+    if (current.steps.length && !current.inboxOpen) setState({ ...current, isOpen: true, index: 0 });
   };
   const move = (direction: -1 | 1) => {
     setState(current => ({ ...current, index: Math.max(0, Math.min(current.index + direction, current.steps.length - 1)) }));
@@ -364,6 +374,15 @@ export function AppGuide({ role, pathname, compact, onOpenChange }: { role: Guid
     };
   }, [activeTarget]);
 
+  const helpHost = popup ? popupGuideHost(popup) : null;
+  useLayoutEffect(() => {
+    if (!helpHost || helpHost === popup || !definitions || !steps.length) return;
+    const isHeader = helpHost.matches("header, .assessment-bank-header, .operator-level-form-dialog-header") || Boolean(helpHost.querySelector(":scope > h2, :scope > h3, :scope > .operator-level-form-dialog-title"));
+    const name = isHeader ? "app-guide-help-header" : "app-guide-help-actions";
+    const existed = helpHost.classList.contains(name);
+    helpHost.classList.add(name);
+    return () => { if (!existed) helpHost.classList.remove(name); };
+  }, [helpHost, popup, definitions, steps.length]);
   if (!definitions || !steps.length) return null;
 
   const helpButton = <button ref={trigger} className={`btn-sm ${popup ? "app-guide-popup-trigger" : "btn-ghost"} app-guide-trigger`} type="button"
@@ -372,7 +391,7 @@ export function AppGuide({ role, pathname, compact, onOpenChange }: { role: Guid
       <CircleHelp size={18} strokeWidth={1.7} aria-hidden="true" />
     </button>;
   return <>
-    {popup ? createPortal(helpButton, popup.querySelector(":scope > header") ?? popup) : helpButton}
+    {helpHost ? createPortal(helpButton, helpHost) : helpButton}
     {isOpen && createPortal(<>
       <div className="app-guide-blocker" data-popup={Boolean(popup) || undefined} aria-hidden="true" />
       {active && spotlight && <div className="app-guide-spotlight" style={spotlight} aria-hidden="true" />}

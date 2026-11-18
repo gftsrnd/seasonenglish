@@ -4,7 +4,8 @@ import { InfoTip } from "./CompactUi.js";
 import type { LearnerProgressView } from "@e4s/contracts";
 import { REWARD_SEASONS, type RewardSeasonLevel } from "@e4s/domain/engagement";
 import { Progress } from "../learner/ui.js";
-import { REWARD_SEASON_ICONS, rewardBadgeIcon } from "./reward-badge-icons.js";
+import { REWARD_SEASON_ICONS } from "./reward-badge-icons.js";
+import { RewardBadgeArtwork } from "./RewardBadgeArtwork.js";
 import "./season-progress-card.css";
 
 const formatPoints = (points: number) => points.toLocaleString("vi-VN");
@@ -109,7 +110,7 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
               const StatusIcon = badge.earned ? Check : LockKeyhole;
               const isOpen = openBadge === badge.key;
               return <button type="button" className={`bdg-chip${badge.earned ? " is-earned" : ""}`} key={badge.key} data-badge-key={badge.key} aria-expanded={isOpen} title={badge.description} onClick={() => setOpenBadge(isOpen ? null : badge.key)}>
-                <span className="profile-badge-emoji" role="img" aria-label={`Biểu tượng ${badge.label}`}>{rewardBadgeIcon(badge.key) ?? "🏅"}</span>
+                <RewardBadgeArtwork className="profile-badge-emoji" badgeKey={badge.key} label={badge.label} />
                 <b>{badge.label}</b>
                 <span className="profile-badge-state" role="img" aria-label={badge.earned ? "Đã đạt" : "Chưa đạt"}><StatusIcon size={13} aria-hidden="true" /></span>
               </button>;
@@ -122,7 +123,7 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
                 <span className="profile-badge-state" role="img" aria-label={badge.earned ? "Đã đạt" : "Chưa đạt"}>
                   <StatusIcon size={14} aria-hidden="true" />
                 </span>
-                <span className="profile-badge-emoji" role="img" aria-label={`Biểu tượng ${badge.label}`}>{rewardBadgeIcon(badge.key) ?? "🏅"}</span>
+                <RewardBadgeArtwork className="profile-badge-emoji" badgeKey={badge.key} label={badge.label} />
                 <b>{badge.label}</b>
                 {badge.earned && <span className="xs profile-badge-earned-level">{badge.earnedLevel ? `Đạt ở ${badge.earnedLevel}` : "Đã đạt"}</span>}
                 <span className="profile-badge-description">{badge.description}</span>

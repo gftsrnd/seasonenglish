@@ -1,4 +1,5 @@
 export * from "./registry.js";
+export * from "./assessment-bank-group.js";
 export * from "./schemas.js";
 export * from "./monthly-review-schemas.js";
 export * from "./monthly-verification-schemas.js";

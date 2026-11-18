@@ -69,7 +69,7 @@
 
   /* Form fields: ~36px tall, tight padding, 16px text (iOS does not zoom on
      focus), smaller placeholders and labels, textareas start at 2–3 rows and grow. */
-  :root:root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select) {
+  :root:root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):where(:not(.crossword-cell > input)), select) {
     height: var(--phone-field-h);
     min-height: 0 !important;
     padding: 6px 8px;
@@ -246,27 +246,6 @@
 /* E. Operator › Duyệt trình độ on phones (Dashboard.tsx also limits the lists
    to 3 rows + "Xem thêm"). */
 @media (max-width: 480px) {
-  /* Chờ duyệt: name on line 1; submit time/total and chips share line 2
-     (chips scroll sideways instead of wrapping onto more rows). */
-  :root:root .operator-pending-review-summary {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: 4px 8px;
-  }
-  :root:root .operator-pending-review-summary > div:first-child { display: contents; }
-  :root:root .operator-pending-review-summary .name { grid-column: 1 / -1; font-size: 15px !important; }
-  :root:root .operator-pending-review-summary > div:first-child > .xs { grid-column: 1; white-space: nowrap; }
-  :root:root .operator-pending-review-summary > .row {
-    grid-column: 2;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    gap: 4px;
-    min-width: 0;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  :root:root .operator-pending-review-summary > .row > .badge { flex: none; }
   /* Tín hiệu đổi mức: two small stat tiles side by side; the "(14 ngày gần
      nhất · đề thi lên mức)" suffix is hidden so the heading stays one line. */
   :root:root [data-guide="op-signals"] > h3 > .small { display: none; }
@@ -417,12 +396,6 @@
   :root:root .assessment-definition-preview-section :is(th, td) { overflow-wrap: normal; }
 }
 @media (max-width: 480px) {
-  /* Chờ duyệt rows: chips wrap after the submit time instead of being cut. */
-  :root:root .operator-pending-review-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
-  :root:root .operator-pending-review-summary > div:first-child { display: contents; }
-  :root:root .operator-pending-review-summary .name { flex-basis: 100%; }
-  :root:root .operator-pending-review-summary > div:first-child > .xs { white-space: nowrap; }
-  :root:root .operator-pending-review-summary > .row { display: contents; }
   /* Expanded row: everything stays inside the card; scores one per line with
      the percentage; actions wrap as compact buttons. */
   :root:root .operator-pending-review { min-width: 0; max-width: 100%; }
@@ -431,13 +404,6 @@
   :root:root .operator-pending-review-body .grid.cols-2 .row > .xs.muted { width: 44px !important; flex: none; }
   :root:root .operator-pending-review-body .grid.cols-2 .row > .progress { min-width: 0; }
   :root:root .operator-pending-review-body .grid.cols-2 .row > .xs:last-child { flex: none; min-width: 52px !important; }
-  :root:root .operator-pending-review-body > .row { flex-wrap: wrap; gap: 6px; }
-  :root:root .operator-pending-review-body > .row > * { flex: 0 1 auto; max-width: 100%; }
-  :root:root:root .operator-pending-review-body > .row { display: flex !important; flex-wrap: wrap; }
-  :root:root:root .operator-pending-review-body > .row > :is(button, .btn):not(:has(> .action-icon-only)) { width: auto !important; }
-  /* Icon buttons (Xem bài làm, Xoá học viên) grouped at the end of the row. */
-  :root:root:root .operator-pending-review-body > .row > :has(> .action-icon-only) { order: 10; margin-left: 0 !important; }
-  :root:root:root .operator-pending-review-body > .row > :has(> .action-icon-only):first-of-type { margin-left: auto !important; }
 
   :root:root .operator-profile-disclosure { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; justify-content: flex-start; }
 }
@@ -478,20 +444,6 @@
   :root:root .lesson-page .vocabulary-card-label { margin: 2px 0 0; }
   :root:root .lesson-page :is(.vocabulary-card-phrases, .vocabulary-card-relations) { gap: 5px; }
   :root:root .lesson-page .vocabulary-card-heading .vocabulary-card-sound--icon { width: 32px; min-width: 32px !important; height: 32px; min-height: 32px !important; padding: 0; }
-}
-@media (max-width: 480px) {
-  /* Cài đặt › Yêu cầu đổi đề: one form with a small switch (Settings.tsx),
-     2-row textarea that grows with the text, compact send button. */
-  :root:root .settings-test-change-switch { display: inline-flex; gap: 2px; margin: 4px 0 8px; padding: 2px; border-radius: 10px; background: var(--surface-2); }
-  :root:root .settings-test-change-switch > button { min-height: 28px !important; padding: 2px 12px; border: 0; border-radius: 8px; background: transparent; box-shadow: none; font-size: 13px; }
-  :root:root .settings-test-change-switch > button.active { background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / .12); font-weight: 600; }
-  :root:root .settings-test-change-requests .settings-test-change-request > h4 { display: none; }
-  :root:root .settings-test-change-request textarea { min-height: 56px; field-sizing: content; max-height: 160px; }
-  :root:root .settings-test-change-request .field { margin-bottom: 8px; }
-}
-@media (max-width: 480px) {
-  :root:root .settings-test-change-requests .settings-test-change-request { padding: 0; border: 0; background: transparent; box-shadow: none; }
-  :root:root:root .settings-test-change-request :is(button, .btn) { width: auto !important; justify-self: start; align-self: flex-start; padding-inline: 16px; }
 }
 
 @media (max-width: 480px) {
@@ -582,23 +534,14 @@
 }
 @media (max-width: 480px) {
   /* Chờ duyệt (expanded): the "Hồ sơ: …" disclosure ends with "…" instead of
-     being cut; the level select matches the 30px buttons next to it. */
+     being cut. */
   :root:root:root .operator-profile-disclosure { display: block; width: 100%; padding-inline: 0 !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
   :root:root .operator-profile-disclosure > .ui-chevron { display: inline-block; vertical-align: middle; margin-inline-end: 4px; }
-  :root:root:root .operator-pending-review-body > .row > select { flex: 1 1 130px; height: var(--phone-btn-h); padding: 0 8px; border-radius: 9px; font-size: 13px; line-height: calc(var(--phone-btn-h) - 2px); }
-  :root:root .operator-pending-review-body > .row { align-items: center; }
 }
 
 @media (min-width: 481px) and (max-width: 1024px) {
-  /* Tablet: all review actions on one row — select, text actions, then the icon group. */
-  :root:root:root .operator-pending-review-body > .row { display: flex !important; flex-wrap: wrap; align-items: center; gap: 6px; }
-  :root:root:root .operator-pending-review-body > .row > :is(button, .btn):not(:has(> .action-icon-only)) { width: auto !important; flex: 0 0 auto; }
-  :root:root:root .operator-pending-review-body > .row > select { width: auto !important; flex: 0 1 150px; min-width: 120px; height: 40px; min-height: 40px; padding-block: 0; line-height: 38px; font-size: 14.5px; }
-  :root:root:root .operator-pending-review-body > .row > :is(button, .btn):not(:has(> .action-icon-only)) { padding-inline: 10px; }
   /* Lists are paged on tablets too, so no scroll box inside the card. */
   :root:root #root :is(.operator-pending-list, .operator-bounded-list, .operator-approved-list) { max-height: none !important; overflow-y: visible !important; }
-  :root:root:root .operator-pending-review-body > .row > :has(> .action-icon-only) { order: 10; margin-left: 0 !important; }
-  :root:root:root .operator-pending-review-body > .row > :has(> .action-icon-only):first-of-type { margin-left: auto !important; }
   :root { --icon-btn: 40px; }
 }
 @media (max-width: 1024px) {
@@ -663,7 +606,7 @@
   :root:root :is(main, [role="dialog"]) table:not(.operator-results-table):not(.manager-accounts-table__table):not(.operator-action-table) :is(th, td) { min-width: 64px; overflow-wrap: normal; word-break: normal; }
 
   /* Fields: tighter boxes, read-only values as plain text, 8px between fields. */
-  :root:root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select, textarea) { line-height: 1.35; }
+  :root:root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):where(:not(.crossword-cell > input)), select, textarea) { line-height: 1.35; }
   :root:root:root :is(input, textarea)[readonly] { height: auto !important; min-height: 0 !important; padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; field-sizing: content; resize: none; }
   :root:root :is(.field, label.field) + :is(.field, label.field) { margin-top: 8px; }
   :root:root :is(form, fieldset, .operator-editor-section) { row-gap: 8px; }
@@ -677,8 +620,8 @@
 }
 @media (max-width: 1024px) {
   /* Modal headers stay pinned while the body scrolls: solid background, thin
-     divider, one-line title. */
-  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .operator-editor-sticky-header, .monthly-final-review-header) {
+     divider, and room for the title to wrap. */
+  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .monthly-final-review-header) {
     position: sticky;
     top: 0;
     z-index: 8;
@@ -688,14 +631,12 @@
   :root:root .monthly-resource-panel > header { position: sticky; top: 0; z-index: 8; background: var(--surface); border-bottom: 1px solid var(--line); }
 }
 @media (max-width: 480px) {
-  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .operator-editor-sticky-header) {
-    margin: calc(-1 * var(--phone-card-pad)) calc(-1 * var(--phone-card-pad)) 8px;
-    padding: 8px var(--phone-card-pad);
+  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header) {
     gap: 8px;
     align-items: center;
   }
-  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .operator-editor-sticky-header) :is(h2, h3) { min-width: 0; margin: 0; overflow: hidden; font-size: 15px !important; text-overflow: ellipsis; white-space: nowrap; }
-  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header) > div:first-child { min-width: 0; flex: 1 1 auto; }
+  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header) :is(h2, h3) { min-width: 0; margin: 0; font-size: 15px !important; white-space: normal; overflow-wrap: anywhere; }
+  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .assessment-bank-header) > div:first-child { min-width: 0; flex: 1 1 auto; }
 }
 @media (max-width: 1024px) {
   /* Picture tile actions are one icon group (Sinh lại, Tải ảnh, Xóa ảnh): icons only. */
@@ -703,13 +644,12 @@
   :root:root:root .monthly-illustration-actions .action-icon-only > .action-icon-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 }
 @media (max-width: 1024px) {
-  /* Popups never fill the screen: at most ~78% of the height and ~92% of the
-     width, centred, with the dimmed backdrop visible (tap it to close). */
-  :root:root:root .modal-backdrop { display: grid; place-items: center; padding: 11dvh 4vw; }
+  /* Leave room around dialogs as the viewport gets shorter. */
+  :root:root:root .modal-backdrop { display: grid; place-items: center; padding: 16px; }
   :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) {
-    width: min(92vw, var(--compact-dialog-width, 720px)) !important;
-    max-width: 92vw !important;
-    max-height: 78dvh !important;
+    width: min(100%, var(--compact-dialog-width, 720px)) !important;
+    max-width: calc(100vw - 32px) !important;
+    max-height: min(84dvh, calc(100dvh - 32px)) !important;
     margin: 0 !important;
     overflow: auto;
     overscroll-behavior: contain;
@@ -724,8 +664,8 @@
     z-index: 60;
     inset: 50% auto auto 50% !important;
     transform: translate(-50%, -50%);
-    width: min(92vw, 720px) !important;
-    max-height: 78dvh;
+    width: min(calc(100vw - 32px), 720px) !important;
+    max-height: min(84dvh, calc(100dvh - 32px));
     margin: 0 !important;
     overflow: auto;
     overscroll-behavior: contain;
@@ -739,13 +679,13 @@
 @media (max-width: 1024px) {
   /* Close button: the same 32px × square (40px on tablets) pinned to the
      header's top-right corner in every popup; header actions sit to its left. */
-  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header),
+  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .assessment-bank-header),
   :root:root:root .operator-editor-sticky-header,
   :root:root:root .monthly-resource-panel > header { position: sticky; top: 0; padding-right: calc(var(--icon-btn, 36px) + 16px) !important; }
   :root:root:root .modal-close {
     position: absolute;
     top: 8px;
-    right: 8px;
+    right: 16px;
     width: var(--icon-btn, 36px) !important;
     min-width: var(--icon-btn, 36px) !important;
     max-width: var(--icon-btn, 36px) !important;
@@ -760,23 +700,23 @@
 }
 
 @media (max-width: 1024px) {
-  /* Every popup: the same 12px frame, the header spans it edge to edge, so the
-     close button lands at the same top-right offset in all of them. */
+  /* Headers span the dialog while controls and content share a 16px inset. */
   :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]),
-  :root:root:root .monthly-resource-panel { padding: 0 12px 12px !important; }
-  :root:root:root .modal-backdrop > .dialog.assessment-violation-dialog { padding: 16px !important; }
-  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header),
+  :root:root:root .monthly-resource-panel { padding: 16px !important; }
+  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]):has(> :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header)),
+  :root:root:root .monthly-resource-panel:has(> header) { padding-block-start: 0 !important; }
+  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .assessment-bank-header),
   :root:root:root .modal-backdrop .operator-editor-sticky-header,
   :root:root:root .monthly-resource-panel > header {
-    margin: 0 -12px 8px !important;
-    padding: 10px calc(var(--icon-btn, 36px) + 16px) 10px 12px !important;
+    margin: 0 -16px 8px !important;
+    padding: 12px calc(var(--icon-btn, 36px) + 24px) 12px 16px !important;
     min-height: calc(var(--icon-btn, 36px) + 16px);
   }
-  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) > .operator-level-form-dialog-body { margin: 0 -12px -12px; padding: 0 12px 12px; }
+  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) > .operator-level-form-dialog-body { margin: 0 -16px -16px; padding: 0 16px 16px; }
   :root:root:root .modal-close.modal-close.modal-close {
     position: absolute;
     top: 8px;
-    right: 8px;
+    right: 16px;
     width: var(--icon-btn, 36px) !important;
     min-width: var(--icon-btn, 36px) !important;
     max-width: var(--icon-btn, 36px) !important;
@@ -787,15 +727,12 @@
   }
 }
 @media (max-width: 1024px) {
-  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) { overflow-x: hidden; }
   /* Đề lên mức group header (Mức đích · status · Soạn tay · Sinh đề bằng AI): wraps instead of overflowing. */
   :root:root .operator-level-group--embedded > :first-child { flex-wrap: wrap; row-gap: 6px; min-width: 0; }
   :root:root .operator-level-group--embedded > :first-child > * { min-width: 0; }
 }
 @media (max-width: 1024px) {
   :root:root:root .operator-level-group--embedded > .operator-level-group-header { width: auto; max-width: 100%; margin-inline: 0; box-sizing: border-box; }
-  /* Phones and tablets draw overlay scrollbars; keep the popup frame exact. */
-  :root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) { scrollbar-width: none; }
 }
 @media (max-width: 1024px) {
   /* Lesson review section switcher: ‹ [1/3 · Mục tiêu · Hướng dẫn · Từ vựng ▾] › */
@@ -865,19 +802,19 @@
 @media (max-width: 1024px) {
   /* Bell (Thông báo) popup: the same frame, header, close button and pager
      footer as every other popup. */
-  :root:root:root .inbox-backdrop { padding: 11dvh 4vw; }
-  :root:root:root .inbox-backdrop > .dialog.inbox-dialog { width: min(92vw, 560px) !important; max-height: 78dvh !important; padding: 0 12px 0 !important; overflow: hidden; }
+  :root:root:root .inbox-backdrop { padding: 16px; }
+  :root:root:root .inbox-backdrop > .dialog.inbox-dialog { width: min(100%, 560px) !important; max-height: min(84dvh, calc(100dvh - 32px)) !important; padding: 0 16px !important; overflow: hidden; }
   :root:root:root .inbox-dialog > .inbox-heading {
     position: relative;
-    margin: 0 -12px 8px !important;
-    padding: 10px calc(var(--icon-btn, 36px) + 16px) 10px 12px !important;
+    margin: 0 -16px 8px !important;
+    padding: 12px calc(var(--icon-btn, 36px) + 24px) 12px 16px !important;
     min-height: calc(var(--icon-btn, 36px) + 16px);
     border-bottom: 1px solid var(--line);
     background: var(--surface);
   }
-  :root:root:root .inbox-dialog > .inbox-heading h3 { font-size: 15px !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .inbox-dialog > .inbox-heading h3 { font-size: 15px !important; white-space: normal; overflow-wrap: anywhere; }
   :root:root:root .inbox-dialog > .inbox-controls { margin: 0 0 8px; }
-  :root:root:root .inbox-dialog > .list-pager { flex: none; margin: 0 -12px; padding: 6px 12px; border-top: 1px solid var(--line); background: var(--surface); }
+  :root:root:root .inbox-dialog > .list-pager { flex: none; margin: 0 -16px; padding: 6px 16px; border-top: 1px solid var(--line); background: var(--surface); }
   :root:root:root .inbox-dialog > .inbox-feed { padding-bottom: 10px; }
   :root:root:root .inbox-feed ul { gap: 10px; }
 }
@@ -913,8 +850,8 @@
 }
 @media (max-width: 1024px) {
   /* "Title ⓘ" on one row: the title ellipsises, the ⓘ never wraps; the tip opens below at full card width. */
-  :root:root :is(h1, h2, h3, h4).info-title { display: flex; align-items: center; gap: 2px; min-width: 0; position: relative; }
-  :root:root .info-title > .info-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root :is(h1, h2, h3, h4).info-title { display: flex; align-items: flex-start; gap: 4px; min-width: 0; position: relative; }
+  :root:root .info-title > .info-title-text { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
   :root:root .info-title > .info-tip { flex: none; display: inline-flex; margin-inline-start: 0; }
   :root:root:root:root .info-title > .info-tip > .info-tip-button { margin-top: 0; }
   :root:root .info-title .info-tip-popover { inset-block-start: calc(100% + 4px); inset-inline: 0; width: auto; max-width: none; white-space: normal; }

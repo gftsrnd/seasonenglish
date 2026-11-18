@@ -310,11 +310,7 @@ describe("learner retake request ('Xin thi lại') and the Operator's decision",
     });
     expect(response.json().original.definition.sections.map((section: { code: string }) => section.code)).toEqual(["listening", "reading", "writing", "speaking"]);
     expect(JSON.stringify(response.json().original)).not.toContain("correctAnswer");
-    const keys = response.json().original.objectiveAnswerKeys;
-    const first = placementDefinition.sections[0]!.groups[0]!.tasks[0]!;
-    expect(keys.listening[first.key]).toEqual(first.correctAnswer);
-    expect(keys.writing).toBeUndefined();
-    expect(keys.speaking).toBeUndefined();
+    expect(response.json().original).not.toHaveProperty("objectiveAnswerKeys");
     expect(response.json().original.definition.sections[0].groups[0].stimulus).toMatchObject({ type: "audio_script", audioSrc: expect.any(String), lines: expect.arrayContaining([expect.objectContaining({ speaker: expect.any(String), text: expect.any(String) })]) });
     expect(repositories.assessments.findAttempt).toHaveBeenCalledExactlyOnceWith(LEARNER_ID, OLD_ATTEMPT_ID);
     await server.close();

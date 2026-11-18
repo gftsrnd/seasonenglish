@@ -1,4 +1,5 @@
 import { monthlyManualSeed } from "./monthly-manual-seed.js";
+import { AssessmentBank, PromotionBanks, type AssessmentBankClient } from "./AssessmentBank.js";
 import { describeMonthlyFindings, MONTHLY_PART_TITLES, type MonthlyFindingLine } from "./monthly-failure-findings.js";
 import { monthlyDefaultLessonTitle, monthlyGatedLightFindings, monthlyLessonDisplayTitle } from "@e4s/domain/monthly";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -7,7 +8,6 @@ import "./styles.css";
 import { describeMonthlyIntegrityIssues, integrityIssuesFromError, MONTHLY_INTEGRITY_LINE_PREFIX, monthlyIntegrityBlockedMessage } from "./monthly-failure-findings.js";
 import type {
   AssessmentFormPreviewView,
-  AssessmentDefinitionView,
   AssessmentLevelFormSlotView,
   AssessmentLevelFormDetailView,
   AssessmentReviewChallengeView,
@@ -43,8 +43,7 @@ import { OperatorRequests } from "./OperatorRequests.js";
 import { MonthlyFinalReview } from "./MonthlyFinalReview.js";
 import { Badge, Button, OperatorPage, PageTitle } from "./primitives.js";
 import { ModalProvider, useDialog, useModal } from "../shared/ModalProvider.js";
-import { AssessmentDefinitionPreview } from "../shared/AssessmentDefinitionPreview.js";
-import { ScrollJumpButton, useScrollJump } from "../shared/ScrollJump.js";
+import { AssessmentPreviewDialog } from "./AssessmentPreviewDialog.js";
 import { useToast } from "../shared/design-system.js";
 import { errorCode, errorMessage, GENERIC_ERROR_MESSAGE } from "../shared/error-message.js";
 import type { AudioEvidence } from "../shared/media/audio-evidence.js";
@@ -997,17 +996,6 @@ const resultPreviewKind: Record<TestResultsTab, AssessmentResultKind> = {
   exit: "pass_course"
 };
 
-function assessmentPreviewDefinition(form: AssessmentFormPreviewView): AssessmentDefinitionView & { sections: AssessmentFormPreviewView["sections"] } {
-  return {
-    key: form.versionId,
-    kind: form.kind === "level_up" ? "level-up" : form.kind === "pass_course" ? "pass-course" : form.kind,
-    title: form.title,
-    version: form.version,
-    totalMinutes: form.totalMinutes,
-    totalScore: form.totalScore,
-    sections: form.sections
-  };
-}
 
 function AssessmentPreviewControl({
   client,
@@ -1020,6 +1008,7 @@ function AssessmentPreviewControl({
 }) {
   const modal = useModal();
   const [forms, setForms] = useState<AssessmentFormPreviewView[]>();
+  const [selectedMonth, setSelectedMonth] = useState<string>();
   const [deletingVersionId, setDeletingVersionId] = useState<string>();
   const deletionInFlight = useRef(false);
   const [error, setError] = useState<string>();
@@ -1095,14 +1084,24 @@ function AssessmentPreviewControl({
         : kind === "pass_course"
           ? "Chưa có Form A chuẩn đã lưu để xem. Form A chỉ hiển thị khi nội dung cố định đã được nạp đầy đủ."
           : "Chưa có phiên bản đề đã lưu để xem.";
-    return <section className="card" aria-label="Chưa có nội dung đề thi"><h2>{kind === "final" ? "Bài thi tháng" : "Chưa có đề"}</h2><p className="small muted">{emptyMessage}</p>{notice ? <p role="status" className="small">{notice}</p> : null}</section>;
+    return <section className="card" data-assessment-kind={kind} aria-label="Chưa có nội dung đề thi"><h2>{kind === "final" ? "Bài thi tháng" : "Chưa có đề"}</h2><p className="small muted">{emptyMessage}</p>{notice ? <p role="status" className="small">{notice}</p> : null}</section>;
   }
+  const monthKey = (form: AssessmentFormPreviewView) => form.month && /^\d{4}-(0[1-9]|1[0-2])$/.test(form.month) ? form.month : "unassigned";
+  const months = [...new Set(forms.map(monthKey))].filter(month => month !== "unassigned").sort();
+  if (forms.some(form => monthKey(form) === "unassigned")) months.push("unassigned");
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const defaultMonth = months.filter(month => month !== "unassigned" && month <= currentMonth).at(-1)
+    ?? months.find(month => month !== "unassigned") ?? "unassigned";
+  const activeMonth = selectedMonth && months.includes(selectedMonth) ? selectedMonth : defaultMonth;
+  const visibleForms = kind === "final" ? forms.filter(form => monthKey(form) === activeMonth) : forms;
   return <>
-    <section className="card operator-assessment-form-list" aria-label="Phiên bản đề thi đã lưu">
-      <div className="row between"><div><p className="xs muted">PHIÊN BẢN ĐỀ ĐÃ LƯU</p><h2>{kind === "placement" ? "Đề đầu vào" : kind === "final" ? "Bài thi tháng" : kind === "level_up" ? "Đề lên mức" : "Đề đầu ra"}<SectionTip desktop text={OPERATOR_TIPS.savedForms} label="Phiên bản đề đã lưu là gì?" /></h2></div><span className="badge">{forms.length} phiên bản</span></div>
+    {kind === "final" ? <div className="tabs operator-monthly-bank-tabs" role="tablist" aria-label="Tháng của đề thi">{months.map(month => <button type="button" role="tab" key={month} aria-selected={activeMonth === month} className={activeMonth === month ? "active" : ""} onClick={() => setSelectedMonth(month)}>{month === "unassigned" ? "Chưa rõ tháng" : `${month.slice(5)}/${month.slice(0, 4)}`}</button>)}</div> : null}
+    <section className="card operator-assessment-form-list" data-assessment-kind={kind} aria-label="Phiên bản đề thi đã lưu">
+      <div className="row between"><div><p className="xs muted">PHIÊN BẢN ĐỀ ĐÃ LƯU</p><h2>{kind === "placement" ? "Đề đầu vào" : kind === "final" ? "Bài thi tháng" : kind === "level_up" ? "Đề lên mức" : "Đề đầu ra"}<SectionTip desktop text={OPERATOR_TIPS.savedForms} label="Phiên bản đề đã lưu là gì?" /></h2></div><span className="badge">{visibleForms.length} phiên bản</span></div>
       {notice ? <p role="status" className="small">{notice}</p> : null}
       {editorError && !selected ? <p role="alert" className="small form-error">{editorError}</p> : null}
-      <div className="stack">{forms.map(form => <article className="item operator-assessment-form-row" key={form.versionId}>
+      <div className="stack">{visibleForms.map(form => <article className="item operator-assessment-form-row" key={form.versionId}>
         <div className="operator-assessment-form-info">
           <b>{form.title}</b>
           <p className="small muted">
@@ -1145,36 +1144,6 @@ function AssessmentPreviewControl({
   </>;
 }
 
-function AssessmentPreviewDialog({
-  form,
-  readOnly,
-  onClose,
-  onEdit,
-  busy = false,
-  children
-}: {
-  form: AssessmentFormPreviewView;
-  readOnly: boolean;
-  onClose: () => void;
-  onEdit?: () => void;
-  busy?: boolean;
-  children?: ReactNode;
-}) {
-  const dialogRef = useRef<HTMLElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const scroll = useScrollJump(true);
-  useDialog(true, dialogRef, onClose, closeRef);
-  return <div className="modal-backdrop operator-modal-scope operator-detail-modal" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} className="dialog wide operator-detail-dialog operator-assessment-preview-dialog operator-level-view-dialog" role="dialog" aria-modal="true" aria-label={`Xem đề ${form.title}`} tabIndex={-1}>
-    <div className="operator-level-form-dialog-header"><div className="operator-level-form-dialog-title"><span className="operator-level-kicker">Xem đề thi</span><h3>{form.title}</h3><p className="small muted">Phiên bản {form.version} · {form.status === "published" ? "Đã phát hành" : form.status === "draft" ? "Bản nháp" : "Đã lưu lịch sử"}</p></div><div className="row operator-level-form-dialog-actions">{!readOnly && form.editable && onEdit ? <button className="btn-sm btn-primary" type="button" disabled={busy} onClick={onEdit}>{busy ? "Đang mở…" : "Sửa đề"}</button> : null}<ModalCloseButton ref={closeRef} disabled={busy} onClick={onClose} /></div></div>
-    <div className="operator-level-form-dialog-body">
-      <div ref={scroll.start} className="app-scroll-edge" aria-hidden="true" />
-      {children}
-      <AssessmentDefinitionPreview definition={assessmentPreviewDefinition(form)} status={form.status} audioConfigured={form.audioConfigured} readOnly={readOnly} />
-      <div ref={scroll.end} className="app-scroll-edge" aria-hidden="true" />
-      {scroll.visible && <ScrollJumpButton atTop={scroll.atTop} onClick={scroll.jump} inExam />}
-    </div>
-  </section></div>;
-}
 
 function TestsRoute({ client, readOnly, initialTab, retakeGeneration }: { client: OperatorApiClient; readOnly: boolean; retakeGeneration: RetakeGeneration; initialTab: "placement" | "promotion" }) {
   const location = useLocation();
@@ -1193,9 +1162,11 @@ function TestsRoute({ client, readOnly, initialTab, retakeGeneration }: { client
       <button type="button" role="tab" aria-selected={activeTab === "promotion"} className={activeTab === "promotion" ? "active" : ""} onClick={() => setActiveTab("promotion")}>Đề lên mức</button>
       <button type="button" role="tab" aria-selected={activeTab === "exit"} className={activeTab === "exit" ? "active" : ""} onClick={() => setActiveTab("exit")}>Đề đầu ra</button>
     </div>
-    {activeTab === "promotion" ? <LevelFormsRoute client={client} readOnly={readOnly} embedded slots="promotion" retakeGeneration={retakeGeneration} /> : <AssessmentPreviewControl key={activeTab} client={client} kind={resultPreviewKind[activeTab]} readOnly={readOnly} />}
+    {client.getAssessmentBank && activeTab !== "monthly"
+      ? activeTab === "promotion" ? <PromotionBanks client={client as AssessmentBankClient} readOnly={readOnly} /> : <AssessmentBank key={activeTab} scope={activeTab === "exit" ? "pass_course" : "placement"} client={client as AssessmentBankClient} readOnly={readOnly} />
+      : activeTab === "promotion" ? <LevelFormsRoute client={client} readOnly={readOnly} embedded slots="promotion" retakeGeneration={retakeGeneration} /> : <AssessmentPreviewControl key={activeTab} client={client} kind={resultPreviewKind[activeTab]} readOnly={readOnly} />}
     {/* The placement retake form is a placement form: its own card sits under the "Đề đầu vào" versions, above the results table. */}
-    {activeTab === "placement" ? <LevelFormsRoute client={client} readOnly={readOnly} embedded slots="placement-retake" retakeGeneration={retakeGeneration} /> : null}
+    {activeTab === "placement" ? client.getAssessmentBank ? <AssessmentBank scope="retake" client={client as AssessmentBankClient} readOnly={readOnly} /> : <LevelFormsRoute client={client} readOnly={readOnly} embedded slots="placement-retake" retakeGeneration={retakeGeneration} /> : null}
     <ReviewRoute client={client} readOnly={readOnly} canEditWeeklyPractice={false} assessmentOnly embedded assessmentKinds={kinds[activeTab]} />
   </OperatorPage>;
 }
@@ -1661,9 +1632,11 @@ function OperatorReviewWorkspace({ client }: { client: OperatorApiClient }) {
         {reviewSections.map(section => <Link to={`?tab=${section.key}`} aria-label={section.label} data-compact-label={section.compactLabel} aria-current={section.key === current.key ? "page" : undefined} key={section.key}><span>{section.label}</span></Link>)}
       </nav>
     </div>
-    {current.key === "appeals" || current.key === "sent"
-      ? <OperatorRequests client={client} />
-      : <ReviewRoute client={client} readOnly={false} canEditWeeklyPractice embedded />}
+    <div data-operator-review-tab={current.key}>
+      {current.key === "appeals" || current.key === "sent"
+        ? <OperatorRequests client={client} />
+        : <ReviewRoute client={client} readOnly={false} canEditWeeklyPractice embedded />}
+    </div>
   </OperatorPage>;
 }
 

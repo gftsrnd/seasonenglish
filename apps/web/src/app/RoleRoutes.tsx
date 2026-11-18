@@ -68,7 +68,7 @@ const managerRoutes = ["/mgr", "/mgr/ops", "/mgr/requests", "/mgr/reopen-request
 const operatorRoutes = ["/op", "/op/levelforms", "/op/months", "/op/review", "/op/requests", "/op/tests"] as const;
 const managerContentRoutes = ["/mgr/ops/levels", "/mgr/ops/months", "/mgr/ops/review", "/mgr/ops/tests", "/mgr/ops/level-forms"] as const;
 
-export function RoleRoutes({ session, onSessionRevoked, onLearnerCefr, onPlacementRetakeActive }: { session: SessionView; onSessionRevoked?: (() => void) | undefined } & Pick<LearnerRouteProps, "onLearnerCefr" | "onPlacementRetakeActive">) {
+export function RoleRoutes({ session, onSessionRevoked, ...learnerProps }: { session: SessionView; onSessionRevoked?: (() => void) | undefined } & Pick<LearnerRouteProps, "onLearnerCefr" | "onPlacementRetakeActive" | "sharedProfileRecord" | "onProfileRecord">) {
   const location = useLocation();
   const pathname = normalizePathname(location.pathname);
   const role: unknown = session.role;
@@ -83,7 +83,7 @@ export function RoleRoutes({ session, onSessionRevoked, onLearnerCefr, onPlaceme
     if (operatorRoute) return <AccessFallback home="/home" message="Tài khoản này không có quyền mở khu vực vận hành." />;
     if (managerArea || settingsArea || (rewardPreviewRoute && pathname !== "/reward/preview")) return <AccessFallback home="/home" message="Tài khoản này không có quyền mở khu vực quản lý." />;
     if (pathname === "/") return <Navigate replace to="/home" />;
-    return <RoleRouteLoadingBoundary label={loadingLabel(pathname)}><LearnerRouteController key={session.user.id} learnerId={session.user.id} courseCompleted={session.courseCompleted === true} onLearnerCefr={onLearnerCefr} onPlacementRetakeActive={onPlacementRetakeActive} /></RoleRouteLoadingBoundary>;
+    return <RoleRouteLoadingBoundary label={loadingLabel(pathname)}><LearnerRouteController key={session.user.id} learnerId={session.user.id} courseCompleted={session.courseCompleted === true} {...learnerProps} /></RoleRouteLoadingBoundary>;
   }
   if (pathname === "/op/prompts") return <AccessFallback home="/op" message="Tài khoản này không có quyền mở cấu hình Prompt & rubric." />;
   if (pathname === "/mgr/ops/prompts" || pathname === "/settings/prompts") return <AccessFallback home={role === "operator" ? "/op" : "/mgr/ops"} message="Tài khoản này không có quyền mở cấu hình Prompt & rubric." />;

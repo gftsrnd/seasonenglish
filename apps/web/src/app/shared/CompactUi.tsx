@@ -94,7 +94,7 @@ export function SectionTip({ text, label, desktop = false }: { text: ReactNode; 
   const shown = compact;
   useLayoutEffect(() => {
     const heading = ref.current?.closest("h1, h2, h3, h4");
-    if (!heading) return;
+    if (!heading || heading.hasAttribute("aria-label") || heading.hasAttribute("aria-labelledby")) return;
     const copy = heading.cloneNode(true) as HTMLElement;
     copy.querySelectorAll(".section-tip").forEach((node) => node.remove());
     const name = (copy.textContent ?? "").replace(/\s+/g, " ").trim();
@@ -122,8 +122,8 @@ export function CompactInfoTip({ text, label }: { text: ReactNode; label?: strin
 }
 
 /**
- * A card/section title with its guidance behind ⓘ on phones/tablets: one row,
- * "Title ⓘ" (title ellipsises, ⓘ never wraps). Desktop renders the plain
+ * A card/section title with its guidance behind ⓘ on phones/tablets.
+ * Long titles wrap beside the help button. Desktop renders the plain
  * heading; pair it with `<Description text=… />` (no `short`) so the paragraph
  * shows on desktop and disappears on phones/tablets, where the tip holds it.
  */

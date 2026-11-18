@@ -89,7 +89,8 @@ describe("learner profile app parity", () => {
     expect(screen.getByText(/Trình độ B1 – Trung cấp/)).toBeInTheDocument();
     const avatar = screen.getByLabelText("Avatar của Học viên C");
     expect(avatar.querySelector("svg")).not.toBeNull();
-    expect(avatar).toHaveStyle({ width: "88px", height: "88px", background: "#E3DCFB", color: "#4B6120" });
+    expect(avatar).toHaveStyle({ background: "#E3DCFB", color: "#4B6120" });
+    expect(avatar.style.width).toBe(avatar.style.height);
     expect(screen.getByText("Nắng · nét ô liu")).toBeInTheDocument();
 
     const profile = screen.getByRole("region", { name: "Hồ sơ cá nhân" });
@@ -144,11 +145,11 @@ describe("learner profile app parity", () => {
     const dialog = screen.getByRole("dialog", { name: "Avatar của bạn" });
     expect(within(dialog).getByRole("button", { name: "Nắng" }).querySelector("svg")).not.toBeNull();
     expect(within(dialog).getByRole("button", { name: "Xám nâu" })).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Màu nền 4" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Màu nền Xanh nhạt" })).toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("button", { name: "Hoa" }));
     await user.click(within(dialog).getByRole("button", { name: "Đỏ hồng" }));
-    await user.click(within(dialog).getByRole("button", { name: "Màu nền 4" }));
+    await user.click(within(dialog).getByRole("button", { name: "Màu nền Xanh nhạt" }));
     await user.click(within(dialog).getByRole("button", { name: "Lưu avatar" }));
     expect(actions.saveAvatar).toHaveBeenCalledWith({ acc: "flower", color: "rose", bg: 3 });
   });

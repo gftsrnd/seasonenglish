@@ -3,7 +3,7 @@ import { createRepositories } from "@e4s/database";
 import { EVIDENCE_BUCKET, type ObjectStorage } from "@e4s/storage";
 import type { Pool } from "pg";
 import type { EdgeTtsRunner } from "./edge-tts.js";
-import { DEFAULT_NARRATOR_VOICE, synthesizeListeningScript, type AudioJoiner, type ScriptLine } from "./dialogue-tts.js";
+import { DEFAULT_NARRATOR_VOICE, DIALOGUE_VOICE_POLICY, parseDialogueScript, synthesizeListeningScript, type AudioJoiner, type ScriptLine } from "./dialogue-tts.js";
 
 /**
  * Automatic listening audio right after AI generation (monthly final,
@@ -25,6 +25,7 @@ export interface ListeningAudioService {
 export interface ListeningAudioSynthesisMark {
   status: "generated" | "failed";
   engine: "edge-tts";
+  voicePolicy: string;
   scriptHash: string;
   at: string;
   code?: string;
@@ -68,7 +69,7 @@ export function listeningAudioServiceFor(pool: Pool, runner?: EdgeTtsRunner, sto
 
 export function listeningScriptHash(script: string | readonly ScriptLine[]): string {
   const text = typeof script === "string" ? script.trim() : script.map((line) => `${line.speaker ?? ""}: ${line.text.trim()}`).join("\n");
-  return createHash("sha256").update(text).digest("hex").slice(0, 32);
+  return createHash("sha256").update(`${DIALOGUE_VOICE_POLICY}\n${text}`).digest("hex").slice(0, 32);
 }
 
 function failureCode(error: unknown): string {
@@ -88,7 +89,7 @@ function memoized(service: ListeningAudioService, ownerUserId: string) {
 }
 
 interface BlueprintLike {
-  sections: ReadonlyArray<{ code: string; groups: ReadonlyArray<{ stimulus?: { type: string; audioSrc?: string; lines?: Array<{ speaker: string; text: string }> } | undefined }> }>;
+  sections: ReadonlyArray<{ code: string; groups: ReadonlyArray<{ stimulus?: { type: string; audioSrc?: string; audioSynthesis?: { voicePolicy?: string }; lines?: Array<{ speaker: string; text: string }> } | undefined }> }>;
 }
 
 /**
@@ -110,15 +111,15 @@ export async function withBlueprintListeningAudio<T extends BlueprintLike>(
       if (stimulus?.type !== "audio_script" || stimulus.audioSrc?.trim() || !stimulus.lines?.some((line) => line.text.trim())) return group;
       const hash = listeningScriptHash(stimulus.lines);
       const reused = options.previous?.get(hash);
-      if (reused) return { ...group, stimulus: Object.assign({}, stimulus, { audioSrc: reused, audioSynthesis: { status: "generated", engine: "edge-tts", scriptHash: hash, at } satisfies ListeningAudioSynthesisMark }) };
-      if (!synth) { failed += 1; return { ...group, stimulus: Object.assign({}, stimulus, { audioSynthesis: { status: "failed", engine: "edge-tts", scriptHash: hash, at, code: "EDGE_TTS_UNAVAILABLE" } satisfies ListeningAudioSynthesisMark }) }; }
+      if (reused) return { ...group, stimulus: Object.assign({}, stimulus, { audioSrc: reused, audioSynthesis: { status: "generated", engine: "edge-tts", voicePolicy: DIALOGUE_VOICE_POLICY, scriptHash: hash, at } satisfies ListeningAudioSynthesisMark }) };
+      if (!synth) { failed += 1; return { ...group, stimulus: Object.assign({}, stimulus, { audioSynthesis: { status: "failed", engine: "edge-tts", voicePolicy: DIALOGUE_VOICE_POLICY, scriptHash: hash, at, code: "EDGE_TTS_UNAVAILABLE" } satisfies ListeningAudioSynthesisMark }) }; }
       try {
         const stored = await synth(stimulus.lines).pending;
         generated += 1;
-        return { ...group, stimulus: Object.assign({}, stimulus, { audioSrc: stored.url, audioSynthesis: { status: "generated", engine: "edge-tts", scriptHash: hash, at } satisfies ListeningAudioSynthesisMark }) };
+        return { ...group, stimulus: Object.assign({}, stimulus, { audioSrc: stored.url, audioSynthesis: { status: "generated", engine: "edge-tts", voicePolicy: DIALOGUE_VOICE_POLICY, scriptHash: hash, at } satisfies ListeningAudioSynthesisMark }) };
       } catch (error) {
         failed += 1;
-        return { ...group, stimulus: Object.assign({}, stimulus, { audioSynthesis: { status: "failed", engine: "edge-tts", scriptHash: hash, at, code: failureCode(error) } satisfies ListeningAudioSynthesisMark }) };
+        return { ...group, stimulus: Object.assign({}, stimulus, { audioSynthesis: { status: "failed", engine: "edge-tts", voicePolicy: DIALOGUE_VOICE_POLICY, scriptHash: hash, at, code: failureCode(error) } satisfies ListeningAudioSynthesisMark }) };
       }
     }))
   }));
@@ -132,7 +133,7 @@ export function blueprintListeningAudioIndex(blueprint: BlueprintLike | null | u
     if (section.code !== "listening") continue;
     for (const group of section.groups) {
       const stimulus = group.stimulus;
-      if (stimulus?.type === "audio_script" && stimulus.audioSrc?.trim() && stimulus.lines?.length) index.set(listeningScriptHash(stimulus.lines), stimulus.audioSrc.trim());
+      if (stimulus?.type === "audio_script" && stimulus.audioSrc?.trim() && stimulus.lines?.length && reusableVoicePolicy(stimulus.lines, stimulus.audioSynthesis)) index.set(listeningScriptHash(stimulus.lines), stimulus.audioSrc.trim());
     }
   }
   return index;
@@ -157,15 +158,15 @@ export async function withLessonListeningAudio<T extends LessonLike>(
     const hash = listeningScriptHash(script);
     // Regeneration: an unchanged script keeps the earlier file instead of a new synthesis.
     const earlier = options.previous?.get(hash);
-    if (earlier) { reused += 1; return { audioUrl: earlier, audioSynthesis: { status: "generated", engine: "edge-tts", scriptHash: hash, at } }; }
-    if (!synth) { failed += 1; return { audioSynthesis: { status: "failed", engine: "edge-tts", scriptHash: hash, at, code: "EDGE_TTS_UNAVAILABLE" } }; }
+    if (earlier) { reused += 1; return { audioUrl: earlier, audioSynthesis: { status: "generated", engine: "edge-tts", voicePolicy: DIALOGUE_VOICE_POLICY, scriptHash: hash, at } }; }
+    if (!synth) { failed += 1; return { audioSynthesis: { status: "failed", engine: "edge-tts", voicePolicy: DIALOGUE_VOICE_POLICY, scriptHash: hash, at, code: "EDGE_TTS_UNAVAILABLE" } }; }
     try {
       const stored = await synth(script).pending;
       generated += 1;
-      return { audioUrl: stored.url, audioSynthesis: { status: "generated", engine: "edge-tts", scriptHash: hash, at } };
+      return { audioUrl: stored.url, audioSynthesis: { status: "generated", engine: "edge-tts", voicePolicy: DIALOGUE_VOICE_POLICY, scriptHash: hash, at } };
     } catch (error) {
       failed += 1;
-      return { audioSynthesis: { status: "failed", engine: "edge-tts", scriptHash: hash, at, code: failureCode(error) } };
+      return { audioSynthesis: { status: "failed", engine: "edge-tts", voicePolicy: DIALOGUE_VOICE_POLICY, scriptHash: hash, at, code: failureCode(error) } };
     }
   };
   const parts = await Promise.all(lesson.parts.map(async (part) => {
@@ -197,16 +198,16 @@ export async function withLessonListeningAudio<T extends LessonLike>(
 /** script hash → audioUrl of a stored lesson's listening part and review items (for regeneration reuse). */
 export function lessonListeningAudioIndex(lesson: { parts?: ReadonlyArray<{ code: string; content?: Record<string, unknown> }> } | null | undefined): Map<string, string> {
   const index = new Map<string, string>();
-  const remember = (script: unknown, url: unknown) => { if (text(script) && text(url)) index.set(listeningScriptHash(text(script)), text(url)); };
+  const remember = (script: unknown, url: unknown, mark: unknown) => { if (text(script) && text(url) && reusableVoicePolicy(text(script), mark)) index.set(listeningScriptHash(text(script)), text(url)); };
   for (const part of lesson?.parts ?? []) {
     if (part.code !== "listening" || !part.content) continue;
-    remember(part.content.script, part.content.audioUrl);
+    remember(part.content.script, part.content.audioUrl, part.content.audioSynthesis);
     for (const raw of Array.isArray(part.content.items) ? part.content.items : []) {
       if (!raw || typeof raw !== "object") continue;
       const item = raw as Record<string, unknown>;
-      remember(item.audioText, item.audioUrl);
+      remember(item.audioText, item.audioUrl, item.audioSynthesis);
       for (const variant of Array.isArray(item.variants) ? item.variants : []) {
-        if (variant && typeof variant === "object") remember((variant as Record<string, unknown>).audioText, (variant as Record<string, unknown>).audioUrl);
+        if (variant && typeof variant === "object") remember((variant as Record<string, unknown>).audioText, (variant as Record<string, unknown>).audioUrl, (variant as Record<string, unknown>).audioSynthesis);
       }
     }
   }
@@ -219,4 +220,10 @@ export async function previousMonthlyLessonAudioIndex(db: Pick<Pool, "query">, f
     `select lv.content from month_lessons ml join lesson_versions lv on lv.lesson_id = ml.lesson_id
      where ml.framework_id = $1 and ml.lesson_number = $2 order by lv.version desc limit 1`, [frameworkId, dayNumber]);
   return lessonListeningAudioIndex(result.rows[0]?.content);
+}
+
+/** Older single-voice audio cannot mask repaired multi-speaker synthesis. */
+function reusableVoicePolicy(script: string | readonly ScriptLine[], mark: unknown): boolean {
+  const speakers = new Set(parseDialogueScript(script).map(turn => turn.speaker?.toLowerCase() ?? ""));
+  return speakers.size < 2 || Boolean(mark && typeof mark === "object" && "voicePolicy" in mark && mark.voicePolicy === DIALOGUE_VOICE_POLICY);
 }

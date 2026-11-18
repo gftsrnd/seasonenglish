@@ -46,8 +46,10 @@ function sandboxModeEnabled() {
 }
 
 async function sandboxProfileRequest<T>(url: string, init?: RequestInit): Promise<T | undefined> {
-  if (!sandboxModeEnabled() || url !== "/api/v1/learner/profile") return undefined;
-  const real = await fetch(apiUrl(url), { credentials: "include", headers: { "content-type": "application/json" } });
+  const profilePath = "/api/v1/learner/profile";
+  const avatarOnly = url === `${profilePath}/avatar`;
+  if (!sandboxModeEnabled() || (url !== profilePath && !avatarOnly)) return undefined;
+  const real = await fetch(apiUrl(profilePath), { credentials: "include", headers: { "content-type": "application/json" } });
   if (!real.ok) throw await apiResponseError(real);
   const base = await real.json() as Record<string, any>;
   let saved: Record<string, any> | undefined;
@@ -55,11 +57,11 @@ async function sandboxProfileRequest<T>(url: string, init?: RequestInit): Promis
     const raw = window.localStorage.getItem(SANDBOX_PROFILE_KEY);
     saved = raw ? JSON.parse(raw) as Record<string, any> : undefined;
   } catch { saved = undefined; }
-  if ((init?.method ?? "GET").toUpperCase() === "PUT") {
+  if (avatarOnly || (init?.method ?? "GET").toUpperCase() === "PUT") {
     const input = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, any> : {};
-    const profile = { ...(base.profile ?? {}), ...input };
+    const profile = { ...(saved?.profile ?? base.profile ?? {}), ...(avatarOnly ? { avatar: input } : input) };
     delete profile.version;
-    saved = { ...base, version: Number(base.version ?? 0) + 1, completed: false, profile };
+    saved = { ...base, version: Number(saved?.version ?? base.version ?? 0) + 1, completed: false, profile };
     window.localStorage.setItem(SANDBOX_PROFILE_KEY, JSON.stringify(saved));
   }
   return (saved ? { ...base, ...saved, sandbox: true } : { ...base, sandbox: true }) as T;

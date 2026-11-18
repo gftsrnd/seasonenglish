@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { Cloud, Droplets, Flower2, Leaf, Snowflake, Star, Sun, type LucideIcon } from "lucide-react";
+import { AVATAR_CHARACTERS } from "@e4s/contracts";
 import type { AssessmentPlacementRetakeRequestView, LearnerAvatarData, RewardView, SurveyView } from "@e4s/contracts";
 import type { LearnerCallbacks, ProfileView } from "./contracts.js";
 import { ProductArt } from "../shared/media/ProductArt.js";
@@ -11,6 +11,7 @@ import { CourseAssessmentResult } from "./CourseCompletion.js";
 import { SeasonProgressCard } from "../shared/SeasonProgressCard.js";
 import { useCompactUi } from "../shared/CompactUi.js";
 import { formatPercent, formatScore, formatScoreOutOf } from "../shared/format-score.js";
+import { AccountAvatar, AvatarCharacterArt, AvatarMark, AVATAR_BG, AVATAR_CHARACTER_NAMES, AVATAR_COLOR_HEX } from "../shared/AccountAvatar.js";
 
 export function LearnerSurvey({ view, actions }: { view: SurveyView; actions: LearnerCallbacks }) {
   const [rating, setRating] = useState<number | null>(view.answers?.rating ?? null);
@@ -67,7 +68,7 @@ export function LearnerProfile({ view, actions, courseCompleted = false }: { vie
     <PageTitle eyebrow="Tiến độ & hồ sơ" title={view.learner.displayName} detail={detail} aside={level ? <span className={`badge lvl lvl-${level}`}>{level}</span> : null} />
     <section className="card learner-summary-card learner-summary-card--profile profile-identity-card" aria-label="Hồ sơ cá nhân">
       <div className="profile-identity-header">
-        <button ref={avatarReturnRef} className="btn-ghost profile-avatar-button" type="button" aria-label="Đổi avatar" onClick={openAvatar}><Avatar avatar={view.learner.profile.avatar} name={view.learner.displayName} /></button>
+        <button ref={avatarReturnRef} className="btn-ghost profile-avatar-button" type="button" aria-label="Đổi avatar" onClick={openAvatar}><AccountAvatar avatar={view.learner.profile.avatar} name={view.learner.displayName} /></button>
         <div className="profile-identity-title"><h2>Hồ sơ cá nhân</h2><div className="small muted">{avatarDescription(view.learner.profile.avatar)}</div></div>
         <div className="profile-identity-actions"><button className="btn-primary" type="button" onClick={openAvatar}>Đổi avatar</button><button className="btn" type="button" aria-expanded={profileOpen} aria-controls={profileOpen ? "profile-identity-details" : undefined} onClick={() => setProfileOpen((value) => !value)}>{profileOpen ? "Đóng thông tin" : "Xem hồ sơ"}</button></div>
       </div>
@@ -162,12 +163,14 @@ function PlacementSubmissionReview({ hasRetake }: { hasRetake: boolean }) {
     {submission ? <OriginalPlacementModal submission={submission.attempt} retake={submission.retake} onClose={() => setSubmission(undefined)} /> : null}
   </>;
 }
-function Avatar({ avatar, name, size = 88 }: { avatar: Partial<LearnerAvatarData> | undefined; name: string; size?: number }) { const acc = avatar?.acc ?? "none"; const color = avatar?.color ?? "olive"; const bg = avatar?.bg ?? 0; const dimension = `var(--profile-avatar-size, ${size}px)`; return <span className="app-avatar" style={{ width: dimension, height: dimension, minWidth: dimension, minHeight: dimension, boxSizing: "border-box", background: AVATAR_BG[bg], color: AVATAR_COLOR_HEX[color] }} aria-label={`Avatar của ${name}`}>{acc !== "none" ? <AvatarMark acc={acc} size={Math.round(size * .58)} /> : name.split(/\s+/).slice(-2).map((word) => word[0]).join("").toUpperCase()}</span>; }
-export function AvatarMark({ acc, size = 32 }: { acc: Exclude<LearnerAvatarData["acc"], "none">; size?: number }) { const icons: Record<typeof acc, LucideIcon> = { leaf: Leaf, sun: Sun, flower: Flower2, cloud: Cloud, star: Star, drop: Droplets, snow: Snowflake }; const Icon = icons[acc]; return <Icon size={size} strokeWidth={1.7} aria-hidden="true" />; }
 export function AvatarDialog({ initial, name = "Avatar xem trước", onClose, onSave }: { initial: Partial<LearnerAvatarData> | undefined; name?: string; onClose: () => void; onSave: (avatar: LearnerAvatarData) => void | Promise<void> }) {
-  const [avatar, setAvatar] = useState<LearnerAvatarData>({ acc: initial?.acc ?? "leaf", color: initial?.color ?? "olive", bg: initial?.bg ?? 0 });
+  const [avatar, setAvatar] = useState<LearnerAvatarData>({
+    acc: initial?.acc ?? "none", color: initial?.color ?? "olive", bg: initial?.bg ?? 0,
+    ...(initial?.character ? { character: initial.character } : {})
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { closeRef.current?.focus({ preventScroll: true }); }, []);
   const accessories = Object.entries(AVATAR_ACC_LABELS) as Array<[LearnerAvatarData["acc"], string]>;
@@ -175,6 +178,7 @@ export function AvatarDialog({ initial, name = "Avatar xem trước", onClose, o
   const save = async () => {
     if (saving) return;
     setSaving(true); setError("");
+    dialogRef.current?.focus({ preventScroll: true });
     try { await onSave(avatar); }
     catch { setError("Chưa lưu được avatar. Hãy kiểm tra kết nối rồi thử lại."); }
     finally { setSaving(false); }
@@ -194,7 +198,7 @@ export function AvatarDialog({ initial, name = "Avatar xem trước", onClose, o
     }
     const first = focusable[0]!;
     const last = focusable[focusable.length - 1]!;
-    if (event.shiftKey && document.activeElement === first) {
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === event.currentTarget)) {
       event.preventDefault();
       last.focus();
     } else if (!event.shiftKey && document.activeElement === last) {
@@ -202,11 +206,29 @@ export function AvatarDialog({ initial, name = "Avatar xem trước", onClose, o
       first.focus();
     }
   };
-  return <div className="modal-backdrop avatar-dialog-backdrop"><section className="dialog avatar-dialog" role="dialog" aria-modal="true" aria-labelledby="avatar-dialog-title" aria-busy={saving || undefined} onKeyDown={handleDialogKeyDown}>
-    <header className="avatar-dialog-preview"><Avatar avatar={avatar} name={name} size={48} /><div><h2 id="avatar-dialog-title">Avatar của bạn</h2><p>{name}</p></div></header>
+  return <div className="modal-backdrop avatar-dialog-backdrop"><section ref={dialogRef} className="dialog avatar-dialog" role="dialog" tabIndex={-1} aria-modal="true" aria-labelledby="avatar-dialog-title" aria-busy={saving || undefined} onKeyDown={handleDialogKeyDown}>
+    <header className="avatar-dialog-preview"><AccountAvatar avatar={avatar} name={name} size={48} /><div><h2 id="avatar-dialog-title">Avatar của bạn</h2><p>{name}</p></div></header>
     <div className="avatar-dialog-options">
-      <fieldset disabled={saving}><legend>Biểu tượng</legend><div className="avatar-symbol-options">{accessories.map(([key, text]) => <button type="button" aria-pressed={avatar.acc === key} onClick={() => setAvatar({ ...avatar, acc: key })} key={key}>{key === "none" ? <span aria-hidden="true" className="avatar-symbol-initials">Aa</span> : <AvatarMark acc={key} size={20} />}{text}</button>)}</div></fieldset>
-      <fieldset disabled={saving}><legend>Màu nét <span>· {AVATAR_COLOR_LABELS[avatar.color]}</span></legend><div className="avatar-swatch-options">{colors.map(([key, text]) => <button type="button" aria-label={text} title={text} aria-pressed={avatar.color === key} onClick={() => setAvatar({ ...avatar, color: key })} key={key}><span aria-hidden="true" style={{ background: AVATAR_COLOR_HEX[key] }} /></button>)}</div></fieldset>
+      <fieldset disabled={saving}>
+        <legend>Nhân vật Season English</legend>
+        <div className="avatar-character-options">
+          {AVATAR_CHARACTERS.map(character => <button key={character} type="button" aria-pressed={avatar.character === character}
+            onClick={() => setAvatar({ ...avatar, character })}>
+            <AvatarCharacterArt character={character} />{AVATAR_CHARACTER_NAMES[character]}
+          </button>)}
+        </div>
+      </fieldset>
+      <fieldset disabled={saving}>
+        <legend>Biểu tượng</legend>
+        <div className="avatar-symbol-options">
+          {accessories.map(([key, text]) => <button key={key} type="button" aria-pressed={!avatar.character && avatar.acc === key}
+            onClick={() => setAvatar({ acc: key, color: avatar.color, bg: avatar.bg })}>
+            {key === "none" ? <span aria-hidden="true" className="avatar-symbol-initials">Aa</span> : <AvatarMark acc={key} size={20} />}
+            <span className="avatar-option-label">{text}</span>
+          </button>)}
+        </div>
+      </fieldset>
+      {!avatar.character && <fieldset disabled={saving}><legend>Màu nét <span>· {AVATAR_COLOR_LABELS[avatar.color]}</span></legend><div className="avatar-swatch-options">{colors.map(([key, text]) => <button type="button" aria-label={text} title={text} aria-pressed={avatar.color === key} onClick={() => setAvatar({ ...avatar, color: key })} key={key}><span aria-hidden="true" style={{ background: AVATAR_COLOR_HEX[key] }} /></button>)}</div></fieldset>}
       <fieldset disabled={saving}><legend>Màu nền <span>· {AVATAR_BG_LABELS[avatar.bg]}</span></legend><div className="avatar-swatch-options">{AVATAR_BG.map((background, bg) => <button type="button" aria-label={`Màu nền ${AVATAR_BG_LABELS[bg]}`} title={AVATAR_BG_LABELS[bg]} aria-pressed={avatar.bg === bg} onClick={() => setAvatar({ ...avatar, bg: bg as LearnerAvatarData["bg"] })} key={background}><span aria-hidden="true" style={{ background }} /></button>)}</div></fieldset>
       <ErrorText message={error} />
     </div>
@@ -258,22 +280,21 @@ const ASSESSMENT_SKILLS = ["listening", "reading", "writing", "speaking"] as con
 const SECTION_LABELS: Record<string, string> = { listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" };
 const AVATAR_ACC_LABELS: Record<string, string> = { none: "Chữ cái đầu", leaf: "Lá", sun: "Nắng", flower: "Hoa", cloud: "Mây", star: "Sao", drop: "Giọt mưa", snow: "Tuyết" };
 const AVATAR_COLOR_LABELS: Record<string, string> = { ink: "Mực", brown: "Nâu", olive: "Ô liu", taupe: "Xám nâu", orange: "Cam", rose: "Đỏ hồng" };
-export const AVATAR_COLOR_HEX = { ink: "#1E1E1E", brown: "#6E3B32", olive: "#4B6120", taupe: "#7A7064", orange: "#F28C28", rose: "#B4374B" } satisfies Record<LearnerAvatarData["color"], string>;
-export const AVATAR_BG: readonly string[] = ["#FBB829", "#F6D3CB", "#E3DCFB", "#DCE8C8", "#FFF4D9", "#D6CCBF"];
 const AVATAR_BG_LABELS = ["Vàng", "Hồng nhạt", "Tím nhạt", "Xanh nhạt", "Kem", "Be"] as const;
 function label(value: string | undefined, dictionary: Record<string, string>) { return value ? dictionary[value] ?? value : ""; }
 function labels(values: readonly string[] | undefined, dictionary: Record<string, string>) { return (values ?? []).map((value) => label(value, dictionary)).join(", "); }
-function avatarDescription(avatar: Partial<LearnerAvatarData> | undefined) { return avatar ? `${label(avatar.acc, AVATAR_ACC_LABELS)} · nét ${label(avatar.color, AVATAR_COLOR_LABELS).toLowerCase()}` : "Chưa chọn – đang hiện chữ cái đầu"; }
+function avatarDescription(avatar: Partial<LearnerAvatarData> | undefined) {
+  if (avatar?.character && AVATAR_CHARACTER_NAMES[avatar.character]) return AVATAR_CHARACTER_NAMES[avatar.character];
+  return avatar ? `${label(avatar.acc, AVATAR_ACC_LABELS)} · nét ${label(avatar.color, AVATAR_COLOR_LABELS).toLowerCase()}` : "Chưa chọn – đang hiện chữ cái đầu";
+}
 
 export function LearnerReward({ view, actions }: { view: RewardView; actions: LearnerCallbacks }) {
   const preview = view.mode === "preview";
   const backHref = preview ? "/profile" : "/home";
+  const printingRequirement = "Bạn có thể in chứng nhận sau khi đạt C1 và được duyệt bài thi cuối tháng.";
   return <div className="app-learner-page reward-page rw">
-    {preview && <p className="reward-preview-note no-print" role="note">
-      <b>Bản xem trước</b> · Bạn đã đạt {view.earnedBadgeCount}/{view.requiredBadgeCount} huy hiệu.
-    </p>}
-    <BadgeCertificate view={view} preview={preview} {...(preview ? { summaryNote: "Nút in / lưu chỉ mở khi đạt cấp cao nhất thật." } : {})} />
-    <CertificateActions>{preview ? <span className="xs muted reward-print-note">Nút in / lưu chỉ mở khi đạt cấp cao nhất thật.</span> : <button className="btn" type="button" disabled={!view.printable} onClick={actions.printReward}>In / lưu chứng nhận (PDF, 1 trang A4 ngang)</button>}<AppLink className="btn btn-primary" href={backHref} navigate={actions.navigate}>{preview ? "← Quay lại" : "Tiếp tục học"}</AppLink></CertificateActions>
+    <BadgeCertificate view={view} preview={preview} {...(preview ? { previewInfo: printingRequirement } : {})} />
+    <CertificateActions>{preview ? <span className="xs muted reward-print-note">{printingRequirement}</span> : <button className="btn" type="button" disabled={!view.printable} onClick={actions.printReward}>In / lưu chứng nhận (PDF, 1 trang A4 ngang)</button>}<AppLink className="btn btn-primary" href={backHref} navigate={actions.navigate}>{preview ? "← Quay lại" : "Tiếp tục học"}</AppLink></CertificateActions>
   </div>;
 }
 

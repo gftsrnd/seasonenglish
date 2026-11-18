@@ -70,7 +70,7 @@ export interface AssessmentStimulus {
   text?: string;
   audioSrc?: string;
   /** Automatic Edge TTS after AI generation; "failed" keeps the script for the manual buttons. */
-  audioSynthesis?: { status: "generated" | "failed"; code?: string; scriptHash?: string; at?: string; engine?: string };
+  audioSynthesis?: { status: "generated" | "failed"; code?: string; scriptHash?: string; at?: string; engine?: string; voicePolicy?: string };
   lines?: Array<{ speaker: string; text: string }>;
   headers?: string[];
   rows?: string[][];
@@ -424,6 +424,8 @@ export interface AssessmentFormPreviewView {
   versionId: string;
   /** The approved month framework owning this monthly final, when available. */
   monthlyFrameworkId?: string;
+  /** Canonical monthly exam month (YYYY-MM); independent of title and publication date. */
+  month?: string;
   /** Database spelling is kept here so a category can be mapped without guessing. */
   kind: "placement" | "level_up" | "final" | "pass_course";
   title: string;
@@ -500,6 +502,7 @@ export interface AssessmentReviewLearnerView {
 }
 
 export interface AssessmentReviewAttemptDetailView extends AssessmentReviewAttemptSummaryView {
+  delivery?: { anchorVersionId: string; sourceVersionIds: string[]; groups: Array<{ section: AssessmentSectionCode; groupKey: string; versionId: string }> };
   learnerId: string;
   learnerName: string;
   productiveRubric?: AssessmentProductiveRubricItem[];

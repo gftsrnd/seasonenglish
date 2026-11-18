@@ -71,6 +71,12 @@ describe("dialogue script parser", () => {
 });
 
 describe("dialogue voice assignment", () => {
+  it("distinguishes speakers whose complete dialogue is stored on a single line", () => {
+    const plan = planListeningSpeech("Man: Hi, Sarah. Woman: Hello, Mark. Man: Is the meeting at nine?");
+    expect(plan.map(segment => segment.text)).toEqual(["Hi, Sarah.", "Hello, Mark.", "Is the meeting at nine?"]);
+    expect(plan[0]?.voice).not.toBe(plan[1]?.voice);
+    expect(plan[0]?.voice).toBe(plan[2]?.voice);
+  });
   it("uses name and role gender hints", () => {
     expect(speakerGenderHint("Ahmed")).toBe("male");
     expect(speakerGenderHint("Linda")).toBe("female");
@@ -111,6 +117,19 @@ describe("dialogue voice assignment", () => {
 });
 
 describe("dialogue synthesis and MP3 joining", () => {
+  it("synthesizes long monologues in bounded chunks without losing words or changing voice", async () => {
+    const text = Array.from({ length: 40 }, (_, index) => `Please bring your badge to meeting number ${index}.`).join(" ");
+    const runner = mockRunner();
+    runner.synthesize.mockImplementation(async ({ text }: { text: string }) => {
+      if (text.length > 500) throw new Error("EDGE_TTS_FAILED");
+      return { bytes: mp3Frames(2, 9), mimeType: "audio/mpeg" as const, filename: "speech.mp3" };
+    });
+    const result = await synthesizeListeningScript(runner, { script: text, voice: DEFAULT_NARRATOR_VOICE, joiner: mp3FrameJoiner });
+    expect(runner.synthesize.mock.calls.length).toBeGreaterThan(1);
+    expect(runner.synthesize.mock.calls.map(([input]) => input.text).join(" ")).toBe(text);
+    for (const [input] of runner.synthesize.mock.calls) expect(input).toMatchObject({ voice: DEFAULT_NARRATOR_VOICE });
+    expect(result.bytes.byteLength).toBeGreaterThan(0);
+  });
   it("joins Edge MP3 turns with silent frames of the same format", () => {
     const joined = joinMp3Segments([mp3Frames(2, 1), mp3Frames(3, 2)], 120);
     const frame = firstMp3Frame(joined)!;

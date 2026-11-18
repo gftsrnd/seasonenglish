@@ -271,6 +271,8 @@ async function ensurePrototypePromptsForUser(
   if (!organizationId) return;
   await ensurePrototypePrompts(pool, organizationId, keys);
 }
+import { bankAttemptId, bankDefinitionForAttempt, bankPreparation, startBankAttempt } from "./assessment-bank.js";
+import type { AssessmentBankScope } from "@e4s/contracts";
 import { assessmentProductiveRubric, normalizeLevelFormQuestionPrompts, type StoredAssessmentDefinition } from "./assessment-blueprints.js";
 function roundAssessmentScore(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -1042,6 +1044,18 @@ class LearningRepository {
     } finally {
       client.release();
     }
+  }
+
+  async saveProfileAvatar(learnerId: string, avatar: LearnerAvatarData): Promise<LearnerProfileRecord | null> {
+    const result = await this.pool.query(
+      `update learner_profiles
+       set profile = jsonb_set(profile, '{avatar}', $2::jsonb),
+           draft_profile = jsonb_set(draft_profile, '{avatar}', $2::jsonb),
+           version = version + 1, updated_at = now()
+       where user_id = $1`,
+      [learnerId, JSON.stringify(avatar)]
+    );
+    return result.rowCount ? this.getProfile(learnerId) : null;
   }
 
   async saveProfileDraft(input: {
@@ -5694,7 +5708,7 @@ function sectionTaskCount(blueprint: StoredAssessmentDefinition, code: Assessmen
  * Level-form review/edit/publish also serves the AI-generated placement retake form: a
  * `placement` definition keyed `placement-retake` with the same 20/40/2/4 structure.
  */
-const LEVEL_FORM_DEFINITION_SQL = `(ad.kind = 'level_up' or (ad.kind = 'placement' and ad.assessment_key = '${PLACEMENT_RETAKE_ASSESSMENT_KEY}'))`;
+const LEVEL_FORM_DEFINITION_SQL = `(not av.bank_managed and (ad.kind = 'level_up' or (ad.kind = 'placement' and ad.assessment_key = '${PLACEMENT_RETAKE_ASSESSMENT_KEY}')))`;
 const LEVEL_FORM_TARGET_SQL = `(case when ad.assessment_key = '${PLACEMENT_RETAKE_ASSESSMENT_KEY}' then '${PLACEMENT_RETAKE_ASSESSMENT_KEY}' else nullif(av.blueprint->>'targetLevel', '') end)`;
 
 function levelFormTarget(value: string | null | undefined): AssessmentLevelFormTarget | null {
@@ -5775,7 +5789,7 @@ function supportsPlacementMigration(
   source: StoredAssessmentDefinition,
   target: StoredAssessmentDefinition
 ): boolean {
-  if (source.kind !== "placement" || target.kind !== "placement" || ![1, 2].includes(source.version) || target.version !== 3) return false;
+  if (source.kind !== "placement" || target.kind !== "placement" || ![1, 2].includes(source.version) || target.version < 3) return false;
   const sourceTasks = assessmentTaskMap(source);
   const targetTasks = assessmentTaskMap(target);
   const sourceMovedKey = source.version === 1 ? "LA_3" : "LB_Q6";
@@ -5911,27 +5925,28 @@ class AssessmentRepository {
   }
 
   async findPublishedLevelUpForLearner(learnerId: string, targetLevel: CefrLevel): Promise<PublishedAssessmentRecord | null> {
-    const result = await this.pool.query<{
-      definition_id: string; version_id: string; assessment_key: string; kind: "level_up";
-      title: string; version: number; blueprint: StoredAssessmentDefinition;
-    }>(
-      `select ad.id as definition_id, av.id as version_id, ad.assessment_key, ad.kind, ad.title,
-              av.version, av.blueprint
-       from users learner
-       join assessment_definitions ad on ad.organization_id = learner.organization_id and ad.kind = 'level_up'
-       join assessment_versions av on av.definition_id = ad.id and av.status = 'published'
-       where learner.id = $1 and av.blueprint->>'targetLevel' = $2
-       order by av.published_at desc nulls last, av.version desc limit 1`,
-      [learnerId, targetLevel]
-    );
-    const row = result.rows[0];
-    return row ? {
-      definitionId: row.definition_id, versionId: row.version_id, assessmentKey: row.assessment_key,
-      kind: row.kind, title: row.title, version: row.version, blueprint: row.blueprint
-    } : null;
+    return targetLevel === "A1" ? null : bankPreparation(this.pool,learnerId,targetLevel);
   }
 
-  async findPublished(kind: AssessmentKind): Promise<PublishedAssessmentRecord | null> {
+  async findPublished(kind: AssessmentKind, learnerId?: string): Promise<PublishedAssessmentRecord | null> {
+    if (learnerId && kind !== "final") {
+      let scope: AssessmentBankScope;
+      if (kind === "level-up") {
+        const {currentLevel} = await this.levelUpStartContext(learnerId);
+        const next = currentLevel && { A1:"A2", A2:"B1", B1:"B2", B2:"C1", C1:null }[currentLevel];
+        if (!next) return null;
+        scope = next as AssessmentBankScope;
+      } else scope = kind === "pass-course" ? "pass_course" : "placement";
+      const existing = await bankAttemptId(this.pool,learnerId,scope);
+      if (existing) {
+        const {rows:[pin]} = await this.pool.query<{pinned:boolean}>(`select (a.status <> 'in_progress' or av.bank_managed or av.bank_archived
+          or exists(select 1 from assessment_bank_attempts b where b.attempt_id=a.id)
+          or exists(select 1 from assessment_bank_policies p join users u on u.organization_id=p.organization_id where u.id=$2 and p.scope=$3)) pinned
+          from assessment_attempts a join assessment_versions av on av.id=a.assessment_version_id where a.id=$1`,[existing,learnerId,scope]);
+        if (pin?.pinned) return bankDefinitionForAttempt(this.pool,existing);
+      }
+      return bankPreparation(this.pool,learnerId,scope);
+    }
     const databaseKind = kind === "level-up" ? "level_up" : kind === "pass-course" ? "pass_course" : kind;
     const result = await this.pool.query<{
       definition_id: string;
@@ -5970,7 +5985,8 @@ class AssessmentRepository {
    * created it. A monthly final is keyed by month and CEFR, so looking up only
    * the latest form of kind `final` can select another month's form.
    */
-  async findPublishedByVersion(versionId: string): Promise<PublishedAssessmentRecord | null> {
+  async findPublishedByVersion(versionId: string, attemptId?: string): Promise<PublishedAssessmentRecord | null> {
+    if (attemptId) return bankDefinitionForAttempt(this.pool,attemptId);
     const result = await this.pool.query<{
       definition_id: string;
       version_id: string;
@@ -6109,6 +6125,9 @@ class AssessmentRepository {
       return { state: "session_conflict", attempt: null };
     }
 
+    if ((await this.pool.query("select 1 from assessment_bank_attempts where attempt_id=$1", [candidate.id])).rowCount) {
+      return { state: "ready", attempt: candidate };
+    }
     const hasLegacyResponse = candidate.responses.some((response) => response.section === "listening" && response.taskKey === "LA_3");
     if (candidate.assessmentVersionId === published.versionId && !hasLegacyResponse) {
       return { state: "ready", attempt: candidate };
@@ -6533,7 +6552,12 @@ class AssessmentRepository {
     durationMinutes: number;
     violationLimit?: number;
     ownerSessionId?: string;
+    bankScope?: AssessmentBankScope;
   }): Promise<AssessmentAttemptRecord> {
+    if (input.bankScope) {
+      const id = await startBankAttempt(this.pool,input.learnerId,input.bankScope,input.violationLimit ?? 3,input.ownerSessionId ?? null);
+      return (await this.findAttempt(input.learnerId,id))!;
+    }
     const active = await this.findActiveAttempt(input.learnerId, input.assessmentVersionId);
     if (active) return active;
     const id = randomUUID();
@@ -6904,7 +6928,8 @@ class AssessmentRepository {
     const row = scope.rows[0];
     if (!row) return null;
     const attempt = await this.findAttempt(row.learner_id, attemptId);
-    return attempt ? { attempt, definition: row.blueprint } : null;
+    const delivered = attempt && await bankDefinitionForAttempt(this.pool,attemptId);
+    return attempt && delivered ? { attempt, definition: delivered.blueprint } : null;
   }
 
   async saveAssessmentRescore(input: {
@@ -7048,10 +7073,14 @@ class AssessmentRepository {
         await client.query("rollback");
         return null;
       }
+      const delivered = await bankDefinitionForAttempt(client,input.attemptId);
+      if (!delivered) { await client.query("rollback"); return null; }
+      person.blueprint = delivered.blueprint;
       const monthly = person.blueprint.kind === "final";
-      const rubric = monthly || person.blueprint.kind === "pass-course" ? assessmentProductiveRubric(person.blueprint) : [];
+      const rubric = assessmentProductiveRubric(person.blueprint);
       const rubricScores = input.rubricScores ?? [];
       const rubricByCode = new Map(rubric.map(criterion => [criterion.code, criterion]));
+      if (!monthly && (input.writingTasks.some(t=>rubricByCode.get(t.taskKey)?.skill!=="writing") || input.speakingTasks.some(t=>rubricByCode.get(t.taskKey)?.skill!=="speaking"))) { await client.query("rollback"); return null; }
       const submittedScores = new Map(rubricScores.map(criterion => [criterion.code, criterion.score]));
       if ((monthly && (!rubric.length || rubricScores.length !== rubric.length || submittedScores.size !== rubric.length
         || rubricScores.some(({ code, score }) => score > (rubricByCode.get(code)?.maxScore ?? -1))))
@@ -7170,6 +7199,14 @@ class AssessmentRepository {
     if (!row) return null;
     const attempt = await this.findAttempt(row.learner_id, attemptId);
     if (!attempt) return null;
+    const delivered = await bankDefinitionForAttempt(this.pool,attemptId);
+    if (!delivered) return null;
+    row.blueprint = delivered.blueprint;
+    row.title = delivered.title;
+    const bank = await this.pool.query<{manifest: import("./assessment-bank-manifest.js").BankManifest}>("select manifest from assessment_bank_attempts where attempt_id=$1",[attemptId]);
+    const manifest=bank.rows[0]?.manifest;
+    const delivery=manifest ? {anchorVersionId:manifest.anchor,sourceVersionIds:[...new Set(manifest.groups.map(g=>g.versionId))],
+      groups:manifest.groups.map(g=>({section:row.blueprint.sections[g.section]!.code, groupKey:row.blueprint.sections[g.section]!.groups[g.group]!.key,versionId:g.versionId}))} : undefined;
     const scoreRows = await this.pool.query<{
       section: AssessmentSectionCode; score: string; source: "deterministic" | "ai" | "human"; criteria: unknown;
     }>(
@@ -7274,6 +7311,7 @@ class AssessmentRepository {
       ? sectionScores.reduce((total, score) => total + Number(score ?? 0), 0)
       : null;
     return {
+      ...(delivery ? {delivery} : {}),
       id: attempt.id,
       kind: row.kind,
       title: row.title,
@@ -8327,7 +8365,7 @@ class AssessmentRepository {
       );
       const row = source.rows[0];
       if (!row) { await client.query("rollback"); return null; }
-      await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'draft'", [row.definition_id]);
+      await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'draft' and not bank_managed", [row.definition_id]);
       const next = await client.query<{ version: number }>("select coalesce(max(version), 0) + 1 as version from assessment_versions where definition_id = $1", [row.definition_id]);
       createdId = randomUUID();
       await client.query(
@@ -8397,7 +8435,7 @@ class AssessmentRepository {
         [definitionId, organizationId, key, placementRetake ? "placement" : "level_up", blueprint.title]
       );
       else await client.query("update assessment_definitions set title = $2 where id = $1", [definitionId, blueprint.title]);
-      await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'draft'", [definitionId]);
+      await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'draft' and not bank_managed", [definitionId]);
       const next = await client.query<{ version: number }>("select coalesce(max(version), 0) + 1 as version from assessment_versions where definition_id = $1", [definitionId]);
       versionId = randomUUID();
       await client.query("insert into assessment_versions (id, definition_id, version, status, blueprint) values ($1, $2, $3, 'draft', $4::jsonb)", [versionId, definitionId, next.rows[0]?.version ?? 1, JSON.stringify(blueprint)]);
@@ -8426,7 +8464,7 @@ class AssessmentRepository {
       const listening = blueprint.sections.find((section) => section.code === "listening");
       const missingAudio = !listening || listening.groups.some((group) => group.stimulus?.type !== "audio_script" || !group.stimulus.audioSrc?.trim());
       if (missingAudio) throw new Error("LEVEL_FORM_AUDIO_REQUIRED");
-      await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'published'", [definitionId]);
+      await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'published' and not bank_managed and not exists(select 1 from assessment_bank_policy_sources s where s.version_id=assessment_versions.id)", [definitionId]);
       await client.query("update assessment_versions set status = 'published', published_at = now() where id = $1", [versionId]);
       await client.query("commit");
     } catch (error) { await client.query("rollback"); throw error; } finally { client.release(); }
@@ -10698,10 +10736,10 @@ class EngagementRepository {
 
   async reward(learnerId: string, mode: "preview" | "done"): Promise<RewardView | null> {
     const result = await this.pool.query<{
-      display_name: string; cefr: CefrLevel; program_id: string; points: string; organization_name: string; operator_name: string; manager_name: string; completed_at: Date | null; monthly_final_approved: boolean;
+      display_name: string; cefr: CefrLevel; program_id: string; points: string; organization_name: string; operator_name: string; manager_name: string; monthly_final_approved: boolean;
       badges: Array<{ key: string; label: string; description: string; earned: boolean }>;
     }>(
-      `select u.display_name, e.cefr, e.program_id, o.name as organization_name, coalesce(sum(re.points), 0)::text as points, max(re.created_at) as completed_at,
+      `select u.display_name, e.cefr, e.program_id, o.name as organization_name, coalesce(sum(re.points), 0)::text as points,
               coalesce((select x.display_name from users x where x.organization_id = u.organization_id and x.role = 'operator' and x.status = 'active' order by x.created_at limit 1), '') as operator_name,
               coalesce((select x.display_name from users x where x.organization_id = u.organization_id and x.role = 'manager' and x.status = 'active' order by x.created_at limit 1), '') as manager_name,
               exists(select 1 from assessment_attempts aa
@@ -10717,17 +10755,15 @@ class EngagementRepository {
     );
     const row = result.rows[0];
     if (!row) return null;
-    const earnedBadgeCount = row.badges.filter((badge) => badge.earned).length;
-    const printable = row.cefr === "C1" && row.monthly_final_approved;
-    if (mode === "done" && !printable) return null;
-    const year = new Date().getUTCFullYear();
-    const generatedCode = `SE-${year}-${learnerId.replace(/\W/g, "").slice(-6).toUpperCase()}`;
+    if (mode === "done" && (row.cefr !== "C1" || !row.monthly_final_approved)) return null;
     type CertificateIssuanceRow = {
       certificate_code: string; level: CefrLevel; learner_name: string; organization_name: string;
       badges_snapshot: typeof row.badges; signatures_snapshot: { operatorName?: string; managerName?: string }; issued_at: Date;
     };
     let issuance: CertificateIssuanceRow | null = null;
     if (mode === "done") {
+      const year = new Date().getUTCFullYear();
+      const generatedCode = `SE-${year}-${learnerId.replace(/\W/g, "").slice(-6).toUpperCase()}`;
       await this.pool.query(
         `insert into certificate_issuances
            (id, learner_id, program_id, certificate_code, level, learner_name, organization_name,
@@ -10757,9 +10793,9 @@ class EngagementRepository {
       mode, learnerName: issuance?.learner_name ?? row.display_name, cefr: issuance?.level ?? row.cefr,
       cefrLabel: cefrDisplayLabel(issuance?.level ?? row.cefr),
       points: Number(row.points), displayPoints: Number(row.points),
-      season: { name: seasonName, description: seasonDescription, cefr: seasonState?.cefr ?? row.cefr }, simulated: mode === "preview", earnedBadgeCount,
-      requiredBadgeCount: badges.length, printable, certificateNumber: issuance?.certificate_code ?? generatedCode,
-      completedAt: issuance?.issued_at.toISOString() ?? (mode === "done" ? row.completed_at : null)?.toISOString() ?? new Date().toISOString(),
+      season: { name: seasonName, description: seasonDescription, cefr: seasonState?.cefr ?? row.cefr }, simulated: mode === "preview",
+      earnedBadgeCount: badges.filter((badge) => badge.earned).length, requiredBadgeCount: badges.length, printable: issuance !== null,
+      ...(issuance ? { certificateNumber: issuance.certificate_code, completedAt: issuance.issued_at.toISOString() } : {}),
       organizationName: issuance?.organization_name ?? row.organization_name,
       operatorName: signatures.operatorName ?? "", managerName: signatures.managerName ?? "", badges
     };
@@ -11221,33 +11257,14 @@ class FileRepository {
     return Boolean(result.rowCount);
   }
 
-  async findAudioDeleteTarget(actorId: string, fileId: string, tokenHash: string): Promise<AudioFileRecord | null> {
-    const result = await this.pool.query<AudioFileRow>(
-      `select f.*
-       from files f
-       join users actor on actor.id = $1
-       join file_deletion_confirmations c on c.file_id = f.id
-         and c.requester_user_id = actor.id
-         and c.token_hash = $3
-         and c.used_at is null
-         and c.expires_at > now()
-       where f.id = $2 and f.purpose = 'assessment_audio'
-         and f.deleted_at is null
-         and actor.role in ('operator', 'manager')
-         and actor.organization_id = f.organization_id
-       limit 1`,
-      [actorId, fileId, tokenHash]
-    );
-    return result.rows[0] ? fromAudioRow(result.rows[0]) : null;
-  }
-
   async deleteAudioWithConfirmation(input: {
     actorId: string;
     fileId: string;
     tokenHash: string;
     traceId: string;
+    removeObject(file: AudioFileRecord): Promise<void>;
     now?: Date;
-  }): Promise<{ status: "deleted" | "not_found" | "invalid_confirmation" | "already_deleted"; file?: AudioFileRecord }> {
+  }): Promise<{ status: "deleted" | "not_found" | "invalid_confirmation" | "already_deleted" | "retained"; file?: AudioFileRecord }> {
     const now = input.now ?? new Date();
     const client = await this.pool.connect();
     try {
@@ -11281,6 +11298,10 @@ class FileRepository {
         await client.query("rollback");
         return { status: "invalid_confirmation" };
       }
+      if ((await client.query<{ held: boolean }>("select assessment_file_retained($1) as held", [input.fileId])).rows[0]?.held) {
+        await client.query("rollback");
+        return { status: "retained" };
+      }
       const updated = await client.query<AudioFileRow>(
         `update files
          set deleted_at = $3, deleted_by = $1
@@ -11303,6 +11324,7 @@ class FileRepository {
           input.traceId
         ]
       );
+      await input.removeObject(fromAudioRow(file.rows[0]));
       await client.query("commit");
       return { status: "deleted", file: fromAudioRow(updated.rows[0]!) };
     } catch (error) {
@@ -13771,7 +13793,7 @@ class ManagerRepository {
       await client.query("delete from user_credentials where user_id = $1", [accountId]);
       await client.query("delete from learner_profiles where user_id = $1", [accountId]);
       const privateFiles = await client.query<{ bucket: string; object_key: string }>(
-        "select bucket, object_key from files where owner_user_id = $1 for update",
+        "select bucket, object_key from files where owner_user_id = $1 and not assessment_file_retained(id) for update",
         [accountId]
       );
       for (const file of privateFiles.rows) {
@@ -13786,7 +13808,7 @@ class ManagerRepository {
           ]
         );
       }
-      await client.query("delete from files where owner_user_id = $1", [accountId]);
+      await client.query("delete from files where owner_user_id = $1 and not assessment_file_retained(id)", [accountId]);
 
       // Keep operational and learning history, but remove free-form content that
       // can contain names, contact details, speech, or other personal data.

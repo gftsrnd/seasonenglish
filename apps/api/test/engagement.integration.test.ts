@@ -678,6 +678,8 @@ describe("practice, games, arena, rewards and survey API", () => {
     const reward = await app.inject({ method: "GET", url: "/api/v1/engagement/rewards/preview", headers: { cookie } });
     expect(reward.statusCode, reward.body).toBe(200);
     expect(reward.json()).toMatchObject({ mode: "preview", requiredBadgeCount: 8, printable: false });
+    expect(reward.json()).not.toHaveProperty("certificateNumber");
+    expect(reward.json()).not.toHaveProperty("completedAt");
     expect(reward.json()).not.toHaveProperty("games");
   });
 
@@ -695,5 +697,46 @@ describe("practice, games, arena, rewards and survey API", () => {
       payload: { rating: 1, comment: "overwrite", studyTime: "work" }
     });
     expect(duplicate.statusCode).toBe(409);
+  });
+
+  it("keeps preview unissued even for an eligible learner and returns real issuance metadata for done", async () => {
+    const previewUrl = "/api/v1/engagement/rewards/preview";
+    const issuedUrl = "/api/v1/engagement/rewards/done";
+    const headers = { cookie };
+    const locked = await app.inject({ method: "GET", url: issuedUrl, headers });
+    expect(locked.json()).toEqual({ code: "REWARD_NOT_READY" });
+
+    await pool.query("update enrollments set cefr = 'C1' where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query(
+      `with definition as (
+         insert into assessment_definitions (id, organization_id, assessment_key, kind, title)
+         values (gen_random_uuid(), $1, 'certificate-final-test', 'final', 'Certificate eligibility test') returning id
+       ), form as (
+         insert into assessment_versions (id, definition_id, version, status, blueprint, published_at)
+         select gen_random_uuid(), id, 1, 'published', '{}'::jsonb, now() from definition returning id
+       )
+       insert into assessment_attempts (id, assessment_version_id, learner_id, status, submitted_at)
+       select gen_random_uuid(), id, $2, 'approved', now() from form`,
+      [DEMO_IDS.organization, DEMO_IDS.learner]
+    );
+    const preview = await app.inject({ method: "GET", url: previewUrl, headers });
+    expect(preview.statusCode, preview.body).toBe(200);
+    expect(preview.json()).toMatchObject({ mode: "preview", printable: false });
+    expect(preview.json()).not.toHaveProperty("certificateNumber");
+    expect(preview.json()).not.toHaveProperty("completedAt");
+    const beforeIssuance = await pool.query("select 1 from certificate_issuances where learner_id = $1", [DEMO_IDS.learner]);
+    expect(beforeIssuance.rowCount).toBe(0);
+
+    const issued = await app.inject({ method: "GET", url: issuedUrl, headers });
+    expect(issued.statusCode, issued.body).toBe(200);
+    expect(issued.json()).toMatchObject({ printable: true, certificateNumber: expect.stringMatching(/^SE-/), completedAt: expect.any(String) });
+    const issuance = await pool.query<{ certificate_code: string; issued_at: Date }>(
+      "select certificate_code, issued_at from certificate_issuances where learner_id = $1",
+      [DEMO_IDS.learner]
+    );
+    expect(issuance.rows).toHaveLength(1);
+    expect(issued.json()).toMatchObject({
+      certificateNumber: issuance.rows[0]?.certificate_code, completedAt: issuance.rows[0]?.issued_at.toISOString()
+    });
   });
 });

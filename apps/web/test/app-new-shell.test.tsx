@@ -45,7 +45,10 @@ describe("new binding-app shell", () => {
     const user = userEvent.setup();
     const onAvatarClick = vi.fn();
     const { container } = render(<MemoryRouter initialEntries={["/home"]}><AppShell session={learnerSession} avatar={{ acc: "leaf", color: "olive", bg: 0 }} onLogout={vi.fn()} onAvatarClick={onAvatarClick}><section>Trang học</section></AppShell></MemoryRouter>);
-    const avatarButton = within(container).getByRole("button", { name: "Đổi avatar" });
+    const account = within(container).getByRole("button", { name: "Tài khoản và âm thanh" });
+    const menu = document.getElementById(account.getAttribute("popovertarget")!)!;
+    menu.removeAttribute("popover"); // jsdom does not open native popovers.
+    const avatarButton = within(menu).getByRole("button", { name: "Đổi avatar" });
     expect(avatarButton.querySelector("svg")).not.toBeNull();
     await user.click(avatarButton);
     expect(onAvatarClick).toHaveBeenCalledOnce();
@@ -54,7 +57,10 @@ describe("new binding-app shell", () => {
   it("disables the avatar trigger until its action is available", () => {
     render(<MemoryRouter initialEntries={["/home"]}><AppShell session={learnerSession} onLogout={vi.fn()}><section>Trang học</section></AppShell></MemoryRouter>);
 
-    expect(screen.getByRole("button", { name: "Đổi avatar" })).toBeDisabled();
+    const account = screen.getByRole("button", { name: "Tài khoản và âm thanh" });
+    const menu = document.getElementById(account.getAttribute("popovertarget")!)!;
+    menu.removeAttribute("popover");
+    expect(within(menu).getByRole("button", { name: "Đổi avatar" })).toBeDisabled();
   });
 
   it("locks every entry action while a real login is pending", async () => {

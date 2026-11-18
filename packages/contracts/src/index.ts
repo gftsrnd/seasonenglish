@@ -1,4 +1,5 @@
 export * from "./assessment-contract.js";
+export * from "./assessment-bank-contract.js";
 export * from "./audio-contract.js";
 export * from "./content-contract.js";
 export * from "./coach-contract.js";

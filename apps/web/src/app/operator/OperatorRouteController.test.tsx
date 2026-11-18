@@ -6,6 +6,7 @@ import { Link, MemoryRouter, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ContentLessonMatrixView, ContentLessonSetVersionView, ContentReviewAssessmentDetailView, ContentReviewView, SessionView } from "@e4s/contracts";
 import { ApiError } from "../../api/runtime.js";
+import { AppGuide } from "../shared/AppGuide.js";
 import { ToastProvider } from "../shared/design-system.js";
 import { monthlyFinalView } from "../../../test/support/monthly-final-view.js";
 import { OperatorRouteController } from "./OperatorRouteController.js";
@@ -276,6 +277,39 @@ describe("OperatorRouteController", () => {
     expect(within(navigation).getAllByRole("link").map(link => link.textContent)).toEqual(["Phản hồi Season", "Kháng nghị học viên", "Yêu cầu đã gửi", "Cảnh báo bài tập"]);
     expect(within(navigation).getByRole("link", { name: "Phản hồi Season" })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByText("Chưa có lượt luyện nào.")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["coach", "Chưa có lượt luyện nào.", "Theo dõi phản hồi"],
+    ["appeals", "Chưa có kháng nghị.", "Lọc kháng nghị"],
+    ["sent", "Chưa có yêu cầu gửi Quản lý.", "Theo dõi yêu cầu"],
+    ["attempts", "Chưa có câu bài ngày sai cả hai lượt.", "Theo dõi cảnh báo"]
+  ])("guides the active %s review tab even when its list is empty", async (tab, empty, heading) => {
+    const layout = vi.spyOn(HTMLElement.prototype, "getClientRects").mockImplementation(function (this: HTMLElement) {
+      return (this.closest("[hidden]") ? [] : [new DOMRect(20, 60, 260, 50)]) as unknown as DOMRectList;
+    });
+    try {
+      const client = {
+        getContentReview: vi.fn().mockResolvedValue({
+          tabs: [], submissions: [], coachSamples: [], microLessons: [], weeklyPractices: [], appeals: [],
+          lessonAttempts: [], exerciseWarnings: [], assessments: []
+        }),
+        getContentReviewAppeals: vi.fn().mockResolvedValue({ appeals: [], hasMore: false }),
+        getOwnReopenRequests: vi.fn().mockResolvedValue({ requests: [] }),
+        getOwnDeletionRequests: vi.fn().mockResolvedValue({ requests: [] })
+      };
+      render(<ToastProvider><MemoryRouter initialEntries={[`/op/review?tab=${tab}`]}>
+        <AppGuide role="operator" pathname="/op/review" compact={false} />
+        <OperatorRouteController session={operator} client={client as any} />
+      </MemoryRouter></ToastProvider>);
+      await screen.findByText(empty);
+      fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
+      const guide = screen.getByRole("dialog", { name: "Hướng dẫn sử dụng" });
+      fireEvent.click(within(guide).getByRole("button", { name: "Tiếp theo" }));
+      expect(within(guide).getByRole("heading", { name: heading })).toBeInTheDocument();
+    } finally {
+      layout.mockRestore();
+    }
   });
 
   it("switches Bài kiểm tra between recap result categories in the shared result shell", async () => {

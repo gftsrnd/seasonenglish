@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -29,7 +29,7 @@ beforeEach(() => {
   });
   client.logout.mockResolvedValue(undefined);
   client.saveSessionAvatar.mockResolvedValue({
-    user: { id: "manager-1", displayName: "Quản lý Demo", email: "manager@e4s.local", avatar: { acc: "leaf", color: "olive", bg: 2 } },
+    user: { id: "manager-1", displayName: "Quản lý Demo", email: "manager@e4s.local", avatar: { acc: "none", color: "olive", bg: 2, character: "rabbit" } },
     role: "manager", permissions: ["settings:manage"]
   });
   client.getProductPreferences.mockResolvedValue({ theme: "auto", vocabImageSource: "wikimedia" });
@@ -130,11 +130,17 @@ describe("Manager AI provider settings", () => {
     render(<App />);
     await screen.findByRole("heading", { name: "Cài đặt" });
 
-    await user.click(screen.getByRole("button", { name: "Đổi avatar" }));
-    expect(screen.getByRole("dialog", { name: "Avatar của bạn" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Màu nền 3" }));
-    await user.click(screen.getByRole("button", { name: "Lưu avatar" }));
+    const account = screen.getByRole("button", { name: "Tài khoản và âm thanh" });
+    const menu = document.getElementById(account.getAttribute("popovertarget")!)!;
+    menu.removeAttribute("popover"); // jsdom does not open native popovers.
+    await user.click(within(menu).getByRole("button", { name: "Đổi avatar" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Avatar của bạn" }));
+    await user.click(dialog.getByRole("button", { name: "Thỏ hồng" }));
+    await user.click(dialog.getByRole("button", { name: "Màu nền Tím nhạt" }));
+    await user.click(dialog.getByRole("button", { name: "Lưu avatar" }));
 
-    expect(client.saveSessionAvatar).toHaveBeenCalledWith(expect.objectContaining({ bg: 2 }));
+    expect(client.saveSessionAvatar).toHaveBeenCalledWith(expect.objectContaining({ bg: 2, character: "rabbit" }));
+    await waitFor(() => expect(account.querySelector("img")).toHaveAttribute("src", "/media/avatars/rabbit.webp"));
+    expect(account).toHaveFocus();
   });
 });

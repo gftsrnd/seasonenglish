@@ -35,10 +35,14 @@ export interface RewardAnnouncementView {
   reason?: string;
 }
 
+export const AVATAR_CHARACTERS = ["rabbit", "cricket", "squirrel", "penguin", "swallow", "jade-rabbit", "reindeer"] as const;
+export type AvatarCharacter = (typeof AVATAR_CHARACTERS)[number];
+
 export interface LearnerAvatarData {
   color: "ink" | "brown" | "olive" | "taupe" | "orange" | "rose";
   acc: "none" | "leaf" | "sun" | "flower" | "cloud" | "star" | "drop" | "snow";
   bg: 0 | 1 | 2 | 3 | 4 | 5;
+  character?: AvatarCharacter;
 }
 
 export interface LearnerProfileData {

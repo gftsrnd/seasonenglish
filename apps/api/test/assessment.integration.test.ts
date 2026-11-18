@@ -158,6 +158,22 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     });
   });
 
+  it("returns canonical month metadata for monthly exam grouping", async () => {
+    const definition = await pool.query<{ id: string }>(`insert into assessment_definitions (id, organization_id, assessment_key, kind, title)
+      values (gen_random_uuid(), $1, 'monthly-final-2026-11-a1', 'final', 'A title without a date') returning id`, [DEMO_IDS.organization]);
+    const versions = await pool.query<{ id: string }>(`insert into assessment_versions (id, definition_id, version, status, blueprint)
+      select gen_random_uuid(), $1, 1, 'draft', blueprint || '{"monthlyScope":{"month":"2026-11"}}'::jsonb
+      from assessment_versions where id = $2 returning id`, [definition.rows[0]!.id, levelUpVersionId]);
+    try {
+      const response = await app.inject({ method: "GET", url: "/api/v1/assessment-form-previews/final", headers: { cookie: operatorCookie } });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().forms).toEqual(expect.arrayContaining([expect.objectContaining({ versionId: versions.rows[0]!.id, month: "2026-11" })]));
+    } finally {
+      await pool.query("delete from assessment_versions where definition_id=$1", [definition.rows[0]!.id]);
+      await pool.query("delete from assessment_definitions where id=$1", [definition.rows[0]!.id]);
+    }
+  });
+
   it("returns persisted four-skill forms for the shared operator assessment viewer", async () => {
     const placement = await app.inject({ method: "GET", url: "/api/v1/assessment-form-previews/placement", headers: { cookie: operatorCookie } });
     expect(placement.statusCode, placement.body).toBe(200);

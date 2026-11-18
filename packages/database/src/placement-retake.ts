@@ -1,3 +1,4 @@
+import { bankPreparation, startBankAttempt } from "./assessment-bank.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type { AssessmentLevelFormUpdateInput, AssessmentRetakeStatus, AssessmentSectionCode, CefrLevel } from "@e4s/contracts";
@@ -301,23 +302,8 @@ export interface PublishedPlacementRetakeForm {
 
 /** The learner's organisation's currently published placement-retake form. */
 export async function findPublishedPlacementRetakeForm(db: Db, learnerId: string): Promise<PublishedPlacementRetakeForm | null> {
-  const result = await db.query<{
-    definition_id: string; version_id: string; assessment_key: string; title: string; version: number; blueprint: StoredAssessmentDefinition;
-  }>(
-    `select ad.id as definition_id, av.id as version_id, ad.assessment_key, ad.title, av.version, av.blueprint
-     from users learner
-     join assessment_definitions ad on ad.organization_id = learner.organization_id
-       and ad.kind = 'placement' and ad.assessment_key = $2
-     join assessment_versions av on av.definition_id = ad.id and av.status = 'published'
-     where learner.id = $1
-     order by av.published_at desc nulls last, av.version desc limit 1`,
-    [learnerId, PLACEMENT_RETAKE_ASSESSMENT_KEY]
-  );
-  const row = result.rows[0];
-  return row ? {
-    definitionId: row.definition_id, versionId: row.version_id, assessmentKey: row.assessment_key,
-    kind: "placement", title: row.title, version: row.version, blueprint: row.blueprint
-  } : null;
+  const form = await bankPreparation(db,learnerId,"retake");
+  return form ? { ...form, kind: "placement" } : null;
 }
 
 /**
@@ -416,36 +402,9 @@ export async function startPlacementRetakeAttempt(pool: Pool, input: {
   durationMinutes: number;
   violationLimit: number;
   ownerSessionId: string | null;
-}): Promise<string | null> {
-  const client = await pool.connect();
-  try {
-    await client.query("begin");
-    const grant = await findPlacementRetakeGrant(client, input.learnerId, { forUpdate: true });
-    if (!grant) { await client.query("rollback"); return null; }
-    if (grant.retakeAttemptId) { await client.query("commit"); return grant.retakeAttemptId; }
-    if (grant.usedAt) { await client.query("rollback"); return null; }
-    const id = randomUUID();
-    const startedAt = new Date();
-    const endsAt = new Date(startedAt.getTime() + input.durationMinutes * 60_000);
-    const timingState = { sections: { [input.firstSection]: { startedAt: startedAt.toISOString(), endsAt: endsAt.toISOString() } } };
-    await client.query(
-      `insert into assessment_attempts
-         (id, assessment_version_id, learner_id, status, current_section, timing_state, violation_limit, started_at, updated_at, owner_session_id)
-       values ($1, $2, $3, 'in_progress', $4, $5::jsonb, $6, $7, $7, $8)`,
-      [id, input.assessmentVersionId, input.learnerId, input.firstSection, JSON.stringify(timingState), input.violationLimit, startedAt, input.ownerSessionId]
-    );
-    await client.query(
-      "update assessment_retake_grants set retake_attempt_id = $2, used_at = $3 where id = $1",
-      [grant.id, id, startedAt]
-    );
-    await client.query("commit");
-    return id;
-  } catch (error) {
-    await client.query("rollback");
-    throw error;
-  } finally {
-    client.release();
-  }
+ }): Promise<string | null> {
+  return startBankAttempt(pool,input.learnerId,"retake",input.violationLimit,input.ownerSessionId);
+
 }
 
 /** Retake state of every learner in the reviewer's organisation that has a grant (absent = not granted). */

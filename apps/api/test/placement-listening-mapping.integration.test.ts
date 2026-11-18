@@ -10,6 +10,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 const learnerId = "00000000-0000-4000-8000-000000000164";
 const staleLearnerId = "00000000-0000-4000-8000-000000000165";
+const staleVersionId = "00000000-0000-4000-8000-000000006165";
 const staleAttemptId = "00000000-0000-4000-8000-000000009165";
 
 function legacyPlacementDefinition() {
@@ -68,8 +69,8 @@ describe("placement Listening 2 question 9 scoring path", () => {
       await migrateDatabase(client);
       await seedDemo(client);
       await client.query(
-        "update assessment_versions set blueprint = $2::jsonb where id = $1",
-        [DEMO_IDS.placementVersion, JSON.stringify(legacyPlacementDefinition())]
+        "insert into assessment_versions(id,definition_id,version,status,blueprint,published_at) values($1,$2,2,'published',$3,now())",
+        [staleVersionId, DEMO_IDS.placementDefinition, JSON.stringify(legacyPlacementDefinition())]
       );
       await syncCanonicalAssessmentBlueprints(client);
       await client.query(
@@ -198,7 +199,7 @@ describe("placement Listening 2 question 9 scoring path", () => {
       `insert into assessment_attempts
          (id, assessment_version_id, learner_id, status, current_section, timing_state, started_at, updated_at)
        values ($1, $2, $3, 'in_progress', 'listening', $4::jsonb, now(), now())`,
-      [staleAttemptId, DEMO_IDS.placementVersion, staleLearnerId, JSON.stringify({ sections: { listening: { startedAt: new Date().toISOString(), endsAt: new Date(Date.now() + 10 * 60_000).toISOString() } } })]
+      [staleAttemptId, staleVersionId, staleLearnerId, JSON.stringify({ sections: { listening: { startedAt: new Date().toISOString(), endsAt: new Date(Date.now() + 10 * 60_000).toISOString() } } })]
     );
     await pool.query(
       `insert into assessment_responses (id, attempt_id, section, task_key, response) values

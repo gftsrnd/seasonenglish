@@ -828,8 +828,16 @@ describe("ManagerRouteController", () => {
 
   it("opens the staff certificate preview from the Manager reward simulator", async () => {
     renderManager(<MemoryRouter initialEntries={["/reward/preview"]}><RoleRoutes session={{ user: { id: "manager-1", displayName: "Quản lý Demo", email: null }, role: "manager", permissions: [] }} /></MemoryRouter>);
-    expect(await screen.findByRole("heading", { name: "Certificate of Completion" })).toBeInTheDocument();
-    expect(screen.getByText(/Bản xem trước/)).toBeInTheDocument();
+    const certificate = await screen.findByRole("region", { name: "Certificate of Completion" });
+    expect(within(certificate).getByText("Bản xem trước")).toBeInTheDocument();
+    expect(certificate).not.toHaveTextContent(/SE-PREVIEW/);
+    expect(certificate).toHaveTextContent("đã hoàn thành bộ 8 huy hiệu");
+    expect(Array.from(certificate.querySelectorAll(".cert-facts > div > span"), label => label.textContent))
+      .toEqual(["Ngày cấp", "Huy hiệu", "Điểm", "Season"]);
+    expect(certificate.querySelector(".cert-facts > div:first-child")).toHaveTextContent("Chưa cấp");
+    expect(certificate.querySelector(".cert-sign")).toHaveTextContent("Vận hành mẫu");
+    expect(certificate.querySelector(".cert-sign")).toHaveTextContent("Quản lý mẫu");
+    expect(document.querySelector(".cert-print-only .cert-doc")?.innerHTML).toBe(certificate.innerHTML);
     expect(screen.getByRole("link", { name: "← Quay lại" })).toHaveAttribute("href", "/mgr/rewards");
   });
 
@@ -999,7 +1007,7 @@ describe("Manager guide coverage and bounded scroll regions", () => {
     const { container } = renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="operator" currentUserId="operator-1" /></MemoryRouter>);
     await waitFor(() => expect(container.querySelector("#setting-accounts > .card")).not.toBeNull());
     const panels = Array.from(container.querySelectorAll('.settings-panel-content[id^="setting-"]'));
-    expect(panels.map((panel) => panel.id)).toEqual(["setting-theme", "setting-music", "setting-monthly", "setting-exam-requests", "setting-accounts"]);
+    expect(panels.map((panel) => panel.id)).toEqual(["setting-theme", "setting-music", "setting-monthly", "setting-accounts"]);
     const { found, missing } = guideCoverage("operator", "/settings");
     expect(missing).toEqual([]);
     expect(found.map((step) => settingsPanelId(step.target))).toEqual(panels.map((panel) => panel.id));

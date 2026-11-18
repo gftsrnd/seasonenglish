@@ -11,9 +11,17 @@ import {
 import { createRepositories } from "../src/repositories.js";
 import { DEMO_IDS, seedDemo } from "../src/seed.js";
 
-/** The one retake form, in exactly placement-a's structure (the content is placement-a's here, for the test only). */
+/** The one retake form, in exactly placement-a's structure with distinct content. */
 function retakeBlueprint(): StoredAssessmentDefinition {
-  return { ...placementDefinition, key: "placement-retake", title: "Test đầu vào – đề thi lại" };
+  const form = structuredClone(placementDefinition);
+  for (const section of form.sections) for (const group of section.groups) {
+    for (const task of group.tasks) task.prompt = "Retake scenario " + task.key + ": discuss the revised work schedule.";
+    if (group.stimulus?.audioSrc) group.stimulus.audioSrc = "/test-audio/" + group.key + ".wav";
+    if (group.stimulus?.lines) group.stimulus.lines = [{ speaker:"Coordinator",text:"The revised shift begins tomorrow at eleven." }];
+    if (group.stimulus?.text) group.stimulus.text = "Please confirm the revised shift proposal before tomorrow.";
+    if (group.stimulus?.rows) group.stimulus.rows = [["New schedule","Eleven"]];
+  }
+  return { ...form, key: "placement-retake", title: "Test đầu vào – đề thi lại" };
 }
 
 // Needs a disposable database (the suite resets the public schema); skipped without one.

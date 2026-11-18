@@ -141,25 +141,31 @@ const operatorSteps: Record<string, readonly GuideStep[]> = {
     ["#monthly-teaching-calendar", "Lịch soạn bài", "Mỗi ô là ngày học, ngày ôn hoặc bài thi. Bấm **AI** để sinh bài nháp, **bút chì** để soạn tay, **Xem** để mở bài đã có."],
   ],
   "/op/review": [
-    [".operator-review-panel", "Phản hồi Season", "Mỗi hàng là một người học. Mở hàng để đọc lượt chat và điểm Season chấm, rồi đánh dấu **đã kiểm** cho lượt đã xem."],
-    [".card:has(> .operator-status-legend)", "Cảnh báo bài tập", "Mỗi hàng là một người học có cảnh báo. Mở để xem kỹ năng đã làm đúng hoặc đã **hết lượt**."],
-    ['main:has(.request-tabs a[aria-current="page"][href*="tab=attempts"]) .empty', "Cảnh báo bài tập", "Học viên làm sai hết lượt ở một kỹ năng sẽ hiện ở đây. Mỗi kỹ năng có tối đa **2 lượt**; hiện chưa có ai cần chú ý."],
-    ['main:has(.request-tabs a[aria-current="page"][href*="tab=attempts"]) .operator-review-card-list', "Câu sai cả hai lượt", "Mỗi thẻ là một câu học viên trả lời sai **cả hai lượt**. Bấm **Mở câu hỏi** để xem đề, **Hiệu chỉnh câu** nếu đề sai, **Không lỗi** nếu đề đúng."],
-    [".operator-requests .request-card:has(.request-filters)", "Kháng nghị học viên", "Lọc theo **trạng thái** ở đầu thẻ. Bấm **Xử lý** để đọc lý do, minh chứng và trả lời kháng nghị."],
-    [".operator-request-expanded", "Xử lý kháng nghị", "Đọc lý do và minh chứng, rồi **chấp nhận** để sửa kết quả hoặc **giữ nguyên** kèm lý do cho người học.", true],
-    ['main:has(.request-tabs a[aria-current="page"][href*="tab=sent"]) .operator-requests .request-card', "Yêu cầu đã gửi", "Yêu cầu bạn gửi Quản lý để **mở lại** bài, đề, tài nguyên hoặc **xoá học viên**. Xem **trạng thái** và phản hồi của Quản lý ngay dưới nội dung."],
+    [".operator-review-navigation", "Phản hồi và yêu cầu", "Bốn mục giúp bạn kiểm tra phản hồi **Season**, xử lý **kháng nghị**, theo dõi **yêu cầu gửi Quản lý** và rà **cảnh báo bài tập**."],
+    ['[data-operator-review-tab="coach"] .operator-review-panel', "Theo dõi phản hồi", "Mở hàng theo **học viên** để đọc câu trả lời, nhận xét và điểm Season. Chọn **Đánh dấu đã kiểm** sau khi xem, hoặc **Đã kiểm** để bỏ dấu."],
+    ['[data-operator-review-tab="coach"] > .empty', "Theo dõi phản hồi", "Các lượt luyện với **Season** xuất hiện ở đây sau khi học viên luyện tập."],
+    [".operator-requests .request-filters", "Lọc kháng nghị", "Chọn **Tất cả** để xem mọi mục, **Chờ xử lý** để tìm việc còn mở hoặc **Đã xử lý** để xem các quyết định."],
+    ['.operator-requests .request-table[aria-label="Danh sách kháng nghị"]:has(.request-record)', "Danh sách kháng nghị", "Dùng **Xử lý** cho mục đang chờ, **Chi tiết** xem quyết định, **Xóa** ẩn mục đã xử lý. Ưu tiên **quá hạn xử lý**."],
+    ['.operator-request-expanded:has(.operator-review-appeal-pending:not([aria-label^="Yêu cầu thi lại"]))', "Xử lý kháng nghị", "Đọc lý do và minh chứng, **Xem bài làm** nếu có. Chọn **Chấp nhận kháng nghị** hoặc **Giữ nguyên kết quả**, rồi nhập giải thích cho học viên.", true],
+    ['.operator-request-expanded:has(.operator-review-appeal-pending[aria-label^="Yêu cầu thi lại"])', "Xử lý thi lại", "Chọn **Duyệt cho thi lại** hoặc **Từ chối**, rồi nhập giải thích. Cần phát hành **đề thi lại** trước khi duyệt.", true],
+    ['.operator-request-expanded:has(.operator-review-appeal:not(.operator-review-appeal-pending))', "Xem quyết định", "Xem lý do, minh chứng và phản hồi đã gửi. Trạng thái cho biết yêu cầu **đã chấp nhận** hay **đã từ chối**.", true],
+    ['[data-operator-review-tab="sent"] .operator-requests .request-card', "Theo dõi yêu cầu", "Theo dõi yêu cầu **mở lại** hoặc **xóa tài khoản**. Xem ngày gửi, trạng thái **chờ xử lý**, **đã duyệt**, **đã từ chối** hoặc **đã hủy** và phản hồi."],
+    ['[data-operator-review-tab="attempts"] :is(.empty, .operator-review-card-list)', "Theo dõi cảnh báo", "Xem câu học viên sai **cả hai lượt** và đối chiếu hai câu trả lời. Mục này có dữ liệu khi cần kiểm tra bài tập ngày."],
+    ['[data-operator-review-tab="attempts"] .operator-review-card-list > article', "Kiểm tra câu hỏi", "Chọn **Mở câu hỏi** để xem đề, **Hiệu chỉnh câu** nếu đề sai hoặc **Không lỗi** để bỏ cảnh báo khi đề đúng."],
   ],
 };
 
 operatorSteps["/op/tests"] = [
-  [".operator-assessment-form-list", "Phiên bản đề đã lưu", "Các phiên bản đề của tab đang chọn kèm **trạng thái**, số kỹ năng và tổng điểm. Bấm **Xem** để mở trước đề như học viên thấy."],
+  ['.assessment-bank:not([aria-label="Kho đề thi lại đầu vào"]) > .assessment-bank-header', "Kho đề", "Danh sách các phiên bản đề đã lưu. Mục tiêu ban đầu **3 bộ**, có thể bổ sung khi cần."],
+  ['.assessment-bank:not([aria-label="Kho đề thi lại đầu vào"]) > .assessment-bank-toolbar', "Công cụ đề", "Chọn **Soạn tay** hoặc **Sinh bằng AI** để thêm bản nháp. Mở **Cách giao đề** để chọn bộ đã duyệt hoặc cấu hình trộn cho lượt thi mới."],
+  ['.assessment-bank:not([aria-label="Kho đề thi lại đầu vào"]) > .assessment-bank-list:has(.assessment-bank-row)', "Các phiên bản", "Bấm **Xem** để đọc đề, **Sửa** nháp hoặc **Tạo bản sửa** từ bộ đã duyệt. **Lưu trữ** ngừng giao đề; chỉ xoá khi chưa có lượt thi."],
+  ['.assessment-bank[aria-label="Kho đề thi lại đầu vào"]', "Kho đề thi lại", "Kho riêng cho **thi lại đầu vào**. Soạn, duyệt và dùng **Cách giao đề** để chỉ định bộ giao cho lượt thi lại mới."],
+  ['[data-assessment-kind="final"]', "Đề thi tháng", "Mỗi **tháng và mức** dùng một đề. Bấm **Xem** để đọc đề đã lưu và đối chiếu phiên bản trước khi sử dụng."],
+  ['.operator-assessment-form-list:not([data-assessment-kind="final"]):not(.assessment-bank)', "Phiên bản đề đã lưu", "Các phiên bản đề của tab đang chọn kèm **trạng thái**, số kỹ năng và tổng điểm. Bấm **Xem** để mở trước đề như học viên thấy."],
   [".card:has(.operator-results-table)", "Kết quả bài thi", "Các lượt làm bài **đầu vào**, **lên mức**, **thi tháng** và **đề đầu ra** kèm tổng điểm. Bấm **Xem** để mở bài làm và chấm."],
   ["main .empty", "Kết quả bài thi", "Bài thi học viên đã nộp sẽ hiện ở đây kèm tổng điểm. Bấm **Xem** ở mỗi hàng để mở bài làm và chấm."],
 ];
-operatorSteps["/op/levelforms"] = [
-  [".operator-level-forms-embedded", "Đề lên mức", "Mỗi **mức đích** có một đề lên mức. Bấm **Soạn tay** hoặc **Sinh đề bằng AI** để tạo bản nháp; chỉ bản nháp hoàn chỉnh mới phát hành được."],
-  ...operatorSteps["/op/tests"]!.slice(1),
-];
+operatorSteps["/op/levelforms"] = operatorSteps["/op/tests"]!;
 
 const managerSteps: Record<string, readonly GuideStep[]> = {
   "/mgr": [
@@ -210,10 +216,13 @@ const managerSteps: Record<string, readonly GuideStep[]> = {
 managerSteps["/mgr/reopen-requests"] = managerSteps["/mgr/requests"]!;
 managerSteps["/mgr/complaints"] = managerSteps["/mgr/requests"]!;
 managerSteps["/mgr/ops/tests"] = [
-  [".operator-assessment-form-list", "Phiên bản đề đã lưu", "Các phiên bản đề của tab đang chọn kèm **trạng thái** và tổng điểm. Bấm **Xem** để mở trước đề; Quản lý **chỉ xem**."],
+  [".assessment-bank", "Kho đề đang dùng", "Xem **bộ đang giao**, trạng thái phiên bản và số bộ đã duyệt. Quản lý có thể dùng **Xem** để mở từng bộ đề."],
+  ['[data-assessment-kind="final"]', "Đề thi tháng", "Mỗi **tháng và mức** dùng một đề. Bấm **Xem** để đọc phiên bản đã lưu."],
+  ['.operator-assessment-form-list:not([data-assessment-kind="final"])', "Phiên bản đề đã lưu", "Các phiên bản đề của tab đang chọn kèm **trạng thái** và tổng điểm. Bấm **Xem** để mở trước đề; Quản lý **chỉ xem**."],
   [".card:has(.operator-results-table)", "Kết quả bài thi", "Các lượt làm bài đầu vào, lên mức, thi tháng và đề đầu ra kèm tổng điểm. Bấm **Xem** để mở bài làm; Quản lý **chỉ xem**."],
   ["main .empty", "Kết quả bài thi", "Bài thi học viên đã nộp sẽ hiện ở đây kèm tổng điểm để theo dõi."],
 ];
+managerSteps["/mgr/ops/level-forms"] = managerSteps["/mgr/ops/tests"]!;
 managerSteps["/mgr/ops/levels"] = [
   ['[data-guide="op-pending"]', "Hồ sơ chờ duyệt", "Mở hồ sơ để xem **điểm từng kỹ năng** và thông tin xét trình độ. **Vận hành** là người chọn mức."],
   ['[data-guide="op-signals"]', "Tín hiệu đổi mức", "Người học đủ tín hiệu để **thi lên mức** hoặc cần **xem xét hạ mức** trong 14 ngày gần nhất."],
@@ -251,7 +260,6 @@ const operatorSettings: readonly GuideStep[] = [
   themeGuide,
   musicGuide,
   learningGuide,
-  settingsStep("exam-requests", "Yêu cầu đổi đề", "Nhập **email đội phát triển** và mô tả phần cần đổi, rồi gửi yêu cầu cho **đề đầu vào** hoặc **đề đầu ra**."),
   settingsStep("accounts", "Người dùng", "Vai trò, mức học và trạng thái đăng nhập của từng người. Vận hành **chỉ xem**."),
 ];
 
@@ -275,7 +283,14 @@ export function guideDefinitions(role: GuideRole, path: string) {
   return routes[path] ?? routes[`/${path.split("/")[1]}/*`];
 }
 
+const deliveryPolicySteps: readonly GuideStep[] = [
+  ["fieldset:first-of-type", "Chọn cách giao", "Giữ **Dùng nguyên một bộ** để giao đề nguyên vẹn. Với **Trộn các bộ**, chọn **Số bộ muốn trộn** trước khi chọn các bộ đã duyệt."],
+  ["fieldset:last-of-type", "Chọn bộ đề", "Chọn đúng **số bộ** đã chỉ định. Các bộ tham gia phải **đã duyệt** và tương thích về cấu trúc, thời lượng và cách chấm."],
+  [".assessment-bank-confirm", "Áp dụng cấu hình", "Bấm **Xác nhận áp dụng** để lưu cấu hình cho **lượt thi mới**."],
+];
+
 export function guidePopupDefinitions(role: GuideRole, path: string, popup: HTMLElement): readonly GuideStep[] | undefined {
+  if (role === "operator" && (path === "/op/tests" || path === "/op/levelforms") && popup.matches(".assessment-delivery-dialog")) return deliveryPolicySteps;
   // Chỉ popup có quy trình nhiều bước mới có hướng dẫn. Hộp thoại nhỏ, tự giải thích (mở lại bài, avatar,
   // phân bổ theo ngày, sửa tay tài nguyên tháng) không có hướng dẫn nên nút "?" không hiện trong đó.
   if (role === "operator" && (path === "/op/months" || path.startsWith("/op/months/lesson/")) && popup.matches(".operator-lesson-editor")) return lessonEditorSteps;
@@ -289,4 +304,5 @@ export const allGuideSteps: readonly (readonly [route: string, steps: readonly G
   ["operator /settings", operatorSettings],
   ["operator /op/months/lesson/*", monthlyLessonOperatorSteps],
   ["operator popup lesson editor", lessonEditorSteps],
+  ["operator popup assessment delivery", deliveryPolicySteps],
 ];

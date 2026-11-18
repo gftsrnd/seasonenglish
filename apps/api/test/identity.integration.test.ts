@@ -504,14 +504,14 @@ describe("identity API", () => {
       method: "PATCH",
       url: "/api/v1/me/avatar",
       headers: { cookie: managerCookie },
-      payload: { acc: "leaf", color: "olive", bg: 2 }
+      payload: { acc: "leaf", color: "olive", bg: 2, character: "rabbit" }
     });
     expect(saved.statusCode).toBe(200);
-    expect(saved.json()).toMatchObject({ user: { avatar: { acc: "leaf", color: "olive", bg: 2 } }, role: "manager" });
+    expect(saved.json()).toMatchObject({ user: { avatar: { acc: "leaf", color: "olive", bg: 2, character: "rabbit" } }, role: "manager" });
 
     const current = await app.inject({ method: "GET", url: "/api/session", headers: { cookie: managerCookie } });
     expect(current.statusCode).toBe(200);
-    expect(current.json()).toMatchObject({ user: { avatar: { acc: "leaf", color: "olive", bg: 2 } } });
+    expect(current.json()).toMatchObject({ user: { avatar: { acc: "leaf", color: "olive", bg: 2, character: "rabbit" } } });
   });
 
   it("rejects invalid avatar values", async () => {
@@ -519,7 +519,7 @@ describe("identity API", () => {
       method: "PATCH",
       url: "/api/v1/me/avatar",
       headers: { cookie: managerCookie },
-      payload: { acc: "rocket", color: "olive", bg: 99 }
+      payload: { acc: "leaf", color: "olive", bg: 2, character: "https://example.test/avatar.png" }
     });
     expect(response.statusCode).toBe(400);
   });

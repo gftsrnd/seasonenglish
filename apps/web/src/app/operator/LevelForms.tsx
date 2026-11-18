@@ -181,7 +181,8 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
       }))
     }))
   }));
-  const updateGroupStimulusText = (sectionIndex: number, groupIndex: number, type: "audio_script" | "passage", text: string) => setDraft((current) => ({
+  const updateGroupContent = (sectionIndex: number, groupIndex: number, patch: Partial<AssessmentLevelFormUpdateInput["sections"][number]["groups"][number]>) => setDraft(current => ({ ...current, sections: current.sections.map((section, si) => si !== sectionIndex ? section : { ...section, groups: section.groups.map((group, gi) => gi !== groupIndex ? group : { ...group, ...patch }) }) }));
+  const updateGroupStimulusText = (sectionIndex: number, groupIndex: number, type: "audio_script" | "passage" | "message", text: string) => setDraft((current) => ({
     ...current,
     sections: current.sections.map((section, nextSectionIndex) => nextSectionIndex !== sectionIndex ? section : ({
       ...section,
@@ -191,7 +192,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
           ? {
               type,
               lines: parseScriptLines(text),
-              ...(group.stimulus?.type === "audio_script" && group.stimulus.audioSrc ? { audioSrc: group.stimulus.audioSrc } : {})
+              ...(group.stimulus?.type === "audio_script" && group.stimulus.lines && JSON.stringify(group.stimulus.lines) === JSON.stringify(parseScriptLines(text)) && group.stimulus.audioSrc ? { audioSrc: group.stimulus.audioSrc } : {})
             }
           : { type, text }
       }))
@@ -249,7 +250,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
     setPublishing(true);
     setActionError(undefined);
     try { await onPublish({ answersReviewed: true }); }
-    catch { setActionError("Không phát hành được đề lên mức. Hãy kiểm tra lại bản nháp."); }
+    catch (error) { setActionError(error instanceof Error ? error.message : "Không phát hành được đề. Hãy kiểm tra lại bản nháp."); }
     finally { interactionLocked.current = false; setPublishing(false); }
   };
 
@@ -294,13 +295,20 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
     {section.groups.map((group, groupIndex) => {
       const audioSrc = group.stimulus?.type === "audio_script" ? group.stimulus.audioSrc?.trim() : undefined;
       const script = group.stimulus?.type === "audio_script" ? (group.stimulus.lines ?? []).map((line) => `${line.speaker}: ${line.text}`).join("\n") : "";
-      const spokenScript = speakTextOnly && group.stimulus?.type === "audio_script" ? (group.stimulus.lines ?? []).map((line) => line.text).join("\n") : script;
+      // Only a narrator-only script may discard labels. Dialogue labels are
+      // required by the shared server TTS planner to retain distinct voices.
+      const narratorOnly = group.stimulus?.lines?.every(line => /^narrator$/iu.test(line.speaker.trim()));
+      const spokenScript = speakTextOnly && narratorOnly && group.stimulus?.type === "audio_script" ? (group.stimulus.lines ?? []).map((line) => line.text).join("\n") : script;
       const passage= group.stimulus?.type === "passage" ? group.stimulus.text : "";
       const audioBusy = audioJob?.groupKey === group.key;
       return <section className="card flat operator-level-question-group" key={group.key}>
-        <header><b>{group.title}</b><p className="xs muted">{group.instruction}</p></header>
+        <header><b>{group.title}</b>{editing && !readOnly ? <label className="operator-level-stimulus-editor"><span>Hướng dẫn phần</span><textarea aria-label={`Hướng dẫn ${group.title}`} value={group.instruction} onChange={event => updateGroupContent(sectionIndex, groupIndex, { instruction: event.target.value })} /></label> : <p className="xs muted">{group.instruction}</p>}</header>
         {editing && !readOnly && section.code === "listening" ? <label className="operator-level-stimulus-editor"><span>Kịch bản nghe</span><textarea aria-label={`Kịch bản nghe ${group.title}`} value={script} onChange={(event) => updateGroupStimulusText(sectionIndex, groupIndex, "audio_script", event.target.value)} /></label> : null}
-        {editing && !readOnly && section.code === "reading" ? <label className="operator-level-stimulus-editor"><span>Đoạn đọc</span><textarea aria-label={`Đoạn đọc ${group.title}`} value={passage} onChange={(event) => updateGroupStimulusText(sectionIndex, groupIndex, "passage", event.target.value)} /></label> : null}
+        {editing && !readOnly && section.code === "reading" && group.stimulus?.type !== "message" && group.stimulus?.type !== "table" ? <label className="operator-level-stimulus-editor"><span>Đoạn đọc</span><textarea aria-label={`Đoạn đọc ${group.title}`} value={passage} onChange={(event) => updateGroupStimulusText(sectionIndex, groupIndex, "passage", event.target.value)} /></label> : null}
+        {group.stimulus?.type === "message" || (group.stimulus?.type === "passage" && section.code !== "reading") ? editing && !readOnly
+          ? <label className="operator-level-stimulus-editor"><span>Ngữ liệu</span><textarea aria-label={`Ngữ liệu ${group.title}`} value={group.stimulus.text ?? ""} onChange={event => updateGroupStimulusText(sectionIndex, groupIndex, group.stimulus!.type as "message" | "passage", event.target.value)} /></label>
+          : <p className="operator-level-passage">{group.stimulus.text}</p> : null}
+        {group.stimulus?.type === "table" ? <AssessmentTableEditor group={group} editing={editing && !readOnly} onChange={stimulus => updateGroupContent(sectionIndex, groupIndex, { stimulus })} /> : null}
         {section.code === "listening" ? <div className={`operator-level-audio ${audioSrc ? "has-audio" : "missing-audio"}`}>
           <div><b>{audioSrc ? "Audio phần nghe" : "Chưa có audio nghe"}</b><span className="xs muted">{audioSrc ? "Học viên sẽ nghe đúng tệp này trong bài thi." : "Chọn một nguồn audio và lưu bản nháp trước khi duyệt đề."}</span></div>
           {audioSrc ? <audio controls preload="metadata" src={audioSrc}>Trình duyệt không hỗ trợ audio.</audio> : null}
@@ -332,7 +340,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
     <div className="operator-level-form-dialog-body">
       <div ref={scroll.start} className="app-scroll-edge" aria-hidden="true" />
       <div className="operator-level-form-dialog-content">
-        {editing && !readOnly && onPublish ? <section className="card flat operator-level-publication" aria-label="Trạng thái đề lên mức">
+        {editing && !readOnly && onPublish ? <section className="card flat operator-level-publication" aria-label={kicker ? `Trạng thái ${kicker.toLocaleLowerCase("vi")}` : "Trạng thái đề lên mức"}>
           <header className="row between">
             <div><b>Trạng thái đề</b> <Badge tone={publishBlocker ? "warn" : "ok"}>{dirty ? "Có thay đổi chưa lưu" : publicationReady ? "Sẵn sàng phát hành" : "Cần hoàn thiện"}</Badge></div>
             <button className="btn btn-primary" type="button" disabled={saving || publishing || Boolean(audioJob) || Boolean(publishBlocker) || draftMaintenanceBusy} title={publishBlocker} onClick={() => void publish()}>{publishing ? "Đang phát hành…" : "Duyệt & phát hành"}</button>
@@ -354,6 +362,22 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
       {scroll.visible && <ScrollJumpButton atTop={scroll.atTop} onClick={scroll.jump} inExam />}
     </div>
   </section></div>;
+}
+
+function AssessmentTableEditor({ group, editing, onChange }: {
+  group: AssessmentLevelFormUpdateInput["sections"][number]["groups"][number];
+  editing: boolean;
+  onChange(value: NonNullable<AssessmentLevelFormUpdateInput["sections"][number]["groups"][number]["stimulus"]>): void;
+}) {
+  const headers = group.stimulus?.headers ?? [];
+  const rows = group.stimulus?.rows ?? [];
+  const update = (nextHeaders: string[], nextRows: string[][]) => onChange({ type: "table", headers: nextHeaders, rows: nextRows });
+  return <div className="operator-level-table-editor">
+    <div className="table-wrap"><table aria-label={`Ngữ liệu bảng ${group.title}`}><thead><tr>{headers.map((header, ci) => <th key={ci}>{editing ? <><input aria-label={`Tiêu đề cột ${ci + 1} ${group.title}`} value={header} onChange={event => update(headers.map((cell, i) => i === ci ? event.target.value : cell), rows)} /><button type="button" className="btn-sm" disabled={headers.length <= 1} aria-label={`Xoá cột ${ci + 1} ${group.title}`} onClick={() => update(headers.filter((_, i) => i !== ci), rows.map(row => row.filter((_, i) => i !== ci)))}>Xoá cột</button></> : header}</th>)}{editing && <th>Thao tác</th>}</tr></thead>
+      <tbody>{rows.map((row, ri) => <tr key={ri}>{headers.map((_, ci) => <td key={ci}>{editing ? <input aria-label={`Dòng ${ri + 1} cột ${ci + 1} ${group.title}`} value={row[ci] ?? ""} onChange={event => update(headers, rows.map((cells, i) => i === ri ? headers.map((_, j) => j === ci ? event.target.value : cells[j] ?? "") : cells))} /> : row[ci]}</td>)}{editing && <td><button type="button" className="btn-sm" disabled={rows.length <= 1} aria-label={`Xoá dòng ${ri + 1} ${group.title}`} onClick={() => update(headers, rows.filter((_, i) => i !== ri))}>Xoá dòng</button></td>}</tr>)}</tbody>
+    </table></div>
+    {editing && <div className="row"><button type="button" className="btn-sm" disabled={headers.length >= 40} onClick={() => update([...headers, ""], rows.map(row => [...row, ""]))}>Thêm cột {group.title}</button><button type="button" className="btn-sm" disabled={rows.length >= 100} onClick={() => update(headers, [...rows, headers.map(() => "")])}>Thêm dòng {group.title}</button></div>}
+  </div>;
 }
 
 function LevelFormWarnings({ warnings }: { warnings: LevelFormEditorDetail["warnings"] }) {

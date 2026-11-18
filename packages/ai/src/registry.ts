@@ -51,6 +51,7 @@ import {
   validateMonthlyFinalProductiveOutput, validateMonthlyFinalReceptiveOutput
 } from "./monthly-final-schemas.js";
 import { z } from "zod";
+import { assessmentBankGroupOutput } from "./assessment-bank-group.js";
 import {monthlyFinalReadAloudInputSchema,monthlyFinalReadAloudOutputSchema,monthlyFinalReadAloudOutputJsonSchema,normalizeMonthlyFinalReadAloudOutput,validateMonthlyFinalReadAloudOutput} from "./monthly-final-read-aloud.js";
 import {monthlyFinalSampleRepairInputSchema,monthlyFinalSpeakingSampleRepairJsonSchema,validateMonthlyFinalSampleRepair} from "./monthly-final-sample-repair.js";
 import {monthlyFinalWritingBlocksInputSchema,monthlyFinalWritingBlocksOutputSchema,monthlyFinalWritingBlocksJsonSchema,validateMonthlyFinalWritingBlocks} from "./monthly-final-writing-blocks.js";
@@ -143,6 +144,8 @@ export const AI_TASKS = new AiTaskRegistry([
     id: "level_form_item_repair", promptKey: "level_form_generation", inputSchema: z.record(z.string(), z.unknown()),
     outputSchema: levelFormItemRepairOutputSchema, outputJsonSchema: levelFormItemRepairOutputJsonSchema
   },
+  { id: "assessment_bank_group_generation", promptKey: "level_form_generation", inputSchema: z.record(z.string(),z.unknown()),
+    outputSchema: assessmentBankGroupOutput, outputJsonSchema: z.toJSONSchema(assessmentBankGroupOutput) },
   { id: "level_form_listening_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormListeningOutputSchema, outputJsonSchema: levelFormListeningOutputJsonSchema },
   { id: "level_form_reading_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormReadingOutputSchema, outputJsonSchema: levelFormReadingOutputJsonSchema },
   {

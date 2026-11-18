@@ -1,0 +1,35 @@
+:root {
+  --assessment-canvas: var(--surface-3);
+  --assessment-paper: var(--surface);
+}
+.assessment-bank { min-width: 0; }
+.assessment-bank-header h2 { margin-top: 0; }
+.assessment-bank-header > div, .assessment-bank-row > div { min-width: 0; overflow-wrap: anywhere; }
+.assessment-bank-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.assessment-bank-title > b { min-width: 0; overflow-wrap: anywhere; }
+.assessment-bank .badge.assessment-bank-state { flex: none; font-weight: 500; box-shadow: none; border: 1px solid; }
+.assessment-bank .badge.assessment-bank-state.active { color: #17643d; background: #e8f3eb; border-color: #bad8c4; }
+.assessment-bank .badge.assessment-bank-state.draft { color: #855600; background: #fff4d9; border-color: #ead39b; }
+.assessment-bank .badge.assessment-bank-state.archived { color: #5f6368; background: #f0f1f2; border-color: #d4d7da; }
+.assessment-bank .badge.assessment-bank-state.approved { color: #315f8a; background: #edf3fb; border-color: #c3d5e8; }
+.assessment-bank-actions { display: flex; gap: 6px; flex-wrap: nowrap; flex-shrink: 0; align-items: center; }
+.assessment-bank button.assessment-bank-compact-action { --hci-touch-target: 32px; --touch-min: 32px; min-height: 32px; padding: 5px 10px; border-radius: 8px; font-size: .85rem; line-height: 1.3; white-space: nowrap; }
+.assessment-bank button.assessment-bank-compact-action.btn-primary { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+.assessment-bank button.assessment-bank-compact-action.btn-danger { color: #b91c1c; border-color: #dc2626; }
+.assessment-bank button.assessment-bank-archive-toggle { --hci-touch-target: 32px; --touch-min: 32px; padding: 4px 0; min-height: 32px; border: 0; background: transparent; box-shadow: none; color: var(--primary-dark); font-size: .85rem; }
+.assessment-bank-toolbar { gap: 6px; margin: 12px 0; }
+.assessment-bank-toolbar > .assessment-bank-archive-toggle { margin-inline-start: auto; }
+.assessment-delivery-dialog { box-sizing: border-box; min-width: 0; width: 640px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 24px; background: var(--surface); }
+.assessment-delivery-dialog fieldset { display: grid; gap: 12px; min-width: 0; margin: 16px 0; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-3); }
+.assessment-delivery-dialog fieldset label { display: flex; align-items: flex-start; gap: 8px; overflow-wrap: anywhere; }
+.assessment-delivery-dialog input[type=radio], .assessment-delivery-dialog input[type=checkbox] { width: auto; flex: 0 0 auto; margin-top: 4px; }
+.assessment-bank-confirm { justify-content: flex-end; margin-top: 20px; }
+.assessment-delivery-dialog > .assessment-bank-header { display: flex; align-items: flex-start; justify-content: flex-start; gap: 8px; }
+.assessment-delivery-dialog > .assessment-bank-header > h2 { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+.assessment-delivery-dialog > .assessment-bank-header > .app-guide-popup-trigger { margin-inline-start: 0; }
+@media (max-width: 640px) {
+  .assessment-bank-actions { flex-shrink: 1; }
+  .assessment-bank-toolbar > .assessment-bank-archive-toggle { margin-inline-start: 0; }
+  .assessment-delivery-dialog { padding: 20px; }
+  .assessment-delivery-dialog .assessment-bank-header { flex-direction: row; }
+}

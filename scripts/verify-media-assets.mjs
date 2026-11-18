@@ -3,11 +3,14 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, extname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const suppliedAvatarIds = ["rabbit", "cricket", "squirrel", "penguin", "swallow", "jade-rabbit", "reindeer"].map(id => `avatar-${id}`);
+
 export const REQUIRED_MEDIA_IDS = [
   "mascot", "basket", "dinosaur", "gift-closed", "gift-correct", "gift-wrong", "flag", "mushroom", "bomb",
   "hero-rabbit", "hero-cricket", "hero-squirrel", "hero-penguin", "hero-swallow", "hero-reindeer",
   "food-rabbit", "food-cricket", "food-squirrel", "food-penguin", "food-swallow", "food-reindeer",
-  "catch-spring", "catch-summer", "catch-autumn", "catch-winter", "catch-tet", "catch-midautumn", "catch-christmas"
+  "catch-spring", "catch-summer", "catch-autumn", "catch-winter", "catch-tet", "catch-midautumn", "catch-christmas",
+  ...suppliedAvatarIds
 ];
 
 const rasterExtensions = new Set([".png", ".webp"]);
@@ -47,7 +50,15 @@ export async function verifyMediaAssets(options = {}) {
     if (paths.has(entry.localPath)) errors.push(`${label}: localPath bị trùng.`);
     else paths.add(entry.localPath);
     const extension = extname(entry.localPath).toLowerCase();
-    if (rasterExtensions.has(extension)) {
+    if (suppliedAvatarIds.includes(entry.id)) {
+      const expectedPath = `apps/web/public/media/avatars/${entry.id.slice("avatar-".length)}.webp`;
+      if (entry.localPath !== expectedPath) errors.push(`${label}: localPath avatar không hợp lệ.`);
+      if (entry.licence !== "LicenseRef-E4S-supplied") errors.push(`${label}: thiếu giấy phép sử dụng ảnh do E4S cung cấp.`);
+      if (typeof entry.suppliedBy !== "string" || !entry.suppliedBy.trim()) errors.push(`${label}: thiếu suppliedBy.`);
+      if (typeof entry.sourcePack !== "string" || !entry.sourcePack.trim()) errors.push(`${label}: thiếu sourcePack.`);
+      if (typeof entry.originalArchivePath !== "string" || !/^[^/\\]+\.svg$/i.test(entry.originalArchivePath)) errors.push(`${label}: thiếu tên file SVG gốc.`);
+      if (typeof entry.originalSha256 !== "string" || !sha256Pattern.test(entry.originalSha256)) errors.push(`${label}: thiếu SHA-256 của file SVG gốc.`);
+    } else if (rasterExtensions.has(extension)) {
       if (entry.licence !== "CC0-1.0") errors.push(`${label}: licence phải là CC0-1.0.`);
       if (typeof entry.sourcePage !== "string" || !/^https:\/\/kenney\.nl\/assets\/[a-z0-9-]+$/.test(entry.sourcePage)) errors.push(`${label}: sourcePage phải là trang asset chính thức của Kenney.`);
       if (typeof entry.sourcePack !== "string" || !entry.sourcePack.trim()) errors.push(`${label}: thiếu sourcePack.`);

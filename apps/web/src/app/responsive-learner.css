@@ -20,9 +20,8 @@
   :root:root:root .learner-root :is(button, .btn, a.btn) > .action-icon-only > .action-icon-label { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap; }
 
   /* Title + ⓘ on one line. */
-  :root:root:root .learner-root .page-title h1.info-title { display: flex; align-items: center; gap: 4px; min-width: 0; }
-  :root:root:root .learner-root .info-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  :root:root:root .learner-root :is(h2, h3).info-title { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  :root:root:root .learner-root .page-title h1.info-title { display: flex; align-items: flex-start; gap: 4px; min-width: 0; }
+  :root:root:root .learner-root :is(h2, h3).info-title { display: flex; align-items: flex-start; gap: 4px; min-width: 0; }
 
   /* Content images: whole picture, never cropped. */
   :root:root:root .learner-root :is(.lesson-page, .game-page) img { object-fit: contain; max-width: 100%; }
@@ -223,7 +222,7 @@
   :root:root:root .learner-root .cert-summary { padding: 12px !important; gap: 8px !important; }
   :root:root:root .learner-root .cert-summary-facts > div { padding: 6px 10px !important; }
 }
-@media (min-width: 721px) and (max-width: 1024px) {
+@media screen and (min-width: 721px) and (max-width: 1024px) {
   /* Tablet: the whole certificate fits one screen together with its actions. */
   :root:root:root .learner-root .reward-page .cert-stage { padding: 10px !important; }
   :root:root:root .learner-root .reward-page .cert-doc { padding: 22px 28px 16px !important; min-height: 0 !important; }
@@ -407,7 +406,7 @@
   :root:root:root .learner-root .test-page .assessment-runtime-header { position: sticky; top: 0; z-index: 5; padding: 6px 10px !important; margin-bottom: 0 !important; box-shadow: 0 4px 12px rgb(0 0 0 / .06); }
   :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between { flex-wrap: nowrap !important; gap: 8px !important; }
   :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between > .row:first-child { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; gap: 6px; }
-  :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between > .row:first-child > .badge:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between > .row:first-child > .badge:first-child { min-width: 0; white-space: normal; }
   :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between > .row:first-child > .badge { flex: none; }
   :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between > .row:first-child > .badge:first-child { display: block; }
   :root:root:root .learner-root .test-page .assessment-runtime-header > .row.between > .row:first-child > .badge:first-child { flex: 0 1 auto; }

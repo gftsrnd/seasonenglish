@@ -697,21 +697,6 @@
   .settings-operator-accounts__table tr:not([data-account-role="learner"]) :is(.settings-account-level, .settings-account-score) { display: none; }
 }
 
-.settings-test-change-request {
-  display: grid;
-  gap: 10px;
-  align-content: start;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface-2);
-}
-
-.settings-test-change-request h4 {
-  margin: 0;
-  font-size: 1rem;
-}
-
 @media (max-width: 520px) {
   .settings-page {
     gap: 14px;

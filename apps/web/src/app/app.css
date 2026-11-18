@@ -214,14 +214,14 @@ td button,td .btn,td .badge,td .chip,td .pill,td select,td input{box-shadow:none
 td input,td select{min-height:40px;padding:8px 12px}
 
 /* tabs: segmented control */
-.tabs{display:inline-flex;gap:4px;padding:4px;border-radius:999px;background:#E4E2DC;margin-bottom:14px;overflow-x:auto;max-width:100%;border:0;scrollbar-width:none}
+.tabs{display:flex;width:100%;gap:4px;padding:4px;border-radius:999px;background:#E4E2DC;margin-bottom:14px;overflow-x:auto;max-width:100%;border:0;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
-.tabs button{border:0;box-shadow:none;border-radius:999px;background:transparent;padding:0 16px;min-height:36px;color:var(--muted);white-space:nowrap;font-size:.88rem;font-weight:400}
+.tabs button{flex:1 1 0;min-width:0;border:0;box-shadow:none;border-radius:999px;background:transparent;padding:0 16px;min-height:36px;color:var(--muted);white-space:normal;font-size:.88rem;font-weight:400}
 .tabs button:hover{background:rgba(255,255,255,.5);color:var(--text)}
 .tabs button:active{transform:none}
 .tabs button.active{color:var(--text);background:var(--surface);font-weight:500}
-.ltabs{display:inline-flex;gap:4px;padding:4px;border-radius:999px;background:#E4E2DC}
-.ltabs button{border-radius:999px;box-shadow:none;padding:0 20px;min-height:42px;font-size:.95rem;background:transparent;color:var(--muted)}
+.ltabs{display:flex;width:100%;gap:4px;padding:4px;border-radius:999px;background:#E4E2DC}
+.ltabs button{flex:1 1 0;min-width:0;border-radius:999px;box-shadow:none;padding:0 20px;min-height:42px;font-size:.95rem;background:transparent;color:var(--muted)}
 .ltabs button:hover{background:rgba(255,255,255,.5)}
 .ltabs button.active{background:var(--primary);color:var(--primary-ink);font-weight:500}
 .ltabs button:disabled{opacity:.5}
@@ -321,8 +321,8 @@ td input,td select{min-height:40px;padding:8px 12px}
 @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 #modal:empty{display:none}
 #modal{position:fixed;inset:0;background:rgba(30,30,30,.45);z-index:90;display:flex;align-items:center;justify-content:center;padding:16px}
-.dialog{background:var(--surface);border:0;border-radius:28px;padding:24px;max-width:560px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 60px rgba(30,30,30,.25)}
-.dialog.wide{max-width:860px}
+.dialog{background:var(--surface);border:0;border-radius:28px;padding:24px;width:min(100%,560px);max-height:90vh;overflow:auto;box-shadow:0 24px 60px rgba(30,30,30,.25)}
+.dialog.wide{width:min(100%,860px)}
 .countdown{font-weight:600;font-size:4.5rem;line-height:1;text-align:center;color:var(--brown);margin:8px 0;letter-spacing:-.03em}
 #saved{position:fixed;right:12px;bottom:14px;z-index:80;font-size:.75rem;font-weight:500;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 12px;opacity:0;transition:opacity .3s;pointer-events:none}
 #saved.on{opacity:.9}
@@ -671,7 +671,7 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 /* reward certificate: everything on one A4 page */
 @page{size:A4;margin:10mm}
 /* certificate: one landscape A4 page (the reward screen adds @page landscape while it is open) */
-.rw .cert-doc{max-width:none;padding:22px 34px 18px;break-inside:avoid;border-color:#1E1E1E;min-height:180mm;display:flex;flex-direction:column}.rw .cert-head{padding-bottom:10px}.rw .cert-logo{width:56px;height:56px}.rw .cert-body{padding:12px 0 8px;flex:1}.rw .cert-title{font-size:1.9rem;margin:4px 0 8px}.rw .cert-name{font-size:1.7rem;margin:6px 0 8px}.rw .cert-line{max-width:none;margin:2px auto}.rw .cert-facts{margin:12px auto 10px;max-width:760px}.rw .cert-badges{grid-template-columns:repeat(4,1fr);gap:4px 16px;max-width:none}.rw .cert-badge{padding:3px 0}.rw .cert-badge .xs{font-size:.66rem;line-height:1.25}.rw .cert-sign{margin-top:14px}.rw .cert-sign .line{height:34px}.rw .cert-foot{margin-top:10px}}
+.rw .cert-doc{max-width:none;padding:22px 34px 18px;break-inside:avoid;border-color:#1E1E1E;min-height:180mm;display:flex;flex-direction:column}.rw .cert-head{padding-bottom:10px}.rw .cert-logo{width:56px;height:56px}.rw .cert-body{padding:12px 0 8px;flex:1}.rw .cert-title{font-size:1.9rem;margin:4px 0 8px}.rw .cert-name{font-size:1.7rem;margin:6px 0 8px}.rw .cert-line{max-width:none;margin:2px auto}.rw .cert-facts{margin:12px auto 10px;max-width:760px}.rw .cert-badges{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 16px;max-width:none}.rw .cert-badge{padding:3px 0}.rw .cert-badge .xs{font-size:.66rem;line-height:1.25}.rw .cert-sign{margin-top:14px}.rw .cert-sign .line{height:34px}.rw .cert-foot{margin-top:10px}}
 
 /* Global geometry guards: keep the existing screen structure readable when
    labels, URLs or API-provided content are longer than the app copy. */
@@ -684,10 +684,14 @@ main{width:auto;min-width:0;box-sizing:border-box}
 .grid.cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}
 .grid > *, .row > *, .stack > *, .page-title > *, .banner > *{min-width:0;max-width:100%}
 .card,.panel,.dialog,.report,.item,.opt,.tile,.hero,.welcome,.msg,.usercard,.role,.banner,.word-card,.stat,.party,.cert,.cheat,.correction,.bubble,.rubric .r,.setup .st,.arena-row,.chat,.xw,.toast{overflow-wrap:anywhere}
-.card,.panel,.dialog,.report,.hero,.welcome,.cert{max-width:100%}
+.card,.panel,.report,.hero,.welcome,.cert{max-width:100%}
 .table-wrap{max-width:100%;min-width:0}
 button,input,select,textarea{max-width:100%}
-.dialog{max-inline-size:calc(100vw - 32px)}
+fieldset{min-inline-size:0}
+:is(.app-learner-page,.app-operator,.manager-page,.settings-page,[role="dialog"]){min-inline-size:0;overflow-wrap:anywhere}
+.modal-backdrop{position:fixed;inset:0;z-index:100;background:#0008;display:grid;grid-template-columns:minmax(0,1fr);place-items:center;padding:20px}
+.dialog{max-inline-size:calc(100vw - 32px);max-block-size:min(90dvh,calc(100dvh - 40px));overscroll-behavior:contain}
+:where([aria-modal="true"]){max-inline-size:calc(100vw - 32px)}
 .rubric{grid-template-columns:repeat(3,minmax(0,1fr))}
 .days{grid-template-columns:repeat(7,minmax(0,1fr))}
 .roles{grid-template-columns:repeat(3,minmax(0,1fr))}

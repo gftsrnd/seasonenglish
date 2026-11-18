@@ -96,6 +96,27 @@ describe("app audio controls", () => {
 describe("app shell navigation and logout", () => {
   it.each([
     ["learner", "/profile", "profile-identity-card"],
+    ["operator", "/op/review", "operator-review-navigation"],
+    ["manager", "/mgr", "manager-progress-card"]
+  ] as const)("places guide help in the compact app header for %s", async (role, path, anchor) => {
+    const visible = vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([new DOMRect(12, 70, 180, 65)] as unknown as DOMRectList);
+    vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes("max-width"), media: query, addEventListener: vi.fn(), removeEventListener: vi.fn()
+    })));
+    try {
+      const { container } = render(<ExperienceProvider><MemoryRouter initialEntries={[path]}><AppShell session={session(role)} onLogout={vi.fn()}><section className={anchor} /></AppShell></MemoryRouter></ExperienceProvider>);
+      const utilities = screen.getByRole("group", { name: "Tiện ích ứng dụng" });
+      expect(container.querySelector(".app-shell-topbar")).toContainElement(utilities);
+      expect(await within(utilities).findByRole("button", { name: "Hướng dẫn sử dụng" })).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Hướng dẫn sử dụng" })).toHaveLength(1);
+    } finally {
+      visible.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([
+    ["learner", "/profile", "profile-identity-card"],
     ["operator", "/op/months", "monthly-topic-card"],
     ["manager", "/mgr", "manager-progress-card"]
   ] as const)("puts account details in the desktop avatar menu and keeps sidebar logout for %s", async (role, path, anchor) => {

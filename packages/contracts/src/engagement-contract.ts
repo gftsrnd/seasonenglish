@@ -202,8 +202,9 @@ export interface RewardView {
   earnedBadgeCount: number;
   requiredBadgeCount: number;
   printable: boolean;
-  certificateNumber: string;
-  completedAt: string;
+  /** Issuance details are present only for an issued certificate. */
+  certificateNumber?: string;
+  completedAt?: string;
   organizationName: string;
   operatorName: string;
   managerName: string;

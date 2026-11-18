@@ -180,7 +180,7 @@ describe("new Settings app branch", () => {
     };
     const callbacks = actions();
     const { container } = render(<SettingsPage role="operator" operatorOverview={overview} product={product} experience={experience} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={callbacks} />);
-    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Giao diện theo mùa / lễ", "Nhạc nền của Season", "Học theo tháng", "Yêu cầu đổi đề", "Người dùng"]);
+    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Giao diện theo mùa / lễ", "Nhạc nền của Season", "Học theo tháng", "Người dùng"]);
     expect(screen.getByText("Học viên A")).toBeInTheDocument();
     expect(screen.queryByText(/Lịch pilot|Số tuần của chu kỳ|Chu kỳ/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Nghe (phút)")).not.toBeInTheDocument();
@@ -213,16 +213,14 @@ describe("new Settings app branch", () => {
     expect(container.querySelector(".settings-operator-accounts__table")).toBeInTheDocument();
   });
 
-  it("keeps input and output test change requests in one Operator card", async () => {
+  it("omits developer exam-change forms from Operator settings", () => {
     const overview: OperatorSettingsOverviewView = { organizationName: "GFT Demo", settings: manager, pilot: { startDate: "2026-10-12", weeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: manager.courseTheme, coachDailyLimit: 20 }, test: { timed: true, times: manager.testTimes, warnLimit: 3 }, accounts: [] };
     const callbacks = actions();
     render(<SettingsPage role="operator" operatorOverview={overview} product={product} capabilities={capabilities} actions={callbacks} />);
 
-    const card = screen.getByRole("heading", { name: "Yêu cầu đổi đề" }).closest("section");
-    expect(card).toHaveTextContent("Yêu cầu đổi đề đầu vào");
-    expect(card).toHaveTextContent("Yêu cầu đổi đề đầu ra");
-    expect(screen.getByRole("button", { name: "Gửi yêu cầu đổi đề đầu vào" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Gửi yêu cầu đổi đề đầu ra" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Yêu cầu đổi đề" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Email đội phát triển/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Gửi yêu cầu đổi đề/ })).not.toBeInTheDocument();
   });
 
   it("lists licensed songs by title, previews the draft volume and does not save a failed preview", async () => {
@@ -308,6 +306,6 @@ describe("new Settings app branch", () => {
 function actions() {
   return {
     onSaveAi: vi.fn(), onTestAi: vi.fn(), onSaveManager: vi.fn(), onSaveProduct: vi.fn(), onSaveExperience: vi.fn(), onTestImage: vi.fn(), onClearImageCache: vi.fn(), onTestMusic: vi.fn(), onResetMusic: vi.fn(), onTestWebhook: vi.fn(),
-    onExportJson: vi.fn(), onImportJson: vi.fn(), onExportCsv: vi.fn(), onSeedData: vi.fn(), onWipeData: vi.fn(), onRequestPlacementTestChange: vi.fn(), onRequestFinalTestChange: vi.fn()
+    onExportJson: vi.fn(), onImportJson: vi.fn(), onExportCsv: vi.fn(), onSeedData: vi.fn(), onWipeData: vi.fn()
   };
 }

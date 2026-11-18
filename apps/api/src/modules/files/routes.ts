@@ -290,22 +290,17 @@ export function registerFileRoutes(app: FastifyInstance, pool: Pool, storage: Ob
       return reply.code(400).send({ code: "ASSESSMENT_AUDIO_CONFIRMATION_REQUIRED" });
     }
     const tokenHash = createHash("sha256").update(confirmationToken).digest("hex");
-    const target = await repositories.files.findAudioDeleteTarget(request.e4sSession!.user.id, fileId, tokenHash);
-    if (!target) {
-      return reply.code(409).send({ code: "ASSESSMENT_AUDIO_CONFIRMATION_INVALID" });
-    }
-    try {
-      await storage.deleteObject(target.bucket, target.objectKey);
-    } catch (error) {
-      logStorageFailure(request, "deleteAudioObject", error);
-      return reply.code(503).send({ code: "ASSESSMENT_AUDIO_DELETE_UNAVAILABLE" });
-    }
     const deleted = await repositories.files.deleteAudioWithConfirmation({
-      actorId: request.e4sSession!.user.id,
-      fileId,
-      tokenHash,
-      traceId: request.id
+      actorId: request.e4sSession!.user.id, fileId, tokenHash, traceId: request.id,
+      removeObject: async file => {
+        try { await storage.deleteObject(file.bucket,file.objectKey); }
+        catch (error) {
+          logStorageFailure(request,"deleteAudioObject",error);
+          throw Object.assign(new Error("ASSESSMENT_AUDIO_DELETE_UNAVAILABLE"),{code:"ASSESSMENT_AUDIO_DELETE_UNAVAILABLE",statusCode:503});
+        }
+      }
     });
+    if (deleted.status === "retained") return reply.code(409).send({code:"ASSESSMENT_AUDIO_RETAINED"});
     if (deleted.status !== "deleted" || !deleted.file) return reply.code(409).send({ code: "ASSESSMENT_AUDIO_CONFIRMATION_INVALID" });
     return reply.send({ ...audioView(deleted.file, undefined), deleted: true });
   });

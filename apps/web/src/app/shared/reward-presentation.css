@@ -11,13 +11,69 @@
   margin: 12px auto;
 }
 .reward-page .reward-actions :is(button, a) { min-height: 44px; }
-.rw .badge-certificate-list {
+.cert-doc .cert-brand { gap: var(--hci-space-control, 8px); align-items: center; }
+.cert-doc .cert-eyebrow { letter-spacing: .1em; }
+.cert-preview-badge {
+  padding: 5px 9px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: .78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  justify-self: start;
+  flex: none;
+}
+.cert-preview-marker { text-transform: uppercase; }
+.cert-preview-summary-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.cert-preview-summary-head img { object-fit: contain; }
+.cert-summary-facts--preview {
+  gap: 0;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--surface-3);
+}
+.cert-summary .cert-summary-facts--preview > div {
+  min-width: 0;
+  background: transparent;
+}
+.cert-badges.badge-certificate-list {
   list-style: none;
   padding: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .badge-certificate-list .cert-badge { align-items: center; min-width: 0; text-align: start; }
-.badge-certificate-list .ck { flex: 0 0 auto; }
+.badge-certificate-list .cert-badge .cert-badge-unearned { background: var(--surface-3); color: var(--muted); }
+.badge-certificate-list b { overflow-wrap: normal; word-break: normal; }
+.cert-badge-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--surface-3);
+  font-size: 19px;
+  line-height: 1;
+}
+.cert-badge-art--earned { background: var(--ok-tint); }
+.cert-badge-art:not(.cert-badge-art--earned) > :first-child { filter: grayscale(1); opacity: .65; }
+.cert-badge-state {
+  position: absolute;
+  inset-inline-end: -2px;
+  inset-block-end: -1px;
+  display: grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 700;
+}
 @media screen and (max-width: 600px) {
   .reward-page .cert-doc { padding: 20px 16px 16px; }
   .reward-page .cert-head { align-items: center; gap: 6px; padding-bottom: 10px; }
@@ -40,9 +96,6 @@
   .reward-page .cert-sign .cert-date { grid-row: 2; grid-column: 1 / -1; }
   .reward-page .cert-foot { margin-top: 10px; }
 }
-@media print {
-  .rw .badge-certificate-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
 
 /* Certificates are shown as a framed preview: the document keeps its A4-landscape design at a readable size,
    centred on a quiet panel with page margins, instead of running edge to edge over the patterned page. */
@@ -55,6 +108,7 @@
 }
 .cert-stage > .cert-doc { width: min(100%, 860px); margin: 0; }
 .cert-summary { display: none; }
+.cert-summary > button { min-height: 44px; justify-self: start; }
 
 /* Phones (and any width where the scaled certificate text would be tiny): a short summary card replaces the
    full render; "In / lưu PDF" still prints the full certificate. */
@@ -68,12 +122,49 @@
   .cert-summary-facts > div { display: grid; gap: 2px; padding: 10px; border-radius: 10px; background: var(--surface-3); }
   .cert-summary-facts dt, .cert-summary-facts dd { margin: 0; }
   .cert-summary-facts dd { font-weight: 600; overflow-wrap: anywhere; }
-  .cert-summary-facts > div:last-child { grid-column: 1 / -1; }
+  .cert-summary-facts > .cert-summary-identifier { grid-column: 1 / -1; }
+  .cert-summary-facts.cert-summary-facts--preview { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .cert-summary .cert-summary-facts--preview > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; }
+  .cert-summary .cert-summary-facts--preview > div + div { border-radius: 0; border-block-start: 1px solid var(--line); }
+  .rw .cert-summary .badge-certificate-list { grid-template-columns: minmax(0, 1fr); gap: 0 10px; margin: 0; }
   .reward-actions { flex-wrap: wrap; }
   .reward-actions > :is(.btn, button, a) { flex: 1 1 100%; min-height: 44px; justify-content: center; }
 }
+@media screen and (min-width: 400px) and (max-width: 600px) {
+  .rw .cert-summary .badge-certificate-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* A4 landscape with 10 mm page margins leaves a 277 mm content area. */
+.cert-paper-layout.cert-paper-layout > .cert-doc {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 277mm;
+  max-width: none;
+  min-height: 180mm;
+  margin: 0 auto;
+  padding: 22px 34px 18px;
+  border-color: #1e1e1e;
+  break-inside: avoid;
+}
+.cert-paper-layout .cert-head { align-items: flex-start; padding-bottom: 10px; }
+.cert-paper-layout .cert-logo { width: 56px; height: 56px; }
+.cert-paper-layout .cert-body { padding: 12px 0 8px; flex: 1; }
+.cert-paper-layout .cert-title { font-size: 1.9rem; margin: 4px 0 8px; }
+.cert-paper-layout .cert-name { font-size: 1.7rem; margin: 6px 0 8px; }
+.cert-paper-layout .cert-line { max-width: none; margin: 2px auto; }
+.cert-paper-layout .cert-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 12px auto 10px; max-width: 760px; }
+.cert-paper-layout .course-completion-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 300px; }
+.cert-paper-layout .cert-badges { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; max-width: none; }
+.cert-paper-layout .cert-badge { padding: 3px 0; }
+.cert-paper-layout .cert-sign { flex-direction: row; align-items: flex-end; margin-top: 14px; }
+.cert-paper-layout .cert-sign .line { height: 34px; }
+.cert-paper-layout .cert-foot { margin-top: 10px; }
 
 @media print {
-  .cert-stage { display: block !important; padding: 0; background: none; }
-  .cert-summary { display: none !important; }
+  :is(html, body):has(.cert-print-only) { background: #fff !important; }
+  body:has(.cert-print-only)::before { display: none; }
+  .reward-page { margin: 0 !important; padding: 0 !important; max-width: none !important; }
+  .cert-stage, .cert-summary { display: none !important; }
+  .cert-print-only[hidden] { display: block !important; }
 }

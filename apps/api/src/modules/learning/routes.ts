@@ -2,6 +2,7 @@ import type {
   CefrLevel,
   LearnerAcademicAppealView,
   LearnerHomeView,
+  LearnerAvatarData,
   LearnerProfileData,
   LearnerProfileView,
   LessonPartCode,
@@ -22,6 +23,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { requestEvidenceFields } from "../manager/request-evidence.js";
 import { createRoleGuard } from "../identity/policy.js";
+import { avatarInput } from "../identity/avatar-input.js";
 import { registerWeeklyReviewRoutes } from "./weekly-review-routes.js";
 import type { ContentMediaService } from "../media/index.js";
 import type { LessonProductiveGrading } from "./productive-grading.js";
@@ -52,11 +54,7 @@ const profileInput = z.object({
   certificates: z.array(z.object({ type: z.string(), result: z.string(), year: z.string().optional() })).optional(),
   experience: z.string().optional(),
   concerns: z.string().optional(),
-  avatar: z.object({
-    color: z.enum(["ink", "brown", "olive", "taupe", "orange", "rose"]),
-    acc: z.enum(["none", "leaf", "sun", "flower", "cloud", "star", "drop", "snow"]),
-    bg: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)])
-  }).optional()
+  avatar: avatarInput.optional()
 });
 const profileDraftInput = profileInput.extend({
   fullName: z.string().trim().max(200),
@@ -114,6 +112,14 @@ export function registerLearningRoutes(
     const record = await repositories.learning.getProfile(request.e4sSession!.user.id);
     if (!record) return reply.code(404).send({ code: "PROFILE_NOT_FOUND" });
     return profileView(record);
+  });
+
+  app.patch("/api/v1/learner/profile/avatar", { preHandler: learnerOnly }, async (request, reply) => {
+    const parsed = avatarInput.strict().safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "INVALID_AVATAR" });
+    const saved = await repositories.learning.saveProfileAvatar(request.e4sSession!.user.id, parsed.data as LearnerAvatarData);
+    if (!saved) return reply.code(404).send({ code: "PROFILE_NOT_FOUND" });
+    return profileView(saved);
   });
 
   app.put("/api/v1/learner/profile", { preHandler: learnerOnly }, async (request, reply) => {
@@ -220,7 +226,7 @@ export function registerLearningRoutes(
         request.log.warn({ err: error }, "Unable to sync highest level notification");
       }
       if (await repositories.assessments.passCourseEligibility(learnerId)) {
-        const exam = await repositories.assessments.findPublished("pass-course");
+        const exam = await repositories.assessments.findPublished("pass-course",learnerId);
         if (exam) {
           const attempt = await repositories.assessments.findActiveAttempt(learnerId, exam.versionId);
           passCourse = { status: attempt?.status === "in_progress" ? "in_progress"

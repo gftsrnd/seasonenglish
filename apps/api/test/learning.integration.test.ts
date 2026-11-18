@@ -101,8 +101,27 @@ describe("learner profile, home, lesson and progress API", () => {
     expect(avatarUpdated.statusCode).toBe(200);
     expect(avatarUpdated.json()).toMatchObject({ version: 3, profile: { avatar } });
 
+    const character = { ...avatar, character: "penguin" };
+    const draft = await app.inject({
+      method: "PUT", url: "/api/v1/learner/profile/draft", headers: { cookie },
+      payload: { ...avatarUpdated.json().profile, concerns: "Bản nháp cần giữ", version: 3 }
+    });
+    expect(draft.statusCode).toBe(200);
+    const characterUpdated = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/learner/profile/avatar",
+      headers: { cookie },
+      payload: character
+    });
+    expect(characterUpdated.statusCode).toBe(200);
+    expect(characterUpdated.json()).toMatchObject({
+      completed: true, draftAvailable: true, version: 4, profile: { avatar: character, concerns: "Bản nháp cần giữ" }
+    });
+
     const reloaded = await app.inject({ method: "GET", url: "/api/v1/learner/profile", headers: { cookie } });
-    expect(reloaded.json()).toMatchObject({ version: 3, profile: { avatar } });
+    expect(reloaded.json()).toMatchObject({ version: 4, profile: { avatar: character } });
+    const progress = await app.inject({ method: "GET", url: "/api/v1/learner/progress", headers: { cookie } });
+    expect(progress.json()).toMatchObject({ learner: { profile: { avatar: character, concerns: "Muốn nói rõ hơn" } } });
   });
 
   it("still loads a stored profile that carries the retired Season style key and ignores it", async () => {

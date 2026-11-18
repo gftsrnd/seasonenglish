@@ -1,6 +1,24 @@
 /* ⓘ guidance tips next to section/card titles (InfoTip / SectionTip in CompactUi.tsx).
    Base styles for every width; phone/tablet sizing lives in responsive-phone.css. */
 .section-tip { display: contents; }
+
+/* Keep the heading and its help trigger together even when its text spans lines. */
+:is(h1, h2, h3, h4):has(> :is(.info-tip, .section-tip)) {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 4px;
+  min-inline-size: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+:is(h1, h2, h3, h4) > :is(.info-tip, .section-tip),
+:is(h1, h2, h3, h4) > .section-tip > .info-tip {
+  flex: none;
+  margin-inline-start: 0;
+}
+:is(h1, h2, h3, h4) > .info-tip::before,
+:is(h1, h2, h3, h4) > .section-tip > .info-tip::before { content: none; }
 /* The word joiner glues the ⓘ to the last word of the title (generated, so it is not part of the title text). */
 .info-tip::before { content: "\2060"; }
 .info-tip { display: inline; white-space: nowrap; margin-inline-start: 4px; font-size: 1rem; font-weight: 400; letter-spacing: 0; }

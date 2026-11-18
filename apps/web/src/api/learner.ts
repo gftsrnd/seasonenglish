@@ -2,7 +2,7 @@ import type {
   AssessmentAppealTargetView, AssessmentAppealView, AssessmentKind, AssessmentMonthlyGoalView, AssessmentResponseView,
   AssessmentRuntimeView, AssessmentSectionCode, AssessmentView, AssessmentViolationInput, CoachMessageInput,
   CoachPersona, CoachView, GameFinishInput, GameHubView, GameKey, GameResultView,
-  LearnerHomeView, LearnerNotificationsView, LearnerProfileData, LearnerProfileView, LearnerProgressView, LessonPartAppealView,
+  LearnerAvatarData, LearnerHomeView, LearnerNotificationsView, LearnerProfileData, LearnerProfileView, LearnerProgressView, LessonPartAppealView,
   LessonPartAttemptEvidenceInput, LessonPartAttemptView, LessonPartCode, LessonProgressView, LessonView,
   ContentImageView, CourseCompletionView, LevelChallengeView, MicroLessonView, RewardView, SurveyView, WeeklyPracticeView, AudioArtifactInput,
   RequestEvidenceInput, LearnerAcademicAppealView, LearnerComplaintKind, LearnerComplaintView, WeeklyReviewAnswerInput, WeeklyReviewAnswerResult, WeeklyReviewSessionView
@@ -22,6 +22,7 @@ export interface LearnerApiClient {
   getLearnerComplaints(): Promise<{ complaints: LearnerComplaintView[] }>;
   submitLearnerComplaint(kind: LearnerComplaintKind, reason: string, evidence?: RequestEvidenceInput): Promise<{ complaint: LearnerComplaintView }>;
   getProfile(): Promise<LearnerProfileView>;
+  saveProfileAvatar(avatar: LearnerAvatarData): Promise<LearnerProfileView>;
   saveProfile(profile: LearnerProfileData, version: number): Promise<LearnerProfileView>;
   saveProfileDraft(profile: LearnerProfileData, version: number): Promise<LearnerProfileView>;
   updateLearnerMonthlyGoal(monthlyGoal: string): Promise<AssessmentMonthlyGoalView>;
@@ -85,6 +86,7 @@ export const learnerApiClient: LearnerApiClient = {
   getLearnerComplaints: () => request("/api/v1/learner/complaints"),
   submitLearnerComplaint: (kind, reason, evidence) => request("/api/v1/learner/complaints", { method: "POST", body: JSON.stringify({ kind, reason, ...evidence }) }),
   getProfile: () => request("/api/v1/learner/profile"),
+  saveProfileAvatar: (avatar) => request("/api/v1/learner/profile/avatar", { method: "PATCH", body: JSON.stringify(avatar) }),
   saveProfile: (profile, version) => request("/api/v1/learner/profile", { method: "PUT", body: JSON.stringify({ ...profile, version }) }),
   saveProfileDraft: (profile, version) => request("/api/v1/learner/profile/draft", { method: "PUT", body: JSON.stringify({ ...profile, version }) }),
   updateLearnerMonthlyGoal: (monthlyGoal) => request("/api/v1/learner/monthly-goal", { method: "PATCH", body: JSON.stringify({ monthlyGoal }) }),

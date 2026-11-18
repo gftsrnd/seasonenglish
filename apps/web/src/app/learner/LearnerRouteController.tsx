@@ -16,6 +16,7 @@ import { learnerApiClient as apiClient } from "../../api/learner.js";
 import { ApiError } from "../../api/runtime.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import { useToast } from "../shared/design-system.js";
+import { printCertificateLayout as printLearnerReward } from "./CertificateDocument.js";
 // This controller is lazy-loaded directly by the role router. Keep the
 // Learner-only visual layer in the same chunk so its lesson/profile spacing
 // rules are present when the first Learner screen mounts.
@@ -100,36 +101,7 @@ export function resolveLearnerRoute(pathname: string): ResolvedLearnerRoute {
 
 function safeDecode(value: string) { try { return decodeURIComponent(value); } catch { return value; } }
 
-const rewardPrintStyleId = "e4s-reward-print-style";
-
-/**
- * The app reward screen uses the browser print dialog, but the page's
- * certificate needs a landscape A4 print context. Keep the rule scoped to the
- * action so it cannot change the print layout of unrelated learner screens.
- */
-export function printLearnerReward() {
-  if (typeof document === "undefined") return;
-  document.getElementById(rewardPrintStyleId)?.remove();
-  const style = document.createElement("style");
-  style.id = rewardPrintStyleId;
-  style.textContent = "@media print { @page { size: A4 landscape; margin: 10mm; } .reward-page .cert-doc { break-inside: avoid; } }";
-  document.head.appendChild(style);
-
-  let cleaned = false;
-  const cleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
-    style.remove();
-    window.removeEventListener("afterprint", cleanup);
-  };
-  window.addEventListener("afterprint", cleanup, { once: true });
-  try {
-    window.print();
-  } catch (reason) {
-    cleanup();
-    throw reason;
-  }
-}
+export { printLearnerReward };
 
 /**
  * Full learner route integration. Mount once under the learner wildcard route;
@@ -140,6 +112,8 @@ export type LearnerRouteProps = {
   learnerId?: string;
   onLearnerCefr?: ((level: CefrLevel) => void) | undefined;
   onPlacementRetakeActive?: ((active: boolean) => void) | undefined;
+  sharedProfileRecord?: LearnerProfileView | undefined;
+  onProfileRecord?: ((record: LearnerProfileView) => void) | undefined;
 };
 
 export function LearnerRouteController(props: LearnerRouteProps = {}) {
@@ -157,7 +131,7 @@ function LearnerRoutes(props: LearnerRouteProps) {
   return <LearnerContent {...props} />;
 }
 
-function LearnerContent({ courseCompleted = false, learnerId, onLearnerCefr, onPlacementRetakeActive }: LearnerRouteProps) {
+function LearnerContent({ courseCompleted = false, learnerId, onLearnerCefr, onPlacementRetakeActive, sharedProfileRecord, onProfileRecord }: LearnerRouteProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const experience = useExperience();
@@ -166,7 +140,9 @@ function LearnerContent({ courseCompleted = false, learnerId, onLearnerCefr, onP
   const showLearnerToast = (message: string, tone: "info" | "ok" | "danger" = "info") => { toast.show({ message, tone, variant: "learner", durationMs: 3_500 }); };
   const route = useMemo(() => resolveLearnerRoute(location.pathname), [location.pathname]);
   const [contracts, setContracts] = useState<LearnerContractBundle>({});
-  const [profileRecord, setProfileRecord] = useState<LearnerProfileView>();
+  const [localProfileRecord, setLocalProfileRecord] = useState<LearnerProfileView>();
+  const profileRecord = onProfileRecord ? sharedProfileRecord : localProfileRecord;
+  const setProfileRecord = onProfileRecord ?? setLocalProfileRecord;
   const [uiState, setUiState] = useState<LearnerUiState>({});
   // Each learner has a single placement retake grant. Keep one acknowledgement per browser session.
   const retakeApprovalKey = learnerId ? `e4s:placement-retake-approved:${learnerId}` : null;
@@ -360,7 +336,8 @@ function LearnerContent({ courseCompleted = false, learnerId, onLearnerCefr, onP
     if (!profileRecord) throw new Error("PROFILE_NOT_LOADED");
     setUiState((current) => ({ ...current, onboard: { ...current.onboard, saving: true } }));
     try {
-      const saved = await apiClient.saveProfile(profile, profileRecord.version);
+      const avatar = profileRecord.profile.avatar;
+      const saved = await apiClient.saveProfile({ ...profile, ...(avatar ? { avatar } : {}) }, profileRecord.version);
       setProfileRecord(saved);
       setContracts((current) => ({
         ...current,
@@ -380,7 +357,8 @@ function LearnerContent({ courseCompleted = false, learnerId, onLearnerCefr, onP
     if (!profileRecord) throw new Error("PROFILE_NOT_LOADED");
     setUiState((current) => ({ ...current, onboard: { ...current.onboard, saving: true } }));
     try {
-      const saved = await apiClient.saveProfileDraft(profile, profileRecord.version);
+      const avatar = profileRecord.profile.avatar;
+      const saved = await apiClient.saveProfileDraft({ ...profile, ...(avatar ? { avatar } : {}) }, profileRecord.version);
       setProfileRecord(saved);
       setContracts((current) => ({ ...current, ...(route.name === "onboard" ? { onboard: saved } : {}) }));
       setUiState((current) => ({ ...current, onboard: { ...current.onboard, draftAvailable: true } }));
@@ -573,9 +551,7 @@ function LearnerContent({ courseCompleted = false, learnerId, onLearnerCefr, onP
     appealWeeklyPractice: async (submissionId, reason, ...evidence) => setContracts({ practice: await apiClient.appealWeeklyPractice(submissionId, reason, ...evidence) }),
     submitSurvey: async (answers) => setContracts({ survey: await apiClient.submitSurvey(answers) }),
     saveAvatar: async (avatar: LearnerAvatarData) => {
-      if (!profileRecord || !contracts.profile) throw new Error("PROFILE_NOT_LOADED");
-      const saved = await apiClient.saveProfile({ ...profileRecord.profile, avatar }, profileRecord.version);
-      setProfileRecord(saved); setContracts({ profile: { ...contracts.profile, learner: { ...contracts.profile.learner, profile: saved.profile } } });
+      setProfileRecord(await apiClient.saveProfileAvatar(avatar));
     },
     printReward: printLearnerReward,
     speak: experience.speak,
@@ -610,8 +586,13 @@ function LearnerContent({ courseCompleted = false, learnerId, onLearnerCefr, onP
     try { if (retakeApprovalKey) window.sessionStorage.setItem(retakeApprovalKey, "1"); }
     catch { /* In-memory acknowledgement also covers browsers with storage disabled. */ }
   };
+  const avatar = profileRecord?.profile.avatar;
+  const progress = contracts.profile;
+  const visibleContracts = progress && avatar ? {
+    ...contracts, profile: { ...progress, learner: { ...progress.learner, profile: { ...progress.learner.profile, avatar } } }
+  } : contracts;
   return <>
-    <LearnerController path={location.pathname} contracts={contracts} callbacks={callbacks} uiState={uiState} courseCompleted={courseCompleted} />
+    <LearnerController path={location.pathname} contracts={visibleContracts} callbacks={callbacks} uiState={uiState} courseCompleted={courseCompleted} />
     {retakeGranted && !retakeApprovalSeen ? <Modal
       title="Đã duyệt thi lại"
       description="Vận hành đã duyệt yêu cầu thi lại bài đầu vào. Sau khi bạn nộp bài, Vận hành sẽ xem cả hai bài thi và chốt mức học."

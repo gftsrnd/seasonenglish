@@ -199,52 +199,55 @@
   margin-left: auto;
 }
 
-.app-operator .operator-pending-review-summary {
+.operator-pending-review-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px 14px;
+  min-height: 44px;
+  list-style: none;
   cursor: pointer;
-  list-style-position: outside;
 }
 
-.app-operator .operator-pending-review-body {
+.operator-pending-review-summary::-webkit-details-marker { display: none; }
+.operator-pending-review-summary:focus:not(:focus-visible) { outline: none; }
+.operator-pending-review-summary:focus-visible {
+  outline: 2px solid var(--focus, var(--text));
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+.operator-pending-review-identity { display: grid; gap: 2px; }
+.operator-pending-review-identity .name { font-size: 1rem; }
+.operator-pending-review-status { gap: 4px 6px; min-width: 0; }
+.operator-pending-review-status .badge { white-space: normal; }
+.operator-pending-review-body {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.operator-pending-review-body .progress { height: 8px; }
+
+.operator-pending-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin-top: 12px;
 }
+.operator-pending-review-actions > .operator-pending-review-delete { margin-inline-start: auto; }
+.operator-pending-review-actions > select { white-space: nowrap; }
 
-/* Pending review card: one tidy action row. The delete action stays last but
-   next to the others instead of floating at the far edge; phones get a
-   two-column grid instead of ragged wrapping. */
-.app-operator .operator-pending-review-body > .row:last-child {
-  gap: 8px;
-}
-
-.app-operator .operator-pending-review-body > .row:last-child > button:last-child {
-  margin-left: 8px !important;
-}
-
-.app-operator .operator-pending-review-body > .operator-review-flags,
-.app-operator .operator-pending-review-body > .grid.cols-2 {
-  margin-top: 14px !important;
-}
-
-.app-operator .operator-pending-review-body .progress {
-  height: 8px;
+@media (max-width: 760px) {
+  .operator-pending-review-summary { grid-template-columns: minmax(0, 1fr) auto; }
+  .operator-pending-review-summary > .ui-chevron { grid-column: 2; grid-row: 1; }
+  .operator-pending-review-status { grid-column: 1 / -1; }
 }
 
 @media (max-width: 560px) {
-  .app-operator .operator-pending-review-body > .row:last-child {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .app-operator .operator-pending-review-body > .row:last-child > .btn-danger:last-child,
-  .app-operator .operator-pending-review-body > .row:last-child > button.danger:last-child {
-    grid-column: 1 / -1;
-    margin-top: 6px;
-  }
-
-  .app-operator .operator-pending-review-body > .row:last-child > * {
-    width: 100% !important;
-    min-width: 0;
-    margin-left: 0 !important;
-  }
+  .operator-pending-review-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .operator-pending-review-actions > :is(select, button) { width: 100% !important; min-inline-size: 0; min-block-size: 44px !important; height: auto; }
+  .operator-pending-review-actions > .operator-pending-review-delete { grid-column: 1 / -1; margin: 2px 0 0; }
 }
 
 /* Readable minimum for small print on tablet and desktop. */
@@ -357,8 +360,9 @@
 }
 
 .app-operator .tabs[role="tablist"] > button {
-  flex: 0 0 auto;
-  white-space: nowrap;
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: normal;
 }
 
 .operator-modal-scope .operator-lesson-editor {
@@ -1363,7 +1367,9 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
   box-shadow: inset 0 0 0 1px var(--line);
 }
 
-.app-operator .operator-review-tabs > :is(button, a) {
+.app-operator .tabs.operator-review-tabs > :is(button, a) {
+  flex: 1 1 0;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1493,6 +1499,7 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
   border: 0;
   border-radius: 16px;
   padding: 22px;
+  background: var(--assessment-paper, #f4f1e8);
   box-shadow: 0 24px 60px rgba(30, 30, 30, .25);
 }
 
@@ -2609,9 +2616,9 @@ body:has(.app-operator) #modal > .dialog > .row {
 
 /* Result pages stay compact. The full standard assessment introduction belongs
    in the explicit Xem dialog, where its long persisted sections can scroll. */
-.app-operator .operator-assessment-form-list {
+.app-operator > .card.operator-assessment-form-list {
   width: 100%;
-  background: #f7f6f1;
+  background: var(--assessment-canvas, #eae8df);
   border-color: #ded9d0;
 }
 
@@ -2621,7 +2628,7 @@ body:has(.app-operator) #modal > .dialog > .row {
   justify-content: space-between;
   gap: 16px;
   padding: 16px;
-  background: #fffdfa;
+  background: var(--assessment-paper, #f4f1e8);
   border-color: #e2ddd5;
 }
 
@@ -2642,7 +2649,7 @@ body:has(.app-operator) #modal > .dialog > .row {
 .operator-assessment-preview-dialog .assessment-definition-preview {
   margin: 18px 0 0;
   box-shadow: none;
-  background: #f7f6f1;
+  background: var(--assessment-canvas, #eae8df);
   border-color: #ded9d0;
 }
 
@@ -2763,7 +2770,7 @@ body:has(.app-operator) #modal > .dialog > .row {
   margin: 0;
 }
 
-.operator-assessment-preview-dialog .assessment-definition-preview-group {
+.operator-assessment-preview-dialog .card.assessment-definition-preview-group {
   margin: 0;
   padding: 4px 0 0;
   border: 0;
@@ -3627,7 +3634,7 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
 .operator-level-question-list { display: grid; }
 .operator-level-question { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 14px 16px; }
 .operator-level-question + .operator-level-question { border-top: 1px solid var(--line); }
-.operator-level-question-number { display: grid; gap: 2px; font-weight: 800; }
+.operator-level-question-number { display: grid; gap: 2px; font-weight: 600; }
 .operator-level-question-number span { color: var(--muted); font-size: .72rem; font-weight: 500; }
 .operator-level-question-content { min-width: 0; }
 .operator-level-question-content > p { margin: 0; line-height: 1.55; white-space: pre-wrap; }
@@ -3959,7 +3966,7 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 /* Level-up authoring is the editable counterpart of the shared assessment
    preview.  It intentionally uses the same dialog width, section rows and
    quiet paper surfaces instead of nesting another card system inside it. */
-.operator-detail-modal > .operator-level-editor-dialog {
+.operator-detail-modal > .dialog.operator-level-editor-dialog {
   width: min(980px, calc(100vw - 32px));
   max-width: 980px;
   max-height: min(860px, calc(100dvh - 32px));
@@ -3969,7 +3976,7 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
   overflow: hidden;
   scrollbar-gutter: auto;
   padding: 22px;
-  background: #fffdfa;
+  background: var(--assessment-paper, #f4f1e8);
 }
 
 .operator-level-editor-dialog > .operator-level-form-dialog-header { position: static; }
@@ -4038,7 +4045,7 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
   overflow: clip;
   border: 1px solid #ded9d0;
   border-radius: 10px;
-  background: #fffdfa;
+  background: var(--assessment-paper, #f4f1e8);
 }
 
 .operator-level-editor-dialog .operator-level-section > summary {
@@ -4047,12 +4054,14 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
   justify-content: space-between;
   min-height: 58px;
   padding: 12px 15px;
-  background: #f7f6f1;
+  background: var(--assessment-canvas, #eae8df);
   border-radius: 9px 9px 0 0;
   list-style: none;
 }
 
 .operator-level-editor-dialog .operator-level-section > summary::-webkit-details-marker { display: none; }
+.operator-level-editor-dialog .operator-level-section > summary:focus-visible { outline: 2px solid var(--focus, var(--primary-dark)); outline-offset: -3px; }
+.operator-level-editor-dialog .operator-level-section > summary:focus:not(:focus-visible) { outline: none; }
 .operator-level-editor-dialog .operator-level-section[open] > summary {
   position: sticky;
   top: 0;
@@ -4070,7 +4079,7 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
   background: #f7f6f1;
 }
 
-.operator-level-editor-dialog .operator-level-question-group {
+.operator-level-editor-dialog .card.operator-level-question-group {
   margin: 0 16px;
   padding: 0 !important;
   overflow: visible;
@@ -4092,7 +4101,7 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
   border-radius: 10px;
   background: #f7f6f1;
 }
-.operator-level-editor-dialog .operator-level-stimulus-editor > span { font-size: .82rem; font-weight: 800; }
+.operator-level-editor-dialog .operator-level-stimulus-editor > span { font-size: .85rem; font-weight: 600; }
 .operator-level-editor-dialog .operator-level-stimulus-editor textarea { min-height: 120px; border-radius: 10px; }
 
 .operator-level-editor-dialog .operator-level-audio {
@@ -4131,6 +4140,7 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
   .operator-detail-modal > .operator-level-editor-dialog { width: calc(100vw - 20px); padding: 16px; }
   .operator-level-editor-dialog .operator-level-form-dialog-header { gap: 12px; }
   .operator-level-editor-dialog .operator-level-question { grid-template-columns: 1fr; gap: 8px; }
+  .operator-level-editor-dialog .operator-level-question > .badge { grid-column: 1; justify-self: start; }
   .operator-level-editor-dialog .operator-level-question-number { display: flex; align-items: baseline; gap: 6px; }
   .operator-level-editor-dialog .operator-level-option-editor > .operator-level-answer-editor { grid-template-columns: 1fr; }
   .operator-level-editor-dialog .operator-level-audio-actions { align-items: stretch; }
@@ -4158,14 +4168,17 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
   margin: -2px 0 14px;
   padding: 12px 0 14px;
   border-bottom: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--assessment-paper, var(--surface));
 }
 
 .operator-level-form-dialog-title {
   display: grid;
   gap: 3px;
   min-width: 0;
+  flex: 1 1 0;
 }
+
+.operator-level-form-dialog-title :is(h3, p, .operator-level-kicker) { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 
 .operator-level-form-dialog-title p {
   margin: 0;
@@ -4224,7 +4237,7 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
   .operator-level-audio { display: grid; grid-template-columns: minmax(0, 1fr); }
 }
 
-.operator-level-stimulus-editor { display: grid; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface-2); color: var(--muted); font-size: .78rem; font-weight: 800; }
+.operator-level-stimulus-editor { display: grid; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface-2); color: var(--muted); font-size: .85rem; font-weight: 600; }
 .operator-level-stimulus-editor textarea { width: 100%; min-height: 108px; box-sizing: border-box; color: var(--text); font: inherit; font-weight: 400; }
 
 /* Level-up forms embedded in "Kết quả bài thi": match the saved-versions card of the other exam tabs. */
@@ -4618,11 +4631,9 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 }
 
 /* Pending placement rows: the row summary was 26px tall on iPad and desktop; make the whole header a 44px target. */
-.app-operator .operator-pending-review > summary { min-height: 44px; }
 .app-operator .operator-pending-review-body details > summary { min-height: 36px; padding-block: 8px; }
 
 /* Pending review cards: a closed card is just its summary, centred vertically (no leftover header gap below). */
-.app-operator .operator-pending-review > summary.operator-pending-review-summary { align-items: center; }
 .app-operator .operator-pending-review:not([open]) > summary.operator-pending-review-summary { margin: 0; padding-block: 0; }
 .app-operator .operator-pending-review:not([open]) { padding-block: 14px; }
 

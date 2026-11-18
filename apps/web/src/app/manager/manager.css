@@ -263,7 +263,8 @@
   display: inline-flex;
   min-height: 40px;
   align-items: center;
-  flex: 0 0 auto;
+  flex: 1 1 0;
+  justify-content: center;
   padding: 10px 14px;
   background: var(--surface-2);
   font-weight: 650;

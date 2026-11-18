@@ -1,10 +1,10 @@
 /*
- * One header layout for every popup (all widths): title on the left with an
- * ellipsis, extra header actions (e.g. "?") next to the close button, and the
+ * One header layout for every popup (all widths): title on the left,
+ * extra header actions (e.g. "?") next to the close button, and the
  * close button (ModalCloseButton, `.modal-close`) in the top-right corner,
  * vertically centred with the title's first line. Imported by CompactUi.tsx.
  */
-:is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header),
+:is(.dialog, [role="dialog"]) > :is(header:not(.avatar-dialog-preview), .row.between:first-of-type, .operator-level-form-dialog-header),
 .operator-editor-sticky-header > .operator-editor-heading {
   display: flex;
   flex-wrap: nowrap;
@@ -12,12 +12,12 @@
   justify-content: space-between;
   gap: 8px;
 }
-:is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header) > :first-child,
+:is(.dialog, [role="dialog"]) > :is(header:not(.avatar-dialog-preview), .row.between:first-of-type, .operator-level-form-dialog-header) > :first-child,
 .operator-editor-sticky-header > .operator-editor-heading > :first-child { flex: 1 1 auto; min-width: 0; }
-:is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header) :is(h2, h3),
-.operator-editor-sticky-header > .operator-editor-heading :is(h2, h3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:is(.dialog, [role="dialog"]) > :is(header:not(.avatar-dialog-preview), .row.between:first-of-type, .operator-level-form-dialog-header) :is(h2, h3),
+.operator-editor-sticky-header > .operator-editor-heading :is(h2, h3) { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 /* The header's action group (e.g. "Sửa đề", "?") never wraps and ends with the close button. */
-:is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header) > :not(:first-child),
+:is(.dialog, [role="dialog"]) > :is(header:not(.avatar-dialog-preview), .row.between:first-of-type, .operator-level-form-dialog-header) > :not(:first-child),
 .operator-editor-sticky-header > .operator-editor-heading > :not(:first-child) { flex: none; display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; margin: 0; }
 .modal-close { order: 99; flex: none; margin-inline-start: auto; }
 .modal-close.modal-close { border: 1px solid var(--line); background: var(--surface); color: var(--text); box-shadow: none; }

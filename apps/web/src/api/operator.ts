@@ -16,6 +16,21 @@ import type { AssessmentLevelFormTarget, AssessmentPlacementRetakeGrantView } fr
 import type { ReopenRequestView, MonthFrameworkReopenRequestView, MonthlyResourceEditInput, MonthlyFinalDraftView, MonthlyFinalUpdateInput, MonthlyOperatorOverviewView, SharedMonthBriefView } from "@e4s/contracts";
 import type { MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { request, uploadMultipart } from "./runtime.js";
+import type { AssessmentBankBlueprint, AssessmentBankFormDetail, AssessmentBankPolicy, AssessmentBankScope, AssessmentBankView } from "@e4s/contracts";
+
+export interface AssessmentBankClient {
+  getAssessmentBank(scope: AssessmentBankScope): Promise<AssessmentBankView>;
+  saveAssessmentBankPolicy(scope: AssessmentBankScope, policy: AssessmentBankPolicy): Promise<AssessmentBankView>;
+  createAssessmentBankForm(scope: AssessmentBankScope, input: { method: "manual" | "ai"; title?: string }): Promise<AssessmentBankFormDetail>;
+  getAssessmentBankForm(scope: AssessmentBankScope, versionId: string): Promise<AssessmentBankFormDetail>;
+  updateAssessmentBankForm(scope: AssessmentBankScope, versionId: string, blueprint: AssessmentBankBlueprint): Promise<AssessmentBankFormDetail>;
+  validateAssessmentBankForm(scope: AssessmentBankScope, versionId: string): Promise<{ issues: string[] }>;
+  publishAssessmentBankForm(scope: AssessmentBankScope, versionId: string, confirmation: { answersReviewed: true }): Promise<AssessmentBankFormDetail>;
+  archiveAssessmentBankForm(scope: AssessmentBankScope, versionId: string): Promise<AssessmentBankFormDetail>;
+  deleteAssessmentBankForm(scope: AssessmentBankScope, versionId: string): Promise<{ deleted: true; versionId: string }>;
+  uploadContentMedia?(kind: "audio" | "image", file: Blob, filename: string): Promise<{ artifactKey: string; url: string }>;
+  synthesizeAssessmentEdgeTts?(input: { text: string; voice: string }): Promise<{ filename: string; mimeType: string; base64: string }>;
+}
 
 export type AssessmentAudioReadView = AudioArtifactView & {
   url?: string | null;
@@ -48,7 +63,7 @@ export type MonthlyResourceCheckpointView = {
   categories: Record<"coreTerms" | "expandedTerms" | "grammarTopics" | "pronunciationTargets", { state: "complete" | "missing"; count: number; target: number }>;
 };
 
-export interface OperatorApiClient {
+export interface OperatorApiClient extends Partial<AssessmentBankClient> {
   getAssessmentReviewOverview(): Promise<AssessmentReviewOverviewView>;
   getAssessmentReviewLearner(learnerId: string): Promise<AssessmentReviewLearnerView>;
   assignAssessmentReviewWeeklyPractice(learnerId: string): Promise<WeeklyPracticeAssignmentView>;
@@ -175,6 +190,15 @@ export interface OperatorApiClient {
 }
 
 export const operatorApiClient: OperatorApiClient = {
+  getAssessmentBank: scope => request(`/api/v1/assessment-banks/${encodeURIComponent(scope)}`),
+  saveAssessmentBankPolicy: (scope, policy) => request(`/api/v1/assessment-banks/${encodeURIComponent(scope)}/policy`, { method: "PUT", body: JSON.stringify(policy) }),
+  createAssessmentBankForm: (scope, input) => request(`/api/v1/assessment-banks/${encodeURIComponent(scope)}/forms`, { method: "POST", body: JSON.stringify(input) }),
+  getAssessmentBankForm: (scope, id) => request(`/api/v1/assessment-banks/${encodeURIComponent(scope)}/forms/${encodeURIComponent(id)}`),
+  updateAssessmentBankForm: (scope, id, blueprint) => request(`/api/v1/assessment-banks/${encodeURIComponent(scope)}/forms/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ blueprint }) }),
+  validateAssessmentBankForm: (scope, id) => request(`/api/v1/assessment-banks/${encodeURIComponent(scope)}/forms/${encodeURIComponent(id)}/validate`, { method: "POST", body: "{}" }),
+  publishAssessmentBankForm: (scope, id, confirmation) => request(`/api/v1/assessment-banks/${encodeURIComponent(scope)}/forms/${encodeURIComponent(id)}/publish`, { method: "POST", body: JSON.stringify(confirmation) }),
+  archiveAssessmentBankForm: (scope, id) => request(`/api/v1/assessment-banks/${encodeURIComponent(scope)}/forms/${encodeURIComponent(id)}/archive`, { method: "POST", body: "{}" }),
+  deleteAssessmentBankForm: (scope, id) => request(`/api/v1/assessment-banks/${encodeURIComponent(scope)}/forms/${encodeURIComponent(id)}`, { method: "DELETE" }),
   getAssessmentReviewOverview: () => request("/api/v1/assessment-reviews/overview"),
   getAssessmentReviewLearner: (learnerId) => request(`/api/v1/assessment-reviews/learners/${encodeURIComponent(learnerId)}`),
   assignAssessmentReviewWeeklyPractice: (learnerId) => request(`/api/v1/assessment-reviews/learners/${encodeURIComponent(learnerId)}/weekly-practice`, { method: "POST", body: "{}" }),

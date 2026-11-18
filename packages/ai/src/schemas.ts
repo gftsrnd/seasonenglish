@@ -2123,8 +2123,10 @@ export const assessmentGradingInputSchema = z.object({
     listening: assessmentObjectiveScoreSchema,
     reading: assessmentObjectiveScoreSchema
   }),
-  writing: z.array(z.object({ prompt: z.string(), answer: z.string() })).min(1),
-  speaking: z.array(z.object({ prompt: z.string(), answer: z.string(), evidenceType: z.string() })).min(1),
+  writing: z.array(z.object({ taskKey:z.string().optional(),maxScore:z.number().optional(),prompt: z.string(), answer: z.string() })).min(1),
+  speaking: z.array(z.object({ taskKey:z.string().optional(),maxScore:z.number().optional(),prompt: z.string(), answer: z.string(), evidenceType: z.string() })).min(1),
+  rubric:z.array(z.object({code:z.string(),skill:z.enum(["writing","speaking"]),maxScore:z.number(),description:z.string()})).optional(),
+  targetLevel:z.enum(["A1","A2","B1","B2","C1"]).optional(),
   writingMaxScore: z.number().int().min(1).max(25), speakingMaxScore: z.number().int().min(1).max(25)
 });
 export const assessmentGradingOutputSchema = z.object({
