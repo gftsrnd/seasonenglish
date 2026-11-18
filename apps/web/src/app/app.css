@@ -799,3 +799,8 @@ button,.btn{min-height:var(--hci-touch-target)}
 [aria-expanded="true"] > .ui-chevron:not(.ui-chevron--right){transform:rotate(180deg)}
 [open] > summary > .ui-chevron--right,
 [aria-expanded="true"] > .ui-chevron--right{transform:none}
+
+/* Round controls never deform (owner 18/11 #23): radios and checkboxes keep
+   their own square box inside flex rows instead of being squeezed (13×18). */
+:root:root:root input[type="radio"] { flex-shrink: 0 !important; }
+:root:root:root input[type="checkbox"] { flex-shrink: 0 !important; }

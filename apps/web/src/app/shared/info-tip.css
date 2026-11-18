@@ -2,36 +2,44 @@
    Base styles for every width; phone/tablet sizing lives in responsive-phone.css. */
 .section-tip { display: contents; }
 
-/* Keep the heading and its help trigger together even when its text spans lines. */
-:is(h1, h2, h3, h4):has(> :is(.info-tip, .section-tip)) {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: flex-start;
-  gap: 4px;
+/* ⓘ sits INLINE right after the last word of the title (owner 18/11 #6):
+   the word joiner (::before) and nowrap glue it to that word, so it never
+   wraps onto a line of its own, and it is centred on that text line (also
+   when the title runs over two lines). Headings that carry a tip are plain
+   text flow, not flex columns (a flex column put the ⓘ beside the FIRST line
+   or alone under the title). */
+:root:root:root:root:root:root :is(h1, h2, h3, h4, h5):has(> :is(.info-tip, .section-tip, .info-title-text)) {
+  display: block;
   min-inline-size: 0;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
-:is(h1, h2, h3, h4) > :is(.info-tip, .section-tip),
-:is(h1, h2, h3, h4) > .section-tip > .info-tip {
-  flex: none;
-  margin-inline-start: 0;
-}
-:is(h1, h2, h3, h4) > .info-tip::before,
-:is(h1, h2, h3, h4) > .section-tip > .info-tip::before { content: none; }
-/* The word joiner glues the ⓘ to the last word of the title (generated, so it is not part of the title text). */
+:root:root:root:root:root:root .info-title > .info-title-text { display: inline; min-width: 0; }
 .info-tip::before { content: "\2060"; }
-.info-tip { display: inline; white-space: nowrap; margin-inline-start: 4px; font-size: 1rem; font-weight: 400; letter-spacing: 0; }
-.info-tip > .info-tip-button {
+:root:root:root:root:root:root .info-tip,
+:root:root:root:root:root:root .info-title > .info-tip {
+  display: inline;
+  flex: none;
+  white-space: nowrap;
+  margin-inline-start: 2px;
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+:root:root:root:root:root:root .info-tip > .info-tip-button {
   display: inline-grid;
   place-items: center;
   flex: none;
+  box-sizing: border-box;
   vertical-align: middle;
-  width: 26px;
-  min-width: 26px;
-  height: 26px;
-  min-height: 26px;
-  margin-top: -3px;
+  width: 24px;
+  min-width: 24px;
+  max-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
+  /* Negative block margins: the button never makes its line taller than the text. */
+  margin: -6px 0 -4px;
   padding: 0;
   border: 0;
   border-radius: 999px;
@@ -40,6 +48,7 @@
   color: var(--muted);
   cursor: pointer;
 }
+:root:root:root:root:root:root .info-tip > .info-tip-button > svg { width: 15px; height: 15px; }
 .info-tip > .info-tip-button:hover, .info-tip > .info-tip-button[aria-expanded="true"] { color: var(--primary-dark, var(--primary)); background: var(--surface-3, rgb(0 0 0 / 5%)); }
 .info-tip-popover {
   position: fixed;
@@ -60,3 +69,10 @@
   text-transform: none;
   white-space: normal;
 }
+
+/* Long ⓘ guidance opens as a small popup (shared frame): ≤ 80% tall, sticky title row with ×. */
+.info-tip-modal-backdrop { z-index: 1000; }
+.modal-backdrop > .dialog.info-tip-dialog { --compact-dialog-width: 440px; box-sizing: border-box; width: min(440px, calc(100vw - 32px)); max-height: min(80dvh, calc(100dvh - 32px)); overflow: auto; padding: 0 20px 20px; text-align: start; }
+.info-tip-dialog > .info-tip-dialog-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -20px 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.info-tip-dialog-header > h3 { margin: 0; font-size: 15px; line-height: 1.3; }
+.info-tip-dialog-body { font-size: 14px; line-height: 1.55; white-space: normal; }

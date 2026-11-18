@@ -75,7 +75,7 @@ export function LearnerProfile({ view, actions, courseCompleted = false }: { vie
       {profileOpen ? <ProfileDetails view={view} navigate={actions.navigate} /> : null}
     </section>
     <LearnerSupportCard from="profile" navigate={actions.navigate} />
-    {courseCompleted ? <section className="card profile-progress-section"><div className="profile-completion-heading"><div><div className="eyebrow">Pass Course</div><h2>Đã hoàn thành khóa E4S</h2></div><AppLink className="btn" href="/reward/course" navigate={actions.navigate}>Xem chứng nhận</AppLink></div></section> : null}
+    {courseCompleted ? <section className="card profile-progress-section"><div className="profile-completion-heading"><div><h2>Hoàn thành khóa E4S</h2><p className="small muted">Pass Course · C1</p></div><AppLink className="btn" href="/reward/course" navigate={actions.navigate}>Xem chứng nhận</AppLink></div></section> : null}
     {level ? <SeasonProgressCard compact={compactUi} view={{ ...view, badgeCount: view.badges.length }} certificateAction={
       // Only a learner who can open the certificate gets the link to it; everyone else sees its preview.
       <AppLink className="btn btn-sm" href={view.badgeCertificateAvailable ? "/reward/done" : "/reward/preview"} navigate={actions.navigate}>

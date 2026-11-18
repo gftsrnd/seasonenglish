@@ -1139,8 +1139,23 @@ body:has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump {
 :is(.shell-desktop-controls, .shell-compact-controls) button.shell-account-trigger { border-radius: 50%; }
 
 .shell-account-trigger > span { display: grid; place-items: center; }
-/* The filled 32px avatar reads higher than the 22px line icons beside it: nudge it down optically. */
-.shell-account-trigger > span { transform: translateY(1.5px); }
+/* Top bar (owner 18/11): bell, "?" and the avatar share one box size and one
+   centre line; the avatar is a true circle centred in its box (no optical
+   nudge, which pushed it below the other icons). */
+:root:root:root:root :is(.shell-desktop-controls, .app-shell-topbar .shell-compact-controls) button:is(.inbox-trigger, .app-guide-trigger, .shell-account-trigger) {
+  align-self: center;
+  box-sizing: border-box;
+  block-size: 40px !important;
+  min-block-size: 40px !important;
+  max-block-size: 40px;
+  min-height: 40px !important;
+  height: 40px !important;
+  margin-block: 0 !important;
+  padding: 0 !important;
+  vertical-align: middle;
+}
+:root:root:root:root .shell-account-trigger > span { transform: none; margin: 0; }
+:root:root:root:root .shell-account-trigger .account-avatar { inline-size: 32px; block-size: 32px; aspect-ratio: 1; line-height: 1; }
 
 .shell-account-panel {
   position: fixed;
@@ -1416,3 +1431,5 @@ body:has(#root > main :is(textarea, select, input:not([type="checkbox"], [type="
 svg.season-mark--logo { background: none; border-radius: 0; }
 /* Brand icon spots (top bar, login): bigger pinwheel, no disc behind it. */
 .brand .season-mark.app-brand-logo, .app-entry-brand .app-brand-logo { width: 34px; height: 34px; flex: none; }
+.shell-logout-dialog-heading { margin-bottom: 10px; }
+.shell-logout-dialog-heading > h3 { margin: 0; }

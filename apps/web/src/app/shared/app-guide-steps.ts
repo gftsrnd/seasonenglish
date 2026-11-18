@@ -2,238 +2,278 @@ export type GuideRole = "learner" | "operator" | "manager";
 export type GuideStep = readonly [selector: string, title: string, text: string, prioritize?: true];
 
 // Viết bước theo docs/guide-writing-rules.md:
-// - Mỗi bước trỏ vào một thẻ hoặc khu vực (thẻ, bảng, danh sách, khối form), không trỏ vào từng nút.
-// - Nội dung là 1–2 câu liền mạch, khoảng 30 tiếng; tên nút, trường và điều kiện quan trọng viết đậm bằng **...**.
-// - Engine tự sắp bước theo thứ tự trên màn và bỏ thẻ đang bị ẩn.
+// - Mỗi bước trỏ vào đúng vùng đang nói: thẻ, bảng, cột, bộ lọc, khối form hoặc ô thao tác của hàng đầu tiên.
+// - Nội dung 1–2 câu ngắn, khoảng 20 tiếng (≤ 130 ký tự), một ý mỗi bước; đậm 1–2 chữ chính bằng **...**.
+// - Mỗi màn khoảng 3–7 bước ở mỗi trạng thái; chi tiết từng trường để cho gợi ý dưới trường hoặc nút ⓘ.
+// - Engine tự sắp bước theo thứ tự trên màn và bỏ thẻ đang bị ẩn; trạng thái khác nhau dùng bộ chọn khác nhau.
+// - Nội dung chữ do PO duyệt: bản để duyệt nằm ở HUONG-DAN-SU-DUNG-NOI-DUNG.md (cạnh thư mục repo).
+
+// Trang chủ trong tháng học thử: thẻ tiến độ có data-trial.
+const HOME_TRIAL = ".home-page:has(.monthly-home-metrics[data-trial])";
+const HOME_COUNTED = ".home-page:not(:has(.monthly-home-metrics[data-trial]))";
 
 const learnerSteps: Record<string, readonly GuideStep[]> = {
   "/home": [
-    // Trang chủ trước khi có trình độ: một bước cho mỗi thẻ theo thứ tự trên màn (đầu khối, thẻ 1, 2, 3), rồi thẻ hỗ trợ.
-    // Mỗi thẻ trỏ đúng thẻ của nó qua data-onboarding-step, theo trạng thái đã xong / đang làm / sắp tới.
+    // Trang chủ trước khi có trình độ: một bước cho mỗi thẻ theo thứ tự trên màn (đầu khối, thẻ 1, 2, 3).
     // Đầu khối trỏ vào tiêu đề, không trỏ cả khối: cả khối bắt đầu từ thẻ 1 nên bước kế tiếp sẽ như quay lại thẻ 1.
-    [".onboarding-steps > h2", "Ba bước bắt đầu", "Làm lần lượt **Hồ sơ cá nhân**, **Test đầu vào**, rồi chờ **Vận hành duyệt mức**. Nhãn mỗi bước cho biết bước nào **đã xong** và bạn **đang ở** đâu."],
-    ['.onboarding-steps [data-onboarding-step="1"].done', "Hồ sơ đã lưu", "Hồ sơ đã xong. Bấm **Xem / sửa hồ sơ** nếu cần đổi công việc, mục tiêu hay cách học."],
-    ['.onboarding-steps [data-onboarding-step="1"].cur', "Điền hồ sơ", "Bấm **Điền hồ sơ**, khoảng **2 phút**, để bài học sát công việc của bạn. Đã lưu nháp thì bấm **Tiếp tục phần đã lưu**."],
-    ['.onboarding-steps [data-onboarding-step="2"].todo', "Test đầu vào", "Lưu hồ sơ xong, bước này mở nút **Bắt đầu test**: **4 phần** Nghe, Đọc, Viết, Nói, tối đa **75 phút**. Không cần ôn trước."],
-    ['.onboarding-steps [data-onboarding-step="2"].cur', "Làm test đầu vào", "Bài có **4 phần** Nghe, Đọc, Viết, Nói, tối đa **75 phút**. Chuẩn bị **tai nghe** và **micro**, rồi bấm **Bắt đầu test**; không cần ôn trước."],
-    ['.onboarding-steps [data-onboarding-step="2"].done', "Đã nộp test", "Bài test đầu vào đã nộp, bạn không cần làm lại. Điểm bài test là căn cứ để **Vận hành** xếp mức cho bạn."],
-    ['.onboarding-steps [data-onboarding-step="3"].todo', "Vận hành duyệt mức", "Nộp test xong, **Vận hành** xem điểm để xếp mức. Bạn không cần làm gì thêm; bài học **tự mở** khi có mức."],
-    ['.onboarding-steps [data-onboarding-step="3"].cur', "Chờ duyệt mức", "Bài test đã gửi, **Vận hành** đang xem điểm để xếp mức. Bạn không cần làm gì thêm; bài học **tự mở** khi có mức."],
-    ['[data-home-block="primary"]:has(a[href^="/lesson/"])', "Bài học hôm nay", "Bấm bài được đề xuất để học hoặc học tiếp. **Bài học bù** hay **bài ôn** cần làm trước cũng hiện ở đây."],
-    ['[data-home-block="primary"]:has(a[href^="/support"]):not(:has(a[href^="/lesson/"]))', "Bài học đang khóa", "Bạn đã bỏ lỡ bài thi tháng trước. Bấm **Gửi đơn xin mở** và nêu lý do để Quản lý xem xét."],
-    ['.home-page[data-monthly-preparation="true"] [data-home-block="primary"]:not(:has(a[href^="/lesson/"], a[href^="/support"]))', "Lộ trình đang chuẩn bị", "Vận hành đang chuẩn bị và duyệt bộ bài tháng cho trình độ của bạn. Trong lúc chờ, bạn vẫn luyện được với Season."],
-    ['[data-home-block="month-path"]', "Lịch học tháng", "Mỗi ô là **bài học**, **ôn tập**, ngày nghỉ hoặc **bài thi tháng**, kèm trạng thái. Bấm bài đã mở để học hoặc ôn lại."],
-    ['.home-page[data-monthly-preparation="true"] [data-home-block="activities"]', "Luyện trong lúc chờ", "Mở **Season AI Coach** để luyện hội thoại theo trình độ đã duyệt, hoặc **Bài tháng** để xem trạng thái bộ bài."],
-    ['.home-page:not([data-monthly-preparation="true"]) [data-home-block="activities"]', "Season và bài tháng", "Mở **Season AI Coach** để luyện hội thoại; số lượt hôm nay hiện trên thẻ. **Bài tháng** cho biết ngày thi và điều kiện dự thi."],
-    // One step per card (testers found per-metric steps too detailed).
-    ['[data-home-block="metrics"]', "Tiến độ học tập", "Vòng tròn cho biết **bài đã học**, **bài ôn**, **ngày đi học** và **điểm huy hiệu**; dòng **Vắng** là số ngày vắng so với mức cho phép."],
-    ['.home-readiness', "Đường lên mức", "Mỗi dòng là một **điều kiện để thi lên mức**. Đủ tất cả các dòng thì bạn được **thi lên mức** tiếp theo."],
-    [".learner-summary-card--profile", "Hồ sơ và đầu vào", "Bấm **Hồ sơ học tập & đầu vào** để xem thông tin cá nhân, kết quả đầu vào và trình độ đã duyệt."],
+    [".onboarding-steps > h2", "Ba bước bắt đầu", "Làm lần lượt **hồ sơ**, **test đầu vào**, rồi chờ duyệt mức. Nhãn cho biết bạn đang ở bước nào."],
+    ['.onboarding-steps [data-onboarding-step="1"].done', "Hồ sơ đã lưu", "Hồ sơ đã xong. Bấm **Xem / sửa hồ sơ** khi cần đổi thông tin."],
+    ['.onboarding-steps [data-onboarding-step="1"].cur', "Điền hồ sơ", "Bấm **Điền hồ sơ**, khoảng 2 phút, để bài học sát công việc của bạn."],
+    ['.onboarding-steps [data-onboarding-step="2"].todo', "Test đầu vào", "Mở sau khi lưu hồ sơ: **4 phần**, tối đa 75 phút, không cần ôn trước."],
+    ['.onboarding-steps [data-onboarding-step="2"].cur:has(.onboarding-test-note)', "Làm test đầu vào", "Chuẩn bị **tai nghe** và micro, rồi bấm **Bắt đầu test**. Không cần ôn trước."],
+    ['.onboarding-steps [data-onboarding-step="2"].cur:not(:has(.onboarding-test-note))', "Làm tiếp bài test", "Bấm **Tiếp tục bài test** để làm tiếp; câu đã trả lời vẫn được giữ."],
+    ['.onboarding-steps [data-onboarding-step="2"].done', "Đã nộp test", "Bài test đã nộp. Điểm này giúp Vận hành **xếp mức** cho bạn."],
+    ['.onboarding-steps [data-onboarding-step="3"].todo', "Vận hành duyệt mức", "Sau khi bạn nộp test, Vận hành xếp mức. Bài học **tự mở** khi có mức."],
+    ['.onboarding-steps [data-onboarding-step="3"].cur', "Chờ duyệt mức", "Vận hành đang xếp mức cho bạn. Bạn không cần làm gì; bài học **tự mở**."],
+    // Lượt thi lại đầu vào được duyệt: trang chủ chỉ còn thẻ thi lại.
+    ['section[aria-label="Bài thi lại đầu vào"]', "Bài thi lại đầu vào", "Bạn có **một lượt thi lại**. Nộp xong, Vận hành chốt mức theo bài thi lại."],
+    // Thẻ chính: một bước cho mỗi dạng thẻ.
+    [`${HOME_COUNTED} .home-primary-lesson:not(.home-primary-lesson--catch-up)`, "Bài học hôm nay", "Bài nên học hôm nay. Bấm **Học ngay**, hoặc **Học tiếp** nếu đang dở."],
+    [".home-primary-lesson--catch-up", "Bài học bù", "Còn một bài ngày trước chưa học. **Học bù** bài này trước bài hôm nay."],
+    [`${HOME_TRIAL} .home-primary-lesson`, "Bài học thử", "Tháng này là **tháng học thử**: học để làm quen, chưa tính điểm danh hay bài thi."],
+    ['.home-page [data-home-block="primary"].hero:not(.home-primary-lesson):has(a, button)', "Bài đang bị chặn", "Bài tiếp theo chỉ mở khi bạn xong **bài đang chặn**. Bấm nút trên thẻ để làm ngay."],
+    ['.home-page [data-home-block="primary"].hero:not(.home-primary-lesson):not(:has(a, button))', "Chưa có bài mới", "Thẻ ghi **ngày mở** bài tiếp theo. Trong lúc chờ, ôn lại bài đã học trong lịch."],
+    ['[data-home-block="primary"]:has(a[href^="/support"]):not(:has(a[href^="/lesson/"]))', "Bài học đang khóa", "Bài khóa vì bạn **bỏ lỡ bài thi** tháng trước. Bấm **Gửi đơn xin mở** để Quản lý xem xét."],
+    ['.home-page[data-monthly-preparation="true"] [data-home-block="primary"]:not(:has(a[href^="/lesson/"], a[href^="/support"]))', "Lộ trình đang chuẩn bị", "Bộ bài tháng **đang được soạn**. Trong lúc chờ, bạn vẫn luyện được với Season."],
+    ['.home-page:not([data-monthly-preparation="true"]) section.card[data-home-block="primary"]:not(:has(a))', "Chưa có bài mới", "Thẻ cho biết vì sao chưa có bài, ví dụ **ngày bắt đầu học** hoặc đã học hết bài đang mở."],
+    [".pass-course-home-card", "Bài thi đầu ra", "Ở mức C1, thẻ cho biết bạn thi **Pass Course** được chưa và mở bài thi khi đủ điều kiện."],
+    [`${HOME_COUNTED} [data-home-block="metrics"]`, "Tiến độ học tập", "Bài, bài ôn, **điểm danh** và điểm huy hiệu của tháng. Dòng **Vắng** so với số ngày cho phép."],
+    [`${HOME_TRIAL} [data-home-block="metrics"]`, "Tiến độ học thử", "Chỉ đếm bài đã học. Điểm danh và bài thi **tính từ ngày** ghi trên thẻ."],
+    [`${HOME_COUNTED} [data-home-block="month-path"]`, "Lịch học tháng", "Mỗi ô là một bài, bài ôn, ngày nghỉ hoặc **bài thi tháng**. Bấm bài đã mở để học."],
+    [`${HOME_TRIAL} [data-home-block="month-path"]`, "Lịch học thử", "Mỗi ô là một bài hoặc ngày nghỉ. Ngày thi ghi **Miễn thi** vì tháng thử không có bài thi."],
+    ['.home-page[data-monthly-preparation="true"] [data-home-block="activities"]', "Luyện trong lúc chờ", "Mở **Season AI Coach** để luyện nói; **Bài tháng** cho biết bộ bài đã chuẩn bị đến đâu."],
+    [`${HOME_COUNTED}:not([data-monthly-preparation="true"]) [data-home-block="activities"]`, "Season và bài tháng", "**Season AI Coach** để luyện nói. **Bài tháng** mở lịch thi và điều kiện dự thi."],
+    [`${HOME_TRIAL}:not([data-monthly-preparation="true"]) [data-home-block="activities"]`, "Season và bài tháng", "**Season AI Coach** để luyện nói. Tháng học thử **không có bài thi**."],
+    [".home-readiness:has(a[href^=\"/test/level-up\"])", "Sẵn sàng thi lên mức", "Bạn đủ **4 điều kiện**. Bấm **Thi lên mức** khi đã có tai nghe và micro."],
+    [".home-readiness:not(:has(a[href^=\"/test/level-up\"]))", "Đường lên mức", "Bốn **điều kiện để thi lên mức**. Đủ cả bốn thì nút thi hiện ở đây."],
+    ['[data-home-block="monthly-exam"]', "Bài thi tháng", "Trạng thái **bài thi cuối tháng**. Bấm để xem lịch thi và điều kiện dự thi."],
+    [".learner-summary-card--profile", "Hồ sơ và đầu vào", "Xem hồ sơ, **điểm đầu vào** và trình độ đã duyệt."],
   ],
   "/monthly": [
-    [".monthly-assessment-header", "Lịch thi tháng", "Xem **ngày thi** và nhãn trạng thái đề, từ **chưa phát hành**, **đã phát hành** đến **đã hoàn thành** hoặc **đã hết giờ vào thi**."],
-    [".monthly-assessment-form-state:has(a.btn)", "Vào bài thi", "Đề đã mở: bấm **Vào bài thi** hoặc **Tiếp tục bài thi**. Chuẩn bị **tai nghe** và **micro** trước khi bắt đầu."],
-    [".monthly-assessment-form-state:not(:has(a.btn))", "Trạng thái đề", "Cho biết bước tiếp theo, ví dụ chờ **đề phát hành**, chờ **giờ mở đề** hoặc **gửi khiếu nại**. Nút vào bài hiện ở đây khi đề mở."],
-    [".monthly-eligibility-metrics", "Điều kiện dự thi", "**Điểm danh** quyết định quyền vào thi, vắng quá giới hạn thì cần khiếu nại. **Lịch học** và **lượt Season hợp lệ** chỉ để theo dõi tiến độ."],
-    [".monthly-complaint-form", "Khiếu nại điều kiện", "Vắng quá giới hạn thì gửi khiếu nại kèm lý do. Quản lý phản hồi trong **24 giờ**; quá hạn đơn được **tự duyệt**.", true],
+    // Tháng học thử: trang chỉ có một dòng, không có lịch thi hay điều kiện dự thi.
+    [".monthly-assessment-landing .monthly-assessment-form-state:not([aria-label])", "Tháng học thử", "Tháng học thử **không có bài thi** và không xét điều kiện dự thi."],
+    [".monthly-assessment-header", "Lịch thi tháng", "**Ngày thi** và trạng thái đề: chưa phát hành, đã phát hành, đang làm hoặc đã xong."],
+    [".monthly-assessment-form-state[aria-label]:has(a.btn)", "Vào bài thi", "Đề đã mở. Chuẩn bị tai nghe, micro rồi bấm **Vào bài thi**."],
+    [".monthly-assessment-form-state[aria-label]:not(:has(a.btn))", "Trạng thái đề", "Cho biết **bước tiếp theo**, ví dụ chờ phát hành đề hoặc chờ giờ mở đề."],
+    [".monthly-eligibility-metrics", "Điều kiện dự thi", "Chỉ **điểm danh** quyết định quyền vào thi. Hai chỉ số còn lại để theo dõi."],
+    [".monthly-complaint-form", "Khiếu nại điều kiện", "Vắng quá giới hạn: nêu lý do rồi **Gửi khiếu nại**. Quản lý trả lời trong 24 giờ.", true],
   ],
   "/coach": [
-    [".coach-header", "Phong cách trò chuyện", "Chọn **Informal** để luyện nói thân mật hoặc **Formal** cho tình huống công việc. **Xoá chat** bắt đầu một hội thoại mới."],
-    [".coach-limit-row", "Lượt luyện và phản hồi", "**Hôm nay** và **Tháng** đếm lượt hợp lệ. Bật **Nhận xét** hoặc **Giải thích** để tự mở điểm và gợi ý sau mỗi lượt."],
-    [".coach-page .chat", "Cuộc trò chuyện", "Season trả lời và chấm từng lượt về ý nghĩa, từ vựng, ngữ pháp. Bấm **Nghe** để nghe câu tiếng Anh của Season."],
-    [".chat-compose:has(textarea:enabled)", "Trả lời Season", "Gõ câu tiếng Anh rồi bấm **Gửi**. Bấm **micro** để nói trực tiếp, hoặc **tải tệp** ghi âm có sẵn."],
-    [".coach-vocabulary", "Từ bí mật", "Các ô từ của tháng mở dần khi bạn luyện. Bấm từ **đã mở** để nghe phát âm."],
+    [".coach-header", "Phong cách trò chuyện", "Chọn giọng **Informal** hay **Formal**. Xoá chat để bắt đầu chủ đề mới."],
+    [".coach-limit-row", "Lượt luyện và phản hồi", "Số **lượt hợp lệ** hôm nay và tháng. Bật Nhận xét, Giải thích để tự mở sau mỗi lượt."],
+    [".coach-page .chat", "Cuộc trò chuyện", "Season trả lời và **chấm từng lượt**. Bấm **Nghe** để nghe câu của Season."],
+    [".chat-compose:has(textarea:enabled)", "Trả lời Season", "Gõ câu tiếng Anh rồi **Gửi**, hoặc bấm **Nói** để ghi âm."],
+    [".coach-vocabulary", "Từ bí mật", "Các **từ bí mật** mở dần khi bạn luyện. Bấm từ đã mở để nghe."],
   ],
   "/games": [
-    [".game-vocabulary-tools:not([open]) > summary", "Bộ từ đang chơi", "Mở để xem các từ đang dùng, tạo bộ từ theo chủ đề mới hoặc lấy **từ đã học trong tháng**."],
-    [".games-topic-card:has(.topic-create input:enabled)", "Tạo bộ từ", "Nhập **1–3 từ tiếng Anh**, ví dụ coffee shop, rồi bấm **Tạo bộ từ**. Hoặc lấy **từ đã học trong tháng** làm bộ từ."],
-    [".games-topic-card:not(:has(.topic-create input:enabled)):has([data-game-source-learned])", "Chọn bộ từ", "Bấm **Dùng từ đã học trong tháng** để chơi với từ đã học. Đang dùng bộ này thì bấm **Cập nhật bộ từ đã học** để thêm từ mới."],
-    ['.games-topic-card:has(a[href="/home"])', "Chưa có bộ từ", "Khi bài tháng mở, học phần từ vựng rồi quay lại chọn **Dùng từ đã học trong tháng**. Có bộ từ thì trò chơi mới mở."],
-    [".games-word-set-card:has(.word-chip)", "Ôn từ trước khi chơi", "Các từ trong bộ đang chơi, **nghĩa tiếng Việt** nằm cạnh mỗi từ. Bấm một từ để **nghe phát âm**."],
-    ['[aria-labelledby="games-picker-title"]:has(a.game-tile)', "Chọn trò chơi", "Bấm một trò **đang sẵn sàng** để chơi với bộ từ hiện tại. Trò chưa sẵn sàng ghi rõ điều kiện còn thiếu."],
+    [".games-page:not(:has(.games-topic-card)) > section.card", "Mini game chưa mở", "Mini game mở khi có **bài học tháng** đã phát hành."],
+    [".game-vocabulary-tools:not([open]) > summary", "Bộ từ đang chơi", "Chủ đề và số từ đang chơi. Bấm để mở, xem từ hoặc **đổi bộ từ**."],
+    [".games-topic-card:has(.topic-create input:enabled)", "Tạo bộ từ", "Nhập **1–3 từ tiếng Anh** rồi **Tạo bộ từ**, hoặc dùng từ đã học trong tháng."],
+    [".games-topic-card:not(:has(.topic-create input:enabled)):has([data-game-source-learned])", "Chọn bộ từ", "Bấm **Dùng từ đã học trong tháng** để chơi với từ bạn đã học."],
+    ['.games-topic-card:has(a[href="/home"])', "Chưa có bộ từ", "Học phần **từ vựng** của bài tháng trước, rồi quay lại chơi."],
+    [".games-word-set-card:has(.word-chip)", "Ôn từ trước khi chơi", "Các từ đang chơi, kèm **nghĩa tiếng Việt**."],
+    ['[aria-labelledby="games-picker-title"]:has(a.game-tile)', "Chọn trò chơi", "Bấm một trò **Sẵn sàng chơi**. Trò chưa mở ghi rõ điều kiện còn thiếu."],
   ],
   "/games/*": [
-    ["#gm-board:has(.game-tutorial-actions)", "Cách chơi", "Đọc mục tiêu, các bước và cách tính điểm, rồi bấm **Bắt đầu chơi**."],
-    ["#gm-board:has(.game-result.is-error)", "Chưa lưu kết quả", "Kết quả lượt này chưa được lưu. Kiểm tra kết nối rồi bấm **Thử gửi lại** để giữ lượt chơi."],
-    ["#gm-board:has(.game-result.is-complete)", "Kết quả lượt chơi", "Xem điểm của lượt vừa chơi. Bấm **Chơi lại** để bắt đầu lượt mới với cùng bộ từ."],
+    ["#gm-board:has(.game-tutorial-actions)", "Cách chơi", "Đọc mục tiêu và cách tính điểm, rồi bấm **Bắt đầu chơi**."],
+    ["#gm-board:has(.game-result.is-error)", "Chưa lưu kết quả", "Kết quả chưa lưu. Kiểm tra mạng rồi bấm **Thử gửi lại**."],
+    ["#gm-board:has(.game-result.is-complete)", "Kết quả lượt chơi", "Điểm lượt vừa chơi. Bấm **Chơi lại** hoặc **Chọn trò khác**."],
   ],
-  // Một bước cho mỗi thẻ bài học, theo thứ tự trên màn. Hướng dẫn chỉ đi qua tab đang mở (Học hoặc Luyện tập):
-  // thẻ của tab kia không có trong trang nên bước của nó tự bị bỏ; engine không tự đổi tab.
+  // Một bước cho mỗi thẻ chính, theo thứ tự trên màn; chỉ đi qua tab đang mở (Học hoặc Bài tập).
   // Kiểm tra trên bài thật dựng từ dữ liệu mẫu: apps/web/src/app/learner/Learning.guide.test.tsx.
   "/lesson/*": [
-    [".app-learner-page > div.card:has(.eyebrow)", "Bài chưa mở", "Bài chưa đến ngày hoặc cần xong **bài trước**; dòng chữ ghi lý do và ngày mở. Bấm nút chính để làm bài đang chặn hoặc **Luyện với Season**."],
-    [".lesson-heading", "Đầu bài học", "Tên bài, **chủ đề tuần** và **trạng thái** học. Bài có hai bước: **Học** trước, **Luyện tập** mở khi bạn học xong."],
-    [".lesson-part--objective", "Mục tiêu bài", "Những việc bạn **làm được** sau bài này. Đọc trước để biết cần chú ý gì khi học và làm bài tập."],
-    [".lesson-part--instruction", "Hướng dẫn", "Các bước nên làm **theo thứ tự** cho tab đang mở; nội dung đổi theo tab **Học** hay **Luyện tập**."],
-    [".lesson-part--vocabulary:not(:has(.vocabulary-card-phrases .lesson-example-wrap--phrase))", "Từ vựng", "Mỗi thẻ từ có **phiên âm**, **nghĩa** và ảnh minh hoạ. Bấm **loa** để nghe từ, bấm từng **cụm từ hay dùng** để nghe cả cụm."],
-    [".lesson-part--vocabulary:has(.vocabulary-card-phrases .lesson-example-wrap--phrase)", "Từ vựng", "Mỗi thẻ từ có **phiên âm**, **nghĩa** và ảnh minh hoạ. Bấm **loa** hoặc **cụm từ hay dùng** để nghe; chạm **biểu tượng dịch** cạnh cụm từ để xem **nghĩa**."],
-    [".lesson-vocabulary-group", "Nhóm từ bao trùm", "Các từ cùng nhóm nghĩa xếp dưới một **từ bao trùm** chung. Học cả nhóm để nhớ từ theo ngữ cảnh và phân biệt sắc thái."],
-    [".lesson-part--vocabulary:not(:has(.vocabulary-card-relations .lesson-example-wrap--chip)) .vocabulary-card-relations", "Từ liên quan", "Chip **Từ bao trùm**, **Họ từ** mở nhóm từ; **=** là đồng nghĩa, **≠** là trái nghĩa, **Khẩu ngữ**, **Văn chương** là sắc thái. Bấm chip để nghe hoặc xem thêm."],
-    [".lesson-part--vocabulary .vocabulary-card-relations:has(.lesson-example-wrap--chip)", "Từ liên quan", "Chip **Từ bao trùm**, **Họ từ** mở nhóm từ; **=** là đồng nghĩa, **≠** là trái nghĩa. Bấm chip để nghe, chạm **biểu tượng dịch** cuối chip để xem **nghĩa**."],
-    [".lesson-part--grammar:not(:has(.lesson-example-wrap))", "Ngữ pháp", "**Công thức** của cấu trúc, cách dùng và câu ví dụ. Bấm từng **câu ví dụ** để nghe cách nói."],
-    [".lesson-part--grammar:has(.lesson-example-wrap)", "Ngữ pháp", "**Công thức** của cấu trúc, cách dùng và câu ví dụ. Bấm **câu ví dụ** để nghe, chạm **biểu tượng dịch** để xem **nghĩa tiếng Việt**."],
-    [".lesson-part--pronunciation", "Phát âm", "Âm mục tiêu kèm **khẩu hình** và các **từ mẫu**. Bấm loa nghe hết từng từ mẫu, vì phần **Nói** chỉ mở khi đã nghe đủ."],
-    [".lesson-study-cta", "Xong phần Học", "Học hết các thẻ phía trên rồi bấm **Đã học xong → Làm bài tập** để mở **Luyện tập**. Thẻ ghi luôn **số phần bài tập** cần làm."],
-    [".lesson-part--listening", "Nghe", "Bấm **loa** hoặc trình phát để nghe đoạn audio, nghe lại nếu cần, rồi chọn đáp án đúng."],
+    [".app-learner-page > div.card:has(.eyebrow)", "Bài chưa mở", "Bài chưa đến ngày hoặc cần xong **bài trước**. Bấm nút chính để làm bài đang chặn."],
+    [".lesson-heading", "Đầu bài học", "Tên bài và trạng thái. Học tab **1. Học** trước, tab **2. Bài tập** mở sau đó."],
+    [".lesson-study-steps", "Học từng bước", "Phần Học chia **từng bước**. Học xong bước này thì bấm **Tiếp** ở cuối trang."],
+    [".lesson-part--vocabulary", "Từ vựng", "Mỗi thẻ có phiên âm, nghĩa, ảnh. Bấm **loa** hoặc cụm từ để nghe."],
+    [".lesson-part--grammar", "Ngữ pháp", "**Công thức** và câu ví dụ. Bấm câu ví dụ để nghe cách nói."],
+    [".lesson-part--pronunciation", "Phát âm", "Nghe hết các **từ mẫu**: phần Nói chỉ mở khi đã nghe đủ."],
+    [".lesson-study-cta", "Xong phần Học", "Học xong thì bấm **Đã học xong → Làm bài tập** để mở tab Bài tập."],
     // Vùng trả lời của bài tập đầu tiên; nút báo lỗi chỉ có sau khi học xong và khi câu chưa bị báo lỗi.
-    [".lesson-parts:has(.lesson-answer > button[aria-expanded]) .lesson-answer", "Trả lời và nộp", "Chọn hoặc viết câu trả lời rồi bấm **Nộp bài**; sai thì **làm lại** kèm gợi ý. Câu sai đề thì bấm **Báo lỗi câu này** để Vận hành xem lại."],
-    [".lesson-parts:not(:has(.lesson-answer > button[aria-expanded])) .lesson-answer", "Trả lời và nộp", "Chọn hoặc viết câu trả lời rồi bấm **Nộp bài**. Sai thì được **làm lại** kèm gợi ý; hết lượt thì **đáp án đúng** hiện ra."],
-    ['[data-testid="lesson-exercise-translation"]', "Bản dịch câu hỏi", "Làm đúng hoặc hết lượt thì **bản dịch** câu hỏi và đáp án hiện ra để bạn kiểm tra lại nghĩa."],
-    [".lesson-part--reading", "Đọc", "Đọc đoạn văn ngắn rồi trả lời câu hỏi bên dưới theo **nội dung bài đọc**."],
-    [".lesson-part--writing", "Viết", "Điền hoặc viết câu theo yêu cầu, dùng **từ** và **cấu trúc** vừa học ở tab Học."],
-    [".lesson-part--word_class", "Từ loại", "Chọn **dạng từ** đúng, như danh từ, động từ hay tính từ, cho chỗ trống trong câu."],
-    [".lesson-part--word_use", "Dùng từ", "Chọn từ đi đúng với cụm cho sẵn, tức **cách dùng từ** tự nhiên trong câu tiếng Anh."],
-    [".lesson-part--speaking:has(.lesson-speaking-gate)", "Mở phần Nói", "Phần Nói đang khóa: nghe lần lượt các **từ mẫu** ở thẻ **Phát âm** bên tab Học. Dòng **Đã nghe** cho biết còn thiếu từ nào."],
-    [".lesson-part--speaking:not(:has(.lesson-speaking-gate))", "Nói", "Nghe **câu mẫu**, rồi ghi âm câu của bạn và đổi một chi tiết cho hợp với bạn. Ghi xong thì bấm **Kiểm tra nói**."],
-    [".lesson-appeal-form", "Báo lỗi phần bài", "Ghi rõ câu hoặc nội dung bạn cho là sai, đính kèm ảnh nếu có, rồi gửi để **Vận hành** xem lại.", true],
-    [".lesson-completion", "Hoàn thành bài", "Dòng chữ ghi **số phần đã xong**; đủ phần thì bấm **Hoàn thành bài** để lưu và mở bài tiếp. **Luyện với Season** mở trò chuyện luyện nói."],
-    ['.app-learner-page > .row:has(> .lesson-back)', "Bài ôn thứ Sáu", "Bài ôn lại **từ** và **cấu trúc** đã học trong tuần. Làm lần lượt từng phần cho tới hết bài."],
-    [".weekly-review-sections", "Các phần bài ôn", "Bài ôn cuối tuần đi lần lượt từng phần. Mỗi dòng ghi **số câu đúng** trên tổng số câu của phần đó."],
-    ["section.card:has(button.card.flat[aria-pressed])", "Khởi động lật thẻ", "Bấm từng thẻ để lật xem nghĩa. Phần này **không chấm điểm**, bỏ qua hoặc bắt đầu phần 1 khi sẵn sàng."],
-    ['.app-learner-page:has(> .weekly-review-sections, .weekly-review-sections) section.card.stack:has([role="group"], textarea, .weekly-review-read-aloud)', "Câu đang làm", "Chọn đáp án, viết hoặc ghi âm theo yêu cầu của câu. Câu sai sẽ được **hỏi lại**; bấm biểu tượng loa để nghe."],
-    ['[data-testid="review-exercise-translation"]', "Bản dịch câu vừa làm", "Sau mỗi câu, **bản dịch** câu hỏi và đáp án hiện ở đây để bạn đối chiếu nghĩa trước khi sang câu tiếp."],
-    ['section.card:is([aria-label="Đã xong bài ôn"], [aria-label="Review complete"])', "Đã xong bài ôn", "Kết quả bài ôn đã được lưu. **Bài đầu tuần sau** mở đúng ngày của nó; bấm nút trong thẻ để về Trang chủ."],
+    [".lesson-parts:has(.lesson-answer > button[aria-expanded]) .lesson-answer", "Trả lời và nộp", "Trả lời rồi bấm **Nộp bài**; sai thì làm lại. Đề sai thì bấm **Báo lỗi câu này**."],
+    [".lesson-parts:not(:has(.lesson-answer > button[aria-expanded])) .lesson-answer", "Trả lời và nộp", "Trả lời rồi bấm **Nộp bài**. Sai thì làm lại kèm gợi ý."],
+    [".lesson-part--speaking:has(.lesson-speaking-gate)", "Mở phần Nói", "Phần Nói đang khóa: nghe hết **từ mẫu** ở thẻ Phát âm trước."],
+    [".lesson-part--speaking:not(:has(.lesson-speaking-gate))", "Nói", "Nghe câu mẫu, **ghi âm** câu của bạn rồi bấm **Kiểm tra nói**."],
+    [".lesson-appeal-form", "Báo lỗi phần bài", "Ghi rõ **chỗ sai**, thêm ảnh nếu có, rồi gửi để Vận hành xem lại.", true],
+    [".lesson-completion", "Hoàn thành bài", "Đủ phần thì bấm **Hoàn thành bài** để lưu và mở bài tiếp theo."],
+    ['.app-learner-page > .row:has(> .lesson-back)', "Bài ôn thứ Sáu", "Ôn lại **từ và cấu trúc** của tuần, làm lần lượt từng phần."],
+    [".weekly-review-sections", "Các phần bài ôn", "Mỗi dòng ghi **số câu đúng** của một phần."],
+    ["section.card:has(button.card.flat[aria-pressed])", "Khởi động lật thẻ", "Bấm thẻ để lật xem **từ tiếng Anh**. Phần này không chấm điểm."],
+    ['.app-learner-page:has(> .weekly-review-sections, .weekly-review-sections) section.card.stack:has([role="group"], textarea, .weekly-review-read-aloud)', "Câu đang làm", "Trả lời rồi bấm **Kiểm tra**. Câu sai sẽ **quay lại** ở cuối phần."],
+    ['section.card:is([aria-label="Đã xong bài ôn"], [aria-label="Review complete"])', "Đã xong bài ôn", "Kết quả đã lưu. **Bài đầu tuần sau** mở đúng ngày của nó."],
   ],
   "/onboard": [
-    [".profile-edit-sections", "Các mục hồ sơ", "Chuyển giữa **Cá nhân**, **Tiếng Anh**, **Cách học** và **Trình độ** để điền từng phần."],
-    ['.profile-form > section.card:not([id]):not([hidden])', "Thông tin và mục tiêu", "**Họ tên** và **Email** là bắt buộc. Thêm phòng ban, tên Base và các việc bạn dùng tiếng Anh để Season đưa ví dụ sát hơn."],
-    ["#profile-edit-learning", "Phong cách học", "Chọn **cách học** hiệu quả, thời lượng và thiết bị thường dùng."],
-    ["#profile-edit-level", "Trình độ tự đánh giá", "Chọn trình độ bạn tự thấy. Có thể thêm **chứng chỉ** và điều muốn Season giúp."],
-    [".onboard-actions", "Lưu hồ sơ", "Bấm **Lưu nháp** để điền tiếp sau. Điền đủ các mục có **dấu sao** rồi bấm nút lưu chính; hồ sơ mới sẽ chuyển sang **test đầu vào**."],
+    [".profile-edit-sections", "Các mục hồ sơ", "Hồ sơ chia **4 mục**. Điền xong mục này rồi bấm **Tiếp** ở cuối trang."],
+    ['.profile-form > section.card:not([id]):not([hidden])', "Thông tin và mục tiêu", "Điền **họ tên, email** và 4 câu về việc bạn dùng tiếng Anh; các mục có dấu sao là bắt buộc."],
+    ["#profile-edit-learning", "Phong cách học", "Chọn **cách học** hợp với bạn, thời lượng và thiết bị hay dùng."],
+    ["#profile-edit-level", "Trình độ tự đánh giá", "Chọn **trình độ** bạn tự thấy và chứng chỉ nếu có."],
+    [".onboard-actions", "Lưu hồ sơ", "**Lưu nháp** để điền tiếp sau. Lưu đủ hồ sơ thì chuyển sang **test đầu vào**."],
   ],
   "/profile": [
-    [".profile-identity-card", "Hồ sơ cá nhân", "Bấm **Đổi avatar** để chọn biểu tượng và màu. **Xem hồ sơ** mở thông tin đã lưu, kèm nút **Cập nhật hồ sơ**."],
-    [".app-learner-page:not(.profile-page) :has(> a[href=\"/onboard\"])", "Hồ sơ chưa đủ", "Bấm **Điền hồ sơ** để E4S chọn nội dung hợp với công việc và cách học của bạn."],
-    [".learner-support-entry", "Hỗ trợ học tập", "Gửi **khiếu nại**, **kháng nghị**, trả lời **khảo sát tháng** và xem phản hồi đã nhận."],
-    ['[aria-label="Mùa học"]', "Mùa học và huy hiệu", "Đủ **điểm** và **huy hiệu** của cấp thì lên mùa tiếp theo. **Xem tất cả huy hiệu** cho biết điều kiện; **Xem trước chứng nhận** mở mẫu chứng nhận."],
-    [".profile-assessment-section", "Kết quả đánh giá", "Điểm **đầu vào** và các bài đánh giá theo từng kỹ năng nghe, đọc, viết, nói."],
+    [".profile-identity-card", "Hồ sơ cá nhân", "**Đổi avatar**, hoặc **Xem hồ sơ** để xem và cập nhật thông tin."],
+    ['.app-learner-page:not(.profile-page):has(> a[href="/onboard"])', "Hồ sơ chưa đủ", "Bấm **Điền hồ sơ** để bài học hợp với công việc của bạn."],
+    [".learner-support-entry", "Hỗ trợ học tập", "Gửi **khiếu nại, kháng nghị**, khảo sát và xem phản hồi đã nhận."],
+    [".profile-progress-section:has(.profile-completion-heading)", "Đã hoàn thành khóa", "Bấm **Xem chứng nhận** để mở chứng nhận hoàn thành khóa."],
+    ['[aria-label="Mùa học"]', "Mùa học và huy hiệu", "Đủ **điểm và huy hiệu** thì lên mùa tiếp theo. Bấm để xem điều kiện từng huy hiệu."],
+    [".profile-assessment-section:not(:has(.profile-assessment-result))", "Kết quả đánh giá", "Điểm **đầu vào** từng kỹ năng. Bấm **Xem lại bài làm** để xem từng câu."],
+    [".profile-assessment-section:has(.profile-assessment-result)", "Kết quả đánh giá", "Điểm đầu vào và đầu ra. Bấm **Chi tiết điểm đầu ra** để xem từng kỹ năng."],
   ],
   "/support": [
     // Thẻ Tất cả chỉ có bảng lịch sử: thêm hàng mục để người học biết gửi khiếu nại, kháng nghị ở đâu.
     // Trước khi trình độ được duyệt, mục Kháng nghị và Khảo sát tháng bị ẩn, khiếu nại chỉ có loại Tài khoản.
-    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):has(.request-tabs a[href*="type=appeals"]) .request-tabs', "Các mục hỗ trợ", "Mở **Khiếu nại** để báo lỗi điểm danh, bài học hay tài khoản, **Kháng nghị** để xin chấm lại bài thi, **Khảo sát tháng** để góp ý."],
-    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):not(:has(.request-tabs a[href*="type=appeals"])) .request-tabs', "Các mục hỗ trợ", "Mở **Khiếu nại** để báo vấn đề về **tài khoản**. Các mục học tập khác mở khi bạn bắt đầu học."],
-    ['[aria-labelledby="learner-complaint-title"]', "Khiếu nại mới", "Chọn **loại khiếu nại**, ghi ngày hoặc màn hình xảy ra, nêu **lý do** và đính kèm ảnh nếu có, rồi bấm **Gửi cho Quản lý**.", true],
-    [".learner-support-action:has(.assessment-appeal-status)", "Bài có thể kháng nghị", "Bấm **Gửi kháng nghị** ở bài còn hạn, nêu lý do từ **10 ký tự**, chọn trình độ đề xuất nếu được hỏi, rồi gửi cho Vận hành."],
-    [".card:has(> .monthly-survey-form), .monthly-survey-form", "Khảo sát tháng", "Trả lời các câu có **dấu sao** rồi bấm **Gửi phản hồi**. Có nhiều tháng đang mở thì chọn tháng ở đầu thẻ."],
-    ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=complaints"]):has(.request-tabs a[href*="type=appeals"]) .request-card', "Khiếu nại đã gửi", "Mỗi hàng có **trạng thái** và ngày gửi; bấm **Chi tiết** để đọc phản hồi. **Gửi khiếu nại** báo vấn đề về điểm danh, bài học hoặc tài khoản."],
-    ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=complaints"]):not(:has(.request-tabs a[href*="type=appeals"])) .request-card', "Khiếu nại đã gửi", "Mỗi hàng có **trạng thái** và ngày gửi; bấm **Chi tiết** để đọc phản hồi. **Gửi khiếu nại** báo vấn đề về tài khoản."],
-    ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=appeals"]) .request-card', "Kháng nghị đã gửi", "Mỗi hàng có **trạng thái** và ngày gửi. Bấm **Chi tiết** để đọc phản hồi của Vận hành."],
-    ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=feedback"]) .request-card', "Khảo sát đã gửi", "Các khảo sát bạn đã trả lời. Bấm **Chi tiết** để xem lại câu trả lời của tháng đó."],
-    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):has(.request-tabs a[href*="type=appeals"]) .request-card', "Lịch sử hỗ trợ", "Khiếu nại, kháng nghị và khảo sát đã gửi, kèm **trạng thái**. Bấm **Chi tiết** để đọc nội dung và phản hồi."],
-    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):not(:has(.request-tabs a[href*="type=appeals"])) .request-card', "Lịch sử hỗ trợ", "Khiếu nại đã gửi, kèm **trạng thái**. Bấm **Chi tiết** để đọc nội dung và phản hồi."],
+    [".learner-support-shortcuts", "Bạn cần hỗ trợ gì?", "Mỗi ô là một loại yêu cầu, kèm **số mục đang chờ**. Bấm nút trong ô để gửi hoặc xem."],
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):has(.request-tabs a[href*="type=appeals"]) .request-tabs', "Các mục hỗ trợ", "**Khiếu nại** báo lỗi điểm danh, bài, tài khoản. **Kháng nghị** xin xem lại kết quả hoặc thi lại."],
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])):not(:has(.request-tabs a[href*="type=appeals"])) .request-tabs', "Các mục hỗ trợ", "Mở **Khiếu nại** để báo vấn đề tài khoản. Mục khác mở khi bạn có mức."],
+    ['[aria-labelledby="learner-complaint-title"]', "Khiếu nại mới", "Chọn **loại**, nêu lý do, thêm ảnh nếu có, rồi **Gửi cho Quản lý**.", true],
+    [".learner-support-action:has(.placement-retake-heading)", "Xin thi lại đầu vào", "Bạn được xin **thi lại một lần**. Ghi lý do rồi gửi cho Vận hành."],
+    [".learner-support-action:has(.assessment-appeal-status)", "Bài có thể kháng nghị", "Bấm **Gửi kháng nghị** ở bài còn hạn và nêu lý do."],
+    [".card:has(> .monthly-survey-form), .monthly-survey-form", "Khảo sát tháng", "Trả lời các câu có dấu sao rồi **Gửi phản hồi**."],
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=complaints"]) .request-card', "Khiếu nại đã gửi", "Mỗi hàng có **trạng thái**. Bấm **Chi tiết** để đọc phản hồi."],
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=appeals"]) .request-card', "Kháng nghị đã gửi", "Mỗi hàng có **trạng thái**. Bấm **Chi tiết** để đọc phản hồi của Vận hành."],
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"][href*="type=feedback"]) .request-card', "Khảo sát đã gửi", "Bấm **Chi tiết** để xem lại câu trả lời của tháng đó."],
+    ['.learner-support-page:has(.request-tabs a[aria-current="page"]:not([href*="type="])) .request-card', "Lịch sử hỗ trợ", "Mọi yêu cầu đã gửi kèm **trạng thái**. Bấm **Chi tiết** để đọc phản hồi."],
   ],
 };
+
+// Vận hành › Phản hồi & yêu cầu (mục 19a): mỗi tab có bước riêng; bước đầu luôn giới thiệu 4 tab.
+const APPEALS = '[data-operator-review-tab="appeals"]';
+const APPEAL_TABLE = `${APPEALS} .request-table[aria-label="Danh sách kháng nghị"]`;
+const FIRST_APPEAL = `${APPEAL_TABLE} .request-record:first-of-type`;
+const operatorReviewSteps: readonly GuideStep[] = [
+  [".operator-review-navigation", "Bốn mục của trang", "Bốn tab: nhận xét Season, **kháng nghị** của học viên, **yêu cầu** gửi Quản lý, cảnh báo câu sai hai lượt."],
+  // Kháng nghị học viên
+  [`${APPEALS} .request-filters`, "Lọc theo trạng thái", "Chọn **Chờ xử lý** để thấy việc còn mở, **Đã xử lý** để xem lại quyết định."],
+  [`${FIRST_APPEAL} .request-kind`, "Cột Loại", "**Kháng nghị**: xin xem lại kết quả bài. **Yêu cầu thi lại**: xin thi lại bài đầu vào."],
+  [`${FIRST_APPEAL} .request-state`, "Ba trạng thái", "**Chờ xử lý** là chưa quyết định; đã quyết định thì ghi **Đã chấp nhận** hoặc Đã từ chối."],
+  [`${APPEAL_TABLE} .request-record:not(:has(.request-delete)) .request-commands`, "Nút Xử lý", "Bấm **Xử lý**: đọc lý do, minh chứng, rồi chấp nhận hoặc từ chối kèm **lời giải thích**."],
+  [`${APPEAL_TABLE} .request-record:has(.request-delete) .request-commands`, "Chi tiết và Xóa", "**Chi tiết** xem lại quyết định. **Xóa** chỉ ẩn khỏi danh sách; học viên vẫn thấy kết quả."],
+  [`${APPEAL_TABLE}:not(:has(.request-record))`, "Danh sách kháng nghị", "Chưa có mục nào theo bộ lọc này. Mục mới sẽ hiện ở đây kèm **loại** và **trạng thái**."],
+  [`${APPEALS} .operator-request-expanded:has(.operator-review-appeal-pending:not([aria-label^="Yêu cầu thi lại"]))`, "Xử lý kháng nghị", "Đọc lý do và bài làm, chọn **Chấp nhận** hoặc **Giữ nguyên kết quả**, rồi giải thích cho học viên.", true],
+  [`${APPEALS} .operator-request-expanded:has(.operator-review-appeal-pending[aria-label^="Yêu cầu thi lại"])`, "Xử lý thi lại", "Chọn **Duyệt cho thi lại** hoặc Từ chối. Cần **phát hành đề thi lại** trước khi duyệt.", true],
+  [`${APPEALS} .operator-request-expanded:has(.operator-review-appeal:not(.operator-review-appeal-pending))`, "Xem quyết định", "Lý do, minh chứng và **phản hồi đã gửi**. Quyết định đã lưu không sửa được.", true],
+  // Phản hồi Season
+  ['[data-operator-review-tab="coach"] .operator-review-panel', "Phản hồi Season", "Mở từng học viên để đọc nhận xét AI, rồi bấm **Đánh dấu đã kiểm**."],
+  ['[data-operator-review-tab="coach"] > .empty', "Phản hồi Season", "Chưa có lượt luyện. Lượt luyện với **Season** sẽ hiện ở đây để bạn kiểm tra."],
+  // Yêu cầu đã gửi
+  ['[data-operator-review-tab="sent"] .request-card', "Yêu cầu đã gửi", "Yêu cầu **mở lại** hoặc **xóa tài khoản** bạn gửi Quản lý, kèm trạng thái và phản hồi."],
+  // Cảnh báo bài tập
+  ['[data-operator-review-tab="attempts"] .operator-review-card-list > article', "Câu sai cả hai lượt", "Mở câu hỏi để kiểm tra. Đề sai thì **Hiệu chỉnh câu**, đề đúng thì **Không lỗi**."],
+  ['[data-operator-review-tab="attempts"] .empty', "Cảnh báo bài tập", "Chưa có câu nào học viên **sai cả hai lượt**."],
+];
 
 const operatorSteps: Record<string, readonly GuideStep[]> = {
   "/op": [
-    ['[data-guide="op-pending"]', "Hồ sơ chờ duyệt", "Mở từng hồ sơ để xem điểm 4 kỹ năng và thông tin người học, chọn **Mức duyệt** rồi xác nhận để xếp trình độ."],
-    ['[data-guide="op-signals"]', "Tín hiệu đổi mức", "Người học đủ điều kiện **thi lên mức** theo kết quả các tháng, hoặc sai nhiều **hai tuần liền** nên cần xem xét hạ mức. Bấm **Hạ mức** để chuyển xuống."],
-    [".operator-approved-panel", "Học viên đã duyệt", "Mức hiện tại và điểm đầu vào của từng người. Bấm **Đổi level** để chuyển mức, **Mục tiêu** để đặt mục tiêu tháng, **Hồ sơ** để xem chi tiết."],
-    ['[data-guide="op-in-progress"]', "Đang làm test", "Người học đã bắt đầu bài đầu vào nhưng chưa nộp. Bấm **Hồ sơ** để xem thông tin đã điền."],
-    ['[data-guide="op-unassessed"]', "Chưa làm test", "Người học chưa bắt đầu bài đầu vào. Bấm **Hồ sơ** để xem thông tin trước khi nhắc họ làm bài."],
+    ['[data-guide="op-pending"]', "Hồ sơ chờ duyệt", "Mở từng học viên để xem **điểm 4 kỹ năng**, chọn mức rồi bấm **Duyệt mức**."],
+    ['[data-guide="op-signals"]', "Tín hiệu đổi mức", "Người đủ điều kiện **thi lên mức**, và người sai nhiều hai tuần liền cần xem **hạ mức**."],
+    [".operator-approved-panel", "Học viên đã duyệt", "Mức hiện tại của từng người. **Đổi level**, mở **Thi lên mức** hoặc đặt mục tiêu tháng."],
+    ['[data-guide="op-in-progress"]', "Đang làm test", "Đã bắt đầu bài đầu vào nhưng **chưa nộp**."],
+    ['[data-guide="op-retry"]', "Cần làm lại", "Cần làm lại bài đầu vào. Bấm **Cho thi lại** để cấp lượt thi lại."],
+    ['[data-guide="op-unassessed"]', "Chưa làm test", "Có tài khoản nhưng **chưa bắt đầu** bài đầu vào."],
   ],
   "/op/months": [
-    [".monthly-month-card", "Chu kỳ tháng", "Chọn tháng cần soạn. Tháng đã qua ghi **Chỉ xem** và không sửa được."],
-    [".monthly-topic-card", "Chủ đề tháng", "Chủ đề chung cho mọi mức. Bấm **Gợi ý AI** để có bản nháp, **Chốt chủ đề** khi đã đúng; hàng dưới cùng để **chọn mức**."],
-    [".monthly-resources", "Tài nguyên tháng", "Tạo rồi **duyệt** bộ từ vựng, ngữ pháp, phát âm cho mức đang chọn. Bấm từng ô để xem; **Phân bổ** cho biết ngày nào học gì."],
-    [".monthly-publication", "Công bố tháng", "Cho biết số bài **còn cần duyệt**. Đủ điều kiện thì bấm **Công bố tháng** để học viên thấy bài theo lịch."],
-    ["#monthly-teaching-calendar", "Lịch soạn bài", "Mỗi ô là ngày học, ngày ôn hoặc bài thi. Bấm **AI** để sinh bài nháp, **bút chì** để soạn tay, **Xem** để mở bài đã có."],
+    [".monthly-month-card", "Chu kỳ tháng", "Chọn tháng cần soạn. Tháng đã qua chỉ **xem**, không sửa."],
+    [".monthly-topic-card", "Chủ đề tháng", "Soạn hoặc **Gợi ý AI** chủ đề chung, rồi **Chốt chủ đề**. Hàng cuối để chọn mức."],
+    [".monthly-resources", "Tài nguyên tháng", "**Sinh** hoặc soạn tay từ vựng, ngữ pháp, phát âm cho mức này, rồi **Duyệt tài nguyên**."],
+    [".monthly-publication", "Công bố tháng", "Cho biết còn thiếu gì. Đủ điều kiện thì bấm **Công bố tháng**."],
+    ["#monthly-teaching-calendar", "Lịch soạn bài", "**AI** sinh bài, **bút chì** soạn tay, Xem mở bài. Chỉ bật sau khi duyệt tài nguyên."],
   ],
-  "/op/review": [
-    [".operator-review-navigation", "Phản hồi và yêu cầu", "Bốn mục giúp bạn kiểm tra phản hồi **Season**, xử lý **kháng nghị**, theo dõi **yêu cầu gửi Quản lý** và rà **cảnh báo bài tập**."],
-    ['[data-operator-review-tab="coach"] .operator-review-panel', "Theo dõi phản hồi", "Mở hàng theo **học viên** để đọc câu trả lời, nhận xét và điểm Season. Chọn **Đánh dấu đã kiểm** sau khi xem, hoặc **Đã kiểm** để bỏ dấu."],
-    ['[data-operator-review-tab="coach"] > .empty', "Theo dõi phản hồi", "Các lượt luyện với **Season** xuất hiện ở đây sau khi học viên luyện tập."],
-    [".operator-requests .request-filters", "Lọc kháng nghị", "Chọn **Tất cả** để xem mọi mục, **Chờ xử lý** để tìm việc còn mở hoặc **Đã xử lý** để xem các quyết định."],
-    ['.operator-requests .request-table[aria-label="Danh sách kháng nghị"]:has(.request-record)', "Danh sách kháng nghị", "Dùng **Xử lý** cho mục đang chờ, **Chi tiết** xem quyết định, **Xóa** ẩn mục đã xử lý. Ưu tiên **quá hạn xử lý**."],
-    ['.operator-request-expanded:has(.operator-review-appeal-pending:not([aria-label^="Yêu cầu thi lại"]))', "Xử lý kháng nghị", "Đọc lý do và minh chứng, **Xem bài làm** nếu có. Chọn **Chấp nhận kháng nghị** hoặc **Giữ nguyên kết quả**, rồi nhập giải thích cho học viên.", true],
-    ['.operator-request-expanded:has(.operator-review-appeal-pending[aria-label^="Yêu cầu thi lại"])', "Xử lý thi lại", "Chọn **Duyệt cho thi lại** hoặc **Từ chối**, rồi nhập giải thích. Cần phát hành **đề thi lại** trước khi duyệt.", true],
-    ['.operator-request-expanded:has(.operator-review-appeal:not(.operator-review-appeal-pending))', "Xem quyết định", "Xem lý do, minh chứng và phản hồi đã gửi. Trạng thái cho biết yêu cầu **đã chấp nhận** hay **đã từ chối**.", true],
-    ['[data-operator-review-tab="sent"] .operator-requests .request-card', "Theo dõi yêu cầu", "Theo dõi yêu cầu **mở lại** hoặc **xóa tài khoản**. Xem ngày gửi, trạng thái **chờ xử lý**, **đã duyệt**, **đã từ chối** hoặc **đã hủy** và phản hồi."],
-    ['[data-operator-review-tab="attempts"] :is(.empty, .operator-review-card-list)', "Theo dõi cảnh báo", "Xem câu học viên sai **cả hai lượt** và đối chiếu hai câu trả lời. Mục này có dữ liệu khi cần kiểm tra bài tập ngày."],
-    ['[data-operator-review-tab="attempts"] .operator-review-card-list > article', "Kiểm tra câu hỏi", "Chọn **Mở câu hỏi** để xem đề, **Hiệu chỉnh câu** nếu đề sai hoặc **Không lỗi** để bỏ cảnh báo khi đề đúng."],
-  ],
+  "/op/review": operatorReviewSteps,
 };
 
 operatorSteps["/op/tests"] = [
-  ['.assessment-bank:not([aria-label="Kho đề thi lại đầu vào"]) > .assessment-bank-header', "Kho đề", "Danh sách các phiên bản đề đã lưu. Mục tiêu ban đầu **3 bộ**, có thể bổ sung khi cần."],
-  ['.assessment-bank:not([aria-label="Kho đề thi lại đầu vào"]) > .assessment-bank-toolbar', "Công cụ đề", "Chọn **Soạn tay** hoặc **Sinh bằng AI** để thêm bản nháp. Mở **Cách giao đề** để chọn bộ đã duyệt hoặc cấu hình trộn cho lượt thi mới."],
-  ['.assessment-bank:not([aria-label="Kho đề thi lại đầu vào"]) > .assessment-bank-list:has(.assessment-bank-row)', "Các phiên bản", "Bấm **Xem** để đọc đề, **Sửa** nháp hoặc **Tạo bản sửa** từ bộ đã duyệt. **Lưu trữ** ngừng giao đề; chỉ xoá khi chưa có lượt thi."],
-  ['.assessment-bank[aria-label="Kho đề thi lại đầu vào"]', "Kho đề thi lại", "Kho riêng cho **thi lại đầu vào**. Soạn, duyệt và dùng **Cách giao đề** để chỉ định bộ giao cho lượt thi lại mới."],
-  ['[data-assessment-kind="final"]', "Đề thi tháng", "Mỗi **tháng và mức** dùng một đề. Bấm **Xem** để đọc đề đã lưu và đối chiếu phiên bản trước khi sử dụng."],
-  ['.operator-assessment-form-list:not([data-assessment-kind="final"]):not(.assessment-bank)', "Phiên bản đề đã lưu", "Các phiên bản đề của tab đang chọn kèm **trạng thái**, số kỹ năng và tổng điểm. Bấm **Xem** để mở trước đề như học viên thấy."],
-  [".card:has(.operator-results-table)", "Kết quả bài thi", "Các lượt làm bài **đầu vào**, **lên mức**, **thi tháng** và **đề đầu ra** kèm tổng điểm. Bấm **Xem** để mở bài làm và chấm."],
-  ["main .empty", "Kết quả bài thi", "Bài thi học viên đã nộp sẽ hiện ở đây kèm tổng điểm. Bấm **Xem** ở mỗi hàng để mở bài làm và chấm."],
+  ['.operator-review-tabs[aria-label="Loại bài kiểm tra"]', "Loại đề", "Chọn **loại đề**; kho đề và kết quả bên dưới đổi theo tab."],
+  ['.tabs[aria-label="Mức đích"]', "Mức đích", "Chọn **mức học viên sẽ lên** để xem kho đề của mức đó."],
+  [".operator-monthly-bank-tabs", "Tháng của đề", "Chọn **tháng** để xem đề thi tháng đó."],
+  ['.assessment-bank:not([aria-label="Kho đề thi lại đầu vào"]) > .assessment-bank-toolbar', "Công cụ đề", "**Soạn tay** hoặc Sinh bằng AI để thêm nháp. **Cách giao đề** chọn bộ cho lượt thi mới."],
+  ['.assessment-bank:not([aria-label="Kho đề thi lại đầu vào"]) > .assessment-bank-list:has(.assessment-bank-row)', "Các phiên bản", "Nhãn cho biết **Đang dùng**, Đã duyệt hay Bản nháp. Bấm **Xem** để đọc, Sửa bản nháp."],
+  ['.assessment-bank[aria-label="Kho đề thi lại đầu vào"]', "Kho đề thi lại", "Kho riêng cho **thi lại đầu vào**, dùng khi Vận hành cho học viên thi lại."],
+  ['[data-assessment-kind="final"]', "Đề thi tháng", "Mỗi **tháng và mức** một đề. Bấm **Xem** để đọc, Sửa đề khi còn sửa được."],
+  ['.operator-assessment-form-list:not([data-assessment-kind="final"]):not(.assessment-bank)', "Phiên bản đề đã lưu", "Các phiên bản đề kèm **trạng thái**. Bấm **Xem** để mở trước đề."],
+  [".card:has(.operator-results-table)", "Kết quả bài thi", "Bài học viên đã nộp của loại đề này. Bấm **Xem** để mở bài làm và **chấm**."],
+  ["main .empty", "Kết quả bài thi", "Chưa có **bài nộp** của loại đề này."],
 ];
 operatorSteps["/op/levelforms"] = operatorSteps["/op/tests"]!;
 
 const managerSteps: Record<string, readonly GuideStep[]> = {
   "/mgr": [
-    [".manager-kpi-grid", "Ba chỉ số chính", "Tỷ lệ **duy trì nhịp học**, **hoàn thành lộ trình** và mức **hài lòng** của nhóm, so với ngưỡng mục tiêu."],
-    [".manager-progress-card", "Danh sách đang học", "Người học đã có mức, xếp theo **rủi ro bỏ học**. Bấm **Hồ sơ** ở mỗi hàng để xem chi tiết người học."],
-    [".manager-progress-card-actions", "Thao tác nhanh", "**Cần nhắc** mở trang Nhắc học, **Xuất CSV** tải tiến độ tháng, **Giả lập phần thưởng** xem trước điểm và huy hiệu người học nhận."],
-    [".manager-progress-submitted", "Chờ duyệt mức", "Người học đã nộp **test đầu vào**, đang chờ **Vận hành duyệt mức**. Bấm **Hồ sơ** để xem điểm và thông tin người học."],
-    [".manager-progress-testing", "Đang làm test", "Người học đã mở **test đầu vào** nhưng chưa nộp nên chưa có điểm. Bấm **Hồ sơ** để xem chi tiết."],
-    [".manager-progress-not-tested", "Chưa làm test", "Người học đã có tài khoản nhưng **chưa làm test đầu vào**. Bấm **Hồ sơ** để xem hồ sơ và hoạt động gần nhất."],
+    [".manager-operational-card--delete", "Yêu cầu xoá tài khoản", "Vận hành xin xoá tài khoản học viên. Bấm **Duyệt xoá** để quyết định."],
+    [".manager-kpi-grid", "Ba chỉ số chính", "**Duy trì nhịp học**, hoàn thành lộ trình và hài lòng, so với ngưỡng mục tiêu."],
+    [".manager-progress-card", "Danh sách đang học", "Người học xếp theo **rủi ro bỏ học**. Bấm **Hồ sơ** để xem chi tiết."],
+    [".manager-progress-card-actions", "Thao tác nhanh", "**Cần nhắc** mở trang Nhắc học, **Xuất CSV** tải tiến độ tháng."],
+    [".manager-progress-waiting", "Chờ xếp mức", "Người chưa có mức: **đã nộp**, đang làm hoặc chưa làm test đầu vào."],
+    [".manager-progress-submitted", "Chờ duyệt mức", "Đã nộp test, chờ **Vận hành duyệt mức**."],
+    [".manager-progress-testing", "Đang làm test", "Đã mở test đầu vào nhưng **chưa nộp**."],
+    [".manager-progress-not-tested", "Chưa làm test", "Có tài khoản nhưng **chưa làm** test đầu vào."],
   ],
   "/mgr/ops": [
-    [".manager-operators-section", "Hiệu suất vận hành", "Mỗi hàng là một người vận hành. Mở hàng để xem số bài **đã soạn**, **đã duyệt** và chi tiết chất lượng."],
+    [".manager-operators-section", "Hiệu suất vận hành", "Chọn **Tháng**. Mỗi hàng là một người vận hành; bấm **Chi tiết** để xem bài đã soạn, đã duyệt."],
   ],
   "/mgr/holidays": [
-    [".manager-holiday-form", "Thêm ngày nghỉ", "Chọn ngày nghỉ riêng của tổ chức rồi bấm **Thêm ngày nghỉ**. Ngày lễ Việt Nam đã có sẵn."],
-    [".manager-holiday-calendar", "Lịch nghỉ lễ", "Ngày lễ Việt Nam và ngày nghỉ của tổ chức. Lọc loại ngày ở góc thẻ; ngày của tổ chức xóa được bằng **Xóa**."],
+    [".manager-holiday-form", "Thêm ngày nghỉ", "Chọn ngày nghỉ riêng của tổ chức rồi bấm **Thêm ngày nghỉ**."],
+    [".manager-holiday-calendar", "Lịch nghỉ lễ", "Ngày lễ Việt Nam có sẵn. Ngày nghỉ của tổ chức **xóa được**."],
   ],
   "/mgr/reminders": [
-    [".manager-reminder-toolbar", "Người cần nhắc", "Số người học vắng lâu cần được nhắc hôm nay. Từng người hiện ở các thẻ bên dưới."],
-    [".manager-reminder-queue", "Danh sách cần nhắc", "Mỗi thẻ là một người học vắng lâu, kèm tin nhắn soạn sẵn. Danh sách dài thì **cuộn trong khung**."],
-    [".manager-reminder-card", "Lời nhắc", "**Copy tin nhắn**, **Gửi email** hoặc **Gửi Base.vn** sau khi **Cấu hình Base.vn**. Đã nhắc ngoài app thì bấm **Đã nhắc qua kênh khác**."],
-    [".manager-reminder-history", "Lịch sử nhắc", "Mỗi lần nhắc ghi ngày, người học, nơi nhận, kênh và **kết quả**. Bảng dài thì **cuộn trong khung**."],
+    [".manager-reminder-toolbar", "Người cần nhắc", "Số người cần nhắc hôm nay. **Gửi tất cả qua email** hoặc nhắc từng người."],
+    [".manager-reminder-empty-state", "Không ai cần nhắc", "Hôm nay **không ai** vắng quá số ngày quy định."],
+    [".manager-reminder-queue", "Danh sách cần nhắc", "Mỗi thẻ là một người vắng lâu, kèm **tin nhắn soạn sẵn**."],
+    [".manager-reminder-card", "Lời nhắc", "**Copy tin nhắn**, gửi email hoặc Base.vn. Đã nhắc nơi khác thì bấm **Đã nhắc qua kênh khác**."],
+    [".manager-reminder-history", "Lịch sử nhắc", "Mỗi lần nhắc: ngày, người học, kênh và **kết quả** gửi."],
   ],
   "/mgr/report": [
-    [".report > .rhead", "Báo cáo tháng", "Chọn **Tháng** và **Mức** để lọc cả báo cáo. Bấm **In / Lưu PDF**, **Copy bản chữ** hoặc tải **.txt** để gửi đi."],
-    ['[aria-label="Ba chỉ số của tháng"]', "Ba chỉ số", "Kết quả từng chỉ số so với **ngưỡng** và đánh giá đạt hay chưa."],
-    [".manager-report-learner-table-wrap, .manager-monthly-learner-list", "Từng học viên", "Điểm danh, bài học, lượt Season, **bài thi tháng** và số khiếu nại của từng người."],
-    [".manager-report-next-actions", "Việc cần làm tiếp", "Gợi ý **việc nên làm** từ số liệu tháng, kèm **tên người học** liên quan."],
+    [".report > .rhead", "Báo cáo tháng", "Bấm **In / Lưu PDF** hoặc **Copy bản chữ** để gửi báo cáo."],
+    [".manager-monthly-filters", "Lọc báo cáo", "Chọn **Tháng** và **Mức** để lọc cả báo cáo."],
+    ['[aria-label="Ba chỉ số của tháng"]', "Ba chỉ số", "Kết quả từng chỉ số so với **ngưỡng**: đạt hay chưa."],
+    [".manager-report-learner-table-wrap, .manager-monthly-learner-list", "Từng học viên", "Điểm danh, bài học, Season và **bài thi tháng** của từng người."],
+    [".manager-report-next-actions", "Việc cần làm tiếp", "Gợi ý **việc nên làm** từ số liệu tháng."],
   ],
   "/mgr/surveys": [
-    [".monthly-survey-month-filter", "Tháng khảo sát", "Chọn tháng rồi bấm **Xem tháng** để mở biểu mẫu và kết quả của tháng đó."],
-    ['[aria-labelledby="manager-monthly-survey-editor"]', "Biểu mẫu khảo sát", "Bấm **Tạo bản nháp** để soạn câu hỏi. **Lưu** bản nháp, **xem trước** như người học thấy rồi mới **công bố**."],
-    ['[aria-labelledby="manager-monthly-survey-results"]', "Kết quả khảo sát", "**Số phản hồi** và câu trả lời của người học trong **tháng đang xem**."],
+    [".monthly-survey-month-filter", "Tháng khảo sát", "Chọn tháng rồi bấm **Xem tháng**."],
+    ['[aria-labelledby="manager-monthly-survey-editor"]', "Biểu mẫu khảo sát", "Soạn **bản nháp**, xem trước như người học thấy, rồi **Công bố khảo sát**."],
+    ['[aria-labelledby="manager-monthly-survey-results"]', "Kết quả khảo sát", "**Số phản hồi** và câu trả lời của tháng đang xem."],
   ],
   "/mgr/ops/months": [
-    [".monthly-topic-card", "Chủ đề tháng", "Chủ đề chung do Vận hành soạn; Quản lý chỉ xem. Hàng dưới cùng để **chọn mức** cần kiểm tra."],
-    [".monthly-resources", "Tài nguyên tháng", "Từ vựng, ngữ pháp, phát âm và ảnh minh họa của mức đang chọn. Bấm từng ô để xem chi tiết."],
-    ["#monthly-teaching-calendar", "Lịch học", "Mỗi ô là ngày học, ngày ôn hoặc bài thi. Bấm **Xem** để mở bài đã soạn."],
+    [".monthly-month-card", "Chu kỳ tháng", "Chọn tháng cần xem. Quản lý **chỉ xem**."],
+    [".monthly-topic-card", "Chủ đề tháng", "Chủ đề do Vận hành soạn, Quản lý chỉ xem. Hàng cuối để **chọn mức**."],
+    [".monthly-resources", "Tài nguyên tháng", "Từ vựng, ngữ pháp, phát âm của mức này. Bấm **từng ô** để xem."],
+    [".monthly-publication", "Công bố tháng", "Mức này **đã công bố** chưa, hay còn thiếu gì."],
+    ["#monthly-teaching-calendar", "Lịch học", "Mỗi ô là một ngày. Bấm **Xem** để mở bài đã soạn."],
   ],
   "/mgr/requests": [
-    [".manager-requests-card", "Danh sách yêu cầu", "Mục **chờ xử lý** nằm đầu danh sách. Bấm **Duyệt** hoặc **Từ chối** kèm lý do; **Lưu trữ** ẩn mục đã xử lý."],
+    ['nav.request-tabs[aria-label="Loại yêu cầu"]', "Loại yêu cầu", "**Yêu cầu mở khóa** từ Vận hành, **Khiếu nại** từ học viên."],
+    [".manager-requests-filters", "Mục đã lưu trữ", "Bật để xem lại các mục **đã lưu trữ**."],
+    [".manager-requests-card .request-table", "Danh sách yêu cầu", "Mục chờ nằm đầu. **Duyệt** hoặc **Từ chối** kèm lý do; mục xong có thể lưu trữ."],
   ],
   "/mgr/rewards": [
-    [".manager-reward-controls", "Tình huống giả lập", "Chọn một **tình huống mẫu**, hoặc mở **Tùy chỉnh điểm và huy hiệu** để nhập điểm và bật từng huy hiệu."],
-    [".manager-reward-result-pane", "Học viên sẽ thấy", "Thẻ Mùa học với điểm và huy hiệu đang chọn. Bấm **Xem lên cấp** để xem màn chúc mừng người học nhận."],
+    [".manager-reward-controls", "Tình huống giả lập", "Chọn **Trình độ** và **Tình huống mẫu**, hoặc tùy chỉnh điểm và huy hiệu."],
+    [".manager-reward-result-pane", "Học viên sẽ thấy", "Thẻ Mùa học đúng như học viên thấy. Bấm **Xem lên cấp** để xem màn chúc mừng."],
   ],
 };
-managerSteps["/mgr/reopen-requests"] = managerSteps["/mgr/requests"]!;
-managerSteps["/mgr/complaints"] = managerSteps["/mgr/requests"]!;
 managerSteps["/mgr/ops/tests"] = [
-  [".assessment-bank", "Kho đề đang dùng", "Xem **bộ đang giao**, trạng thái phiên bản và số bộ đã duyệt. Quản lý có thể dùng **Xem** để mở từng bộ đề."],
-  ['[data-assessment-kind="final"]', "Đề thi tháng", "Mỗi **tháng và mức** dùng một đề. Bấm **Xem** để đọc phiên bản đã lưu."],
-  ['.operator-assessment-form-list:not([data-assessment-kind="final"])', "Phiên bản đề đã lưu", "Các phiên bản đề của tab đang chọn kèm **trạng thái** và tổng điểm. Bấm **Xem** để mở trước đề; Quản lý **chỉ xem**."],
-  [".card:has(.operator-results-table)", "Kết quả bài thi", "Các lượt làm bài đầu vào, lên mức, thi tháng và đề đầu ra kèm tổng điểm. Bấm **Xem** để mở bài làm; Quản lý **chỉ xem**."],
-  ["main .empty", "Kết quả bài thi", "Bài thi học viên đã nộp sẽ hiện ở đây kèm tổng điểm để theo dõi."],
+  ['.operator-review-tabs[aria-label="Loại bài kiểm tra"]', "Loại đề", "Chọn **loại đề**. Quản lý chỉ xem đề và kết quả."],
+  ['.tabs[aria-label="Mức đích"]', "Mức đích", "Chọn **mức học viên sẽ lên**."],
+  [".assessment-bank", "Kho đề đang dùng", "Các phiên bản đề kèm **trạng thái**. Bấm **Xem** để mở."],
+  ['[data-assessment-kind="final"]', "Đề thi tháng", "Mỗi **tháng và mức** một đề. Bấm **Xem** để đọc."],
+  ['.operator-assessment-form-list:not([data-assessment-kind="final"]):not(.assessment-bank)', "Phiên bản đề đã lưu", "Các phiên bản đề kèm **trạng thái**. Bấm **Xem** để mở."],
+  [".card:has(.operator-results-table)", "Kết quả bài thi", "Bài đã nộp kèm **tổng điểm**. Bấm **Xem** để mở bài làm."],
+  ["main .empty", "Kết quả bài thi", "Chưa có **bài nộp** của loại đề này."],
 ];
 managerSteps["/mgr/ops/level-forms"] = managerSteps["/mgr/ops/tests"]!;
 managerSteps["/mgr/ops/levels"] = [
-  ['[data-guide="op-pending"]', "Hồ sơ chờ duyệt", "Mở hồ sơ để xem **điểm từng kỹ năng** và thông tin xét trình độ. **Vận hành** là người chọn mức."],
-  ['[data-guide="op-signals"]', "Tín hiệu đổi mức", "Người học đủ tín hiệu để **thi lên mức** hoặc cần **xem xét hạ mức** trong 14 ngày gần nhất."],
-  [".operator-approved-panel", "Học viên đã duyệt", "Mức hiện tại và điểm đầu vào của từng người; Quản lý **chỉ xem**."],
+  ['[data-guide="op-pending"]', "Hồ sơ chờ duyệt", "Xem **điểm từng kỹ năng**. Vận hành là người chọn mức."],
+  ['[data-guide="op-signals"]', "Tín hiệu đổi mức", "Người đủ điều kiện **thi lên mức** hoặc cần xem **hạ mức**."],
+  [".operator-approved-panel", "Học viên đã duyệt", "Mức hiện tại của từng người. Bấm **Hồ sơ** để xem chi tiết."],
+  ['[data-guide="op-in-progress"]', "Đang làm test", "Đã bắt đầu bài đầu vào nhưng **chưa nộp**."],
+  ['[data-guide="op-retry"]', "Cần làm lại", "Cần **làm lại** bài đầu vào; Vận hành xử lý."],
+  ['[data-guide="op-unassessed"]', "Chưa làm test", "Có tài khoản nhưng **chưa làm** bài đầu vào."],
 ];
+// Quản lý › Chấm & Kháng nghị: tab là nút (không đổi URL), nên chọn theo tab đang chọn.
+const MGR_TAB = (n: number) => `main:has([aria-label="Nhóm nội dung cần kiểm tra"] > [role="tab"]:nth-child(${n})[aria-selected="true"])`;
 managerSteps["/mgr/ops/review"] = [
-  [".operator-review-panel", "Phản hồi Season", "Mỗi hàng là một người học. Mở hàng để đọc lượt chat và điểm Season đã chấm."],
-  [".card:has(> .operator-status-legend)", "Cảnh báo bài tập", "Mở từng người học để xem kỹ năng đã làm đúng hoặc đã **hết lượt**."],
-  ['main:has(.request-tabs a[aria-current="page"][href*="tab=attempts"]) .empty', "Cảnh báo bài tập", "Học viên làm sai hết lượt ở một kỹ năng sẽ hiện ở đây. Hiện chưa có ai cần chú ý."],
-  ['main:has(.request-tabs a[aria-current="page"][href*="tab=attempts"]) .operator-review-card-list', "Câu sai cả hai lượt", "Mỗi thẻ là một câu học viên trả lời sai **cả hai lượt**, kèm hai câu trả lời. Quản lý **chỉ xem**; Vận hành hiệu chỉnh câu."],
-  [".operator-review-card-list", "Kháng nghị", "Mở từng người học để đọc lý do, minh chứng và **trạng thái**. Quản lý **chỉ xem**; Vận hành xử lý kháng nghị."],
+  ['[aria-label="Nhóm nội dung cần kiểm tra"]', "Ba nhóm nội dung", "Season, kháng nghị và cảnh báo bài tập. **Quản lý chỉ xem**, Vận hành xử lý."],
+  [".operator-review-panel:not(:has(.operator-appeals-list))", "Phản hồi Season", "Mở từng người học để đọc **nhận xét AI**."],
+  [".operator-appeals-list", "Kháng nghị", "Mở từng người học để xem lý do và **trạng thái** kháng nghị."],
+  [`${MGR_TAB(3)} .operator-review-card-list`, "Câu sai cả hai lượt", "Câu học viên **sai cả hai lượt**. Bấm **Mở câu hỏi** để xem đề."],
+  [`${MGR_TAB(1)} .empty, ${MGR_TAB(2)} .empty, ${MGR_TAB(3)} .empty`, "Chưa có dữ liệu", "Nhóm này **chưa có mục** nào."],
 ];
 
 const guideSteps = { learner: learnerSteps, operator: operatorSteps, manager: managerSteps };
@@ -244,36 +284,39 @@ function settingsStep(panel: string, title: string, text: string): GuideStep {
   return [`.settings-panel:has(> #setting-${panel}), #setting-${panel} > .card`, title, text];
 }
 
-const themeGuide = settingsStep("theme", "Giao diện theo mùa", "Chọn giao diện **theo mùa**, **theo lễ** hoặc **Tự động** đổi theo ngày, rồi bấm **Lưu** để áp dụng cho cả tổ chức.");
-const musicGuide = settingsStep("music", "Nhạc nền", "Bật nhạc nền, chọn bản nhạc hoặc dán liên kết, chỉnh âm lượng. Bấm **Nghe thử** trước khi **Lưu nhạc nền**.");
-const learningGuide = settingsStep("monthly", "Học theo tháng", "Thời lượng học khuyến nghị mỗi ngày và **giới hạn lượt chat** với Season. Bấm **Lưu** để áp dụng.");
+const themeGuide = settingsStep("theme", "Giao diện theo mùa", "Chọn giao diện **theo mùa, theo lễ** hoặc Tự động, rồi **Lưu** cho cả tổ chức.");
+const musicGuide = settingsStep("music", "Nhạc nền", "Bật nhạc nền, chọn bài và âm lượng. **Nghe thử** trước khi **Lưu**.");
 
 const managerSettings: readonly GuideStep[] = [
-  settingsStep("test-date", "Ngày hệ thống thử", "Ngày giả lập điều khiển **lịch học**, quyền vào bài, điểm danh và thông báo của **cả tổ chức**."),
-  learningGuide,
+  settingsStep("test-date", "Ngày hệ thống thử", "Ngày giả lập cho **lịch học** và điểm danh của cả tổ chức."),
+  settingsStep("monthly", "Học theo tháng", "**Giới hạn chat** Season mỗi ngày; áp dụng từ tháng kế tiếp."),
   themeGuide,
   musicGuide,
-  settingsStep("policy", "Nhắc học và báo cáo", "Số **ngày không hoạt động** thì cần nhắc học, và có gửi **báo cáo tháng** hay không."),
-  settingsStep("accounts", "Người dùng", "Vai trò và trạng thái từng tài khoản. Mỗi hàng có **Khoá**, **Đặt lại** mật khẩu hoặc PIN và **Xoá**; cuối thẻ để thêm người dùng."),
+  settingsStep("policy", "Nhắc học và báo cáo", "Số **ngày vắng** thì cần nhắc học, và có bật báo cáo tháng không."),
+  settingsStep("accounts", "Người dùng", "Đổi **vai trò**, khoá, đặt lại hoặc xoá tài khoản; thêm người dùng ở cuối thẻ."),
 ];
 const operatorSettings: readonly GuideStep[] = [
   themeGuide,
   musicGuide,
-  learningGuide,
-  settingsStep("accounts", "Người dùng", "Vai trò, mức học và trạng thái đăng nhập của từng người. Vận hành **chỉ xem**."),
+  settingsStep("monthly", "Học theo tháng", "**Giới hạn chat** Season mỗi ngày. Vận hành chỉ xem."),
+  settingsStep("accounts", "Người dùng", "Vai trò, mức và **trạng thái** tài khoản. Vận hành chỉ xem."),
 ];
 
 const monthlyLessonOperatorSteps: readonly GuideStep[] = [
-  [".operator-page-title-actions", "Thao tác bài", "Bấm **Sửa tay** để chỉnh, **Duyệt bài** khi nội dung đã đúng. Bài đã duyệt bị khóa; cần sửa thì **Yêu cầu mở lại**."],
-  [".operator-monthly-lesson", "Nội dung bài", "Toàn bộ phần học và bài tập của ngày. Đọc lại từng phần trước khi duyệt."],
+  [".operator-page-title-actions", "Thao tác bài", "**Sửa tay** để chỉnh, **Duyệt bài** khi đã đúng. Bài đã duyệt cần yêu cầu mở lại để sửa."],
+  [".operator-monthly-findings-dock", "Lỗi cần sửa", "Lỗi kiểm tra tự động tìm thấy. Bấm **Sửa** để mở đúng trường cần sửa."],
+  [".operator-monthly-lesson", "Nội dung bài", "Bài đúng như học viên sẽ thấy. **Đọc lại** trước khi duyệt."],
 ];
 
-// Trình soạn tay: ≤ 900 px mỗi mục là <details data-section>, desktop là fieldset; chọn dạng đang hiện.
+// Trình soạn tay: ≤ 900 px mỗi mục là <details data-section>, desktop là khối data-section bọc fieldset; [data-section] khớp cả hai.
+// Chỉ các mục chính; chi tiết từng trường nằm ở gợi ý dưới trường.
 const lessonEditorSteps: readonly GuideStep[] = [
-  ['.operator-editor-collapsible[data-section="general"], .operator-editor-section:has(input[aria-label="Tiêu đề bài"])', "Thông tin chung", "Đặt **tiêu đề** ngắn bằng tiếng Anh và mục tiêu bài để học viên biết sẽ làm được gì."],
-  ['.operator-editor-collapsible[data-section="vocabulary"], .operator-editor-section:has(.operator-vocabulary-base)', "Từ vựng của ngày", "Từ lấy theo **kế hoạch** của ngày này; bài ôn dùng lại từ đã học trong tuần. Kiểm tra nghĩa, ví dụ và audio."],
-  ['.operator-editor-collapsible[data-section="listening"], .operator-editor-section:has(textarea[aria-label="Nội dung nghe"])', "Các phần bài tập", "Từ **Nghe** trở xuống là bài tập: nhập nội dung, câu hỏi và đáp án; audio tải lên phải khớp lời nghe."],
-  [".operator-editor-actions", "Kiểm tra và lưu", "Bấm **Kiểm tra & lưu** để lưu bản nháp. Mục còn thiếu sẽ tự mở và gắn nhãn **Cần bổ sung**."],
+  ['[data-section="general"]', "Phần Chung", "**Tiêu đề** học viên sẽ thấy. **Mục tiêu**: mỗi dòng một việc học viên làm được."],
+  ['[data-section="vocabulary"]', "Từ vựng của ngày", "Từ lấy theo **kế hoạch tháng**. Kiểm tra nghĩa, phiên âm và cụm từ của từng từ."],
+  ['[data-section="grammar"]', "Ngữ pháp", "Giải thích, **công thức** và câu ví dụ. Công thức theo kế hoạch tháng không sửa ở đây."],
+  ['[data-section="listening"]', "Các phần bài tập", "Từ **Nghe** trở xuống là bài tập: câu hỏi, lựa chọn và **đáp án đúng**."],
+  ['[data-section^="review-"]', "Các phần bài ôn", "Mỗi phần là một nhóm câu. **Bản làm lại** là câu hỏi lại khi học viên sai."],
+  [".operator-editor-actions", "Kiểm tra và lưu", "Bấm **Kiểm tra & lưu**. Mục còn thiếu sẽ được liệt kê để bổ sung."],
 ];
 
 export function guideDefinitions(role: GuideRole, path: string) {
@@ -283,10 +326,22 @@ export function guideDefinitions(role: GuideRole, path: string) {
   return routes[path] ?? routes[`/${path.split("/")[1]}/*`];
 }
 
+/**
+ * Màn tự mở hướng dẫn ở lần đầu vào (mỗi tab một lần, nhớ trong trình duyệt).
+ * Trả về khoá của màn đang hiện, hoặc undefined nếu màn không tự mở.
+ */
+export function guideAutoOpenKey(role: GuideRole, path: string, scope: ParentNode = document): string | undefined {
+  if (role === "operator" && path === "/op/review") {
+    const tab = scope.querySelector("[data-operator-review-tab]")?.getAttribute("data-operator-review-tab");
+    return tab ? `operator:/op/review:${tab}` : undefined;
+  }
+  return undefined;
+}
+
 const deliveryPolicySteps: readonly GuideStep[] = [
-  ["fieldset:first-of-type", "Chọn cách giao", "Giữ **Dùng nguyên một bộ** để giao đề nguyên vẹn. Với **Trộn các bộ**, chọn **Số bộ muốn trộn** trước khi chọn các bộ đã duyệt."],
-  ["fieldset:last-of-type", "Chọn bộ đề", "Chọn đúng **số bộ** đã chỉ định. Các bộ tham gia phải **đã duyệt** và tương thích về cấu trúc, thời lượng và cách chấm."],
-  [".assessment-bank-confirm", "Áp dụng cấu hình", "Bấm **Xác nhận áp dụng** để lưu cấu hình cho **lượt thi mới**."],
+  ["fieldset:first-of-type", "Chọn cách giao", "**Dùng nguyên một bộ**, hoặc **Trộn các bộ** (cần ít nhất hai bộ đã duyệt)."],
+  ["fieldset:last-of-type", "Chọn bộ đề", "Chọn đúng **số bộ** đã chỉ định; bộ chưa duyệt không chọn được."],
+  [".assessment-bank-confirm", "Áp dụng cấu hình", "Bấm **Xác nhận áp dụng**. Chỉ áp dụng cho **lượt thi mới**."],
 ];
 
 export function guidePopupDefinitions(role: GuideRole, path: string, popup: HTMLElement): readonly GuideStep[] | undefined {
@@ -297,7 +352,7 @@ export function guidePopupDefinitions(role: GuideRole, path: string, popup: HTML
   return undefined;
 }
 
-/** Mọi bước đã khai báo, dùng cho kiểm tra quy tắc độ dài. */
+/** Mọi bước đã khai báo, dùng cho kiểm tra quy tắc độ dài và cho bản PO duyệt. */
 export const allGuideSteps: readonly (readonly [route: string, steps: readonly GuideStep[]])[] = [
   ...Object.entries(guideSteps).flatMap(([role, routes]) => Object.entries(routes).map(([route, steps]) => [`${role} ${route}`, steps] as const)),
   ["manager /settings", managerSettings],

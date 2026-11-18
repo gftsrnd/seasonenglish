@@ -273,3 +273,12 @@
 @container (max-width: 640px) {
   .request-table .request-record > td { background: transparent !important; }
 }
+
+@media (max-width: 1024px) {
+  /* Section header (also on pages outside .manager-root, e.g. Vận hành › Chấm & Kháng nghị):
+     the ⓘ stays on the title's line instead of dropping alone under it (owner 18/11 #6). */
+  :root:root:root:root .manager-section-title .manager-page-title__content { display: flex; align-items: center; flex-wrap: nowrap; gap: 2px; min-width: 0; }
+  :root:root:root:root .manager-section-title .manager-page-title__content > h1 { flex: 0 1 auto; min-width: 0; margin: 0; }
+  :root:root:root:root .manager-section-title .manager-section-description { display: inline-flex; flex: none; align-items: center; margin: 0; min-block-size: 0; }
+  :root:root:root:root .manager-section-title .manager-section-description:empty { display: none; }
+}

@@ -31,10 +31,12 @@ describe("AppGuide", () => {
     const problems = allGuideSteps.flatMap(([route, steps]) => steps.flatMap(([selector, title, text]) => {
       const plain = text.replace(/\*\*/g, "");
       const words = plain.split(/\s+/).filter(Boolean).length;
-      const sentences = plain.split(/[.!?](?:\s|$)/).filter(part => part.trim()).length;
+      // "1. Học", "2. Bài tập" are tab names, not sentence ends.
+      const sentences = plain.replace(/\b\d\. /g, "").split(/[.!?](?:\s|$)/).filter(part => part.trim()).length;
       return [
-        ...(title.split(/\s+/).length > 5 ? [`${route} "${title}": tiêu đề quá 5 tiếng`] : []),
-        ...(words > 32 || sentences > 2 ? [`${route} "${title}": ${words} tiếng, ${sentences} câu`] : []),
+        ...(title.split(/\s+/).length > 6 ? [`${route} "${title}": tiêu đề quá 6 tiếng`] : []),
+        ...(words > 22 || sentences > 2 || plain.length > 120 ? [`${route} "${title}": ${words} tiếng, ${sentences} câu, ${plain.length} ký tự`] : []),
+        ...((text.match(/\*\*/g)?.length ?? 0) > 4 ? [`${route} "${title}": đậm quá 2 cụm`] : []),
         ...(/\n|^\s*[-•]/.test(text) ? [`${route} "${title}": dùng danh sách thay cho đoạn văn`] : []),
         ...((text.match(/\*\*/g)?.length ?? 0) % 2 ? [`${route} "${title}": thiếu dấu ** đóng`] : []),
         // Một bước là một thẻ hoặc khu vực, không trỏ thẳng vào nút hay ô nhập.
@@ -121,16 +123,18 @@ describe("AppGuide", () => {
   it("walks through the manual monthly lesson editor using only guide controls", async () => {
     render(<><AppGuide role="operator" pathname="/op/months" compact={false} />
       <section className="operator-lesson-editor" role="dialog" aria-modal="true" aria-label="Soạn bài">
-        <fieldset className="operator-editor-section"><input aria-label="Tiêu đề bài" /></fieldset>
-        <fieldset className="operator-editor-section"><div className="operator-vocabulary-base"><input aria-label="Từ 1" /></div></fieldset>
-        <fieldset className="operator-editor-section"><textarea aria-label="Nội dung nghe" /></fieldset>
+        <header className="operator-editor-sticky-header"><h2>Soạn bài ngày 18/11 · A2</h2></header>
+        {["general", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"].map(section =>
+          <div className="operator-editor-anchor" data-section={section} key={section}><fieldset className="operator-editor-section"><legend>{section}</legend><textarea aria-label={section} /></fieldset></div>)}
         <div className="operator-editor-actions"><button className="operator-lesson-save-button">Kiểm tra &amp; lưu</button></div>
       </section>
     </>);
     const editor = screen.getByRole("dialog", { name: "Soạn bài" });
     fireEvent.click(await within(editor).findByRole("button", { name: "Hướng dẫn sử dụng" }));
     const panel = within(screen.getByRole("dialog", { name: "Hướng dẫn sử dụng" }));
-    for (const name of ["Thông tin chung", "Từ vựng của ngày", "Các phần bài tập"]) {
+    // Main sections only (field details stay in the field hints): 5 steps on a new lesson.
+    expect(panel.getByText("1 / 5")).toBeTruthy();
+    for (const name of ["Phần Chung", "Từ vựng của ngày", "Ngữ pháp", "Các phần bài tập"]) {
       expect(panel.getByRole("heading", { name })).toBeTruthy();
       fireEvent.click(panel.getByRole("button", { name: "Tiếp theo" }));
     }
@@ -173,8 +177,8 @@ describe("AppGuide", () => {
 
   it("keeps keyboard navigation inside the guide and restores focus on close", () => {
     render(<><AppGuide role="learner" pathname="/home" compact={false} />
-      <section data-home-block="primary"><a href="/lesson/1">Bài học</a></section>
-      <section data-home-block="month-path"><a href="/lesson/2">Lịch</a></section>
+      <div className="home-page"><section className="hero home-primary-lesson" data-home-block="primary"><a href="/lesson/1">Bài học</a></section>
+      <section data-home-block="month-path"><a href="/lesson/2">Lịch</a></section></div>
     </>);
     const trigger = screen.getByRole("button", { name: "Hướng dẫn sử dụng" });
     fireEvent.click(trigger);
@@ -201,37 +205,13 @@ describe("AppGuide", () => {
     expect(walkSteps()).toEqual(["Từ vựng", "Xong phần Học", "Hoàn thành bài"]);
   });
 
-  it("mentions the A1–A2 translate icon on the grammar card that has it", () => {
-    render(<><AppGuide role="learner" pathname="/lesson/1" compact={false} />
-      <ol><li className="card lesson-part lesson-part--vocabulary">Từ vựng</li>
-        <li className="card lesson-part lesson-part--grammar"><span className="lesson-example-wrap"><button>I have sent it.</button><button aria-label="Xem nghĩa tiếng Việt" /><span role="tooltip" hidden>Tôi đã gửi.</span></span></li></ol>
-      <section className="card lesson-study-cta"><button>Học xong</button></section>
-    </>);
-    expect(walkSteps()).toEqual(["Từ vựng", "Ngữ pháp", "Xong phần Học"]);
-    fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Tiếp theo" }));
-    expect(within(screen.getByRole("dialog")).getByText(/biểu tượng dịch/)).toBeTruthy();
-  });
-
-  it("mentions the synonym/antonym meaning icon on the relation chips", () => {
-    render(<><AppGuide role="learner" pathname="/lesson/1" compact={false} />
-      <ol><li className="card lesson-part lesson-part--vocabulary"><div className="vocabulary-card-relations"><span className="lesson-example-wrap lesson-example-wrap--chip"><button className="chip synonym">= assist</button><button aria-label="Xem nghĩa" /><span role="tooltip" hidden>hỗ trợ</span></span></div></li>
-        <li className="card lesson-part lesson-part--grammar"><button>I have sent it.</button></li></ol>
-    </>);
-    expect(walkSteps()).toEqual(["Từ vựng", "Từ liên quan", "Ngữ pháp"]);
-    fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Tiếp theo" }));
-    expect(within(screen.getByRole("dialog")).getByText(/biểu tượng dịch/)).toBeTruthy();
-  });
-
   it("explains retry and the answer reveal on the first exercise's answer area", () => {
     render(<><AppGuide role="learner" pathname="/lesson/1" compact={false} />
       <ol className="lesson-parts"><li className="card lesson-part lesson-part--reading"><div className="lesson-answer"><button>Nộp bài</button></div></li></ol>
     </>);
-    expect(walkSteps()).toEqual(["Đọc", "Trả lời và nộp"]);
+    expect(walkSteps()).toEqual(["Trả lời và nộp"]);
     fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Tiếp theo" }));
-    expect(within(screen.getByRole("dialog")).getByText(/hết lượt/)).toBeTruthy();
+    expect(within(screen.getByRole("dialog")).getByText(/làm lại/)).toBeTruthy();
   });
 
   it("keeps the plain grammar step when examples have no translation (B1+, older lessons)", () => {
@@ -246,8 +226,8 @@ describe("AppGuide", () => {
 
   it("walks through the current screen, skipping missing targets", () => {
     render(<><AppGuide role="learner" pathname="/home" compact={false} />
-      <section data-home-block="primary"><a href="/lesson/1">Bài học</a></section>
-      <section data-home-block="month-path"><a href="/lesson/2">Lịch</a></section>
+      <div className="home-page"><section className="hero home-primary-lesson" data-home-block="primary"><a href="/lesson/1">Bài học</a></section>
+      <section data-home-block="month-path"><a href="/lesson/2">Lịch</a></section></div>
       <section data-home-block="monthly-exam" hidden>Bài thi</section>
     </>);
     const trigger = screen.getByRole("button", { name: "Hướng dẫn sử dụng" });
@@ -269,8 +249,8 @@ describe("AppGuide", () => {
     const navigate = vi.fn(event => event.preventDefault());
     const submit = vi.fn(event => event.preventDefault());
     render(<><AppGuide role="learner" pathname="/home" compact={false} />
-      <section data-home-block="primary"><a href="/lesson/1" onClick={navigate}>Bài học</a></section>
-      <section data-home-block="month-path"><a href="/lesson/2">Lịch</a></section>
+      <div className="home-page"><section className="hero home-primary-lesson" data-home-block="primary"><a href="/lesson/1" onClick={navigate}>Bài học</a></section>
+      <section data-home-block="month-path"><a href="/lesson/2">Lịch</a></section></div>
       <form onSubmit={submit} aria-label="Form thử" />
     </>);
     fireEvent.click(screen.getByRole("button", { name: "Hướng dẫn sử dụng" }));
@@ -320,7 +300,7 @@ describe("AppGuide", () => {
       return new DOMRect(0, 0, 0, 0);
     });
     render(<><AppGuide role="learner" pathname="/home" compact />
-      <section data-home-block="primary"><a href="/lesson/1">Bài học</a></section>
+      <div className="home-page"><section className="hero home-primary-lesson" data-home-block="primary"><a href="/lesson/1">Bài học</a></section></div>
     </>);
     // Opened after scrolling to the bottom: the first card is above the screen, so the page scrolls up.
     root.scrollTop = 500;
@@ -337,8 +317,8 @@ describe("AppGuide", () => {
 
   it("blocks user scrolling while open and restores it on close", () => {
     render(<><AppGuide role="learner" pathname="/home" compact />
-      <section data-home-block="primary"><a href="/lesson/1">Bài học</a></section>
-      <section data-home-block="month-path"><a href="/lesson/2">Lịch</a></section>
+      <div className="home-page"><section className="hero home-primary-lesson" data-home-block="primary"><a href="/lesson/1">Bài học</a></section>
+      <section data-home-block="month-path"><a href="/lesson/2">Lịch</a></section></div>
     </>);
     const root = document.scrollingElement ?? document.documentElement;
     root.scrollTop = 0;
@@ -371,16 +351,22 @@ describe("AppGuide", () => {
   it("guides the monthly exam landing but never the exam itself", () => {
     render(<><AppGuide role="learner" pathname="/monthly" compact />
       <section className="monthly-assessment-landing"><header className="monthly-assessment-header">Lịch thi</header>
-        <div className="monthly-assessment-form-state"><p>Chưa đến ngày thi.</p></div>
+        <div className="monthly-assessment-form-state" aria-label="Trạng thái đề thi"><p>Chưa đến ngày thi.</p></div>
         <section className="monthly-eligibility-summary"><div className="monthly-eligibility-metrics">Điều kiện</div></section></section>
     </>);
     expect(walkSteps()).toEqual(["Lịch thi tháng", "Trạng thái đề", "Điều kiện dự thi"]);
     cleanup();
     render(<><AppGuide role="learner" pathname="/monthly" compact />
       <section className="monthly-assessment-landing"><header className="monthly-assessment-header">Lịch thi</header>
-        <div className="monthly-assessment-form-state"><a className="btn" href="/test/monthly">Vào bài thi</a></div></section>
+        <div className="monthly-assessment-form-state" aria-label="Trạng thái đề thi"><a className="btn" href="/test/monthly">Vào bài thi</a></div></section>
     </>);
     expect(walkSteps()).toEqual(["Lịch thi tháng", "Vào bài thi"]);
+    cleanup();
+    // Trial month: one line, no exam header or eligibility; the guide says there is no exam.
+    render(<><AppGuide role="learner" pathname="/monthly" compact />
+      <section className="monthly-assessment-landing"><div className="monthly-assessment-form-state"><p>Tháng học thử không có bài thi.</p></div></section>
+    </>);
+    expect(walkSteps()).toEqual(["Tháng học thử"]);
     cleanup();
     const { rerender } = render(<AppGuide role="learner" pathname="/monthly" compact />);
     rerender(<><AppGuide role="learner" pathname="/test/monthly" compact />
@@ -403,7 +389,7 @@ describe("AppGuide", () => {
     </ModalProvider>);
     const choose = await screen.findByRole("button", { name: "Cách giao đề" });
     await screen.findByRole("button", { name: "Hướng dẫn sử dụng" });
-    expect(walkSteps()).toEqual(["Kho đề", "Công cụ đề", "Các phiên bản"]);
+    expect(walkSteps()).toEqual(["Công cụ đề", "Các phiên bản"]);
     fireEvent.click(choose);
     await screen.findByRole("dialog", { name: "Chọn cách giao đề" });
     await screen.findByRole("button", { name: "Hướng dẫn sử dụng" });
@@ -504,7 +490,7 @@ describe("AppGuide", () => {
       <div className="app-learner-page">
         <section className="card setup onboarding-steps"><h2>3 bước để bắt đầu học</h2>
           <div className={`st ${stage === 1 ? "cur" : "done"}`} data-onboarding-step="1"><h3>Hồ sơ cá nhân</h3><a href="/onboard">{stage === 1 ? "Điền hồ sơ" : "Xem / sửa hồ sơ"}</a></div>
-          <div className={`st ${stage === 2 ? "cur" : stage > 2 ? "done" : "todo"}`} data-onboarding-step="2"><h3>Test đầu vào</h3>{stage === 2 && <a href="/test/placement">Bắt đầu test</a>}</div>
+          <div className={`st ${stage === 2 ? "cur" : stage > 2 ? "done" : "todo"}`} data-onboarding-step="2"><h3>Test đầu vào</h3>{stage === 2 && <><a href="/test/placement">Bắt đầu test</a><div className="onboarding-test-note">4 phần</div></>}</div>
           <div className={`st ${stage === 3 ? "cur" : "todo"}`} data-onboarding-step="3"><h3>Vận hành duyệt mức</h3></div>
         </section>
         <a className="card learner-support-entry" href="/support?from=home">Hỗ trợ học tập</a>
@@ -557,7 +543,7 @@ describe("AppGuide", () => {
     render(content(true));
     const after = stepTexts();
     expect(after).toHaveLength(2);
-    after.forEach(text => expect(text).toMatch(/kháng nghị/i));
+    expect(after[0]).toMatch(/kháng nghị/i);
   });
 
   it("guides the Season card areas and omits the composer while it is unavailable", async () => {

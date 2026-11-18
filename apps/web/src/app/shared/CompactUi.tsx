@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState, type ComponentType, type CSSProperties, type ReactNode, type Ref } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ComponentType, type CSSProperties, type ReactNode, type Ref } from "react";
 import { createPortal } from "react-dom";
 import "./info-tip.css";
 import "./modal-header.css";
@@ -46,12 +46,18 @@ const INFO_TIP_FRAME = ".settings-panel, .card, .dialog, [role=\"dialog\"], .sec
 export function InfoTip({ text, label = "Giải thích" }: { text: ReactNode; label?: string }) {
   const [open, setOpen] = useState(false);
   const [box, setBox] = useState<CSSProperties | null>(null);
+  // Long guidance (more than ~6 lines) opens as a small shared popup instead of an inline box.
+  const [asModal, setAsModal] = useState(false);
+  const [modalTitle, setModalTitle] = useState("");
+  const fitted = useRef(false);
   const id = useId();
   const ref = useRef<HTMLSpanElement>(null);
   const popover = useRef<HTMLSpanElement>(null);
+  const dialogBox = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
-    if (!open) { setBox(null); return; }
+    if (!open) { setBox(null); setAsModal(false); fitted.current = false; return; }
     const place = () => {
+      fitted.current = false;
       const trigger = ref.current; if (!trigger) return;
       const previous = trigger.previousElementSibling; const heading = trigger.closest("h1, h2, h3, h4, legend, summary, .settings-panel-head") ?? (previous?.matches("h1, h2, h3, h4") ? previous : null) ?? trigger.parentElement ?? trigger;
       let frame = (heading.closest(INFO_TIP_WIDE_FRAME) ?? heading.parentElement?.closest(INFO_TIP_FRAME) ?? heading) as HTMLElement;
@@ -59,23 +65,56 @@ export function InfoTip({ text, label = "Giải thích" }: { text: ReactNode; la
       for (let wider = frame.parentElement?.closest<HTMLElement>(INFO_TIP_FRAME); wider && frame.getBoundingClientRect().width < Math.min(window.innerWidth * 0.6, 520); wider = wider.parentElement?.closest<HTMLElement>(INFO_TIP_FRAME)) frame = wider;
       const f = frame.getBoundingClientRect(); const h = heading.getBoundingClientRect(); const b = trigger.getBoundingClientRect();
       const left = Math.max(8, f.left + 8); const right = Math.min(window.innerWidth - 8, f.right - 8);
+      setModalTitle((heading.getAttribute("aria-label") ?? heading.textContent ?? "").replace(/\s+/g, " ").trim() || label);
       setBox({ position: "fixed", top: Math.max(h.bottom, b.bottom) + 4, left, width: Math.max(160, right - left), right: "auto", bottom: "auto", maxWidth: "none", insetInlineStart: left, insetInlineEnd: "auto", insetBlockStart: Math.max(h.bottom, b.bottom) + 4, insetBlockEnd: "auto" });
     };
     place();
-    const close = (event: Event) => { const target = event.target; if (!(target instanceof Node && (ref.current?.contains(target) || popover.current?.contains(target)))) setOpen(false); };
+    const close = (event: Event) => { const target = event.target; if (!(target instanceof Node && (ref.current?.contains(target) || popover.current?.contains(target) || dialogBox.current?.contains(target)))) setOpen(false); };
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
-    const onScroll = (event: Event) => { if (!(event.target instanceof Node && popover.current?.contains(event.target))) setOpen(false); };
+    const onScroll = (event: Event) => { if (!(event.target instanceof Node && (popover.current?.contains(event.target) || dialogBox.current?.contains(event.target)))) setOpen(false); };
     document.addEventListener("pointerdown", close);
     document.addEventListener("keydown", onKey);
     window.addEventListener("resize", place);
     document.addEventListener("scroll", onScroll, true);
     return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", onKey); window.removeEventListener("resize", place); document.removeEventListener("scroll", onScroll, true); };
   }, [open]);
+  // Keep the box inside the viewport: at most ~60% of the screen tall (scrolls inside), flipped above
+  // the title when there is more room there; more than ~6 lines becomes a small popup instead.
+  useLayoutEffect(() => {
+    const node = popover.current;
+    if (!open || !box || asModal || !node || fitted.current) return;
+    fitted.current = true;
+    const lineHeight = parseFloat(getComputedStyle(node).lineHeight) || 19;
+    if (node.scrollHeight > lineHeight * 6.5 + 20) { setAsModal(true); return; }
+    const top = Number(box.top) || 0;
+    const titleTop = ref.current?.closest("h1, h2, h3, h4, legend, summary, .settings-panel-head")?.getBoundingClientRect().top ?? top - 28;
+    const below = window.innerHeight - top - 8;
+    const above = titleTop - 12;
+    const cap = Math.round(window.innerHeight * 0.6);
+    if (node.scrollHeight > below && above > below) {
+      const maxHeight = Math.min(cap, above);
+      setBox({ ...box, top: "auto", insetBlockStart: "auto", bottom: window.innerHeight - titleTop + 4, insetBlockEnd: window.innerHeight - titleTop + 4, maxHeight, overflowY: "auto" });
+    } else {
+      setBox({ ...box, maxHeight: Math.max(80, Math.min(cap, below)), overflowY: "auto" });
+    }
+  }, [open, box, asModal]);
+  useEffect(() => {
+    if (!asModal) return undefined;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [asModal]);
   // CSS puts a word joiner (U+2060) before the ⓘ (.info-tip::before), gluing it to the preceding word so it never
   // wraps onto a line of its own; it is generated content, so the title's text stays exactly the title.
   return <span className="info-tip" ref={ref}>
     <button type="button" className="info-tip-button" aria-label={label} title={typeof text === "string" ? text : label} aria-expanded={open} aria-controls={id} onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }}><Info size={15} aria-hidden="true" /></button>
-    {open ? createPortal(<span ref={popover} className="info-tip-popover" id={id} role="note" style={box ?? { visibility: "hidden" }}>{text}</span>, document.body) : null}
+    {open && !asModal ? createPortal(<span ref={popover} className="info-tip-popover" id={id} role="note" style={box ?? { visibility: "hidden" }}>{text}</span>, document.body) : null}
+    {open && asModal ? createPortal(<div className="modal-backdrop info-tip-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
+      <section ref={dialogBox} className="dialog info-tip-dialog" id={id} role="dialog" aria-modal="true" aria-label={modalTitle || label}>
+        <header className="info-tip-dialog-header"><h3>{modalTitle || label}</h3><ModalCloseButton iconOnly onClick={() => setOpen(false)} /></header>
+        <div className="info-tip-dialog-body">{text}</div>
+      </section>
+    </div>, document.body) : null}
   </span>;
 }
 

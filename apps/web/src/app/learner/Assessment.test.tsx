@@ -137,6 +137,19 @@ async function finishSubmitCountdown() {
 }
 
 describe("assessment HCI states", () => {
+  it("asks before an app link (bottom nav, logo) leaves a section in progress", async () => {
+    const actions = makeActions();
+    render(<><nav><a href="/home">Trang chủ</a></nav><LearnerAssessment view={makeView()} actions={actions} /></>);
+    fireEvent.click(screen.getByRole("link", { name: "Trang chủ" }));
+    expect(screen.getByRole("dialog", { name: "Rời bài thi?" })).toBeInTheDocument();
+    expect(actions.navigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Ở lại làm bài" }));
+    expect(screen.queryByRole("dialog", { name: "Rời bài thi?" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "Trang chủ" }));
+    fireEvent.click(screen.getByRole("button", { name: "Rời bài thi" }));
+    expect(actions.navigate).toHaveBeenCalledWith("/home");
+  });
+
   it("labels Pass Course Form A and its pending result without falling back to placement copy", () => {
     const pending = makeView({
       definition: { key: "pass-course-form-a", kind: "pass-course", title: "Pass Course – Form A", version: 1, totalMinutes: 90, totalScore: 100, sections: structuredClone(sections) },
@@ -146,7 +159,9 @@ describe("assessment HCI states", () => {
     render(<LearnerAssessment view={pending} actions={makeActions()} />);
     expect(screen.getByRole("heading", { name: "Pass Course – Form A" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Pass Course đang chờ xét" })).toBeInTheDocument();
-    expect(screen.getByText(/72 giờ/i)).toBeInTheDocument();
+    // No appeal window is announced before a result exists (18/11 #17).
+    expect(screen.queryByText(/72 giờ/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/nhận thông báo khi có kết quả/i)).toBeInTheDocument();
     expect(screen.queryByText(/Test đầu vào đã được nộp/i)).not.toBeInTheDocument();
   });
 

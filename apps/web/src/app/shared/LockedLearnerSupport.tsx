@@ -68,11 +68,12 @@ export function LockedLearnerSupport({ onLogout }: { onLogout: () => void }) {
       <button type="button" className="btn" onClick={onLogout}>Đăng xuất</button>
     </div>
     {open && !pending && <form id={formId} className="locked-account-form" onSubmit={submit}>
-      <RequestEvidenceFields value={evidence} onChange={setEvidence} label="Thời điểm xảy ra" placeholder="Ví dụ: 06/11, khoảng 14 giờ" disabled={sending} />
       <label>Lý do yêu cầu mở khóa
         <textarea autoFocus required minLength={5} maxLength={2000} rows={3} value={reason}
           onChange={event => setReason(event.target.value)} />
       </label>
+      {/* Optional evidence for the reason (e.g. an approved leave), not the time the lock happened. */}
+      <RequestEvidenceFields value={evidence} onChange={setEvidence} label="Minh chứng kèm theo (không bắt buộc)" placeholder="Ví dụ: đơn nghỉ phép đã duyệt ngày 06/11" disabled={sending} />
       {error && <p role="alert" className="small danger-text">{error}</p>}
       <button type="submit" className="btn btn-primary" disabled={sending || evidence.blocked || reason.trim().length < 5}>
         {sending ? "Đang gửi…" : "Gửi yêu cầu"}

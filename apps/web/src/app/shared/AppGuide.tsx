@@ -3,9 +3,23 @@ import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, CircleHelp, X } from "lucide-react";
 import "./app-guide.css";
 
-import { guideDefinitions, guidePopupDefinitions, type GuideRole, type GuideStep } from "./app-guide-steps.js";
+import { guideAutoOpenKey, guideDefinitions, guidePopupDefinitions, type GuideRole, type GuideStep } from "./app-guide-steps.js";
 
 export const OPEN_LEARNER_HOME_GUIDE = "e4s:open-learner-home-guide";
+
+const SEEN_KEY = "e4s:guide-seen";
+/** Screens that open their guide on the first visit remember it per browser; storage may be unavailable. */
+function guideSeen(key: string) {
+  try { return (JSON.parse(window.localStorage.getItem(SEEN_KEY) ?? "[]") as unknown[]).includes(key); } catch { return false; }
+}
+function markGuideSeen(key: string) {
+  try {
+    const seen = JSON.parse(window.localStorage.getItem(SEEN_KEY) ?? "[]") as unknown[];
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify([...seen.filter(item => item !== key), key]));
+  } catch { /* the guide still opens; it just may open again next time */ }
+}
+// Vitest renders screens without a guide popping up over them; tests opt in with autoOpen.
+const AUTO_OPEN_DEFAULT = import.meta.env.MODE !== "test";
 
 /** Help shares the close button's flex group, including custom dialog headers. */
 export function popupGuideHost(popup: HTMLElement): HTMLElement {
@@ -104,7 +118,7 @@ function getSpotlight(target: HTMLElement): Spotlight | null {
   return width > 0 && height > 0 ? { left, top, width, height } : null;
 }
 
-export function AppGuide({ role, pathname, compact, onOpenChange }: { role: GuideRole; pathname: string; compact: boolean; onOpenChange?: (open: boolean) => void }) {
+export function AppGuide({ role, pathname, compact, onOpenChange, autoOpen = AUTO_OPEN_DEFAULT }: { role: GuideRole; pathname: string; compact: boolean; onOpenChange?: (open: boolean) => void; autoOpen?: boolean }) {
   const dialogId = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -114,6 +128,8 @@ export function AppGuide({ role, pathname, compact, onOpenChange }: { role: Guid
   const engineClicking = useRef(false);
   const [state, setState] = useState<GuideState>({ isOpen: false, index: 0, steps: [], popup: null });
   const [spotlight, setSpotlight] = useState<Spotlight | null>(null);
+  // A target that stays under the guide box after scrolling (e.g. a popup's fixed footer) moves the box to the top.
+  const [placeTop, setPlaceTop] = useState(false);
   const { isOpen, index, steps, popup, inboxOpen } = state;
   const active = isOpen ? steps[index] : undefined;
   const path = pathname.replace(/\/+$/, "");
@@ -128,6 +144,13 @@ export function AppGuide({ role, pathname, compact, onOpenChange }: { role: Guid
     if (!definitions) return;
     const update = () => {
       const next = currentContext(role, path, definitions);
+      // First visit of a screen (or tab) that opts in: open its guide once, from step 1.
+      const key = autoOpen && !next.popup && !next.inboxOpen && next.steps.length ? guideAutoOpenKey(role, path) : undefined;
+      if (key && !guideSeen(key)) {
+        markGuideSeen(key);
+        setState(current => current.isOpen ? updateContext(current, next) : { ...next, isOpen: true, index: 0 });
+        return;
+      }
       setState(current => updateContext(current, next));
     };
     let frame: number | undefined;
@@ -143,14 +166,14 @@ export function AppGuide({ role, pathname, compact, onOpenChange }: { role: Guid
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["hidden", "inert", "open", "aria-modal", "aria-current", "aria-expanded", "data-expanded", "data-monthly-preparation", "disabled"],
+      attributeFilter: ["hidden", "inert", "open", "aria-modal", "aria-current", "aria-expanded", "data-expanded", "data-monthly-preparation", "data-operator-review-tab", "disabled"],
     });
     update();
     return () => {
       observer.disconnect();
       if (frame !== undefined) window.cancelAnimationFrame(frame);
     };
-  }, [definitions, compact, path, role]);
+  }, [autoOpen, definitions, compact, path, role]);
 
   useEffect(() => {
     if (!definitions || role !== "learner" || path !== "/home") return;
@@ -236,6 +259,19 @@ export function AppGuide({ role, pathname, compact, onOpenChange }: { role: Guid
       let top = Math.max(compact ? 64 : 12, header && header.bottom > 0 && header.top <= 0 ? header.bottom + 8 : 0);
       let bottom = panel.top - 10;
       const scroller = guideScroller(activeTarget);
+      // A bounded list box between the card and the page scroller (e.g. a request table) is scrolled first,
+      // otherwise a row below its fold stays clipped and the step highlights nothing.
+      for (let node = activeTarget.parentElement; node && node !== scroller && node !== document.body; node = node.parentElement) {
+        const overflow = getComputedStyle(node).overflowY;
+        if ((overflow !== "auto" && overflow !== "scroll") || node.scrollHeight <= node.clientHeight + 1) continue;
+        const box = node.getBoundingClientRect();
+        const inner = activeTarget.getBoundingClientRect();
+        const shift = inner.top < box.top ? inner.top - box.top - 8 : inner.bottom > box.bottom ? Math.min(inner.bottom - box.bottom + 8, inner.top - box.top - 8) : 0;
+        if (shift) {
+          engineScrollUntil.current = Date.now() + 2000;
+          node.scrollTop += shift;
+        }
+      }
       // Inside a popup the visible band is the popup's own scrolling body (below its sticky header), not the window:
       // aligning to the window top hid the card under the popup's edge.
       if (scroller !== document.scrollingElement && scroller !== document.documentElement && scroller.closest("[role=dialog], .dialog")) {
@@ -248,7 +284,8 @@ export function AppGuide({ role, pathname, compact, onOpenChange }: { role: Guid
       if (bottom - top < 80) return; // no usable band above the box (e.g. a very short window)
       const rect = activeTarget.getBoundingClientRect();
       const fits = rect.height <= bottom - top;
-      const hidden = rect.top < top - 1 || (fits ? rect.bottom > bottom + 1 : rect.top > bottom - 72);
+      // A card taller than the band is moved up whenever less than two thirds of the band shows it.
+      const hidden = rect.top < top - 1 || (fits ? rect.bottom > bottom + 1 : rect.top > top + (bottom - top) / 3);
       if (!hidden) return;
       engineScrollUntil.current = Date.now() + 2000;
       // A card that fits is centred in the visible band (minimal movement, the cards around it stay in view);
@@ -260,8 +297,14 @@ export function AppGuide({ role, pathname, compact, onOpenChange }: { role: Guid
     };
     const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     // Right after opening, jump instantly (the page lock starts now); later step changes may glide.
+    setPlaceTop(false);
     reveal(reducedMotion || Date.now() - openedAt.current < 400 ? "instant" : "smooth");
-    const settle = window.setTimeout(() => reveal("instant"), 450);
+    const settle = window.setTimeout(() => {
+      reveal("instant");
+      const panel = closeButton.current?.closest(".app-guide-panel")?.getBoundingClientRect();
+      const rect = activeTarget.isConnected ? activeTarget.getBoundingClientRect() : null;
+      if (panel?.height && rect?.height && rect.top > panel.top - 24 && rect.top < window.innerHeight) setPlaceTop(true);
+    }, 450);
     return () => window.clearTimeout(settle);
   }, [activeTarget, compact]);
 
@@ -396,7 +439,7 @@ export function AppGuide({ role, pathname, compact, onOpenChange }: { role: Guid
       <div className="app-guide-blocker" data-popup={Boolean(popup) || undefined} aria-hidden="true" />
       {active && spotlight && <div className="app-guide-spotlight" style={spotlight} aria-hidden="true" />}
       <section id={dialogId} role="dialog" aria-labelledby={`${dialogId}-label`} className="app-guide-panel"
-        data-compact={compact || undefined} data-popup={Boolean(popup) || undefined}>
+        data-compact={compact || undefined} data-popup={Boolean(popup) || undefined} data-place={placeTop ? "top" : undefined}>
         <div className="app-guide-header">
           <span id={`${dialogId}-label`} className="app-guide-title">Hướng dẫn sử dụng</span>
           <div className="app-guide-header-controls">

@@ -89,9 +89,14 @@ export function CertificateDocument({ organizationName, certificateNumber, learn
 type BadgeCertificateView = Pick<RewardView, "organizationName" | "certificateNumber" | "learnerName" | "requiredBadgeCount" |
   "displayPoints" | "season" | "completedAt" | "operatorName" | "managerName" | "badges"> & { cefrLabel?: string };
 
-export function BadgeCertificate({ view, preview, previewInfo }: { view: BadgeCertificateView; preview: boolean; previewInfo?: string }) {
+/**
+ * The badge certificate template (reward/preview, reward/done). The course certificate (reward/course) reuses it
+ * with `course`: its own title, declaration, number and issue date, and the same badge list.
+ */
+export function BadgeCertificate({ view, preview, previewInfo, course }: { view: BadgeCertificateView; preview: boolean; previewInfo?: string; course?: { title: string; declaration: ReactNode; issuedAt: string; certificateNumber: string; learnerName: string } }) {
   const earnedCount = view.badges.filter((badge) => badge.earned).length;
-  const date = !preview && view.completedAt ? new Date(view.completedAt).toLocaleDateString("vi-VN") : "Chưa cấp";
+  const issued = course?.issuedAt ?? (!preview ? view.completedAt : null);
+  const date = issued ? new Date(issued).toLocaleDateString("vi-VN") : "Chưa cấp";
   const seasonText = view.season.cefr ? `${view.season.name} · ${view.season.cefr}` : view.season.name;
   const badgeCount = `${earnedCount}/${view.requiredBadgeCount}`;
   const facts = [
@@ -103,11 +108,11 @@ export function BadgeCertificate({ view, preview, previewInfo }: { view: BadgeCe
   const achievement = earnedCount === view.requiredBadgeCount
     ? `đã hoàn thành bộ ${view.requiredBadgeCount} huy hiệu`
     : `đã đạt ${badgeCount} huy hiệu`;
-  return <CertificateDocument organizationName={view.organizationName} certificateNumber={view.certificateNumber} learnerName={view.learnerName}
-    title="Certificate of Completion" preview={preview} previewInfo={previewInfo}
+  return <CertificateDocument organizationName={view.organizationName} certificateNumber={course?.certificateNumber ?? view.certificateNumber} learnerName={course?.learnerName ?? view.learnerName}
+    title={course?.title ?? "Certificate of Completion"} preview={preview} previewInfo={previewInfo}
     summary={facts}
     summaryDetails={<CertificateBadgeList badges={view.badges} showArtwork />}
-    declaration={<>{achievement} Season English{view.cefrLabel && <> ở trình độ <b>{view.cefrLabel}</b></>}.</>}
+    declaration={course?.declaration ?? <>{achievement} Season English{view.cefrLabel && <> ở trình độ <b>{view.cefrLabel}</b></>}.</>}
     signature={<div className="cert-sign">
       <div><div className="line" /><div className="small">Vận hành</div><div className="xs muted">{view.operatorName}</div></div>
       <div className="cert-date xs muted">{view.organizationName}, {date}</div>

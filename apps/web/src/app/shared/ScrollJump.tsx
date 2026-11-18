@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { dodgeTop } from "./scroll-jump-dodge.js";
 import { ArrowDown } from "lucide-react";
 
 /** Phone and tablet widths, or any touch-first screen. */
@@ -49,13 +50,40 @@ export function ScrollJumpButton({ atTop, onClick, inExam = false, style }: {
   style?: CSSProperties | undefined;
 }) {
   const label = `Cuộn ${atTop ? "xuống cuối" : "lên đầu"} ${inExam ? "đề thi" : "trang"}`;
+  const ref = useRef<HTMLButtonElement>(null);
+  const [lift, setLift] = useState<number | null>(0);
+  // Page button (not the exam dock): steps up past any control under it, or
+  // hides while no free spot is left, so it never covers row actions.
+  useLayoutEffect(() => {
+    if (inExam || typeof window === "undefined") return undefined;
+    let frame = 0;
+    const place = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const button = ref.current; if (!button) return;
+        const box = button.getBoundingClientRect(); if (!box.width) return;
+        const base = box.top - (Number(button.dataset.lift) || 0);
+        const main = document.querySelector("main") ?? document.body;
+        const top = dodgeTop(main, box.left, base, box.height, window.innerHeight * 0.45, button);
+        const next = top === null ? null : Math.round(top - base);
+        button.dataset.lift = String(next ?? 0);
+        setLift(next);
+      });
+    };
+    place();
+    document.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => { cancelAnimationFrame(frame); document.removeEventListener("scroll", place, true); window.removeEventListener("resize", place); };
+  }, [inExam, atTop]);
+  const placed: CSSProperties | undefined = inExam || lift === 0 ? style : { ...style, ...(lift === null ? { visibility: "hidden" } : { transform: `translateY(${lift}px)` }) };
   const button = <button
+    ref={ref}
     className={`app-scroll-jump no-print${inExam ? " app-scroll-jump--exam" : ""}`}
     type="button"
     data-direction={atTop ? "down" : "up"}
     aria-label={label}
     title={label}
-    style={style}
+    style={placed}
     onClick={onClick}
   >
     <ArrowDown size={20} aria-hidden="true" />

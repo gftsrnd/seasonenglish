@@ -1,3 +1,4 @@
+import { PagedList } from "../shared/Pager.js";
 import { useEffect, useRef, useState } from "react";
 import type { AssessmentBankBlueprint, AssessmentBankFormDetail, AssessmentBankPolicy, AssessmentBankScope, AssessmentBankView, AssessmentLevelFormUpdateInput } from "@e4s/contracts";
 import type { AssessmentBankClient } from "../../api/operator.js";
@@ -105,7 +106,7 @@ export function AssessmentBank({ scope, client, readOnly = false }: { scope: Ass
     <div className="row assessment-bank-toolbar">{!readOnly && <><button type="button" className="btn-sm assessment-bank-compact-action" disabled={Boolean(busy)} onClick={() => void create("manual")}>Soạn tay</button><button type="button" className="btn-sm btn-primary assessment-bank-compact-action" disabled={Boolean(busy)} onClick={() => void create("ai")}>{busy === "ai" ? "Đang sinh…" : "Sinh bằng AI"}</button><button type="button" className="btn-sm assessment-bank-compact-action" disabled={Boolean(busy)} onClick={() => setPolicyOpen(true)}>Cách giao đề</button></>}
       {bank.forms.some(form => form.status === "archived") && <button type="button" className="btn-sm assessment-bank-archive-toggle" aria-expanded={showArchived} onClick={() => setShowArchived(value => !value)}>{showArchived ? "Ẩn kho lưu trữ" : `Xem kho lưu trữ (${bank.forms.filter(form => form.status === "archived").length})`}</button>}
     </div>
-    <div className="stack assessment-bank-list">{visibleForms.map(form => <article className="item operator-assessment-form-row assessment-bank-row" key={form.versionId}>
+    <div className="stack assessment-bank-list"><PagedList items={visibleForms} label="phiên bản đề">{form => <article className="item operator-assessment-form-row assessment-bank-row" key={form.versionId}>
       <div className="operator-assessment-form-info">
         <div className="assessment-bank-title">
           <b>{form.title}</b>
@@ -124,7 +125,7 @@ export function AssessmentBank({ scope, client, readOnly = false }: { scope: Ass
         {!readOnly && form.status !== "archived" && <><button type="button" className="btn-sm assessment-bank-compact-action" disabled={Boolean(busy)} onClick={() => void open(form.versionId, true)}>{form.status === "published" ? "Tạo bản sửa" : "Sửa"}</button><button type="button" className="btn-sm assessment-bank-compact-action" disabled={Boolean(busy)} onClick={() => void archive(form.versionId, form.status === "draft")}>{form.status === "draft" ? "Bỏ nháp" : "Lưu trữ"}</button></>}
         {!readOnly && form.status === "archived" && form.canDelete === true && <button type="button" className="btn-sm btn-danger assessment-bank-compact-action" disabled={Boolean(busy)} aria-label={`Xoá ${form.title}`} onClick={() => void remove(form.versionId, form.title)}>Xoá</button>}
       </div>
-    </article>)}</div>
+    </article>}</PagedList></div>
     {policyOpen && <AssessmentDeliveryDialog bank={bank} onClose={() => setPolicyOpen(false)} onSave={async policy => {
       const next = await client.saveAssessmentBankPolicy(scope, policy); setBank(next); setPolicyOpen(false); setNotice("Đã áp dụng cho các lượt thi mới. Bài đang thi và lịch sử giữ nguyên.");
     }} />}

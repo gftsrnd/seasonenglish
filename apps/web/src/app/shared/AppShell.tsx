@@ -15,6 +15,7 @@ import { organisationThemeStorageKey, useTheme } from "./ThemeProvider.js";
 import { ScrollJumpButton, useScrollJump } from "./ScrollJump.js";
 import { useMediaQuery } from "./useMediaQuery.js";
 import { AppGuide } from "./AppGuide.js";
+import { ModalCloseButton } from "./CompactUi.js";
 
 export { SeasonMark } from "./SeasonMark.js";
 
@@ -261,8 +262,7 @@ function AssessmentLogoutDialog({ open, onCancel, onConfirm }: { open: boolean; 
   if (!open) return null;
   return <div className="modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
     <section ref={dialogRef} className="dialog shell-logout-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} tabIndex={-1}>
-      <button className="app-modal-close" type="button" aria-label="Đóng hộp thoại" title="Đóng" onClick={onCancel}>×</button>
-      <h3 id={titleId}>Bạn đang làm bài test</h3>
+      <div className="row between shell-logout-dialog-heading"><h3 id={titleId}>Bạn đang làm bài test</h3><ModalCloseButton iconOnly label="Đóng hộp thoại" onClick={onCancel} /></div>
       <p id={descriptionId} className="small">Đăng xuất lúc này sẽ được ghi nhận là một lần cảnh báo trong bài test. Bạn có chắc muốn rời bài?</p>
       <div className="row shell-logout-dialog-actions">
         <button ref={stayRef} type="button" onClick={onCancel}>Ở lại làm bài</button>

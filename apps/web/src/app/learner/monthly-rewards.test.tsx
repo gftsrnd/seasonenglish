@@ -33,19 +33,22 @@ describe("profile 'Cách tính điểm'", () => {
   it("lists exactly the monthly point rules and no secret-word points", () => {
     render(<LearnerProfile view={view} actions={actions} />);
     const rules = screen.getByTestId("reward-point-rules");
+    // Grouped plain lines "Việc · +điểm", the condition in the same sentence (18/11 #8, arena line included).
+    expect(within(rules).getAllByRole("heading").map((item) => item.textContent)).toEqual(["Học bài", "Luyện tập", "Bài thi"]);
     const items = within(rules).getAllByRole("listitem").map((item) => item.textContent);
     expect(items).toEqual([
-      "Hoàn thành 1 bài học mới (lần đầu): +10",
-      "Mỗi phần bài học làm đúng: +5 lần 1, giảm 1 điểm mỗi lần làm lại (tối thiểu +1); chỉ tính lần đúng đầu tiên",
-      "Hoàn thành bài Ôn tuần (thứ Sáu): +15",
-      "1 lượt luyện hợp lệ với Season: +2",
-      "Mini game đạt từ 50/100: +5, tối đa 3 lượt có điểm mỗi ngày (chơi thêm vẫn được, không cộng điểm)",
-      "Nộp bài thi cuối tháng: +15",
-      "Bài kiểm tra đầu vào, thi lên mức: +10",
-      "Hoàn thành trọn lịch học tháng (mọi bài mới và bài ôn): +20, một lần mỗi tháng"
+      "Bài học mới (lần đầu) · +10",
+      "Mỗi phần bài học làm đúng · +5, mỗi lần làm lại bớt 1, ít nhất +1",
+      "Bài Ôn tuần (thứ Sáu) · +15",
+      "Học trọn lịch tháng · +20, 1 lần mỗi tháng",
+      "1 lượt luyện với Season · +2",
+      "Mini game đạt từ 50/100 · +5, tối đa 3 lượt mỗi ngày",
+      "Ván đấu trường đạt từ 50/100 · +5, tính chung 3 lượt mỗi ngày với mini game",
+      "Nộp bài thi cuối tháng · +15",
+      "Test đầu vào, thi lên mức · +10"
     ]);
     expect(rules).not.toHaveTextContent(/bí mật/);
-    expect(REWARD_POINT_RULES).toHaveLength(8);
+    expect(REWARD_POINT_RULES).toHaveLength(9);
     const season = screen.getByTestId("reward-season-rules");
     expect(season).toHaveTextContent("Mỗi trình độ (A1–C1) có 4 Season: 🌱 Mùa xuân (bắt đầu) → ☀️ Mùa hạ 500 điểm → 🍂 Mùa thu 2.000 điểm → ❄️ Mùa đông 5.000 điểm");
     expect(season).toHaveTextContent("Season bắt đầu lại từ Mùa xuân của trình độ mới");
@@ -180,7 +183,8 @@ describe("manager reward simulator", () => {
     expect(screen.getByRole("button", { name: "Điểm thi tháng", hidden: true })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Chuỗi 3 ngày|Chuỗi 5 ngày/, hidden: true })).not.toBeInTheDocument();
     const rules = screen.getByTestId("reward-point-rules");
-    expect(rules).toHaveTextContent("Hoàn thành bài Ôn tuần (thứ Sáu): +15");
+    expect(rules).toHaveTextContent("Bài Ôn tuần (thứ Sáu) · +15");
+    expect(rules).toHaveTextContent("Ván đấu trường đạt từ 50/100");
     expect(rules).toHaveTextContent("Mini game đạt từ 50/100");
     expect(rules).not.toHaveTextContent(/bí mật/);
   });

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import type { ArenaView, DuelView, GameDescriptor, GameHubView, GameKey, GameTopicModeration, GameWordSetView } from "@e4s/contracts";
 import { seasonRioRoundPlan } from "@e4s/domain/engagement";
-import { ArrowLeft, ArrowLeftRight, LogOut, Trash2, ArrowRight, Flag, Gift, Grid3X3, Heart, Keyboard, Layers3, Lightbulb, MousePointerClick, Play, ScanText, ShoppingBasket, Shuffle, Sun, Target, Timer, Trophy, Volume2, type LucideIcon } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, LogOut, Trash2, ArrowRight, Flag, Grid3X3, Heart, Keyboard, Layers3, Lightbulb, MousePointerClick, Play, ScanText, ShoppingBasket, Shuffle, Sun, Target, Timer, Trophy, Volume2, type LucideIcon } from "lucide-react";
 import { CrosswordGame, ScrambleGame, SeasonCatchGame, SeasonRioGame, TypingRaceGame, WordSortGame } from "../games/index.js";
 import { crosswordEntryCount } from "../games/CrosswordGame.js";
 import { gameRoundWordCount, type GameWord } from "../games/types.js";
@@ -24,35 +24,36 @@ const gameIdentity: GameIdentity[] = [
 ];
 
 const compactTutorial: Record<GameKey, string[]> = {
+  // Three steps per game, matching the current gameplay and the shared 0–100 round score (arena phase 1).
   scramble: [
-    "Đọc gợi ý và xếp các chữ thành từ đúng.",
-    "Mỗi từ có tối đa 2 lần thử.",
-    "Gợi ý mở một chữ nhưng sẽ giảm điểm."
+    "Đọc gợi ý, bấm hoặc gõ các chữ theo đúng thứ tự.",
+    "Sai lần đầu được thử lại (+5); sai 2 lần thì sang từ mới.",
+    "Gợi ý mở một chữ; từ đó còn +5."
   ],
   crossword: [
-    "Chọn một hàng hoặc cột rồi đọc gợi ý.",
-    "Điền từng chữ vào lưới.",
-    "Kiểm tra đáp án; dùng gợi ý sẽ giảm điểm."
+    "Chọn một từ Ngang hoặc Dọc và đọc gợi ý.",
+    "Gõ chữ vào ô rồi bấm Kiểm tra; điền sai rồi sửa còn +5.",
+    "Gợi ý mở một chữ của từ đang chọn; từ đó còn +5."
   ],
   eggs: [
-    "Di chuyển rổ để hứng từ đúng với gợi ý.",
-    "Hứng đúng được điểm; hứng sai hoặc để rơi mất một mạng.",
-    "Mất đủ 3 mạng thì lượt chơi kết thúc."
+    "Đọc gợi ý, kéo rổ hoặc bấm ← → để hứng từ khớp.",
+    "Hứng đúng liên tiếp từ lượt 3 được +15.",
+    "Hứng sai hoặc để rơi: 0 điểm, mất 1 mạng. Hết 3 mạng là hết ván."
   ],
   mario: [
-    "Di chuyển, nhảy và mở từng hộp câu hỏi.",
-    "Trả lời để mở cổng; trả lời sai mất một mạng.",
-    "Vượt thử thách cuối rồi chạm cờ để hoàn thành."
+    "Chạy, nhảy và chạm hộp quà để mở câu hỏi của cổng.",
+    "Trả lời sai: 0 điểm, mất 1 mạng, cổng vẫn mở.",
+    "Gặp boss: trả lời trước khi hết giờ (sai rồi đúng +5). Chạm cờ để xong."
   ],
   sort: [
-    "Đọc từ trong câu ví dụ: cách dùng trong câu quyết định từ loại.",
-    "Chọn đúng nhóm từ loại.",
-    "Đúng sẽ tăng chuỗi; sai sẽ hiện đáp án."
+    "Đọc từ trong câu ví dụ: cách dùng quyết định từ loại.",
+    "Bấm nhóm đúng. Chọn sai: 0 điểm và hiện đáp án.",
+    "Đúng liên tiếp từ từ thứ 3 được +15."
   ],
   typing: [
-    "Đọc nghĩa và định nghĩa hoặc nghe phát âm.",
-    "Gõ từ bằng bàn phím thật hoặc bàn phím ảo trước khi hết giờ.",
-    "Gõ đúng liên tiếp để tăng điểm combo."
+    "Đọc nghĩa, định nghĩa hoặc bấm nghe phát âm.",
+    "Gõ đủ từ trước khi thanh thời gian cạn; gõ sai được thử lại (+5).",
+    "Hết giờ: 0 điểm và sang từ mới."
   ]
 };
 
@@ -60,7 +61,7 @@ const tutorialStepVisuals: Record<GameKey, readonly { kind: string; Icon: Lucide
   scramble: [{ kind: "read", Icon: ScanText }, { kind: "arrange", Icon: Shuffle }, { kind: "hint", Icon: Lightbulb }],
   crossword: [{ kind: "choose", Icon: MousePointerClick }, { kind: "grid", Icon: Grid3X3 }, { kind: "hint", Icon: Lightbulb }],
   eggs: [{ kind: "move", Icon: ArrowLeftRight }, { kind: "catch", Icon: Target }, { kind: "lives", Icon: Heart }],
-  mario: [{ kind: "move", Icon: ArrowLeftRight }, { kind: "gift", Icon: Gift }, { kind: "finish", Icon: Flag }],
+  mario: [{ kind: "move", Icon: ArrowLeftRight }, { kind: "lives", Icon: Heart }, { kind: "finish", Icon: Flag }],
   sort: [{ kind: "read", Icon: ScanText }, { kind: "classify", Icon: Layers3 }, { kind: "streak", Icon: Trophy }],
   typing: [{ kind: "clue", Icon: ScanText }, { kind: "type", Icon: Keyboard }, { kind: "timer", Icon: Timer }]
 };

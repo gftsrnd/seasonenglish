@@ -333,7 +333,6 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
     <div className="operator-level-form-dialog-header">
       <div className="operator-level-form-dialog-title"><span className="operator-level-kicker">{kicker ?? (detail.targetLevel === "placement-retake" ? "Đề thi lại bài đầu vào" : `Đề lên mức ${detail.targetLevel ?? ""}`)}</span><h3>{detail.title}</h3><p className="small muted">{detail.status === "published" ? "Đã phát hành" : detail.status === "retired" ? "Đã lưu lịch sử" : "Bản nháp"}</p></div>
       <div className="row operator-level-form-dialog-actions">
-        {editing && !readOnly ? <button className="btn-sm btn-primary" type="button" disabled={saving || publishing || Boolean(audioJob) || draftMaintenanceBusy} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</button> : null}
         <ModalCloseButton disabled={saving || publishing || Boolean(audioJob) || draftMaintenanceBusy} onClick={() => void close()} />
       </div>
     </div>
@@ -360,6 +359,11 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
       </div>
       <div ref={scroll.end} className="app-scroll-edge" aria-hidden="true" />
       {scroll.visible && <ScrollJumpButton atTop={scroll.atTop} onClick={scroll.jump} inExam />}
+      {/* Edit actions live in a sticky footer, right-aligned: [Hủy] [Lưu bản nháp]. The header holds only the title and ×. */}
+      {editing && !readOnly ? <div className="row operator-level-form-dialog-footer">
+        <button className="btn-sm" type="button" disabled={saving || publishing || Boolean(audioJob) || draftMaintenanceBusy} onClick={() => void close()}>Hủy</button>
+        <button className="btn-sm btn-primary" type="button" disabled={saving || publishing || Boolean(audioJob) || draftMaintenanceBusy} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</button>
+      </div> : null}
     </div>
   </section></div>;
 }

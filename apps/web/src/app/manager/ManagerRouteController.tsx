@@ -164,7 +164,7 @@ function LearnerProfileDialog({ view, onClose, onRename }: { view: ManagerLearne
       <div className="row between manager-dialog-heading">
         <h3 className="name">{view.learner.displayName}</h3>
         {compact && !editing ? <button className="btn-sm manager-rename-button" type="button" aria-label="Đổi tên hiển thị" onClick={startRename}><ActionLabel icon={Pencil} label="Đổi tên hiển thị" /></button> : null}
-        {compact ? <ModalCloseButton ref={closeRef} onClick={onClose} /> : <button ref={closeRef} className="btn-sm" type="button" onClick={onClose}>Đóng</button>}
+        <ModalCloseButton ref={closeRef} onClick={onClose} />
       </div>
       {editing ? <form className="manager-rename-form" onSubmit={(event) => { event.preventDefault(); void saveName(); }}>
         <label htmlFor="manager-learner-display-name">Tên hiển thị</label>

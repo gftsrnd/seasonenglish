@@ -156,6 +156,8 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
   const status = published ? PUBLISHED_COPY : exam ? STATUS_COPY[exam.status] : STATUS_COPY.DRAFT;
   const startedLearners = draft.startedLearners ?? 0;
   const phone = useMediaQuery("(max-width: 480px)");
+  // Phones read the Sửa đề tables as compact mini cards; tablets and desktop keep the tables.
+  const miniCards = useMediaQuery("(max-width: 600px)");
   const failedChecks = (exam?.checks ?? []).filter((check) => check.status === "fail");
   const manualChecks = (exam?.checks ?? []).filter((check) => check.mode === "manual" && check.status !== "fail");
   const todoCount = failedChecks.length + (savedAudioReady ? 0 : 1);
@@ -219,9 +221,12 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
 
       <details className="card flat monthly-final-fold" aria-label="Bảng mapping mục từ">
         <summary><b>Từ vựng được kiểm tra ở đâu</b> <span className="xs muted">{exam.mapping.length} từ</span></summary>
-        <div className="table-wrap"><table><thead><tr><th>Mã</th><th>Mục từ</th><th>Nghĩa đã học</th><th>Kỹ năng</th><th>Vị trí</th><th>Đáp án</th></tr></thead><tbody>
-          {exam.mapping.map((row) => <tr key={row.termId}><td>{row.code}</td><td>{row.word} <span className="xs muted">· {row.type}</span></td><td>{row.meaning}</td><td>{SKILL_LABEL[row.skill]}</td><td>{row.position}</td><td>{answerKey.get(row.taskKey) || (row.skill === "writing" || row.skill === "speaking" ? "Rubric" : "—")}</td></tr>)}
-        </tbody></table></div>
+        {miniCards ? <ul className="monthly-final-mini-list" aria-label="Từ vựng được kiểm tra">{exam.mapping.map((row) => <li key={row.termId}>
+          <div><b>{row.code} · {row.word}</b> <span className="muted">({row.type})</span> – {row.meaning}</div>
+          <div className="xs muted">{SKILL_LABEL[row.skill]} · {row.position} · Đáp án {answerKey.get(row.taskKey) || (row.skill === "writing" || row.skill === "speaking" ? "Rubric" : "—")}</div>
+        </li>)}</ul> : <div className="table-wrap"><table className="stack-table"><thead><tr><th>Mã</th><th>Mục từ</th><th>Nghĩa đã học</th><th>Kỹ năng</th><th>Vị trí</th><th>Đáp án</th></tr></thead><tbody>
+          {exam.mapping.map((row) => <tr key={row.termId}><td data-label="Mã">{row.code}</td><td data-label="Mục từ">{row.word} <span className="xs muted">· {row.type}</span></td><td data-label="Nghĩa đã học">{row.meaning}</td><td data-label="Kỹ năng">{SKILL_LABEL[row.skill]}</td><td data-label="Vị trí">{row.position}</td><td data-label="Đáp án">{answerKey.get(row.taskKey) || (row.skill === "writing" || row.skill === "speaking" ? "Rubric" : "—")}</td></tr>)}
+        </tbody></table></div>}
       </details>
 
       <details className="card flat monthly-final-fold" aria-label="Ngữ pháp GA GB">
@@ -252,18 +257,26 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
 
       <details className="card flat monthly-final-fold" aria-label="Vị trí phát âm Speaking A">
         <summary><b>Phát âm được chấm ở Nói A</b> <span className="xs muted">{exam.pronunciation.map((target) => target.ipa).join(" ")}</span></summary>
-        <div className="table-wrap"><table><thead><tr><th>Mục</th><th>Vị trí 1</th><th>Vị trí 2</th><th>Từ ví dụ đã học</th></tr></thead><tbody>
-          {exam.pronunciation.map((target) => <tr key={target.code}><td>{target.code} {target.ipa} · {target.label}</td>{[0, 1].map((index) => <td key={index}>{target.positions[index] ? `${target.positions[index]!.target} trong "${target.positions[index]!.word}"` : "—"}</td>)}<td className="xs muted">{target.taughtExamples.map((example) => example.word).join(", ")}</td></tr>)}
-        </tbody></table></div>
+        {miniCards ? <ul className="monthly-final-mini-list" aria-label="Phát âm được chấm">{exam.pronunciation.map((target) => <li key={target.code}>
+          <div><b>{target.code} {target.ipa}</b> {target.label}</div>
+          <div className="xs">Vị trí: {target.positions.map((position) => position.word).join(" · ") || "—"}</div>
+          <div className="xs muted">Ví dụ: {target.taughtExamples.map((example) => example.word).join(", ") || "—"}</div>
+        </li>)}</ul> : <div className="table-wrap"><table className="stack-table"><thead><tr><th>Mục</th><th>Vị trí 1</th><th>Vị trí 2</th><th>Từ ví dụ đã học</th></tr></thead><tbody>
+          {exam.pronunciation.map((target) => <tr key={target.code}><td data-label="Mục">{target.code} {target.ipa} · {target.label}</td>{[0, 1].map((index) => <td key={index} data-label={`Vị trí ${index + 1}`}>{target.positions[index] ? `${target.positions[index]!.target} trong "${target.positions[index]!.word}"` : "—"}</td>)}<td className="xs muted" data-label="Từ ví dụ đã học">{target.taughtExamples.map((example) => example.word).join(", ")}</td></tr>)}
+        </tbody></table></div>}
       </details>
 
       <details className="card flat monthly-final-fold">
         <summary><b>Gói người chấm</b> <span className="xs muted">lời giải, bài mẫu, rubric</span></summary>
-        <div className="table-wrap"><table><thead><tr><th>Câu</th><th>Giải thích</th><th>Trích đoạn bằng chứng (câu nghe)</th></tr></thead><tbody>
-          {Object.entries(items).map(([key, item]) => <tr key={key}><td>{key}</td>
-            <td><LineField aria-label={`Giải thích ${key}`} value={item.explanation} disabled={!editable} onChange={(event) => setItems((previous) => ({ ...previous, [key]: { ...previous[key]!, explanation: event.target.value } }))} /></td>
-            <td>{key.startsWith("L") ? <LineField aria-label={`Bằng chứng ${key}`} value={item.evidence ?? ""} disabled={!editable} onChange={(event) => setItems((previous) => ({ ...previous, [key]: { ...previous[key]!, evidence: event.target.value } }))} /> : null}</td></tr>)}
-        </tbody></table></div>
+        {miniCards ? <ul className="monthly-final-mini-list" aria-label="Lời giải từng câu">{Object.entries(items).map(([key, item]) => <li key={key}>
+          <b>Câu {key}</b>
+          <label className="monthly-final-mini-field">Giải thích<LineField aria-label={`Giải thích ${key}`} value={item.explanation} disabled={!editable} onChange={(event) => setItems((previous) => ({ ...previous, [key]: { ...previous[key]!, explanation: event.target.value } }))} /></label>
+          {key.startsWith("L") ? <label className="monthly-final-mini-field">Câu nghe làm bằng chứng<LineField aria-label={`Bằng chứng ${key}`} value={item.evidence ?? ""} disabled={!editable} onChange={(event) => setItems((previous) => ({ ...previous, [key]: { ...previous[key]!, evidence: event.target.value } }))} /></label> : null}
+        </li>)}</ul> : <div className="table-wrap"><table className="stack-table"><thead><tr><th>Câu</th><th>Giải thích</th><th>Trích đoạn bằng chứng (câu nghe)</th></tr></thead><tbody>
+          {Object.entries(items).map(([key, item]) => <tr key={key}><td data-label="Câu">{key}</td>
+            <td data-label="Giải thích"><LineField aria-label={`Giải thích ${key}`} value={item.explanation} disabled={!editable} onChange={(event) => setItems((previous) => ({ ...previous, [key]: { ...previous[key]!, explanation: event.target.value } }))} /></td>
+            <td data-label="Bằng chứng (câu nghe)">{key.startsWith("L") ? <LineField aria-label={`Bằng chứng ${key}`} value={item.evidence ?? ""} disabled={!editable} onChange={(event) => setItems((previous) => ({ ...previous, [key]: { ...previous[key]!, evidence: event.target.value } }))} /> : null}</td></tr>)}
+        </tbody></table></div>}
         <h5>Bài Writing mẫu</h5><p className="small" style={{ whiteSpace: "pre-line" }}>{exam.grader.writingSample || "—"}</p>
         <p className="xs muted">GA chính: {exam.grader.writingGrammarEvidence.gaMain} · GA phụ: {exam.grader.writingGrammarEvidence.gaSecondary} · GB chính: {exam.grader.writingGrammarEvidence.gbMain} · GB phụ: {exam.grader.writingGrammarEvidence.gbSecondary}</p>
         <h5>Speaking B mẫu</h5><p className="small" style={{ whiteSpace: "pre-line" }}>{exam.grader.speakingSample || "—"}</p>

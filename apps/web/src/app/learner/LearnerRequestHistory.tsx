@@ -5,6 +5,7 @@ import { learnerApiClient } from "../../api/learner.js";
 import { AssessmentAppealForm } from "./AssessmentAppealForm.js";
 import { OriginalPlacementModal, PlacementRetakeRequest } from "./PlacementRetakeRequest.js";
 import { PageTitle } from "./ui.js";
+import { ClipboardCheck, Inbox, MessageSquareWarning, Scale } from "lucide-react";
 import { RequestEvidenceDetails, RequestEvidenceFields, requestEvidenceArgs, type RequestEvidenceDraft } from "../shared/RequestEvidence.js";
 import { RequestTable } from "../shared/RequestTable.js";
 import { LearnerMonthlySurveys, useLearnerMonthlySurveys } from "./MonthlySurveys.js";
@@ -194,6 +195,8 @@ export function LearnerRequestHistory() {
         </Link>;
       })}
     </nav>
+    {filter === "all" && data ? <SupportShortcuts fromProfile={fromProfile} appealsOpen={appealsOpen} surveysOpen={surveysOpen}
+      complaints={data.complaints ?? []} appeals={data.appeals ?? []} appealable={data.results?.length ?? 0} /> : null}
     {filter === "feedback" && surveysOpen ? <LearnerMonthlySurveys surveys={surveys} month={params.get("month")} key={params.get("month") ?? ""} /> : null}
     {notice ? <p role="status">{notice}</p> : null}
     {composing && data?.complaints ? <ComplaintForm lessonUnlock={lessonUnlock} complaints={data.complaints} learning={data.levelApproved === true}
@@ -216,10 +219,34 @@ export function LearnerRequestHistory() {
         {filter === "complaints" && data?.complaints && !composing ? <button type="button" className="btn-primary" onClick={() => setComplaintFormOpen(true)}>Gửi khiếu nại</button> : null}
       </div>
       {requestError || (surveyError && filter !== "feedback") ? <p role="alert">Chưa tải được đầy đủ lịch sử. <button type="button" className="btn" onClick={() => { refresh(); surveys.retry(); }}>Thử lại</button></p> : null}
-      <RequestTable label={listLabel} rows={rows} empty={loading ? <span role="status">Đang tải…</span> : "Chưa có mục nào."} />
+      <RequestTable label={listLabel} rows={rows} empty={loading ? <span role="status">Đang tải…</span> : <span className="learner-support-empty"><Inbox size={18} aria-hidden="true" />Chưa có yêu cầu nào.</span>} />
     </section>
     {selectedSubmission ? <OriginalPlacementModal submission={selectedSubmission} retake={submissionOpen === "completedRetake"} onClose={() => setSubmissionOpen(null)} /> : null}
   </div>;
+}
+
+/**
+ * 18/11 #12: the "Tất cả" view opens with one tile per kind of request (what it is for, how many are waiting, where
+ * to start), so the page is not a single empty white card.
+ */
+function SupportShortcuts({ fromProfile, appealsOpen, surveysOpen, complaints, appeals, appealable }: { fromProfile: boolean; appealsOpen: boolean; surveysOpen: boolean; complaints: LearnerComplaintView[]; appeals: LearnerAcademicAppealView[]; appealable: number }) {
+  const to = (type: string, extra?: Record<string, string>) => {
+    const search = new URLSearchParams({ ...(fromProfile ? { from: "profile" } : {}), type, ...extra });
+    return { search: search.toString() };
+  };
+  const pending = (items: ReadonlyArray<{ status: string }>) => items.filter(item => item.status === "pending").length;
+  const tiles = [
+    { key: "complaints", Icon: MessageSquareWarning, title: "Khiếu nại", text: "Điểm danh, số bài học hoặc tài khoản bị sai.", count: pending(complaints), link: to("complaints", { compose: "complaint" }), action: "Gửi khiếu nại" },
+    ...(appealsOpen ? [{ key: "appeals", Icon: Scale, title: "Kháng nghị", text: appealable ? `${appealable} bài thi có thể kháng nghị.` : "Xin chấm lại bài học hoặc bài thi.", count: pending(appeals), link: to("appeals"), action: "Xem kháng nghị" }] : []),
+    ...(surveysOpen ? [{ key: "feedback", Icon: ClipboardCheck, title: "Khảo sát tháng", text: "Góp ý về bài học trong tháng.", count: 0, link: to("feedback"), action: "Mở khảo sát" }] : [])
+  ];
+  return <section className="learner-support-shortcuts" aria-label="Bạn cần hỗ trợ gì?">
+    {tiles.map(({ key, Icon, title, text, count, link, action }) => <Link key={key} className="learner-support-shortcut" to={link} data-support-kind={key}>
+      <span className="learner-support-shortcut-icon" aria-hidden="true"><Icon size={20} /></span>
+      <span className="learner-support-shortcut-body"><b>{title}{count ? <span className="badge warn">{count} chờ xử lý</span> : null}</b><span className="small muted">{text}</span></span>
+      <span className="learner-support-shortcut-action small">{action} →</span>
+    </Link>)}
+  </section>;
 }
 
 function ComplaintForm({ complaints, submitted, cancel, lessonUnlock, learning }: { complaints: LearnerComplaintView[]; submitted: () => void; cancel: () => void; lessonUnlock: boolean; learning: boolean }) {

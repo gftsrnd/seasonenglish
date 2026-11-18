@@ -200,9 +200,9 @@ describe("learner game visual and interaction regressions", () => {
     expect(screen.getByText("Kỷ lục: chưa có")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Thoát game" })).toHaveClass("btn", "btn-sm");
     expect(screen.getByText("Hướng dẫn chơi", { exact: false })).toBeInTheDocument();
-    expect(screen.getByText("Di chuyển, nhảy và mở từng hộp câu hỏi.")).toBeInTheDocument();
-    expect(screen.getByText("Trả lời để mở cổng; trả lời sai mất một mạng.")).toBeInTheDocument();
-    expect(screen.getByText("Vượt thử thách cuối rồi chạm cờ để hoàn thành.")).toBeInTheDocument();
+    expect(screen.getByText("Chạy, nhảy và chạm hộp quà để mở câu hỏi của cổng.")).toBeInTheDocument();
+    expect(screen.getByText("Trả lời sai: 0 điểm, mất 1 mạng, cổng vẫn mở.")).toBeInTheDocument();
+    expect(screen.getByText("Gặp boss: trả lời trước khi hết giờ (sai rồi đúng +5). Chạm cờ để xong.")).toBeInTheDocument();
     // Boss questions never reuse gate words: a 3-word set has 3 gates and no boss.
     expect(screen.getByText("Vượt 3 cổng rồi chạm cờ.")).toBeInTheDocument();
     expect(screen.getByText(/Điểm ván tối đa 100/i)).toBeInTheDocument();

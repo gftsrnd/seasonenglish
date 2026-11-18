@@ -19,9 +19,6 @@
   :root:root:root .learner-root :is(button, .btn, a.btn) > .action-icon-only { display: inline-grid !important; place-items: center; }
   :root:root:root .learner-root :is(button, .btn, a.btn) > .action-icon-only > .action-icon-label { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap; }
 
-  /* Title + ⓘ on one line. */
-  :root:root:root .learner-root .page-title h1.info-title { display: flex; align-items: flex-start; gap: 4px; min-width: 0; }
-  :root:root:root .learner-root :is(h2, h3).info-title { display: flex; align-items: flex-start; gap: 4px; min-width: 0; }
 
   /* Content images: whole picture, never cropped. */
   :root:root:root .learner-root :is(.lesson-page, .game-page) img { object-fit: contain; max-width: 100%; }
@@ -84,9 +81,15 @@
 
   /* ── Mini game hub ── */
   :root:root:root .learner-root .games-page .word-chip-list { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px !important; }
-  :root:root:root .learner-root .games-page .word-chip { display: flex !important; align-items: center; gap: 4px; min-width: 0 !important; width: 100%; height: 32px; min-height: 32px !important; padding: 0 8px !important; font-size: 13px !important; white-space: nowrap !important; overflow: hidden; }
+  /* 18/11 #4: never cut a word or its meaning. The chip grows to 2 lines; word and meaning wrap whole words only. */
+  :root:root:root .learner-root .games-page .word-chip { display: flex !important; flex-wrap: wrap; align-items: center; justify-content: flex-start !important; text-align: left; column-gap: 4px; row-gap: 0; min-width: 0 !important; width: 100%; height: auto; min-height: 32px !important; padding: 4px 8px !important; border-radius: 10px !important; font-size: 13px !important; line-height: 1.25; white-space: normal !important; overflow: visible; overflow-wrap: normal !important; word-break: normal; }
   :root:root:root .learner-root .games-page .word-chip > * { flex: none; }
-  :root:root:root .learner-root .games-page .word-chip > span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+  :root:root:root .learner-root .games-page .word-chip > span { flex: 0 1 auto; min-width: 0; color: var(--muted); overflow-wrap: normal; }
+  /* Inside "Bộ từ đang chơi" the summary already names the set: drop the repeated title and the card-in-card padding. */
+  :root:root:root .learner-root .games-play-first .game-vocabulary-tools .games-word-set-card .section-heading { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  :root:root:root .learner-root .games-play-first .game-vocabulary-tools > .games-section-card { padding: 8px 12px 10px !important; }
+  :root:root:root .learner-root .games-play-first .game-vocabulary-tools .games-word-set-card .list-pager { margin: 6px 0 0 !important; min-height: 0; }
+  :root:root:root .learner-root .games-play-first .game-vocabulary-tools > summary { min-height: 40px; padding: 6px 12px; }
   :root:root:root .learner-root .games-page .topic-create { flex-wrap: nowrap !important; gap: 6px !important; }
   :root:root:root .learner-root .games-page .topic-create input { flex: 1 1 auto !important; height: 34px; min-height: 34px !important; font-size: 14px; }
   :root:root:root .learner-root .games-page .topic-create button { flex: none; height: 34px; min-height: 34px !important; padding: 0 10px !important; white-space: nowrap; }
@@ -457,4 +460,128 @@
   /* A dialog container that receives focus on open shows no ring (it is not a control). */
   :root:root:root:has(.learner-root) .modal-backdrop > .dialog:focus { outline: none; box-shadow: 0 12px 35px rgb(24 31 28 / 22%); }
   :root:root:root .learner-root .test-page .assessment-prep-compact > table.assessment-prep-table { display: table !important; width: 100% !important; }
+}
+
+/* ── 18/11 learner feedback (agent B): phone/tablet part; the all-width part lives in learner/learner.css. ── */
+@media (max-width: 1024px) {
+  /* #7 Badges: chip names wrap whole instead of being cut with "…". */
+  :root:root:root .learner-root .profile-season-card--compact .bdg-chip { height: auto !important; min-height: 32px; align-items: center; }
+  :root:root:root .learner-root .profile-season-card--compact .bdg-chip > b { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; line-height: 1.2; overflow-wrap: normal; }
+  /* #15 Device checks: two small buttons on one line, the status next to them. */
+  :root:root:root .learner-root .test-page .prep-compact { display: flex !important; flex-wrap: wrap; align-items: center; gap: 6px 8px !important; }
+  :root:root:root .learner-root .test-page .prep-compact .prep-device { flex: none !important; width: auto !important; height: 32px !important; min-height: 32px !important; padding: 0 10px !important; gap: 5px !important; border-radius: 8px !important; font-size: 13px !important; }
+  :root:root:root .learner-root .test-page .prep-compact .prep-device svg { width: 15px; height: 15px; }
+  :root:root:root .learner-root .test-page .prep-compact .prep-checks { flex: 1 1 0; min-width: 0; display: flex !important; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0 !important; margin: 0 !important; }
+  :root:root:root .learner-root .test-page .prep-compact .prep-check { justify-content: flex-start !important; margin: 0 !important; min-height: 0 !important; text-align: left; line-height: 1.25; }
+  :root:root:root .learner-root .test-page .prep-compact .prep-check > span { font-size: 12px; }
+  /* Exam sections: denser, still continuous to read. Touch targets stay at least 36px. */
+  :root:root:root .learner-root .test-page .assessment-task-card { padding: 8px 0 !important; }
+  :root:root:root .learner-root .test-page .assessment-task-heading { display: flex; align-items: center; justify-content: space-between; min-height: 0; margin: 0 !important; }
+  :root:root:root .learner-root .test-page .assessment-task-heading h4 { margin: 0 !important; font-size: 13px !important; color: var(--muted); }
+  :root:root:root .learner-root .test-page .assessment-task-heading .badge { margin: 0; padding: 0 6px; font-size: 11px; min-height: 0; }
+  :root:root:root .learner-root .test-page .assessment-task-prompt { margin: 2px 0 6px !important; font-size: 15px; line-height: 1.4; }
+  :root:root:root .learner-root .test-page .assessment-choices { gap: 4px !important; margin: 0 !important; }
+  :root:root:root .learner-root .test-page .assessment-task-content { gap: 0 !important; margin-top: 6px !important; }
+  :root:root:root .learner-root .test-page .assessment-task-group-heading { margin: 0 !important; }
+  :root:root:root .learner-root .test-page .assessment-task-group-instruction { margin: 2px 0 0 !important; font-size: 13px; }
+  :root:root:root .learner-root .test-page .assessment-choices--tiny { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  :root:root:root .learner-root .test-page .assessment-choice { min-height: 36px !important; padding: 4px 8px !important; gap: 6px; border-radius: 8px !important; font-size: 14px; }
+  :root:root:root .learner-root .test-page .assessment-choices--tiny .assessment-choice { padding: 4px 6px !important; gap: 4px; }
+  :root:root:root .learner-root .test-page .assessment-choice input { width: 16px; height: 16px; min-width: 16px; margin: 0; }
+  :root:root:root .learner-root .test-page .assessment-task-group { padding: 10px !important; }
+  :root:root:root .learner-root .test-page .assessment-section-groups { gap: 10px !important; }
+  :root:root:root .learner-root .test-page .assessment-stimulus-card { padding: 10px !important; font-size: 14.5px; line-height: 1.5; }
+  /* #18 Vocabulary: collocations on one row when they fit, umbrella + synonyms on the next, as on desktop. */
+  :root:root:root .learner-root .lesson-page :is(.vocabulary-card-phrase-list, .vocabulary-card-relations) { gap: 4px !important; }
+  :root:root:root .learner-root .lesson-page :is(.vocabulary-card-phrase-list .vocabulary-card-sound, .vocabulary-card-relations .chip) { height: 28px; min-height: 28px !important; padding: 0 6px !important; gap: 2px; font-size: 12.5px !important; letter-spacing: -.01em; }
+  :root:root:root .learner-root .lesson-page :is(.vocabulary-card-phrase-list .vocabulary-card-sound, .vocabulary-card-relations .chip) svg { width: 11px; height: 11px; }
+  /* A chip with a meaning icon keeps room for the icon, so "= record" is never covered by it. */
+  :root:root:root .learner-root .lesson-page .lesson-example-wrap--chip { --meaning-icon-width: 26px; }
+  :root:root:root .learner-root .lesson-page .lesson-example-wrap--chip > .chip { padding-right: calc(var(--meaning-icon-width) + 6px) !important; }
+  :root:root:root .learner-root .lesson-page .lesson-example-wrap--chip > .lesson-example-translate svg { width: 13px; height: 13px; }
+  /* #11 mascot not tiny on phones. */
+  :root:root:root .learner-root .bao-row .learner-mascot--onboard { width: 64px !important; height: 64px !important; }
+}
+@media (max-width: 720px) {
+  /* Onboarding/profile form: about two screens. Smaller field rows, 3-up certificate chips that never break a name. */
+  :root:root:root .learner-root .profile-form { gap: 10px !important; }
+  :root:root:root .learner-root .profile-form > section.card { padding: 10px 12px !important; }
+  :root:root:root .learner-root .profile-form > section.card > h2 { margin: 0 0 6px !important; font-size: 16px; }
+  :root:root:root .learner-root .profile-form #profile-edit-personal { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 6px 8px !important; }
+  :root:root:root .learner-root .profile-form #profile-edit-personal > label:nth-child(-n+2), :root:root:root .learner-root .profile-form #profile-edit-personal > label:has(textarea) { grid-column: 1 / -1; }
+  :root:root:root .learner-root .profile-form label > input:not([type="checkbox"]):not([type="radio"]) { max-width: none; width: 100%; height: 32px; min-height: 32px !important; }
+  :root:root:root .learner-root .profile-form [role="group"] > p.small, :root:root:root .learner-root .profile-form .profile-certificates > p.small { margin: 8px 0 4px !important; font-size: 13px; line-height: 1.3 !important; }
+  :root:root:root .learner-root .profile-form .row:has(> .opt) { gap: 4px !important; }
+  :root:root:root .learner-root .profile-form .opt { min-height: 30px !important; padding: 3px 8px !important; gap: 6px; }
+  :root:root:root .learner-root .profile-form .opt > span { font-size: 12.5px; line-height: 1.2; }
+  :root:root:root .learner-root .profile-form .opt input { width: 15px; height: 15px; min-width: 15px; margin: 0; }
+  :root:root:root .learner-root .profile-form .profile-info-line { margin: 6px 0 0 !important; padding: 6px 10px !important; }
+  :root:root:root .learner-root .profile-form .profile-certificates { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 4px !important; }
+  :root:root:root .learner-root .profile-form .profile-certificates > p { grid-column: 1 / -1; }
+  :root:root:root .learner-root .profile-form .profile-certificates > .row { display: flex !important; flex-wrap: wrap; gap: 4px !important; min-width: 0; }
+  :root:root:root .learner-root .profile-form .profile-certificates > .row.is-checked { grid-column: 1 / -1; }
+  :root:root:root .learner-root .profile-form .profile-certificates > .row > label.opt { flex: 1 1 auto !important; min-height: 30px !important; padding: 3px 8px !important; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; font-size: 12.5px; }
+  :root:root:root .learner-root .profile-form .profile-certificates > .row > input { flex: 1 1 120px !important; height: 32px; min-height: 32px !important; font-size: 14px; }
+  :root:root:root .learner-root .profile-form textarea { min-height: 52px !important; }
+}
+@media (max-width: 720px) {
+  /* Onboarding/profile form (owner 18/11): every choice is an auto-width chip toggle that wraps; no checkbox column.
+     The real checkbox/radio stays in the chip (invisible, full size) for keyboard and screen readers. */
+  :root:root:root .learner-root .profile-form .row:has(> .opt) { display: grid !important; grid-template-columns: 1fr 1fr !important; align-items: stretch !important; gap: 6px !important; }
+  :root:root:root .learner-root .profile-form .row:has(> .opt) > .opt.opt-wide { grid-column: 1 / -1 !important; }
+  :root:root:root .learner-root .profile-form .row:has(> .opt) > .opt { position: relative; flex: none !important; grid-column: auto; width: auto !important; max-width: 100%; min-width: 0; min-height: 34px !important; height: auto; padding: 6px 10px !important; gap: 4px; border-radius: 10px !important; border: 1px solid var(--line) !important; background: var(--surface, #fff) !important; box-shadow: none !important; font-size: 13px; line-height: 1.25; text-align: left; justify-content: flex-start; }
+  :root:root:root .learner-root .profile-form .row:has(> .opt) > .opt > span { font-size: 13px; white-space: normal; overflow-wrap: normal; }
+  :root:root:root .learner-root .profile-form .row:has(> .opt) > .opt > input { position: absolute; inset: 0; width: 100% !important; height: 100% !important; margin: 0; opacity: 0; cursor: pointer; }
+  :root:root:root .learner-root .profile-form .row:has(> .opt) > .opt:has(> input:checked) { border-color: var(--primary) !important; background: var(--primary-soft) !important; color: var(--primary-dark, var(--primary)); font-weight: 600; }
+  /* Marker inside each chip: a circle for single choice (radio), a square for multiple choice (checkbox); filled with ✓ / a dot when picked. */
+  :root:root:root .learner-root .profile-form .row:has(> .opt) > .opt::before { content: ""; flex: none; box-sizing: border-box; width: 14px; height: 14px; border: 1.5px solid var(--muted); background: var(--surface, #fff); display: inline-grid; place-items: center; font-size: 10px; line-height: 1; font-weight: 800; color: #fff; }
+  :root:root:root .learner-root .profile-form .row:has(> .opt) > .opt:has(> input[type="checkbox"])::before { border-radius: 3px; }
+  :root:root:root .learner-root .profile-form .row:has(> .opt) > .opt:has(> input[type="radio"])::before { border-radius: 50%; }
+  :root:root:root .learner-root .profile-form .row:has(> .opt) > .opt:has(> input[type="checkbox"]:checked)::before { content: "✓"; border-color: var(--primary); background: var(--primary); }
+  :root:root:root .learner-root .profile-form .row:has(> .opt) > .opt:has(> input[type="radio"]:checked)::before { border-color: var(--primary); background: radial-gradient(circle, var(--primary) 0 3.5px, var(--surface, #fff) 4px); }
+  :root:root:root .learner-root .profile-form .row:has(> .opt) > .opt { gap: 6px !important; align-items: center !important; }
+  /* Actions sit right under the card (normal 12px gap), not floating below it. */
+  :root:root:root .learner-root .profile-form > .onboard-actions { display: flex !important; margin-top: 2px !important; }
+  :root:root:root .learner-root .profile-form > .onboard-actions > :is(button, .btn) { width: auto !important; }
+  :root:root:root .learner-root .profile-form .row:has(> .opt) > .opt:has(> input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+  /* Certificate chips: name on one line, the result fields on their own line when ticked. */
+  :root:root:root .learner-root .profile-form .profile-certificates { display: grid !important; grid-template-columns: 1fr 1fr !important; align-items: stretch; gap: 6px !important; }
+  :root:root:root .learner-root .profile-form .profile-certificates > p { grid-column: 1 / -1; }
+  :root:root:root .learner-root .profile-form .profile-certificates > .row { display: contents !important; }
+  :root:root:root .learner-root .profile-form .profile-certificates > .row > label.opt { white-space: nowrap; }
+  :root:root:root .learner-root .profile-form .profile-certificates > .row.is-checked > input { width: 100% !important; min-width: 0; }
+  /* Spacing: 13px question labels ~6px above their chips, 12px between questions. */
+  :root:root:root .learner-root .profile-form [role="group"]:not(section):not(.profile-edit-sections) { margin: 0 0 12px; }
+  :root:root:root .learner-root .profile-form > section.card > [role="group"]:last-child, :root:root:root .learner-root .profile-form > section.card > :last-child > [role="group"]:last-child { margin-bottom: 0; }
+  :root:root:root .learner-root .profile-form [role="group"] > p.small, :root:root:root .learner-root .profile-form .profile-certificates > p.small { margin: 0 0 6px !important; font-size: 13px; }
+  :root:root:root .learner-root .profile-form .onboarding-preferences { display: block !important; }
+  :root:root:root .learner-root .profile-form textarea { min-height: calc(2lh + 14px) !important; }
+  :root:root:root .learner-root .profile-form p.profile-info-line { display: block; margin: 0 0 12px !important; padding: 0 !important; background: none !important; border: 0 !important; }
+  :root:root:root .learner-root .onboard-actions { flex-wrap: nowrap !important; gap: 8px !important; }
+  :root:root:root .learner-root .onboard-actions > :is(button, .btn) { flex: 0 1 auto !important; height: 36px; min-height: 36px !important; padding: 0 14px !important; font-size: 14px; white-space: nowrap; }
+  :root:root:root .learner-root .onboard-actions > .btn-primary { margin-left: auto; }
+}
+@media (max-width: 1024px) {
+  :root:root:root .learner-root .profile-page .profile-completion-heading .btn { width: auto !important; flex: none !important; height: 32px; min-height: 32px !important; padding: 0 12px !important; font-size: 13px; }
+  :root:root:root .learner-root .profile-page .profile-completion-heading { flex-wrap: nowrap !important; }
+}
+@media (max-width: 600px) {
+  /* ── Phone type scale (owner 18/11): h1 20 · card title 16 · sub-title 15 · body 14 · meta 13 · chips/labels 12 · eyebrow 11.
+     Nothing under 11px or over 20px except deliberate big numbers (scores, timers) and game art. ── */
+  :root:root:root .learner-root .page-title h1, :root:root:root .learner-root .app-learner-page h1 { font-size: 20px !important; line-height: 1.25 !important; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  :root:root:root .learner-root .page-title h1 :is(.info-title-text, span:not(.info-tip):not(.info-tip *)) { font-size: inherit !important; }
+  :root:root:root .learner-root .eyebrow, :root:root:root .learner-root .page-title .eyebrow { font-size: 11px !important; line-height: 1.3; }
+  :root:root:root .learner-root .page-title > div > p { font-size: 13px !important; line-height: 1.35; margin-top: 2px !important; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  :root:root:root .learner-root :is(.home-primary-lesson, .monthly-assessment-page) h2 { font-size: 16px !important; }
+  /* Game tutorial: the "Điểm / Bộ từ" meta line at 12px, the running header topic as the page h1. */
+  :root:root:root .learner-root .game-tutorial-meta :is(span, b) { font-size: 12px !important; }
+  :root:root:root:root .learner-root .game-page .game-running-header h1 { font-size: 20px !important; }
+  /* Labels that rendered under 11px: calendar weekdays, word types, crossword mode line, preview badge. */
+  :root:root:root .learner-root :is(.vocabulary-card-type, .crossword-mode-sep, .cert-preview-badge) { font-size: 11px !important; }
+  :root:root:root .learner-root .crossword-mode :is(span, b) { font-size: 11px !important; }
+  :root:root:root .learner-root .monthly-learner-calendar-day time > span { font-size: 11px !important; }
+  :root:root:root .learner-root .catch-wave .falling-item b { font-size: 11px !important; }
+  /* Certificate summary: name as a sub-title, its title as an eyebrow. */
+  :root:root:root .learner-root .cert-summary-name { font-size: 16px !important; }
+  :root:root:root:root:root:root:root .learner-root h2.cert-summary-title { font-size: 11px !important; }
 }

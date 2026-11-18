@@ -2,11 +2,16 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDown } from "lucide-react";
 import { useCompactUi } from "./CompactUi.js";
+import { dodgeTop } from "./scroll-jump-dodge.js";
+
+/** The round button's box (.app-scroll-jump) and its inset from the popup edge. */
+const SIZE = 44;
+const INSET = 12;
 
 /** Where a popup's content scrolls: its body, its feed, or the popup itself. */
 const SCROLLER_SELECTORS = [".operator-level-form-dialog-body", ".inbox-feed"];
 
-type Target = { key: string; scroller: HTMLElement; rect: DOMRect; footer: number; atTop: boolean };
+type Target = { key: string; scroller: HTMLElement; top: number; left: number; atTop: boolean };
 
 function findTargets(): Target[] {
   const dialogs = [...document.querySelectorAll<HTMLElement>(".modal-backdrop > .dialog, .modal-backdrop > [role=dialog], .inbox-backdrop > .dialog, .monthly-resource-panel")];
@@ -16,10 +21,29 @@ function findTargets(): Target[] {
     if (!scroller) return [];
     const rect = dialog.getBoundingClientRect();
     if (!rect.width || !rect.height) return [];
-    const pager = dialog.querySelector<HTMLElement>(".list-pager");
-    const footer = pager ? Math.max(0, rect.bottom - pager.getBoundingClientRect().top) : 0;
-    return [{ key: `${index}-${dialog.className}`, scroller, rect, footer, atTop: scroller.scrollTop < 8 }];
+    const footer = pinnedFooterHeight(dialog, rect);
+    // Never on a control: step up past any button/field under the default spot (bottom-right, above a pinned footer).
+    const left = Math.round(rect.right - INSET - SIZE);
+    const top = dodgeTop(dialog, left, Math.round(rect.bottom - footer - INSET - SIZE), SIZE, rect.top + rect.height * 0.35);
+    if (top === null) return [];
+    return [{ key: `${index}-${dialog.className}`, scroller, top: Math.round(top), left, atTop: scroller.scrollTop < 8 }];
   });
+}
+
+/**
+ * Height of the bar pinned to the popup's bottom edge (pager, sticky action
+ * footer such as "Huỷ / Kiểm tra & lưu"), so the button sits above it instead
+ * of covering its buttons.
+ */
+function pinnedFooterHeight(dialog: HTMLElement, rect: DOMRect): number {
+  let top = rect.bottom;
+  for (const node of dialog.querySelectorAll<HTMLElement>(".list-pager, footer, [class*='actions'], [class*='footer']")) {
+    const box = node.getBoundingClientRect();
+    if (!box.width || !box.height || box.bottom < rect.bottom - 40 || box.top > rect.bottom) continue;
+    const pinned = node.matches(".list-pager") || /sticky|fixed/.test(getComputedStyle(node).position);
+    if (pinned) top = Math.min(top, box.top);
+  }
+  return Math.max(0, rect.bottom - top);
 }
 
 /**
@@ -51,7 +75,7 @@ export function ModalScrollJump() {
       data-direction={target.atTop ? "down" : "up"}
       aria-label={label}
       title={label}
-      style={{ top: Math.round(target.rect.bottom - target.footer - 12 - 40), left: Math.round(target.rect.right - 12 - 40) }}
+      style={{ top: target.top, left: target.left }}
       onClick={() => target.scroller.scrollTo({ top: target.atTop ? target.scroller.scrollHeight : 0, behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}
     ><ArrowDown size={20} aria-hidden="true" /></button>;
   })}</>, document.body);
