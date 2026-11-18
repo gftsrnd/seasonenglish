@@ -35,7 +35,8 @@ const settled = (outcome: "win" | "lose" | "draw", change: number, mode: "ranked
 describe("arena result card", () => {
   it("waits for the opponent and points to the bell", () => {
     render(<ArenaResultCard match={match({ me: { started: true, played: true, score: 73, gameplayMs: 1 } })} />);
-    expect(screen.getByText("Chờ đối thủ, có kết quả sẽ báo ở chuông")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Chờ đối thủ" })).toBeInTheDocument();
+    expect(screen.getByText("Kết quả sẽ báo ở chuông.")).toBeInTheDocument();
     expect(screen.queryByText(/điểm xếp hạng/)).toBeNull();
   });
 
@@ -43,7 +44,8 @@ describe("arena result card", () => {
     const again = vi.fn();
     render(<ArenaResultCard match={settled("win", 50)} onAgain={again} />);
     expect(screen.getByRole("heading", { name: "Bạn thắng!" })).toBeInTheDocument();
-    expect(screen.getByText(/Lan Anh:/)).toBeInTheDocument();
+    expect(document.querySelector("[data-arena-xh]")).toHaveTextContent("Lan Anh 64 · +50 điểm xếp hạng");
+    expect(document.querySelector(".arena-result__detail")!.textContent!.length).toBeLessThanOrEqual(40);
     expect(screen.getByText("73")).toBeInTheDocument();
     expect(screen.getByText("64")).toBeInTheDocument();
     expect(screen.getByText("+50 điểm xếp hạng")).toBeInTheDocument();
@@ -63,7 +65,7 @@ describe("arena result card", () => {
   it("never shows an XH chip for a friendly match", () => {
     render(<ArenaResultCard match={settled("win", 0, "friendly")} />);
     expect(document.querySelector("[data-arena-chip]")).toBeNull();
-    expect(screen.getByText(/Giao hữu không tính điểm xếp hạng/)).toBeInTheDocument();
+    expect(document.querySelector("[data-arena-xh]")).toHaveTextContent("Lan Anh 64 · Giao hữu");
   });
 
   it("labels the band from the base points", () => {
@@ -122,7 +124,7 @@ describe("arena leaderboard", () => {
   it("lists my matches with Chơi on my turn and opens a settled one as the result card", async () => {
     const navigate = vi.fn();
     render(<ModalProvider><ArenaLeaderboard navigate={navigate} notify={vi.fn()} learnerId="me" client={client() as never} /></ModalProvider>);
-    expect(await screen.findByText(/Tới lượt bạn · còn \d+ giờ/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Tới lượt bạn · \d+ giờ$/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Chơi/ })).toHaveAttribute("href", `/arena/match/${ID}`);
     fireEvent.click(screen.getByRole("button", { name: /Xem kết quả/ }));
     expect(await screen.findByRole("dialog", { name: "Kết quả trận" })).toBeInTheDocument();
@@ -132,7 +134,7 @@ describe("arena leaderboard", () => {
   it("filters by game and shows an invite to me with Nhận / Từ chối", async () => {
     const api = client({ home: vi.fn().mockResolvedValue(home({ open: [match({ mode: "friendly", status: "invited", postedByMe: false })] })) });
     render(<ModalProvider><ArenaLeaderboard navigate={vi.fn()} notify={vi.fn()} learnerId="me" client={api as never} /></ModalProvider>);
-    expect(await screen.findByText(/Giao hữu · Lan Anh mời bạn/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Lan Anh mời bạn$/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Nhận/ })).toBeInTheDocument();
     // One action per row: Từ chối lives in the invite details, not on the row.
     expect(screen.queryByRole("button", { name: /Từ chối/ })).toBeNull();

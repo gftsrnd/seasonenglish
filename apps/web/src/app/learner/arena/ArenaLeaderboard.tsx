@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CefrLevel, GameKey } from "@e4s/contracts";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Trophy, Users } from "lucide-react";
 import { arenaApiClient, type ArenaApiClient, type ArenaBoardGame, type ArenaHome, type ArenaLeaderboard as Board, type ArenaMatch } from "../../../api/arena.js";
 import { InfoTip } from "../../shared/CompactUi.js";
 import { Pager } from "../../shared/Pager.js";
@@ -98,12 +98,12 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
         const settled = match.status === "settled" && Boolean(match.result);
         const text = <>
           <ArenaGameIcon game={match.game} />
-          <span className="arena-list__text"><b>{ARENA_GAME_NAMES[match.game]}</b><small>{match.mode === "ranked" ? "Xếp hạng" : "Giao hữu"} · {matchStatusLine(match)}</small></span>
+          <span className="arena-list__text"><b>{ARENA_GAME_NAMES[match.game]}{match.mode === "ranked" ? <Trophy className="arena-mode-icon" size={12} role="img" aria-label="Xếp hạng" /> : <Users className="arena-mode-icon" size={12} role="img" aria-label="Giao hữu" />}</b><small>{matchStatusLine(match)}</small></span>
         </>;
         // One action only when the learner must act; otherwise the row itself opens the details.
         const action = isInviteForMe(match)
-          ? <button className="btn-primary btn-sm" type="button" disabled={busyId === match.id} onClick={() => void accept(match)}>Nhận</button>
-          : isMyTurn(match) ? <AppLink className="btn btn-primary btn-sm" href={`/arena/match/${match.id}`} navigate={navigate}>Chơi</AppLink> : null;
+          ? <button className="btn-primary btn-sm arena-row-action" type="button" disabled={busyId === match.id} onClick={() => void accept(match)}>Nhận</button>
+          : isMyTurn(match) ? <AppLink className="btn btn-primary btn-sm arena-row-action" href={`/arena/match/${match.id}`} navigate={navigate}>Chơi</AppLink> : null;
         return <li key={match.id} className="arena-list__row" data-arena-row={match.status}>
           {settled
             ? <button type="button" className="arena-list__open" aria-label={`Xem kết quả ${ARENA_GAME_NAMES[match.game]}`} onClick={() => setResult(match)}>{text}<ChevronRight className="arena-list__chevron" size={16} aria-hidden="true" /></button>

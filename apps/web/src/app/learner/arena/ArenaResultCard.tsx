@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { Bell, Swords, Trophy } from "lucide-react";
 import type { ArenaMatch } from "../../../api/arena.js";
-import { ARENA_GAME_NAMES, bandLabel, decidedByLine, outcomeTitle, signed } from "./arena-text.js";
+import { ARENA_GAME_NAMES, bandLabel, outcomeTitle, shortReason, signed } from "./arena-text.js";
 
 /**
  * The arena result is the solo Mini game result card (`.game-result`, same icon, score box and
- * actions) with one extra line for the opponent and one for XH. Actions: ONE primary "Đấu tiếp"
- * plus an optional text link (the caller passes "Về bảng xếp hạng").
+ * actions). Settled: title = outcome, ONE line "Lan Anh 64 · +75 điểm xếp hạng", and a muted
+ * second line ≤ 40 characters ("Đối thủ mạnh hơn · lần gặp 1"). Actions: ONE primary "Đấu tiếp"
+ * plus an optional text link ("Về bảng xếp hạng").
  */
 export function ArenaResultCard({ match, onAgain, againBusy = false, link }: {
   match: ArenaMatch;
@@ -18,19 +19,19 @@ export function ArenaResultCard({ match, onAgain, againBusy = false, link }: {
   const waiting = !result && match.me.played && match.status === "accepted";
   const state = result ? result.outcome : waiting ? "waiting" : "closed";
   const mode = `${match.mode === "ranked" ? "Xếp hạng" : "Giao hữu"} · ${ARENA_GAME_NAMES[match.game]}`;
+  const detail = result ? resultDetail(match) : "";
   return <section className={`card game-result ${waiting ? "is-pending" : "is-complete"} arena-result`} data-arena-result={state} aria-live="polite">
     <div className="game-result__icon" aria-hidden="true">{waiting ? <Bell size={30} strokeWidth={1.8} /> : <Trophy size={32} strokeWidth={1.8} />}</div>
     <div className="game-result__copy">
       <div className="eyebrow">{mode}</div>
       {result ? <>
         <h2>{outcomeTitle(result.outcome)}</h2>
-        <p>{match.opponent?.displayName ?? "Đối thủ"}: <b>{match.them.score ?? 0}</b> điểm · {decidedByLine(match)}</p>
-        <p className="arena-result__xh" data-arena-xh>{match.mode === "ranked" && result.rating
-          ? <><span className="badge" data-arena-chip>{signed(result.rating.change)} điểm xếp hạng</span> · {rankedExplanation(match)}</>
-          : "Giao hữu không tính điểm xếp hạng."}</p>
+        <p className="arena-result__line" data-arena-xh>{match.opponent?.displayName ?? "Đối thủ"} <b>{match.them.score ?? 0}</b>{match.mode === "ranked" && result.rating
+          ? <> · <span data-arena-chip>{signed(result.rating.change)} điểm xếp hạng</span></> : " · Giao hữu"}</p>
+        {detail ? <p className="small muted arena-result__detail">{detail}</p> : null}
       </> : waiting ? <>
         <h2>Chờ đối thủ</h2>
-        <p>Chờ đối thủ, có kết quả sẽ báo ở chuông</p>
+        <p>Kết quả sẽ báo ở chuông.</p>
       </> : <h2>Trận đã đóng</h2>}
     </div>
     {result || waiting ? <div className="game-result__score"><strong>{match.me.score ?? 0}</strong><span>điểm của bạn</span></div> : null}
@@ -41,12 +42,15 @@ export function ArenaResultCard({ match, onAgain, againBusy = false, link }: {
   </section>;
 }
 
-/** "Ngang sức · lần gặp 1 · tính 50%": band label, meeting of the day and the repeat rate when it applies. */
-export function rankedExplanation(match: ArenaMatch): string {
+/** Muted second line, ≤ 40 characters: reason (only when unusual), band, meeting of the day, repeat rate. */
+export function resultDetail(match: ArenaMatch): string {
   const result = match.result;
-  if (!result?.rating) return "";
-  const parts = [bandLabel(result.rating.base, result.outcome)];
-  if (result.rating.meetingIndex) parts.push(`lần gặp ${result.rating.meetingIndex}`);
-  if (result.rating.decayPercent !== null && result.rating.decayPercent < 100) parts.push(`tính ${result.rating.decayPercent}%`);
-  return parts.join(" · ");
+  if (!result) return "";
+  const parts = [shortReason(match)];
+  if (match.mode === "ranked" && result.rating) {
+    parts.push(bandLabel(result.rating.base, result.outcome));
+    if (result.rating.meetingIndex) parts.push(`lần gặp ${result.rating.meetingIndex}`);
+    if (result.rating.decayPercent !== null && result.rating.decayPercent < 100) parts.push(`tính ${result.rating.decayPercent}%`);
+  }
+  return parts.filter(Boolean).join(" · ");
 }
