@@ -25,7 +25,7 @@ import { formatScoreOutOf } from "../shared/format-score.js";
 import { Pager, usePaged } from "../shared/Pager.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { Check, MoreHorizontal, Pencil, Trash2, X } from "lucide-react";
-import { ActionLabel, ModalCloseButton, useCompactUi } from "../shared/CompactUi.js";
+import { ActionLabel, ModalCloseButton, useCompactUi, useUiTier } from "../shared/CompactUi.js";
 
 export type ManagerRouteControllerProps = { role: "manager" | "operator"; currentUserId: string; onSessionRevoked?: (() => void) | undefined };
 
@@ -135,6 +135,7 @@ function LearnerProfileDialog({ view, onClose, onRename }: { view: ManagerLearne
   const closeRef = useRef<HTMLButtonElement>(null);
   useDialog(true, dialogRef, onClose, closeRef);
   const compact = useCompactUi();
+  const tablet = useUiTier() === "tablet";
   const profile = view.profile;
   const level = view.learner.currentLevel;
   const rows: Array<[string, string]> = [
@@ -164,7 +165,7 @@ function LearnerProfileDialog({ view, onClose, onRename }: { view: ManagerLearne
       <div className="row between manager-dialog-heading">
         <h3 className="name">{view.learner.displayName}</h3>
         {compact && !editing ? <button className="btn-sm manager-rename-button" type="button" aria-label="Đổi tên hiển thị" onClick={startRename}><ActionLabel icon={Pencil} label="Đổi tên hiển thị" /></button> : null}
-        {compact ? <ModalCloseButton ref={closeRef} onClick={onClose} /> : <button ref={closeRef} className="btn-sm" type="button" onClick={onClose}>Đóng</button>}
+        {compact || tablet ? <ModalCloseButton ref={closeRef} onClick={onClose} /> : <button ref={closeRef} className="btn-sm" type="button" onClick={onClose}>Đóng</button>}
       </div>
       {editing ? <form className="manager-rename-form" onSubmit={(event) => { event.preventDefault(); void saveName(); }}>
         <label htmlFor="manager-learner-display-name">Tên hiển thị</label>

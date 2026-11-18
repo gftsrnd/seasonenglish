@@ -382,7 +382,7 @@ function AssessmentTableEditor({ group, editing, onChange }: {
 
 function LevelFormWarnings({ warnings }: { warnings: LevelFormEditorDetail["warnings"] }) {
   // Phones keep the checklist folded to its count so the editor stays reachable.
-  const phone = useMediaQuery("(max-width: 767px)");
+  const phone = useMediaQuery("(max-width: 600px)");
   return <section className="operator-level-validation" aria-label="Cảnh báo kiểm tra đề"><details key={phone ? "phone" : "wide"} open={!phone}><summary><b>Cần hoàn thiện trước khi phát hành</b><span className="badge warn">{warnings.length} mục</span></summary><ul className="small">{warnings.map((warning, index) => <li key={`${warning.code}-${index}`}><Badge tone={warning.severity === "error" ? "danger" : "warn"}>{warning.code === "missing_answer_key" ? "Đáp án" : warning.code === "missing_task_prompt" ? "Đề bài" : warning.code === "missing_audio" ? "Audio" : warning.code === "quality_check" ? "Nội dung" : "Cấu trúc"}</Badge> {warning.message}</li>)}</ul></details></section>;
 }
 

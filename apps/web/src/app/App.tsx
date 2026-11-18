@@ -20,6 +20,7 @@ import { ModalScrollJump } from "./shared/ModalScrollJump.js";
 import "./app-layout.css";
 import "./responsive-compact.css";
 import "./responsive-phone.css";
+import "./responsive-tablet.css";
 import { cancelAllExclusiveAudio } from "../features/experience/audio-precedence.js";
 
 const authChangeStorageKey = "e4s:auth:changed";

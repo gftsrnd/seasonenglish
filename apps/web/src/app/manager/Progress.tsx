@@ -95,7 +95,7 @@ function Kpi({ label, value, detail, state, tip }: { label: string; value: strin
 }
 
 function LearnerRow({ learner, monthly, weekStartDate, onOpen }: { learner: ManagerProgressView["learners"][number]; monthly?: ManagerMonthlyLearnerView | undefined; weekStartDate?: string; onOpen?: (id: string) => void }) {
-  const compactCard = useMediaQuery("(max-width: 768px)");
+  const compactCard = useMediaQuery("(max-width: 600px)");
   const missed = learner.missedDays ?? 0; const reward = rewardSeasonOfLearner(learner);
   const status = managerLearnerStatus(learner, weekStartDate);
   const badgeDetailText = (learner.earnedBadgeDetails ?? []).map((badge) => `${badge.label}: ${badge.description}`).join(" · ");

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useLocation } from "react-router";
 import { ManagerSectionNavigation } from "./ManagerSectionNavigation.js";
 import { managerNavigationPath, managerSectionForPath, operatorReadOnlyTabs } from "./navigation.js";
-import { Description, InfoTip, useCompactUi } from "../shared/CompactUi.js";
+import { Description, InfoTip, useCompactUi, useUiTier } from "../shared/CompactUi.js";
 
 const ManagerSectionDescription = createContext<HTMLDivElement | null | undefined>(undefined);
 
@@ -17,13 +17,14 @@ export function ManagerSectionLayout({ children }: { children: ReactNode }) {
   const item = section?.items.find(entry => entry.to === pathname);
   const [description, setDescription] = useState<HTMLDivElement | null>(null);
   const compact = useCompactUi();
+  const tablet = useUiTier() === "tablet";
   if (!item) return <>{children}</>;
   const hasOwnDescription = "description" in item;
   return <ManagerSectionDescription.Provider value={hasOwnDescription ? null : description}>
     <header className="page-title manager-page-title manager-section-title no-print" data-section={section?.id}>
       <div className="manager-page-title__content">
-        <h1>{"title" in item ? item.title : item.label}</h1>
-        {hasOwnDescription ? <div className="manager-section-description">{compact ? <InfoTip text={item.description} /> : <p className="muted">{item.description}</p>}</div>
+        <h1 className={tablet && hasOwnDescription ? "info-title" : undefined}>{tablet && hasOwnDescription ? <><span className="info-title-text">{"title" in item ? item.title : item.label}</span><InfoTip text={item.description} /></> : "title" in item ? item.title : item.label}</h1>
+        {hasOwnDescription ? <div className="manager-section-description">{compact ? <InfoTip text={item.description} /> : tablet ? <p className="muted tier-one-line" title={typeof item.description === "string" ? item.description : undefined}>{item.description}</p> : <p className="muted">{item.description}</p>}</div>
           : <div ref={setDescription} className="manager-section-description" />}
       </div>
       <ManagerSectionNavigation readOnly={operatorReadOnlyTabs.some((tab) => tab.to === pathname)} />
@@ -105,8 +106,10 @@ export function PageTitle({ children, description, actions }: { children: ReactN
  * into an ⓘ tip next to the title (or disappears when it only repeats the UI).
  */
 export function PageDescription({ text, tip = true }: { text: ReactNode; tip?: boolean }) {
-  const compact = useCompactUi();
-  if (!compact) return <p className="muted">{text}</p>;
+  const tier = useUiTier();
+  if (tier === "desktop") return <p className="muted">{text}</p>;
+  // Tablet: one short line (full text in the tooltip).
+  if (tier === "tablet") return <p className="muted tier-one-line" title={typeof text === "string" ? text : undefined}>{text}</p>;
   return tip ? <InfoTip text={text} /> : null;
 }
 
@@ -116,7 +119,7 @@ export function PageDescription({ text, tip = true }: { text: ReactNode; tip?: b
  * optional id); desktop renders the plain heading.
  */
 export function ManagerTitle({ as: Tag = "h3", id, title, tip, className, label }: { as?: "h1" | "h2" | "h3" | "h4"; id?: string; title: ReactNode; tip: ReactNode; className?: string; label?: string }) {
-  const compact = useCompactUi();
+  const compact = useUiTier() !== "desktop";
   if (!compact) return <Tag {...(id ? { id } : {})} {...(className ? { className } : {})}>{title}</Tag>;
   return <Tag {...(id ? { id } : {})} className={["info-title", className].filter(Boolean).join(" ")}><span className="info-title-text">{title}</span><InfoTip text={tip} label={label ?? (typeof title === "string" ? `${title}: giải thích` : "Giải thích")} /></Tag>;
 }

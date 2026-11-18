@@ -4533,7 +4533,7 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
 
 /* Phones and tablets: no fixed-height scroll boxes inside cards; the page
    scrolls naturally. Desktop keeps a taller bounded box for scanning. */
-@media (max-width: 1023px) {
+@media (max-width: 1024px) {
   .app-operator .operator-pending-list,
   .app-operator .operator-bounded-list,
   .app-operator .operator-action-table-wrap,
@@ -4551,7 +4551,7 @@ body > .operator-modal-scope .operator-editor-collapsible > .operator-editor-sec
   .app-operator .operator-action-table-wrap thead th { position: static; }
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1025px) {
   .app-operator .operator-bounded-list,
   .app-operator .operator-action-table-wrap,
   .operator-bounded-list,

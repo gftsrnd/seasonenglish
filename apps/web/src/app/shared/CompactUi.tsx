@@ -6,10 +6,20 @@ import "./content-image-contain.css";
 import { Info, X } from "lucide-react";
 import { useMediaQuery } from "./useMediaQuery.js";
 
-/** Phones and tablets: compact UI (icon buttons, short descriptions). Desktop keeps the full text. */
-export const COMPACT_UI_QUERY = "(max-width: 1024px)";
+/** Phones only (≤ 600px): compact UI (icon buttons, short descriptions). Tablets and desktop keep the full text. */
+export const COMPACT_UI_QUERY = "(max-width: 600px)";
 export function useCompactUi() {
   return useMediaQuery(COMPACT_UI_QUERY);
+}
+
+/** Tablets (601–1024px): desktop structure with phone density (see responsive-tablet.css). */
+export const TABLET_UI_QUERY = "(min-width: 601px) and (max-width: 1024px)";
+export type UiTier = "phone" | "tablet" | "desktop";
+/** phone ≤ 600px · tablet 601–1024px · desktop ≥ 1025px. */
+export function useUiTier(): UiTier {
+  const phone = useMediaQuery(COMPACT_UI_QUERY);
+  const tablet = useMediaQuery(TABLET_UI_QUERY);
+  return phone ? "phone" : tablet ? "tablet" : "desktop";
 }
 
 type IconComponent = ComponentType<{ size?: number; "aria-hidden"?: boolean | "true"; strokeWidth?: number }>;
@@ -21,15 +31,16 @@ type IconComponent = ComponentType<{ size?: number; "aria-hidden"?: boolean | "t
  * "Xem" everywhere. Destructive buttons keep their red `.btn-danger` style.
  */
 export function ActionLabel({ icon: Icon, label, children }: { icon: IconComponent; label: string; children?: ReactNode }) {
-  const compact = useCompactUi();
-  if (!compact) return <>{children ?? label}</>;
+  const tier = useUiTier();
+  if (tier === "desktop") return <>{children ?? label}</>;
+  // Tablet: icon + short text label, not icon-only.
+  if (tier === "tablet") return <span className="action-icon-text" title={label}><Icon size={15} strokeWidth={2.2} aria-hidden="true" /><span>{label}</span></span>;
   return <span className="action-icon-only" title={label}><Icon size={16} strokeWidth={2.2} aria-hidden="true" /><span className="action-icon-label">{label}</span></span>;
 }
 
 /** Icon followed by a short label on phones/tablets (for actions that need words); full label on desktop. */
 export function ActionShortLabel({ icon: Icon, label, short }: { icon: IconComponent; label: string; short?: string }) {
-  const compact = useCompactUi();
-  if (!compact) return <>{label}</>;
+  if (useUiTier() === "desktop") return <>{label}</>;
   return <span className="action-icon-text" title={label}><Icon size={15} strokeWidth={2.2} aria-hidden="true" /><span>{short ?? label}</span></span>;
 }
 
@@ -87,7 +98,7 @@ export function InfoTip({ text, label = "Giải thích" }: { text: ReactNode; la
  * title alone (aria-label without the ⓘ button's label).
  */
 export function SectionTip({ text, label, desktop = false }: { text: ReactNode; label?: string; desktop?: boolean }) {
-  const compact = useCompactUi();
+  const compact = useUiTier() !== "desktop";
   const ref = useRef<HTMLSpanElement>(null);
   // Desktop never shows the ⓘ (owner decision 2026-11-16): `desktop` is kept for callers but ignored.
   void desktop;
@@ -110,14 +121,16 @@ export function SectionTip({ text, label, desktop = false }: { text: ReactNode; 
  * text moves into an ⓘ tooltip instead (render <InfoTip> next to the title).
  */
 export function Description({ text, short, className = "small muted" }: { text: ReactNode; short?: ReactNode; className?: string }) {
-  const compact = useCompactUi();
-  if (!compact) return <p className={className}>{text}</p>;
+  const tier = useUiTier();
+  if (tier === "desktop") return <p className={className}>{text}</p>;
+  // Tablet: one short line under the title; the longer guidance is in the title's ⓘ.
+  if (tier === "tablet") return <p className={`${className} tier-one-line`} title={typeof text === "string" ? text : undefined}>{short ?? text}</p>;
   return short ? <p className={className}>{short}</p> : null;
 }
 
 /** Info tip that only appears on phones/tablets (desktop shows the paragraph instead). */
 export function CompactInfoTip({ text, label }: { text: ReactNode; label?: string }) {
-  const compact = useCompactUi();
+  const compact = useUiTier() !== "desktop";
   return compact ? <InfoTip text={text} {...(label ? { label } : {})} /> : null;
 }
 
@@ -128,7 +141,7 @@ export function CompactInfoTip({ text, label }: { text: ReactNode; label?: strin
  * shows on desktop and disappears on phones/tablets, where the tip holds it.
  */
 export function InfoTitle({ as: Tag = "h3", title, tip, label, className }: { as?: "h1" | "h2" | "h3" | "h4"; title: ReactNode; tip: ReactNode; label?: string; className?: string }) {
-  const compact = useCompactUi();
+  const compact = useUiTier() !== "desktop";
   if (!compact) return <Tag {...(className ? { className } : {})}>{title}</Tag>;
   return <Tag className={["info-title", className].filter(Boolean).join(" ")}><span className="info-title-text">{title}</span><InfoTip text={tip} label={label ?? (typeof title === "string" ? `${title}: giải thích` : "Giải thích")} /></Tag>;
 }
@@ -138,6 +151,8 @@ export function InfoTitle({ as: Tag = "h3", title, tip, label, className }: { as
  * (CSS `.modal-close`), "× Đóng" on desktop and a 32px × square on
  * phones/tablets, same neutral style everywhere.
  */
-export function ModalCloseButton({ onClick, disabled, label = "Đóng", iconOnly = false, ref }: { onClick: () => void; disabled?: boolean; label?: string; iconOnly?: boolean; ref?: Ref<HTMLButtonElement> }) {
+export function ModalCloseButton({ onClick, disabled, label = "Đóng", iconOnly: iconOnlyProp = false, ref }: { onClick: () => void; disabled?: boolean; label?: string; iconOnly?: boolean; ref?: Ref<HTMLButtonElement> }) {
+  // Tablets keep the × square of the shared popup header (the one universally obvious icon-only action).
+  const iconOnly = useUiTier() === "tablet" || iconOnlyProp;
   return <button ref={ref} type="button" className={iconOnly ? "btn-sm modal-close modal-close--icon" : "btn-sm modal-close"} aria-label={label} title={label} disabled={disabled} onClick={onClick}>{iconOnly ? <X size={16} strokeWidth={2.2} aria-hidden="true" /> : <ActionLabel icon={X} label="Đóng" />}</button>;
 }

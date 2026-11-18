@@ -522,10 +522,13 @@
 @media (max-width: 480px) {
   :root { --icon-btn: var(--phone-btn-h); }
 }
-@media (max-width: 1024px) {
-  /* Calendar "Xem" and picture actions: icon buttons on phones/tablets. */
+@media (max-width: 600px) {
+  /* Calendar "Xem": an icon button on phones (tablets keep "👁 Xem"). */
   :root:root:root .monthly-day-action.monthly-view-day { width: var(--icon-btn, 36px); min-width: var(--icon-btn, 36px) !important; padding: 0 !important; justify-content: center; }
   :root:root .monthly-day-action.monthly-view-day > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+@media (max-width: 1024px) {
+  /* Picture actions: icon buttons on phones/tablets. */
   :root:root:root .monthly-illustration-action:has(> .action-icon-only) { display: inline-grid; place-items: center; width: var(--icon-btn, 36px); height: var(--icon-btn, 36px); padding: 0; }
   :root:root .monthly-illustration-actions { display: flex; flex-wrap: nowrap; gap: 6px; }
   /* Icon groups sit together; a lone text action keeps its own place. */
@@ -544,8 +547,8 @@
   :root:root #root :is(.operator-pending-list, .operator-bounded-list, .operator-approved-list) { max-height: none !important; overflow-y: visible !important; }
   :root { --icon-btn: 40px; }
 }
-@media (max-width: 1024px) {
-  /* Descriptions that repeat the title or what the screen already shows. */
+@media (max-width: 600px) {
+  /* Descriptions that repeat the title or what the screen already shows (tablets keep them as one line, responsive-tablet.css). */
   :root:root .section-tab-description,
   :root:root .operator-months-header > p,
   :root:root .operator-months-page .monthly-section-title + p.small.muted,

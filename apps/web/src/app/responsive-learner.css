@@ -8,8 +8,21 @@
  */
 .learner-root { display: contents; }
 
-/* ───────────── Phones and tablets (<= 1024px) ───────────── */
+/* ───────────── Phones and tablets (<= 1024px): titles with ⓘ, images, popup height ───────────── */
 @media (max-width: 1024px) {
+  /* Title + ⓘ on one line. */
+  :root:root:root .learner-root .page-title h1.info-title { display: flex; align-items: flex-start; gap: 4px; min-width: 0; }
+  :root:root:root .learner-root :is(h2, h3).info-title { display: flex; align-items: flex-start; gap: 4px; min-width: 0; }
+
+  /* Content images: whole picture, never cropped. */
+  :root:root:root .learner-root :is(.lesson-page, .game-page) img { object-fit: contain; max-width: 100%; }
+
+  /* Popups stay under ~80% of the screen height. */
+  :root:root:root:has(.learner-root) .modal-backdrop > .dialog:not(.wide):not(.vocabulary-modal) { max-height: 78vh; overflow-y: auto; }
+  :root:root:root:has(.learner-root) .modal-backdrop > .dialog.wide { max-height: 78vh; overflow-y: auto; }
+}
+/* ───────────── Phones (<= 600px); tablets use the desktop learner layout ───────────── */
+@media (max-width: 600px) {
   /* Icon-only actions are identical squares (label kept as accessible name + tooltip). */
   :root:root:root .learner-root :is(button, .btn, a.btn, a.btn-sm):has(> .action-icon-only):not(.modal-close) {
     display: inline-grid !important; place-items: center; box-sizing: border-box;
@@ -19,16 +32,8 @@
   :root:root:root .learner-root :is(button, .btn, a.btn) > .action-icon-only { display: inline-grid !important; place-items: center; }
   :root:root:root .learner-root :is(button, .btn, a.btn) > .action-icon-only > .action-icon-label { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap; }
 
-  /* Title + ⓘ on one line. */
-  :root:root:root .learner-root .page-title h1.info-title { display: flex; align-items: flex-start; gap: 4px; min-width: 0; }
-  :root:root:root .learner-root :is(h2, h3).info-title { display: flex; align-items: flex-start; gap: 4px; min-width: 0; }
-
-  /* Content images: whole picture, never cropped. */
-  :root:root:root .learner-root :is(.lesson-page, .game-page) img { object-fit: contain; max-width: 100%; }
-
   /* Small confirm dialogs (clear chat, word-set change, level-up …): compact centred card. */
   :root:root:root:has(.learner-root) .modal-backdrop > .dialog:not(.wide):not(.vocabulary-modal) { width: min(380px, calc(100vw - 32px)); max-width: 380px; max-height: 78vh; overflow-y: auto; }
-  :root:root:root:has(.learner-root) .modal-backdrop > .dialog.wide { max-height: 78vh; overflow-y: auto; }
   :root:root:root:has(.learner-root) .modal-backdrop > .dialog.coach-delete-dialog { --compact-dialog-width: 380px; box-sizing: border-box; padding: 20px !important; }
   :root:root:root:has(.learner-root) .coach-delete-dialog-actions > button { min-height: 44px !important; }
 
@@ -186,12 +191,12 @@
   :root:root:root .learner-root .game-page .game-running-header > div:first-child { flex-basis: 100%; }
   :root:root:root .learner-root .coach-page--compact { --lrn-coach-chrome: 362px; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   /* A tile whose only sub-line is a hidden description: icon and title centred on one row. */
   :root:root:root .learner-root .home-page [data-home-block="activities"] .tile:has(> .home-tile-desc) > svg { grid-row: 1; }
   :root:root:root .learner-root .home-page [data-home-block="activities"] .tile:has(> .home-tile-desc) { align-content: center; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   /* ── Bài tháng: eligibility as the same compact rows on phones and tablets (label · detail · value). ── */
   :root:root:root .learner-root .monthly-assessment-page .monthly-assessment-landing { padding: 12px !important; gap: 8px !important; }
   :root:root:root .learner-root .monthly-assessment-page .monthly-assessment-header { align-items: center; gap: 8px; }
@@ -209,7 +214,7 @@
   :root:root:root .learner-root .monthly-eligibility-metrics .stat .ring > b { width: auto; height: auto; background: none; font-size: 14px; }
   :root:root:root .learner-root .monthly-eligibility-metrics .stat .ring::before, :root:root:root .learner-root .monthly-eligibility-metrics .stat .ring::after { display: none; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   /* ── Certificate / reward ── */
   :root:root:root .learner-root .reward-page .reward-preview-note { margin: 0 0 8px; font-size: 13px; }
   :root:root:root .learner-root .reward-page .reward-actions { justify-content: flex-end; flex-wrap: nowrap; align-items: center; gap: 8px; margin: 10px 0 0; }
@@ -237,10 +242,10 @@
   :root:root:root .learner-root .reward-page .cert-sign { margin-top: 14px !important; }
   :root:root:root .learner-root .reward-page .cert-foot { margin-top: 8px !important; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   :root:root:root .learner-root h2.cert-summary-title { margin: 0; font-size: 12px !important; line-height: 1.4 !important; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   /* ── Hồ sơ ── */
   :root:root:root .learner-root .profile-page > .page-title { margin-bottom: 8px; }
   :root:root:root .learner-root .profile-page > :is(section, a.card) { margin-top: 10px !important; padding: 12px !important; }
@@ -257,7 +262,7 @@
   :root:root:root .learner-root .profile-season-card details > summary { min-height: 34px !important; }
   :root:root:root .learner-root .profile-form-back { width: auto !important; align-self: flex-start; height: 32px; min-height: 32px !important; padding: 0 12px !important; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   /* ── Daily lesson: continuous reading flow kept, just denser. ── */
   :root:root:root .learner-root .lesson-page .word-card.vocabulary-card { padding-block: 12px !important; gap: 8px !important; }
   :root:root:root .learner-root .lesson-page .vocabulary-card-heading { min-height: 0; gap: 6px; }
@@ -274,7 +279,7 @@
   :root:root:root .learner-root .lesson-page .lesson-completion .row { flex-wrap: nowrap !important; gap: 8px !important; justify-content: flex-end; }
   :root:root:root .learner-root .lesson-page .lesson-completion .row > * { width: auto !important; flex: none; height: 32px; min-height: 32px !important; padding: 0 12px !important; white-space: nowrap; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   /* ── Hỗ trợ học tập ── */
   :root:root:root .learner-root .learner-support-page > .page-title { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
   :root:root:root .learner-root .learner-support-page > .page-title > div { min-width: 0; }
@@ -292,7 +297,7 @@
   :root:root:root .learner-root .test-page .assessment-rules > * { padding: 8px 10px !important; margin: 0 !important; }
   :root:root:root .learner-root .test-page .assessment-prep-compact > * + * { margin-top: 10px; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   /* ── Season chat round 2: each coach turn is a compact summary; the full review opens on tap. ── */
   :root:root:root .learner-root .coach-page--compact .chat { gap: 8px !important; }
   :root:root:root .learner-root .coach-page--compact .chat .msg { padding: 8px 10px !important; gap: 4px; }
@@ -317,7 +322,7 @@
   :root:root:root .learner-root .coach-feedback-more-body .coach-correction-card p { margin: 0; }
   :root:root:root .learner-root .coach-feedback-more-body .coach-feedback-disclosure > summary { min-height: 28px !important; font-size: 13px; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   /* ── Hồ sơ › Season progress (round 2): one flat card, badge chips, rules behind ⓘ. ── */
   :root:root:root .learner-root .profile-season-card--compact { padding: 12px !important; }
   :root:root:root .learner-root .profile-season-card--compact .profile-season-heading { gap: 10px; }
@@ -344,11 +349,11 @@
   :root:root:root .learner-root .profile-badge-tip { margin: 6px 0 0; padding: 6px 10px; border-radius: 10px; background: var(--surface-2); }
   :root:root:root .learner-root .profile-season-card--compact .profile-season-actions { margin-top: 8px; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   :root:has(.learner-root) .profile-season-rules-tip ul { margin: 2px 0 6px; padding-left: 18px; }
   :root:has(.learner-root) .profile-season-rules-tip li + li { margin-top: 2px; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   /* ── Test đầu vào / bài thi › chuẩn bị (round 2): one short screen. ── */
   :root:root:root .learner-root .test-page .assessment-prep-compact { padding: 12px !important; }
   :root:root:root .learner-root .test-page .assessment-prep-compact > * + * { margin-top: 8px !important; }
@@ -362,11 +367,11 @@
   :root:root:root .learner-root .test-page .assessment-rules-short { display: grid; gap: 2px; margin: 0; padding-left: 18px; font-size: 13.5px; line-height: 1.4; }
   :root:root:root .learner-root .test-page .assessment-start-actions { margin-top: 10px !important; gap: 8px; align-items: center; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   :root:has(.learner-root) .assessment-rules-tip { display: grid; gap: 6px; }
   :root:has(.learner-root) .assessment-rules-tip > span { display: grid; gap: 1px; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   /* ── Daily lesson round 2: readable sizes; Study is a guided step flow (one section per step). ── */
   :root:root:root .learner-root .lesson-page { font-size: 15px; }
   :root:root:root .learner-root .lesson-page .lesson-part :is(p, li) { font-size: 15px; line-height: 1.5; }
@@ -377,7 +382,7 @@
   :root:root:root .learner-root .lesson-study-step-nav .btn { display: inline-flex; align-items: center; gap: 4px; width: auto !important; min-width: 0; height: 36px; min-height: 36px !important; padding: 0 14px !important; font-size: 14px; white-space: nowrap; }
   :root:root:root .learner-root .lesson-study-step-nav .btn-primary { margin-left: auto; max-width: 70%; overflow: hidden; text-overflow: ellipsis; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   /* ── Forms (round 2): fields sized to their content, labels small and close, textareas short and auto-growing. ── */
   :root:root:root .learner-root :is(.learner-support-form, .lesson-appeal-form, .monthly-complaint-form, .profile-form) label:not(.opt):not(.request-evidence-picker) { display: grid; gap: 3px; font-size: 13px; font-weight: 600; color: var(--text); }
   :root:root:root .learner-root :is(.learner-support-form, .lesson-appeal-form, .monthly-complaint-form, .profile-form) select { justify-self: start; width: auto !important; min-width: 11em; max-width: 100%; field-sizing: content; height: 34px; min-height: 34px !important; padding-inline: 10px 28px; font-size: 14px; }
@@ -400,7 +405,7 @@
 @media (max-width: 360px) {
   :root:root:root .learner-root .profile-form .row:has(> .opt) { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   /* ── Taking a test/exam (round 2): sticky compact progress header, readable questions, 2-column short options. ── */
   :root:root:root .learner-root .test-page > .page-title { margin-bottom: 6px !important; }
   :root:root:root .learner-root .test-page .assessment-runtime-header { position: sticky; top: 0; z-index: 5; padding: 6px 10px !important; margin-bottom: 0 !important; box-shadow: 0 4px 12px rgb(0 0 0 / .06); }
@@ -424,7 +429,7 @@
   :root:root:root .learner-root .test-page textarea { min-height: 84px !important; height: auto !important; field-sizing: content; max-height: 60vh; resize: none; font-size: 15px; line-height: 1.45; }
   :root:root:root .learner-root .test-page .assessment-task-heading h4 { font-size: 14px !important; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   /* ── Test preparation (round 2b): device row, a clean 4-row table, a 5-cell score row, three short rules, one start button. ── */
   :root:root:root .learner-root .test-page .assessment-prep-table { width: 100% !important; max-width: none !important; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; table-layout: fixed; }
   :root:root:root .learner-root .test-page .assessment-prep-table :is(th, td) { padding: 4px 6px; height: 28px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
@@ -453,7 +458,7 @@
   :root:root:root .learner-root .lesson-study-step-nav .btn { height: 38px !important; min-height: 38px !important; }
   :root:root:root .learner-root .lesson-study-step-nav .btn-primary { max-width: 72%; }
 }
-@media (max-width: 1024px) {
+@media (max-width: 600px) {
   /* A dialog container that receives focus on open shows no ring (it is not a control). */
   :root:root:root:has(.learner-root) .modal-backdrop > .dialog:focus { outline: none; box-shadow: 0 12px 35px rgb(24 31 28 / 22%); }
   :root:root:root .learner-root .test-page .assessment-prep-compact > table.assessment-prep-table { display: table !important; width: 100% !important; }
