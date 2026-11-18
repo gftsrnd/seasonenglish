@@ -97,3 +97,17 @@
 }
 /* List rows: the tappable text starts flush left in every row. */
 :root:root:root .arena-page .arena-list__open { padding-left: 0 !important; padding-right: 0 !important; }
+
+/* Row actions ("Chơi" link and "Nhận" button): one compact size, centred in the row, at every width. */
+:root:root:root:root .arena-list__row > .arena-row-action { flex: none; display: inline-flex; align-items: center; justify-content: center; align-self: center; height: 30px; min-height: 30px !important; max-height: 30px; min-width: 0; padding: 0 12px !important; font-size: 13px !important; line-height: 1; border-radius: 999px; white-space: nowrap; text-decoration: none; }
+.arena-mode-icon { margin-left: 6px; vertical-align: -1px; color: var(--muted); }
+.arena-list__text small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Match page states and the result card: centred at a readable width under the header (tablet/desktop). */
+.arena-page .game-board > .arena-state,
+.arena-page .game-board > .arena-result { width: 100%; max-width: 560px; justify-self: center; margin-inline: auto; }
+.arena-page .game-board { display: grid; }
+.arena-result__line { margin: 2px 0 0; color: var(--text) !important; }
+.arena-result__detail { margin: 2px 0 0 !important; }
+/* Outside play the match page is one centred 560px column: header and card line up. */
+:root:root:root .app-learner-page.arena-page--narrow { max-width: 560px !important; margin-inline: auto !important; }

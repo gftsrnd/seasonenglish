@@ -39,17 +39,17 @@ export function outcomeTitle(outcome: "win" | "lose" | "draw"): string {
   return outcome === "win" ? "Bạn thắng!" : outcome === "lose" ? "Bạn thua" : "Hoà";
 }
 
-/** One status line per "Trận của bạn" row. */
+/** One short status line (≤ ~30 characters) per "Trận của bạn" row; the mode is an icon on line 1. */
 export function matchStatusLine(match: ArenaMatch, now = Date.now()): string {
   if (isInviteForMe(match)) return `${match.opponent?.displayName ?? "Bạn học"} mời bạn`;
-  if (match.status === "open" || match.status === "invited") return `Chờ người nhận · còn ${hoursLeft(match.acceptDeadline, now)} giờ`;
+  if (match.status === "open" || match.status === "invited") return `Chờ người nhận · ${hoursLeft(match.acceptDeadline, now)} giờ`;
   if (match.status === "accepted") return match.me.played
-    ? `Chờ đối thủ · còn ${hoursLeft(match.playDeadline, now)} giờ`
-    : `Tới lượt bạn · còn ${hoursLeft(match.playDeadline, now)} giờ`;
+    ? `Chờ đối thủ · ${hoursLeft(match.playDeadline, now)} giờ`
+    : `Tới lượt bạn · ${hoursLeft(match.playDeadline, now)} giờ`;
   if (match.status === "settled" && match.result) {
-    const scores = `${match.me.score ?? 0}–${match.them.score ?? 0}`;
+    const word = match.result.outcome === "win" ? "Thắng" : match.result.outcome === "lose" ? "Thua" : "Hoà";
     const change = match.result.rating ? ` · ${signed(match.result.rating.change)}` : "";
-    return `${outcomeTitle(match.result.outcome).replace("!", "")} · ${scores}${change}`;
+    return `${word} ${match.me.score ?? 0}–${match.them.score ?? 0}${change}`;
   }
   if (match.status === "declined") return "Đã từ chối";
   if (match.status === "cancelled") return "Đã huỷ";
@@ -77,4 +77,15 @@ export function decidedByLine(match: ArenaMatch): string {
   if (result.decidedBy === "timeout") return mine ? "Đối thủ không chơi trong 24 giờ." : "Bạn không chơi trong 24 giờ.";
   if (result.decidedBy === "time") return mine ? "Bằng điểm; bạn nhanh hơn." : "Bằng điểm; đối thủ nhanh hơn.";
   return result.outcome === "draw" ? "Hai bên bằng điểm." : mine ? "Điểm ván của bạn cao hơn." : "Điểm ván của đối thủ cao hơn.";
+}
+
+/** The few words behind an unusual result; nothing for a plain score win/loss (the scores say it). */
+export function shortReason(match: ArenaMatch): string {
+  const result = match.result;
+  if (!result) return "";
+  const mine = result.outcome === "win";
+  if (result.decidedBy === "forfeit") return mine ? "Đối thủ bỏ trận" : "Bạn đã thoát";
+  if (result.decidedBy === "timeout") return mine ? "Đối thủ quá hạn" : "Bạn quá hạn";
+  if (result.decidedBy === "time") return mine ? "Bằng điểm, bạn nhanh hơn" : "Bằng điểm, chậm hơn";
+  return "";
 }

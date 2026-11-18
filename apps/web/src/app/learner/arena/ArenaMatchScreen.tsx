@@ -82,7 +82,7 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
   const modeLine = match.mode === "ranked" ? "Xếp hạng · đối thủ ẩn" : `Giao hữu · ${match.opponent?.displayName ?? ""}`;
   const playing = Boolean(round) && match.status === "accepted" && !match.me.played;
 
-  return <div className="app-learner-page game-page arena-page" data-arena-match={match.id}>
+  return <div className={`app-learner-page game-page arena-page${playing ? "" : " arena-page--narrow"}`} data-arena-match={match.id}>
     <header className="row between game-running-header arena-match-header">
       <div className="arena-match-header__text">
         <div className="eyebrow game-running-title"><span className="game-title-icon" aria-hidden="true"><ArenaGameIcon game={match.game} size={18} /></span><span>{name}</span></div>
@@ -117,8 +117,8 @@ function ArenaMatchState({ match, busy, onStart, onAnswer, again, link }: {
   if (isInviteForMe(match)) {
     // Invite details: the one place with Từ chối next to Nhận.
     return <section className="card arena-state" data-arena-state="invite">
-      <h2>{match.opponent?.displayName ?? "Bạn học"} mời bạn giao hữu</h2>
-      <p className="small muted">{ARENA_GAME_NAMES[match.game]} · còn {hoursLeft(match.acceptDeadline)} giờ để nhận</p>
+      <h2>{match.opponent?.displayName ?? "Bạn học"} mời bạn</h2>
+      <p className="small muted">Giao hữu · {hoursLeft(match.acceptDeadline)} giờ để nhận</p>
       <div className="row arena-actions">
         <button className="btn-primary" type="button" disabled={busy} onClick={() => onAnswer("accept")}>Nhận</button>
         <button className="btn" type="button" disabled={busy} onClick={() => onAnswer("decline")}>Từ chối</button>
@@ -128,14 +128,14 @@ function ArenaMatchState({ match, busy, onStart, onAnswer, again, link }: {
   if (match.status === "open" || match.status === "invited") {
     return <section className="card arena-state" data-arena-state="posted">
       <h2>{match.mode === "ranked" ? "Đã đăng thách đấu" : "Đã gửi lời mời"}</h2>
-      <p className="small muted">Chờ người nhận · còn {hoursLeft(match.acceptDeadline)} giờ. Có người nhận sẽ báo ở chuông.</p>
+      <p className="small muted">Chờ người nhận · {hoursLeft(match.acceptDeadline)} giờ</p>
       {link}
     </section>;
   }
   if (match.status === "accepted" && !match.me.played) {
     return <section className="card arena-state" data-arena-state="ready">
       <h2>{match.me.started ? "Chơi tiếp ván đấu" : "Sẵn sàng đấu"}</h2>
-      <p className="small muted">Còn {hoursLeft(match.playDeadline)} giờ để chơi.</p>
+      <p className="small muted">Còn {hoursLeft(match.playDeadline)} giờ</p>
       <div className="row arena-actions"><button className="btn-primary" type="button" disabled={busy} aria-busy={busy || undefined} onClick={onStart}><Play className="game-control-icon" size={16} aria-hidden="true" />{match.me.started ? "Chơi tiếp" : "Bắt đầu"}</button></div>
     </section>;
   }
