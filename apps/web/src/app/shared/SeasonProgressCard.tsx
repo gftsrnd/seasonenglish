@@ -1,26 +1,63 @@
-import { Check, LockKeyhole } from "lucide-react";
+import { Check, Info, LockKeyhole } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import { InfoTip } from "./CompactUi.js";
 import type { LearnerProgressView } from "@e4s/contracts";
 import { REWARD_SEASONS, type RewardSeasonLevel } from "@e4s/domain/engagement";
-import { Progress } from "../learner/ui.js";
+import { Modal, Progress } from "../learner/ui.js";
 import { REWARD_SEASON_ICONS } from "./reward-badge-icons.js";
 import { RewardBadgeArtwork } from "./RewardBadgeArtwork.js";
 import "./season-progress-card.css";
+import "./reward-point-rules.css";
 
 const formatPoints = (points: number) => points.toLocaleString("vi-VN");
 
-/** How points are earned (same rules as the server reward sync). */
-export const REWARD_POINT_RULES: ReadonlyArray<readonly [label: string, points: string]> = [
-  ["Hoàn thành 1 bài học mới (lần đầu)", "+10"],
-  ["Mỗi phần bài học làm đúng", "+5 lần 1, giảm 1 điểm mỗi lần làm lại (tối thiểu +1); chỉ tính lần đúng đầu tiên"],
-  ["Hoàn thành bài Ôn tuần (thứ Sáu)", "+15"],
-  ["1 lượt luyện hợp lệ với Season", "+2"],
-  ["Mini game đạt từ 50/100", "+5, tối đa 3 lượt có điểm mỗi ngày (chơi thêm vẫn được, không cộng điểm)"],
-  ["Nộp bài thi cuối tháng", "+15"],
-  ["Bài kiểm tra đầu vào, thi lên mức", "+10"],
-  ["Hoàn thành trọn lịch học tháng (mọi bài mới và bài ôn)", "+20, một lần mỗi tháng"]
+/**
+ * How points are earned (same rules as the server reward sync): short rows "Việc · +điểm", and the condition,
+ * only when it matters, in the same sentence.
+ */
+export const REWARD_POINT_GROUPS: ReadonlyArray<{ title: string; rules: ReadonlyArray<readonly [label: string, points: string, condition?: string]> }> = [
+  { title: "Học bài", rules: [
+    ["Bài học mới (lần đầu)", "+10"],
+    ["Mỗi phần bài học làm đúng", "+5", "mỗi lần làm lại bớt 1, ít nhất +1"],
+    ["Bài Ôn tuần (thứ Sáu)", "+15"],
+    ["Học trọn lịch tháng", "+20", "1 lần mỗi tháng"]
+  ] },
+  { title: "Luyện tập", rules: [
+    ["1 lượt luyện với Season", "+2"],
+    ["Mini game đạt từ 50/100", "+5", "tối đa 3 lượt mỗi ngày"],
+    ["Ván đấu trường đạt từ 50/100", "+5", "tính chung 3 lượt mỗi ngày với mini game"]
+  ] },
+  { title: "Bài thi", rules: [
+    ["Nộp bài thi cuối tháng", "+15"],
+    ["Test đầu vào, thi lên mức", "+10"]
+  ] }
 ];
+
+/** Flat "label: points" list (manager simulator tip). */
+export const REWARD_POINT_RULES: ReadonlyArray<readonly [label: string, points: string]> = REWARD_POINT_GROUPS.flatMap((group) =>
+  group.rules.map(([label, points, condition]) => [label, condition ? `${points}, ${condition}` : points] as const));
+
+/** The point rules: one plain line per action, grouped. */
+function RewardPointRules({ className }: { className?: string }) {
+  return <div className={`reward-point-rules${className ? ` ${className}` : ""}`} data-testid="reward-point-rules">
+    {REWARD_POINT_GROUPS.map((group) => <section key={group.title} className="reward-point-group">
+      <h4>{group.title}</h4>
+      <ul>{group.rules.map(([label, points, condition]) => <li key={label}>{label} · <b>{points}</b>{condition ? `, ${condition}` : ""}</li>)}</ul>
+    </section>)}
+  </div>;
+}
+
+/** Phones: the rules open in a popup (≤80% high, sticky header with ×), in two tabs, never as an inline popover. */
+function RewardRulesDialog({ onClose }: { onClose: () => void }) {
+  const [tab, setTab] = useState<"points" | "season">("points");
+  return <Modal title="Cách tính điểm và lên Season" className="reward-rules-dialog" onClose={onClose} dismissOnBackdrop>
+    <div className="reward-rules-tabs" role="tablist" aria-label="Luật điểm">
+      <button type="button" role="tab" aria-selected={tab === "points"} onClick={() => setTab("points")}>Cách tính điểm</button>
+      <button type="button" role="tab" aria-selected={tab === "season"} onClick={() => setTab("season")}>Lên Season</button>
+    </div>
+    {tab === "points" ? <RewardPointRules /> : <ul className="reward-season-list" data-testid="reward-season-rules">{REWARD_SEASON_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ul>}
+  </Modal>;
+}
 
 /** How the Season ladder and the badges work (same rules as the server). */
 export const REWARD_SEASON_RULES: readonly string[] = [
@@ -48,6 +85,7 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
   const levelsId = useId();
   const [showAllBadges, setShowAllBadges] = useState(false);
   const [openBadge, setOpenBadge] = useState<string | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const cefr = view.season.cefr ?? null;
   const pointsInLevel = view.season.pointsInLevel ?? view.points;
   const next = view.season.next;
@@ -63,12 +101,6 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
   );
   const inLevel = cefr ? `trong ${cefr}` : "trong trình độ";
   const nextLine = next ? `Tiếp theo: ${next.name}` : `Đã đạt Season cao nhất${cefr ? ` của ${cefr}` : ""}`;
-  const rulesTip = <span className="profile-season-rules-tip">
-    <b>Cách tính điểm</b>
-    <ul data-testid="reward-point-rules">{REWARD_POINT_RULES.map(([label, points]) => <li key={label}>{label}: <b>{points}</b></li>)}</ul>
-    <b>Lên Season</b>
-    <ul data-testid="reward-season-rules">{REWARD_SEASON_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ul>
-  </span>;
   return <section className={`card profile-season-card${compact ? " profile-season-card--compact" : ""}`} aria-label="Mùa học">
     <div className="profile-season-heading">
       <SeasonFigure level={currentLevel} />
@@ -89,7 +121,7 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
         <b>Thiếu huy hiệu</b> · {missing.map((badge) => badge.label).join(", ")}
       </p>}
     </>}
-    <div className="row between profile-badges-heading" style={{ marginTop: 14 }}>{compact ? <h3 className="info-title" style={{ margin: 0 }}><span className="info-title-text">Huy hiệu theo cấp</span><InfoTip label="Cách tính điểm và lên Season" text={rulesTip} /></h3> : <h3 style={{ margin: 0 }}>Huy hiệu theo cấp</h3>}<span className="small muted" style={{ fontWeight: 800 }}>{view.badgeCount}/{view.badgeRoadmap.length} huy hiệu · giữ mãi</span></div>
+    <div className="row between profile-badges-heading" style={{ marginTop: 14 }}>{compact ? <h3 className="info-title" style={{ margin: 0 }}><span className="info-title-text">Huy hiệu theo cấp</span><span className="info-tip"><button type="button" className="info-tip-button" aria-label="Cách tính điểm và lên Season" aria-haspopup="dialog" onClick={() => setRulesOpen(true)}><Info size={15} aria-hidden="true" /></button></span></h3> : <h3 style={{ margin: 0 }}>Huy hiệu theo cấp</h3>}<span className="small muted" style={{ fontWeight: 800 }}>{view.badgeCount}/{view.badgeRoadmap.length} huy hiệu</span></div>
     <div id={levelsId} className="profile-season-levels">
       {visibleLevels.map((seasonLevel) => {
         const list = view.badgeRoadmap.filter((badge) => badge.seasonLevel === seasonLevel);
@@ -101,9 +133,9 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
           <div className="profile-season-level-heading">
             <span className={`badge ${completed ? "ok" : nextLevel ? "warn" : isCurrent ? "primary" : ""}`} {...(compact ? { title: `${meta.pointsRequired ? `${formatPoints(meta.pointsRequired)} điểm ${inLevel}` : "Bắt đầu trình độ"}${list.length ? ` + ${list.length} huy hiệu` : ""}` } : {})}>
               <span className="profile-season-emoji" role="img" aria-label={`Biểu tượng ${meta.name}`}>{REWARD_SEASON_ICONS[meta.level]}</span>
-              <span>Cấp {seasonLevel} · {meta.name}</span>
+              <span>Cấp {seasonLevel} · {meta.shortName}</span>
             </span>
-            {compact ? null : <span className="xs muted">{meta.pointsRequired ? `${formatPoints(meta.pointsRequired)} điểm ${inLevel}` : "Bắt đầu trình độ"}{list.length ? ` + ${list.length} huy hiệu` : " · không yêu cầu huy hiệu"}{completed ? " · đã đạt" : nextLevel ? " · cấp tiếp theo" : isCurrent ? " · đang ở đây" : ""}</span>}
+            {compact ? null : <span className="xs muted">{meta.pointsRequired ? `${formatPoints(meta.pointsRequired)} điểm` : "Bắt đầu"}{list.length ? ` + ${list.length} huy hiệu` : ""}{completed ? " · đã đạt" : isCurrent ? " · đang ở đây" : ""}</span>}
           </div>
           {list.length && compact ? <><div className="badges badge-chips">
             {list.map((badge) => {
@@ -129,14 +161,16 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
                 <span className="profile-badge-description">{badge.description}</span>
               </article>;
             })}
-          </div> : compact ? null : <p className="profile-season-empty xs muted">Mùa bắt đầu của mỗi trình độ. Đủ điều kiện từ đây sẽ mở Cấp 2.</p>}
+          </div> : null}
         </div>;
       })}
     </div>
+    {rulesOpen ? <RewardRulesDialog onClose={() => setRulesOpen(false)} /> : null}
     <div className="profile-season-actions"><button type="button" className="btn btn-sm" aria-controls={levelsId} aria-expanded={showAllBadges} onClick={() => setShowAllBadges((value) => !value)}>{showAllBadges ? "Thu gọn huy hiệu" : "Xem tất cả huy hiệu"}</button>
     {certificateAction}</div>
     {compact ? null : <details style={{ marginTop: 10 }}><summary className="small" style={{ fontWeight: 800, cursor: "pointer" }}>Cách tính điểm và lên Season</summary>
-      <ul className="small" data-testid="reward-point-rules" style={{ margin: "6px 0 0", paddingLeft: 20 }}>{REWARD_POINT_RULES.map(([label, points]) => <li key={label}>{label}: <b>{points}</b></li>)}</ul>
+      <RewardPointRules className="small" />
+      <b className="small reward-season-rules-title">Lên Season</b>
       <ul className="small" data-testid="reward-season-rules" style={{ margin: "6px 0 0", paddingLeft: 20 }}>{REWARD_SEASON_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ul>
     </details>}
   </section>;

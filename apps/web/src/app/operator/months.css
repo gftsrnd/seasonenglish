@@ -490,3 +490,67 @@ details.monthly-resource-editor-section>:not(summary)+:not(summary){margin-top:1
 .monthly-resource-editor-missing{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;border:1px solid var(--warn-line,var(--line));background:var(--warn-tint,var(--surface-3));color:var(--text);font-size:.72rem;font-style:normal;font-weight:600}
 .monthly-resource-editor-prefill{margin:0 0 10px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-3);font-size:.82rem}
 .monthly-illustration-missing-icon{display:none}
+
+/* Sửa tay tài nguyên tháng (owner 18/11 #25, issues.md #1). */
+/* Word-row field names: shown wherever the row stacks (phones/tablets); desktop keeps its one-line row. */
+.monthly-resource-editor-field-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@media(max-width:760px){
+  .monthly-resource-editor-field-label{position:static;width:auto;height:auto;overflow:visible;clip-path:none}
+  .monthly-resource-editor-row.support,.monthly-resource-editor-row.example{align-items:end}
+}
+@media(max-width:1024px){
+  /* Header: eyebrow + ONE title line on the left, Hủy / Lưu on the right; the description lives in the section summaries. */
+  :root:root:root:root .monthly-resource-editor>.monthly-resource-editor-header{
+    position:sticky;top:0;z-index:8;display:flex;flex-wrap:nowrap;align-items:center;gap:8px;
+    box-sizing:border-box;width:auto;max-width:none;
+    margin:0 calc(-1 * var(--popup-pad,20px)) var(--popup-gap,12px) !important;
+    padding:10px var(--popup-pad,20px) !important;
+  }
+  :root:root:root:root .monthly-resource-editor-header>div:first-child{flex:1 1 auto !important;min-width:0}
+  :root:root:root:root .monthly-resource-editor-header>div:first-child>p{display:none}
+  :root:root:root:root .monthly-resource-editor-header .eyebrow{display:block;margin:0;font-size:12px;line-height:1.2}
+  :root:root:root:root .monthly-resource-editor-header h2{margin:2px 0 0 !important;font-size:15px !important;line-height:1.3 !important;white-space:nowrap !important;overflow:hidden;text-overflow:ellipsis}
+  :root:root:root:root .monthly-resource-editor-actions{flex:none !important;flex-wrap:nowrap;gap:6px}
+  :root:root:root:root .monthly-resource-editor-actions>.btn{min-height:var(--popup-btn,34px);height:var(--popup-btn,34px);padding-inline:10px}
+  :root:root:root:root .monthly-resource-editor-header>.app-guide-popup-trigger{margin:0 !important;order:-1}
+  .monthly-resource-editor-save-rest{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+  /* Word summary line: tags keep their word whole and wrap as a unit. */
+  :root:root .monthly-resource-editor-core>summary{flex-wrap:wrap;row-gap:2px;padding:8px 10px}
+  :root:root .monthly-resource-editor-core>summary>:is(b,.monthly-resource-editor-word,.monthly-resource-editor-type,.monthly-resource-editor-count,.monthly-resource-editor-register-count){flex:none;white-space:nowrap}
+  :root:root .monthly-resource-editor-type{min-width:max-content}
+  :root:root .monthly-resource-editor-meaning{flex:1 1 6em}
+
+  /* Pictures: a small thumbnail beside its note, never cropped. */
+  :root:root:root .monthly-resource-editor-illustration{grid-template-columns:132px minmax(0,1fr) !important;align-items:start;gap:10px}
+  :root:root:root .monthly-resource-editor-illustration .monthly-illustration-tile{max-width:132px !important;width:132px;padding:6px}
+  :root:root:root .monthly-resource-editor-illustration .monthly-illustration-frame{aspect-ratio:1;width:100%;height:auto !important}
+  :root:root:root .monthly-resource-editor-illustration .monthly-illustration-frame img{object-fit:contain !important;width:100% !important;height:100% !important}
+  :root:root:root .monthly-resource-editor-illustration .monthly-illustration-actions{gap:4px}
+  :root:root:root .monthly-resource-editor-illustration .monthly-illustration-actions>:is(button,.btn,label){width:30px !important;min-width:30px !important;max-width:30px !important;height:30px !important;min-height:30px !important}
+  :root:root:root .monthly-resource-editor-illustration>p{font-size:12.5px}
+}
+@media(max-width:480px){:root:root:root:root .monthly-resource-editor-header h2{letter-spacing:-.005em}:root:root:root:root .monthly-resource-editor-actions>.btn{padding-inline:9px}}
+@media(max-width:600px){:root:root:root:root:root:root .monthly-agenda-picker > button.btn-sm{width:var(--phone-btn-h,32px) !important;min-width:var(--phone-btn-h,32px) !important;height:var(--phone-btn-h,32px) !important;min-height:var(--phone-btn-h,32px) !important;padding:0 !important;display:inline-grid;place-items:center}}
+@media(max-width:1024px){/* Hủy = the popup close: the same × square, at the right end of the header. */:root:root:root:root .monthly-resource-editor-actions>.monthly-resource-editor-cancel{order:2;width:var(--popup-btn,34px) !important;min-width:var(--popup-btn,34px) !important;max-width:var(--popup-btn,34px) !important;padding:0 !important;display:inline-grid;place-items:center;border-radius:10px}:root:root:root:root .monthly-resource-editor-header h2{font-size:15px !important}}
+@media(max-width:1024px){:root:root:root:root:root .monthly-resource-editor-actions>:is(.btn,button){height:var(--popup-btn,34px) !important;min-height:var(--popup-btn,34px) !important;max-height:var(--popup-btn,34px)}}
+@media(max-width:480px){:root:root:root:root:root .monthly-resource-editor-header h2{font-size:var(--type-title,16px) !important}}
+/* Sửa tay: header = eyebrow + title + ×; [Hủy] [Lưu bản nháp] in a sticky footer at the right (owner 18/11). */
+.monthly-resource-editor>.monthly-resource-editor-footer{position:sticky;bottom:-20px;z-index:2;display:flex;flex-wrap:nowrap;justify-content:flex-end;align-items:center;gap:8px;margin:16px -20px -20px;padding:12px 20px;border-top:1px solid var(--line);background:var(--surface)}
+.monthly-resource-editor-footer>.btn{white-space:nowrap}
+@media(max-width:1024px){
+  :root:root:root:root:root .monthly-resource-editor>.monthly-resource-editor-header{padding:10px var(--popup-pad,20px) !important}
+  :root:root:root:root:root .monthly-resource-editor>.monthly-resource-editor-footer{bottom:calc(-1 * var(--popup-pad,20px));margin:var(--popup-gap,12px) calc(-1 * var(--popup-pad,20px)) calc(-1 * var(--popup-pad,20px)) !important;padding:10px var(--popup-pad,20px) !important}
+  :root:root:root:root:root .monthly-resource-editor-footer>.btn{height:var(--popup-btn,34px) !important;min-height:var(--popup-btn,34px) !important;max-height:none;width:auto !important;max-width:none !important;padding-inline:12px !important}
+}
+
+/* Sửa tay word rows: inputs and selects share one height, text centred. */
+:root:root:root:root .monthly-resource-editor :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select) {
+  box-sizing: border-box;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding-block: 0 !important;
+  line-height: 1.35;
+  align-items: center;
+}
+:root:root:root:root .monthly-resource-editor textarea.line-field { box-sizing: border-box; min-height: 34px !important; padding-block: 7px !important; line-height: 1.35; }

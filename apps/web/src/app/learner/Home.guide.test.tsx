@@ -56,7 +56,17 @@ const fixtures: Record<string, LearnerHomeView> = {
   preparation: view({ month: null, monthlyPreparation: true, lessons: [], nextLesson: null }),
   onboardingProfile: view({ onboardingRequired: true, learner: { displayName: "Học viên mới", cefr: null } }),
   onboardingTest: view({ learner: { displayName: "Học viên mới", cefr: null } }),
-  onboardingApproval: view({ learner: { displayName: "Học viên mới", cefr: null }, approvalPending: true })
+  onboardingApproval: view({ learner: { displayName: "Học viên mới", cefr: null }, approvalPending: true }),
+  onboardingTestDraft: view({ learner: { displayName: "Học viên mới", cefr: null }, placementDraft: true }),
+  today: view({ nextLesson: { ...lessons[1]!, lessonDate: "2026-11-05" } }),
+  allDone: view({ nextLesson: null }),
+  reviewGate: view({ nextLesson: { ...lessons[2]!, lock: { reason: "review", reviewWeekNumber: 1, blocker: { id: "review-1", dayNumber: 3 } } } } as unknown as Partial<LearnerHomeView>),
+  trial: view({ monthlyUncounted: { countsFrom: "2026-11-17" }, monthlyEligibility: undefined, monthlyExam: null } as unknown as Partial<LearnerHomeView>),
+  trialAllDone: view({ monthlyUncounted: { countsFrom: "2026-11-17" }, monthlyEligibility: undefined, monthlyExam: null, nextLesson: null } as unknown as Partial<LearnerHomeView>),
+  startDate: view({ monthlyStartDate: "2026-11-24" } as Partial<LearnerHomeView>),
+  placementRetake: view({ placementRetake: "granted" } as Partial<LearnerHomeView>),
+  passCourse: view({ learner: { displayName: "Học viên C1", cefr: "C1" }, passCourse: { status: "available" } } as unknown as Partial<LearnerHomeView>),
+  levelUpReady: view({ levelReadiness: { targetLevel: "B1", windowDays: 30, eligible: true, examAvailable: true, criteria: [], monthlyPolicy } as LearnerHomeView["levelReadiness"] })
 };
 
 function resolvedTitles(home: LearnerHomeView) {
@@ -69,13 +79,24 @@ function resolvedTitles(home: LearnerHomeView) {
 describe("learner home guide", () => {
   it("walks the active month home with one step per card", () => {
     expect(resolvedTitles(fixtures.activeMonth!)).toEqual([
-      "Bài học hôm nay",
+      "Bài học bù",
       "Tiến độ học tập",
       "Lịch học tháng",
       "Season và bài tháng",
       "Đường lên mức",
+      "Bài thi tháng",
       "Hồ sơ và đầu vào"
     ]);
+    expect(resolvedTitles(fixtures.today!)[0]).toBe("Bài học hôm nay");
+  });
+
+  it("gives the trial month its own steps, without exam or attendance claims", () => {
+    expect(resolvedTitles(fixtures.trial!)).toEqual([
+      "Bài học thử", "Tiến độ học thử", "Lịch học thử", "Season và bài tháng", "Đường lên mức", "Hồ sơ và đầu vào"
+    ]);
+    const texts = findSteps(guideDefinitions("learner", "/home")!, (render(<LearnerHome view={fixtures.trial!} actions={actions} />), document)).map((step) => step.text).join(" ");
+    expect(texts).not.toMatch(/Điểm danh\*\* quyết định|ngày thi và điều kiện|Bài thi tháng\*\* để xem điều kiện/);
+    expect(texts).toMatch(/không có bài thi/);
   });
 
   /** Title and target of each step; a target is the onboarding card number, the block heading or the support card. */

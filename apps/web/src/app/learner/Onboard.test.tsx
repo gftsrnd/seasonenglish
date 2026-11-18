@@ -45,7 +45,7 @@ describe("app onboard affordances", () => {
     await user.click(screen.getByRole("button", { name: /lưu và làm test đầu vào/i }));
 
     expect(screen.getByRole("alert")).toHaveTextContent(/chọn ít nhất một mục đích dùng tiếng anh/i);
-    expect(screen.getByRole("group", { name: "Bạn dùng tiếng Anh ở công ty cho việc gì? *" })).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("group", { name: "Ở công ty, bạn dùng tiếng Anh để làm gì? *" })).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByRole("checkbox", { name: /nói chuyện với khách hàng/i })).toHaveFocus();
   });
 
@@ -58,7 +58,7 @@ describe("app onboard affordances", () => {
     await user.tab();
 
     expect(screen.getByRole("alert")).toHaveTextContent(/chọn ít nhất một mục đích dùng tiếng anh/i);
-    expect(screen.getByRole("group", { name: "Bạn dùng tiếng Anh ở công ty cho việc gì? *" })).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("group", { name: "Ở công ty, bạn dùng tiếng Anh để làm gì? *" })).toHaveAttribute("aria-invalid", "true");
   });
 
   it("shows the email format error while the learner is typing", async () => {
@@ -124,8 +124,8 @@ describe("app onboard affordances", () => {
   it("exposes profile choices as named groups and locks navigation while saving", () => {
     render(<LearnerOnboard view={{ profile: {}, mode: "new", saving: true }} actions={actions} />);
 
-    expect(screen.getByRole("group", { name: "Bạn dùng tiếng Anh ở công ty cho việc gì? *" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Mức độ dùng tiếng Anh trong môi trường làm việc? *" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Ở công ty, bạn dùng tiếng Anh để làm gì? *" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Bạn dùng tiếng Anh ở công ty thường xuyên không? *" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "← Quay lại" })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: "← Quay lại" }).every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
     expect(screen.getByRole("button", { name: /lưu nháp/i })).toBeDisabled();
@@ -137,7 +137,7 @@ describe("app onboard affordances", () => {
     render(<LearnerOnboard view={{ profile: { goals: ["email"], environmentUse: "weekly" }, mode: "new" }} actions={actions} />);
 
     expect(screen.getByRole("checkbox", { name: /viết email/i })).toHaveClass("profile-choice-input");
-    expect(screen.getByRole("group", { name: "Mức độ dùng tiếng Anh trong môi trường làm việc? *" }).querySelector("input[type='radio'][value='weekly']")).toHaveClass("profile-choice-input");
+    expect(screen.getByRole("group", { name: "Bạn dùng tiếng Anh ở công ty thường xuyên không? *" }).querySelector("input[type='radio'][value='weekly']")).toHaveClass("profile-choice-input");
   });
 
   it("keeps onboarding guidance concise without dropping the key reasons", () => {

@@ -26,11 +26,10 @@
   background: var(--primary-soft);
 }
 
+/* Size comes from the shared popup header CSS (the same square as ×); only layout and look are set here. */
 .app-guide-popup-trigger {
   display: grid;
   place-items: center;
-  inline-size: 44px;
-  min-block-size: 44px;
   margin-inline-start: auto;
   padding: 0;
   border: 1px solid var(--line);
@@ -208,7 +207,9 @@ body:has(.app-guide-panel) .app-scroll-jump {
     padding: 8px 12px 10px;
     gap: 2px;
   }
-  .app-guide-panel[data-compact]:not([data-popup]) {
+  .app-guide-panel[data-compact]:not([data-popup]),
+  body:has(nav.bottomnav) .app-guide-panel[data-compact][data-popup] {
+    /* Popup guides also stay above the bottom nav (phone rule), even though the popup dims it. */
     inset-block-end: calc(72px + env(safe-area-inset-bottom, 0px));
   }
   .app-guide-panel .app-guide-header { min-block-size: 32px; }
@@ -226,4 +227,11 @@ body:has(.app-guide-panel) .app-scroll-jump {
   .app-guide-panel .app-guide-copy { overflow: auto; min-block-size: 0; }
   .app-guide-panel .app-guide-actions { flex-wrap: nowrap; margin-block-start: 8px; }
   .app-guide-panel .app-guide-actions button { min-block-size: 32px !important; block-size: 32px; padding-inline: 12px; white-space: nowrap; }
+}
+
+/* The highlighted area sits where the box normally is (a popup's fixed footer): the box moves to the top instead. */
+.app-guide-panel[data-place="top"],
+body:has(nav.bottomnav) .app-guide-panel[data-compact][data-place="top"] {
+  inset-block-start: calc(64px + env(safe-area-inset-top, 0px));
+  inset-block-end: auto;
 }

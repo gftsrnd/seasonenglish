@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { ModalCloseButton } from "../shared/CompactUi.js";
 import type { CefrLevel, MonthFrameworkView, MonthlyResourceEditInput, MonthlyResourceEditIssue } from "@e4s/contracts";
 import type { MonthlyIllustrationsView, MonthlyResourceCheckpointPrefillView } from "../../api/operator.js";
 import { IllustrationTile, illustrationsEditable } from "./MonthlyIllustrationPanel.js";
@@ -171,10 +172,7 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
     <section className="monthly-resource-editor card" role="dialog" aria-modal="true" aria-label={`Sửa tay tài nguyên ${cefr}`}>
       <header className="monthly-resource-editor-header">
         <div><span className="eyebrow">Bản nháp · {cefr}</span><h2>Sửa tay tài nguyên tháng</h2><p className="small muted">{draft.coreTerms.length} từ cốt lõi (cố định) · mỗi từ 3–9 từ mở rộng · 2 chủ điểm ngữ pháp · 4 mục tiêu phát âm.</p></div>
-        <div className="monthly-resource-editor-actions">
-          <button type="button" className="btn" disabled={saving} onClick={onClose}>Hủy</button>
-          <button type="button" className="btn btn-primary" disabled={disabled} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</button>
-        </div>
+        <ModalCloseButton iconOnly label="Đóng" disabled={saving} onClick={onClose} />
       </header>
       {prefill && <p className="monthly-resource-editor-prefill" role="status">Đã nạp phần AI đã sinh: {[
         [prefill.categories.coreTerms, "từ cốt lõi"], [prefill.categories.expandedTerms, "từ mở rộng"], [prefill.categories.grammarTopics, "chủ điểm ngữ pháp"], [prefill.categories.pronunciationTargets, "mục tiêu phát âm"]
@@ -214,11 +212,11 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
             {open && <div className="monthly-resource-editor-supports" role="group" aria-label={`Từ mở rộng của ${core.word || `từ ${index + 1}`}`}>
               {supports.map((support, supportIndex) => <div key={support.id} className="monthly-resource-editor-support">
                 <div className="monthly-resource-editor-row support">
-                  <input aria-label={`Từ mở rộng ${supportIndex + 1} của ${core.word}`} aria-invalid={invalid(support.id, "word")} placeholder="Từ" value={support.word} disabled={disabled} onChange={(event) => updateSupport(support.id, { word: event.target.value })} />
-                  <LineField aria-label={`Nghĩa từ mở rộng ${supportIndex + 1} của ${core.word}`} aria-invalid={invalid(support.id, "meaning")} placeholder="Nghĩa" value={support.meaning} disabled={disabled} onChange={(event) => updateSupport(support.id, { meaning: event.target.value })} />
-                  <input aria-label={`Từ loại từ mở rộng ${supportIndex + 1} của ${core.word}`} aria-invalid={invalid(support.id, "type")} placeholder="Từ loại" value={support.type} disabled={disabled} onChange={(event) => updateSupport(support.id, { type: event.target.value })} />
-                  <select aria-label={`Quan hệ từ mở rộng ${supportIndex + 1} của ${core.word}`} value={support.relation} disabled={disabled} onChange={(event) => updateSupport(support.id, { relation: event.target.value as Relation })}>{RELATIONS.map((relation) => <option key={relation.value} value={relation.value}>{relation.label}</option>)}</select>
-                  <select aria-label={`CEFR từ mở rộng ${supportIndex + 1} của ${core.word}`} aria-invalid={invalid(support.id, "cefr")} value={support.cefr ?? ""} disabled={disabled} onChange={(event) => updateSupport(support.id, { cefr: (event.target.value || undefined) as CefrLevel | undefined })}><option value="">CEFR —</option>{LEVELS.map((level) => <option key={level} value={level}>{level}</option>)}</select>
+                  <label className="monthly-resource-editor-field"><span className="monthly-resource-editor-field-label" aria-hidden="true">Từ</span><input aria-label={`Từ mở rộng ${supportIndex + 1} của ${core.word}`} aria-invalid={invalid(support.id, "word")} placeholder="Từ" value={support.word} disabled={disabled} onChange={(event) => updateSupport(support.id, { word: event.target.value })} /></label>
+                  <label className="monthly-resource-editor-field"><span className="monthly-resource-editor-field-label" aria-hidden="true">Nghĩa</span><LineField aria-label={`Nghĩa từ mở rộng ${supportIndex + 1} của ${core.word}`} aria-invalid={invalid(support.id, "meaning")} placeholder="Nghĩa" value={support.meaning} disabled={disabled} onChange={(event) => updateSupport(support.id, { meaning: event.target.value })} /></label>
+                  <label className="monthly-resource-editor-field"><span className="monthly-resource-editor-field-label" aria-hidden="true">Từ loại</span><input aria-label={`Từ loại từ mở rộng ${supportIndex + 1} của ${core.word}`} aria-invalid={invalid(support.id, "type")} placeholder="Từ loại" value={support.type} disabled={disabled} onChange={(event) => updateSupport(support.id, { type: event.target.value })} /></label>
+                  <label className="monthly-resource-editor-field"><span className="monthly-resource-editor-field-label" aria-hidden="true">Quan hệ</span><select aria-label={`Quan hệ từ mở rộng ${supportIndex + 1} của ${core.word}`} value={support.relation} disabled={disabled} onChange={(event) => updateSupport(support.id, { relation: event.target.value as Relation })}>{RELATIONS.map((relation) => <option key={relation.value} value={relation.value}>{relation.label}</option>)}</select></label>
+                  <label className="monthly-resource-editor-field"><span className="monthly-resource-editor-field-label" aria-hidden="true">Mức</span><select aria-label={`CEFR từ mở rộng ${supportIndex + 1} của ${core.word}`} aria-invalid={invalid(support.id, "cefr")} value={support.cefr ?? ""} disabled={disabled} onChange={(event) => updateSupport(support.id, { cefr: (event.target.value || undefined) as CefrLevel | undefined })}><option value="">CEFR —</option>{LEVELS.map((level) => <option key={level} value={level}>{level}</option>)}</select></label>
                   <button type="button" className="monthly-resource-editor-icon" aria-label={`Xóa từ mở rộng ${support.word || supportIndex + 1}`} title="Xóa" disabled={disabled} onClick={() => removeSupport(support.id)}><Trash2 aria-hidden="true" /></button>
                 </div>
                 {rowErrors(support.id)}
@@ -261,8 +259,8 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
           <div className="monthly-resource-editor-examples">
             {sound.examples.map((example, exampleIndex) => <div key={example.id}>
               <div className="monthly-resource-editor-row example">
-                <input aria-label={`Từ ví dụ ${exampleIndex + 1} của mục tiêu ${soundIndex + 1}`} aria-invalid={invalid(example.id, "word")} placeholder="Từ" value={example.word} disabled={disabled} onChange={(event) => updateExample(sound.id, example.id, { word: event.target.value })} />
-                <input aria-label={`IPA từ ví dụ ${exampleIndex + 1} của mục tiêu ${soundIndex + 1}`} aria-invalid={invalid(example.id, "ipa")} placeholder="IPA" value={example.ipa} disabled={disabled} onChange={(event) => updateExample(sound.id, example.id, { ipa: event.target.value })} />
+                <label className="monthly-resource-editor-field"><span className="monthly-resource-editor-field-label" aria-hidden="true">Từ ví dụ</span><input aria-label={`Từ ví dụ ${exampleIndex + 1} của mục tiêu ${soundIndex + 1}`} aria-invalid={invalid(example.id, "word")} placeholder="Từ" value={example.word} disabled={disabled} onChange={(event) => updateExample(sound.id, example.id, { word: event.target.value })} /></label>
+                <label className="monthly-resource-editor-field"><span className="monthly-resource-editor-field-label" aria-hidden="true">IPA</span><input aria-label={`IPA từ ví dụ ${exampleIndex + 1} của mục tiêu ${soundIndex + 1}`} aria-invalid={invalid(example.id, "ipa")} placeholder="IPA" value={example.ipa} disabled={disabled} onChange={(event) => updateExample(sound.id, example.id, { ipa: event.target.value })} /></label>
                 <button type="button" className="monthly-resource-editor-icon" aria-label={`Xóa từ ví dụ ${example.word || exampleIndex + 1}`} title="Xóa" disabled={disabled} onClick={() => removeExample(sound.id, example.id)}><Trash2 aria-hidden="true" /></button>
               </div>
               {rowErrors(example.id)}
@@ -271,6 +269,11 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
           <button type="button" className="btn btn-sm" disabled={disabled} onClick={() => addExample(sound.id)}><Plus aria-hidden="true" /> Thêm từ ví dụ</button>
         </div>)}
       </details>
+      {/* Edit actions: sticky footer at the right, the header holds only the title and × (owner 18/11). */}
+      <footer className="monthly-resource-editor-actions monthly-resource-editor-footer">
+        <button type="button" className="btn" disabled={saving} onClick={onClose}>Hủy</button>
+        <button type="button" className="btn btn-primary" disabled={disabled} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</button>
+      </footer>
     </section>
   </div>;
 }

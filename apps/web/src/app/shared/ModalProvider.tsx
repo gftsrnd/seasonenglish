@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 
 export interface ConfirmOptions {
@@ -30,6 +31,18 @@ interface ModalApi {
 type ModalState =
   | ({ id: number; kind: "confirm"; phase: "confirm" | "countdown"; remaining: number; resolve: (value: boolean) => void } & ConfirmOptions)
   | ({ id: number; kind: "prompt"; resolve: (value: string | null) => void } & PromptOptions);
+
+/**
+ * Popups move focus into themselves on open (close button or first field).
+ * Chrome then paints a focus ring although the user only tapped or clicked, so
+ * track the last input kind: rings inside popups show only after a key press
+ * (keyboard users keep them), never right after opening by pointer.
+ */
+if (typeof document !== "undefined" && !document.documentElement.dataset.input) {
+  document.documentElement.dataset.input = "pointer";
+  document.addEventListener("keydown", (event) => { if (!event.metaKey && !event.ctrlKey && !event.altKey) document.documentElement.dataset.input = "keyboard"; }, true);
+  document.addEventListener("pointerdown", () => { document.documentElement.dataset.input = "pointer"; }, true);
+}
 
 const ModalContext = createContext<ModalApi | undefined>(undefined);
 
@@ -262,7 +275,7 @@ function ModalRoot({ children }: { children: ReactNode }) {
       <form ref={dialogRef} className="dialog" role="dialog" aria-modal="true" aria-labelledby={dialogTitleId} aria-describedby={hasDescription ? dialogDescriptionId : undefined} aria-busy={countdown ? "true" : undefined} tabIndex={-1} onSubmit={submit}>
         <div className="app-modal-heading">
           <h3 id={dialogTitleId}>{dialogLabel}</h3>
-          <button className="app-modal-close" data-action="modal-close" type="button" aria-label="Đóng hộp thoại" title="Đóng" onClick={cancel}>×</button>
+          <button className="app-modal-close modal-close modal-close--icon" data-action="modal-close" type="button" aria-label="Đóng hộp thoại" title="Đóng" onClick={cancel}><X size={16} strokeWidth={2.2} aria-hidden="true" /></button>
         </div>
         {countdown ? <>
           <p id={dialogDescriptionId} className="small">Thao tác này không hoàn tác được. Bấm <b>Dừng lại</b> nếu bạn đổi ý.</p>

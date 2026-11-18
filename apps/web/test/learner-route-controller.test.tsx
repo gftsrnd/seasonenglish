@@ -107,10 +107,10 @@ describe("learner route integration controller", () => {
     api.getHome.mockResolvedValue(homeView);
     render(<MemoryRouter initialEntries={["/onboard"]}><LearnerRouteController /></MemoryRouter>);
     await screen.findByRole("button", { name: "Lưu hồ sơ" });
-    await user.click(within(screen.getByRole("group", { name: "Bạn dùng tiếng Anh ở công ty cho việc gì? *" })).getByRole("checkbox", { name: "Nói chuyện với khách hàng / đối tác" }));
-    await user.click(within(screen.getByRole("group", { name: "Mức độ dùng tiếng Anh trong môi trường làm việc? *" })).getByRole("radio", { name: "Hằng ngày" }));
-    await user.click(within(screen.getByRole("group", { name: "Mức độ sử dụng tiếng Anh trong gia đình bạn? *" })).getByRole("radio", { name: "Hằng ngày (người thân nói tiếng Anh)" }));
-    await user.click(within(screen.getByRole("group", { name: "Thói quen dùng tiếng Anh ngoài công việc? *" })).getByRole("checkbox", { name: "Xem phim / video tiếng Anh" }));
+    await user.click(within(screen.getByRole("group", { name: "Ở công ty, bạn dùng tiếng Anh để làm gì? *" })).getByRole("checkbox", { name: "Nói chuyện với khách hàng, đối tác" }));
+    await user.click(within(screen.getByRole("group", { name: "Bạn dùng tiếng Anh ở công ty thường xuyên không? *" })).getByRole("radio", { name: "Hằng ngày" }));
+    await user.click(within(screen.getByRole("group", { name: "Ở nhà bạn có dùng tiếng Anh không? *" })).getByRole("radio", { name: "Hằng ngày, có người thân nói tiếng Anh" }));
+    await user.click(within(screen.getByRole("group", { name: "Ngoài công việc, bạn dùng tiếng Anh thế nào? *" })).getByRole("checkbox", { name: "Xem phim, video tiếng Anh" }));
     await user.click(within(screen.getByRole("group", { name: "Bạn học hiệu quả nhất khi… *" })).getByRole("checkbox", { name: "Đọc & ghi chú" }));
     await user.click(await screen.findByRole("button", { name: "Lưu hồ sơ" }));
     await waitFor(() => expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ fullName: "Lan", email: "lan@example.com" }), 7));

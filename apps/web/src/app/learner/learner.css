@@ -2129,3 +2129,53 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
 /* Ring/tile numbers never wrap or spill: one line, tabular digits, slightly tighter for 5–6 characters (13/11). */
 .ring > b,.stat-figure > b{white-space:nowrap;font-variant-numeric:tabular-nums;letter-spacing:-.02em;overflow:hidden;text-overflow:clip;max-width:100%}
 .ring > b[data-long]{font-size:.78rem}
+
+/* ───────── 18/11 learner feedback (agent B) ───────── */
+/* #12 Learning support: one tile per kind of request above the history. */
+.learner-root .learner-support-shortcuts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 0 0 12px; }
+.learner-root .learner-support-shortcut { display: grid; grid-template-columns: 40px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 10px; row-gap: 6px; align-items: start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface, #fff); color: var(--text); text-decoration: none; box-shadow: 0 1px 2px rgb(0 0 0 / .04); }
+.learner-root .learner-support-shortcut:hover { border-color: var(--primary-line, var(--primary)); }
+.learner-root .learner-support-shortcut-icon { grid-row: 1 / span 2; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--primary-soft); color: var(--primary-dark, var(--primary)); }
+.learner-root .learner-support-shortcut[data-support-kind="appeals"] .learner-support-shortcut-icon { background: #f8ece3; color: #8a4a1f; }
+.learner-root .learner-support-shortcut[data-support-kind="feedback"] .learner-support-shortcut-icon { background: #f8f1d9; color: #7a5a10; }
+.learner-root .learner-support-shortcut-body { display: grid; gap: 2px; min-width: 0; }
+.learner-root .learner-support-shortcut-body > b { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.learner-root .learner-support-shortcut-body .badge { margin: 0; font-size: 11px; }
+.learner-root .learner-support-shortcut-action { grid-column: 2; color: var(--primary-dark, var(--primary)); font-weight: 700; }
+.learner-root .learner-support-empty { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+/* #16 Exam rules: group colours on the titles too (desktop boxes) and on the short phone lines. */
+.learner-root .test-page .assessment-rule--required .assessment-rule-title { color: #24622f; }
+.learner-root .test-page .assessment-rule--restricted .assessment-rule-title { color: #9a3412; }
+.learner-root .test-page .assessment-rule--notice .assessment-rule-title { color: #7a5a10; }
+/* #11 Edit profile: the chosen avatar character as the mascot. */
+.learner-root .learner-mascot--avatar { display: grid; place-items: center; border-radius: 50%; background: var(--primary-soft); overflow: hidden; }
+.learner-root .learner-mascot--avatar img { width: 100%; height: 100%; object-fit: contain; }
+/* Exam "Rời bài thi?" guard dialog: icon and title on one line, like the violation dialog. */
+.learner-root .assessment-leave-dialog h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+.learner-root .assessment-leave-dialog h2 svg { flex: none; color: var(--warn, #b45309); }
+/* Trial month progress: two metrics share the row. */
+.learner-root .home-page .monthly-home-metrics[data-trial] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+/* "Đã hoàn thành khóa E4S" card: same title and button size as the other profile cards (Hỗ trợ học tập, Hồ sơ cá nhân). */
+.learner-root .profile-page .profile-completion-heading h2 { margin: 0; font-size: 1.05rem; }
+.learner-root .profile-page .profile-completion-heading p { margin: 2px 0 0; }
+/* #16 (owner 18/11, second pass): the phone prep rules are a plain list on the card background; each line opens with
+   its group word in the group colour (Bắt buộc green, Không được phép red, Lưu ý amber). No boxes, no side borders. */
+.learner-root .test-page .assessment-rules-short { list-style: none !important; padding: 0 !important; margin: 4px 0 0 !important; display: grid; gap: 4px !important; }
+.learner-root .test-page .assessment-rule-line { display: block; padding: 0; border: 0; background: none; line-height: 1.45; }
+.learner-root .test-page .assessment-rule-tag { margin-right: 6px; font-weight: 700; }
+.learner-root .test-page .assessment-rule-line--required .assessment-rule-tag { color: #24622f; }
+.learner-root .test-page .assessment-rule-line--restricted .assessment-rule-tag { color: #b42318; }
+.learner-root .test-page .assessment-rule-line--notice .assessment-rule-tag { color: #8a5a00; }
+/* Profile form actions: 12px under the last card (form gap 20px − 8px), not floating below it. */
+.learner-root .profile-form > .onboard-actions { margin-top: -8px !important; }
+/* Rules popup (prep): ≤80% high, scrolls inside. */
+.learner-root .assessment-rules-dialog { max-height: 80vh; overflow-y: auto; }
+.learner-root .assessment-rules-dialog .assessment-rules-full { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.learner-root .assessment-rules-dialog .assessment-rule-line { display: block; line-height: 1.45; }
+.learner-root .assessment-rules-dialog .assessment-rule-tag { margin-right: 6px; font-weight: 700; }
+.learner-root .assessment-rules-dialog .assessment-rule-line--required .assessment-rule-tag { color: #24622f; }
+.learner-root .assessment-rules-dialog .assessment-rule-line--restricted .assessment-rule-tag { color: #b42318; }
+.learner-root .assessment-rules-dialog .assessment-rule-line--notice .assessment-rule-tag { color: #8a5a00; }
+/* Exit-test result popup (same layout as the placement one): at most 80% high, scrolls inside. */
+.learner-root .operator-detail-modal > .dialog.course-result-dialog { max-height: 80vh; overflow-y: auto; }
+.learner-root .profile-page .profile-completion-heading > div:first-child { flex: 1 1 auto; min-width: 0; }

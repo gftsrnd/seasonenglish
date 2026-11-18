@@ -480,24 +480,8 @@
   }
   .action-icon-only { display: inline-grid; place-items: center; line-height: 0; }
   .action-icon-text { display: inline-flex; align-items: center; gap: 5px; }
-  .info-tip { position: relative; display: inline; white-space: nowrap; margin-inline-start: 4px; }
-  :root:root:root .info-tip > .info-tip-button {
-    display: inline-grid;
-    flex: none;
-    vertical-align: middle;
-    margin-top: -3px;
-    place-items: center;
-    width: 26px;
-    min-width: 26px !important;
-    height: 26px;
-    min-height: 26px !important;
-    padding: 0 !important;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    box-shadow: none;
-    color: var(--muted);
-  }
+  /* ⓘ trigger: sized and placed once, in shared/info-tip.css. */
+  .info-tip { position: relative; }
   .info-tip-popover {
     position: absolute;
     z-index: 40;
@@ -578,7 +562,7 @@
   :root:root .operator-editor-collapsible + .operator-editor-collapsible { margin-top: 6px; }
   :root:root .operator-lesson-editor :is(.field-hint, .hint, .field > small, label > small) { font-size: 12px; }
   :root:root .operator-editor-sticky-header { padding-block: 8px; }
-  :root:root .operator-editor-sticky-header h3 { font-size: 15.5px !important; }
+  :root:root .operator-editor-sticky-header h3 { font-size: var(--type-title, 16px) !important; }
 }
 @media (max-width: 1024px) {
   /* Tablets too: textareas grow with their text instead of clipping inside a
@@ -638,7 +622,7 @@
     gap: 8px;
     align-items: center;
   }
-  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header) :is(h2, h3) { min-width: 0; margin: 0; font-size: 15px !important; white-space: normal; overflow-wrap: anywhere; }
+  :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header) :is(h2, h3) { min-width: 0; margin: 0; font-size: var(--type-title, 16px) !important; white-space: normal; overflow-wrap: anywhere; }
   :root:root:root :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-of-type, .operator-level-form-dialog-header, .assessment-bank-header) > div:first-child { min-width: 0; flex: 1 1 auto; }
 }
 @media (max-width: 1024px) {
@@ -815,7 +799,7 @@
     border-bottom: 1px solid var(--line);
     background: var(--surface);
   }
-  :root:root:root .inbox-dialog > .inbox-heading h3 { font-size: 15px !important; white-space: normal; overflow-wrap: anywhere; }
+  :root:root:root .inbox-dialog > .inbox-heading h3 { font-size: var(--type-title, var(--tablet-h3, 16px)) !important; white-space: normal; overflow-wrap: anywhere; }
   :root:root:root .inbox-dialog > .inbox-controls { margin: 0 0 8px; }
   :root:root:root .inbox-dialog > .list-pager { flex: none; margin: 0 -16px; padding: 6px 16px; border-top: 1px solid var(--line); background: var(--surface); }
   :root:root:root .inbox-dialog > .inbox-feed { padding-bottom: 10px; }
@@ -853,9 +837,290 @@
 }
 @media (max-width: 1024px) {
   /* "Title ⓘ" on one row: the title ellipsises, the ⓘ never wraps; the tip opens below at full card width. */
-  :root:root :is(h1, h2, h3, h4).info-title { display: flex; align-items: flex-start; gap: 4px; min-width: 0; position: relative; }
-  :root:root .info-title > .info-title-text { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
-  :root:root .info-title > .info-tip { flex: none; display: inline-flex; margin-inline-start: 0; }
-  :root:root:root:root .info-title > .info-tip > .info-tip-button { margin-top: 0; }
+  :root:root :is(h1, h2, h3, h4).info-title { min-width: 0; position: relative; }
   :root:root .info-title .info-tip-popover { inset-block-start: calc(100% + 4px); inset-inline: 0; width: auto; max-width: none; white-space: normal; }
+}
+
+/* ===== Popup system (owner 18/11 #20, #21, #23, #27; issues.md #1-#3) =====
+   Phones and tablets: ONE frame for every popup.
+   - 16px between the popup and the screen edge (backdrop padding);
+   - ONE inner padding: --popup-pad (20px) on all four sides;
+   - ONE vertical rhythm between blocks: --popup-gap (12px);
+   - at most 80% of the screen height, so the backdrop always shows;
+   - sticky header: title left, header actions (guide "?") then the close
+     button, all the same square size, on one row;
+   - footers: buttons on one row, right-aligned. */
+@media (max-width: 1024px) {
+  :root {
+    --popup-pad: 20px;
+    --popup-gap: 12px;
+    --popup-edge: 16px;
+    --popup-btn: 36px;
+    --popup-max-h: min(80dvh, calc(100dvh - 2 * var(--popup-edge)));
+  }
+  :root:root:root:root :is(.modal-backdrop, .inbox-backdrop, .monthly-lesson-preview-backdrop) { padding: var(--popup-edge) !important; }
+  :root:root:root:root .monthly-lesson-preview-backdrop { z-index: 100; display: grid; place-items: center; }
+  /* The popup is never taller than the screen, so the backdrop itself never scrolls (focus or scrollIntoView pushed the header off-screen). */
+  :root:root:root:root :is(.modal-backdrop, .inbox-backdrop, .monthly-lesson-preview-backdrop) { overflow: clip !important; }
+  :root:root:root:root :is(.modal-backdrop, .inbox-backdrop, .monthly-lesson-preview-backdrop) > :is(.dialog, [role="dialog"]),
+  :root:root:root:root .monthly-resource-panel {
+    box-sizing: border-box;
+    max-width: calc(100vw - 2 * var(--popup-edge)) !important;
+    max-height: var(--popup-max-h) !important;
+    padding: var(--popup-pad) !important;
+    overflow-x: hidden;
+  }
+
+  /* Header row: full-bleed, sticky, same inset as the content. */
+  :root:root:root:root :is(.modal-backdrop, .inbox-backdrop, .monthly-lesson-preview-backdrop) > :is(.dialog, [role="dialog"]):has(> :is(header, .row.between:first-child, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading, .inbox-heading, .monthly-resource-editor-header)),
+  :root:root:root:root .monthly-resource-panel:has(> header) { padding-block-start: 0 !important; }
+  :root:root:root:root:root :is(.modal-backdrop, .inbox-backdrop, .monthly-lesson-preview-backdrop) > :is(.dialog, [role="dialog"]) > :is(header:not(.avatar-dialog-preview):not(.monthly-resource-editor-header), .row.between:first-child, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading, .inbox-heading),
+  :root:root:root:root:root .monthly-resource-panel > header {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    box-sizing: border-box;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 calc(-1 * var(--popup-pad)) var(--popup-gap) !important;
+    padding: 10px var(--popup-pad) !important;
+    min-height: calc(var(--popup-btn) + 20px);
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+  /* The close button: the same square everywhere; it is laid out IN the header row (modal-header.css), never absolutely positioned. */
+  :root:root:root:root:root :is(.dialog, [role="dialog"], .monthly-resource-panel) .modal-close.modal-close,
+  :root:root:root:root:root #modal .app-modal-close {
+    box-sizing: border-box;
+    width: var(--popup-btn) !important;
+    min-width: var(--popup-btn) !important;
+    max-width: var(--popup-btn) !important;
+    height: var(--popup-btn) !important;
+    min-height: var(--popup-btn) !important;
+    padding: 0 !important;
+    border-radius: 10px !important;
+  }
+  /* Header actions (guide "?"): the same square as the close button, never squashed. */
+  :root:root:root:root:root :is(.dialog, [role="dialog"], .monthly-resource-panel) :is(header, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading, .monthly-resource-editor-header, .row.between:first-child) .app-guide-popup-trigger {
+    position: static !important;
+    display: grid !important;
+    place-items: center;
+    flex: none !important;
+    box-sizing: border-box;
+    width: var(--popup-btn) !important;
+    min-width: var(--popup-btn) !important;
+    max-width: var(--popup-btn) !important;
+    inline-size: var(--popup-btn) !important;
+    height: var(--popup-btn) !important;
+    min-height: var(--popup-btn) !important;
+    min-block-size: var(--popup-btn) !important;
+    padding: 0 !important;
+    margin: 0 0 0 auto !important;
+    border-radius: 10px !important;
+    order: 90 !important;
+  }
+  :root:root:root:root:root :is(.dialog, [role="dialog"]) > :is(header, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .row.between:first-child) :is(h1, h2, h3) { min-width: 0; margin: 0 !important; }
+
+  /* Bodies that scroll on their own (Xem đề, Xem bài làm, Sửa đề): same inset as the frame. */
+  :root:root:root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) > .operator-level-form-dialog-body {
+    margin: 0 calc(-1 * var(--popup-pad)) calc(-1 * var(--popup-pad)) !important;
+    padding: 0 var(--popup-pad) var(--popup-pad) !important;
+  }
+  /* Pager footers span the popup like the header. */
+  :root:root:root:root:root :is(.modal-backdrop > .dialog, .modal-backdrop > [role="dialog"], .monthly-resource-panel) .list-pager {
+    bottom: calc(-1 * var(--popup-pad));
+    margin: var(--popup-gap) calc(-1 * var(--popup-pad)) calc(-1 * var(--popup-pad)) !important;
+    padding: 6px var(--popup-pad) !important;
+  }
+  :root:root:root:root:root .inbox-backdrop > .dialog.inbox-dialog { padding: 0 var(--popup-pad) !important; }
+  :root:root:root:root:root .inbox-dialog > .list-pager { margin: 0 calc(-1 * var(--popup-pad)) !important; padding: 6px var(--popup-pad) !important; }
+
+  /* One vertical rhythm between top-level blocks. */
+  :root:root:root:root :is(.modal-backdrop, .monthly-lesson-preview-backdrop) > :is(.dialog, [role="dialog"]) > :is(h2, h3, p, .row, .banner, .field, label, ul, ol, section, div):not(:first-child):not(.list-pager):not(.operator-level-form-dialog-body),
+  :root:root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) > .operator-level-form-dialog-body > :not(:first-child) { margin-block-start: var(--popup-gap); }
+  :root:root:root:root :is(.modal-backdrop, .monthly-lesson-preview-backdrop) > :is(.dialog, [role="dialog"]) > :is(h2, h3, p, .row, .banner, .field, label, ul, ol, section, div):not(.list-pager):not(.operator-level-form-dialog-body):not(.operator-level-form-dialog-header):not(:first-child) { margin-block-end: 0; }
+  :root:root:root:root :is(.modal-backdrop, .monthly-lesson-preview-backdrop) > :is(.dialog, [role="dialog"]) > :is(h2, h3):first-child { margin-block-start: 0; }
+
+  /* Footers: buttons on one row at the right (the reward popup stays centred). */
+  :root:root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]):not(.learner-reward-dialog) > :is(.row, footer, .modal-actions, .app-modal-actions, .shell-logout-dialog-actions, .coach-delete-dialog-actions):last-child:has(> :is(button, .btn, a.btn)) {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-end !important;
+    align-items: center;
+    gap: 8px;
+    margin-block-start: var(--popup-gap) !important;
+  }
+  :root:root:root:root .modal-backdrop > :is(.dialog, [role="dialog"]) > :is(.row, footer, .modal-actions, .app-modal-actions):last-child > :is(button, .btn, a.btn) { flex: 0 0 auto; white-space: nowrap; }
+
+  /* Sections opened inside a popup (Soạn tay bài, Sửa đề, Xem đề): an even inner inset. */
+  :root:root:root:root:root .operator-modal-scope .operator-editor-collapsible > .operator-editor-section,
+  :root:root:root:root:root [role="dialog"] .operator-editor-collapsible[open] > :not(summary) { margin-inline: 0 !important; padding: 12px !important; }
+  :root:root:root:root:root [role="dialog"] .operator-editor-collapsible[open] { padding-bottom: 0 !important; }
+  :root:root:root:root:root [role="dialog"] .assessment-definition-preview-section-body { padding: 12px !important; }
+
+  /* One-line fields (LineField) start at one line and grow with their text. */
+  :root:root:root:root textarea.line-field { min-height: var(--phone-field-h, 36px) !important; field-sizing: content; resize: none; }
+}
+@media (max-width: 480px) {
+  :root { --popup-btn: 34px; }
+  :root:root:root:root:root :is(.modal-backdrop, .inbox-backdrop, .monthly-lesson-preview-backdrop) > :is(.dialog, [role="dialog"]) > :is(header, .row.between:first-child, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading, .inbox-heading) :is(h2, h3) { font-size: var(--type-title, 16px) !important; line-height: 1.3 !important; }
+}
+@media (max-width: 600px) {
+  /* Duyệt mức (operator + manager) and Tiến độ nhóm: each learner keeps its own card
+     (owner 18/11: rows without cards are hard to read), only the doubled padding of a
+     card inside a card goes: 12px section, 10px learner card, 8px between cards. */
+  :root:root:root:root .app-operator > section.section:has(:is(.operator-pending-list, .operator-approved-list, .operator-bounded-list)),
+  :root:root:root:root .manager-progress-card { padding: 12px !important; }
+  :root:root:root:root :is(.operator-pending-list > .card.operator-pending-review, .operator-approved-list > .card.operator-approved-record, .operator-bounded-list > .item),
+  :root:root:root:root .manager-progress-card .manager-progress-learner-card { margin: 0 !important; padding: 10px !important; }
+  :root:root:root:root :is(.operator-pending-list, .operator-approved-list, .operator-bounded-list) { gap: 8px !important; row-gap: 8px !important; }
+}
+@media (max-width: 600px) {
+  /* Xem đề / Sửa đề tables (owner 18/11 #28): each row becomes a small block,
+     every cell with its column name, so fields keep the full popup width
+     instead of a squeezed column of a few letters. */
+  :root:root:root:root table.stack-table { display: block !important; width: 100%; min-width: 0; overflow: visible !important; border: 0; }
+  :root:root:root:root table.stack-table > thead { display: none; }
+  :root:root:root:root table.stack-table > tbody { display: grid; gap: 8px; }
+  :root:root:root:root table.stack-table > tbody > tr { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  :root:root:root:root table.stack-table > tbody > tr > td { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; min-width: 0 !important; max-width: none !important; padding: 0; border: 0; overflow-wrap: anywhere; }
+  :root:root:root:root table.stack-table > tbody > tr > td[data-label]::before { content: attr(data-label); flex: 0 0 6.5em; display: block; color: var(--muted); font-size: 12px; font-weight: 600; line-height: 1.3; }
+  :root:root:root:root table.stack-table > tbody > tr > td > :is(textarea, input, .line-field) { flex: 1 1 12em; min-width: 0; }
+  :root:root:root:root table.stack-table > tbody > tr > td:empty { display: none; }
+  :root:root:root:root table.stack-table > tbody > tr > td:empty::before { content: none; }
+  :root:root:root:root .table-wrap:has(> table.stack-table) { overflow: visible; border: 0; padding: 0; }
+}
+@media (max-width: 1024px) {
+  /* Selects show ONE line (ellipsis) instead of wrapping over the next field (Sửa đề › ngữ pháp được chấm). */
+  /* Fold titles (Từ vựng / Ngữ pháp / Phát âm được chấm, Gói người chấm): title on its own line, meta below; never a one-word column. */
+  :root:root:root details.monthly-final-fold > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+  :root:root:root details.monthly-final-fold > summary > b { flex: 0 1 auto; min-width: 0; }
+  :root:root:root details.monthly-final-fold > summary > .xs { flex: 1 1 12em; min-width: 0; overflow-wrap: anywhere; }
+  :root:root:root .monthly-final-grammar { padding: 12px; }
+}
+@media (max-width: 600px) {
+  /* Xem đề: one frame per opened part (the part row); what is inside it is
+     plain content with hairline separators, not boxes in boxes (owner 18/11 #21/#22). */
+  :root:root:root:root [role="dialog"] .card.assessment-definition-preview { padding: 0 !important; border: 0; background: transparent; }
+  :root:root:root:root [role="dialog"] .assessment-definition-preview-section-body > .assessment-definition-preview-group { padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; }
+  :root:root:root:root [role="dialog"] .assessment-definition-preview-group + .assessment-definition-preview-group { padding-top: 12px !important; border-top: 1px solid var(--line) !important; border-radius: 0 !important; }
+  :root:root:root:root [role="dialog"] .assessment-definition-preview-speaking-task { padding: 10px 0 0 !important; border: 0 !important; border-top: 1px dashed var(--line) !important; border-radius: 0 !important; background: transparent !important; }
+  :root:root:root:root [role="dialog"] .assessment-definition-preview-speaking-tasks { margin-top: 8px; display: grid; gap: 10px; }
+  :root:root:root:root [role="dialog"] .assessment-definition-preview-prompt-lines { margin: 6px 0 0 18px; }
+  :root:root:root:root [role="dialog"] .assessment-definition-preview-task-rubric { margin-top: 8px; padding: 8px 10px; }
+}
+@media (max-width: 600px) {
+  /* Xem đề / Sửa đề header: kicker on one line, title + status left, "Lưu bản nháp" right of
+     them on the same row, × in the corner (was three stacked rows). */
+  :root:root:root:root:root:root .modal-backdrop > [role="dialog"] > .operator-level-form-dialog-header { display: flex !important; flex-wrap: nowrap !important; align-items: center !important; }
+  :root:root:root:root:root:root .operator-level-form-dialog-header > .operator-level-form-dialog-title { flex: 1 1 0 !important; min-width: 0 !important; }
+  :root:root:root:root:root:root .operator-level-form-dialog-header .operator-level-kicker { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  :root:root:root:root:root:root .operator-level-form-dialog-header .operator-level-form-dialog-title > p { margin: 0; font-size: 12px; }
+  :root:root:root:root:root:root .operator-level-form-dialog-header > .operator-level-form-dialog-actions { flex: none !important; flex-wrap: nowrap !important; align-self: center !important; margin: 0 !important; width: auto !important; }
+  :root:root:root:root:root:root .operator-level-form-dialog-header > .operator-level-form-dialog-actions > .btn-sm:not(.modal-close) { height: var(--popup-btn, 34px); min-height: var(--popup-btn, 34px) !important; padding-inline: 10px; white-space: nowrap; }
+}
+@media (max-width: 1024px) {
+  /* Sticky edit footer spans the popup like the header; buttons the same height, right-aligned. */
+  :root:root:root:root .operator-level-form-dialog-body > .operator-level-form-dialog-footer {
+    bottom: calc(-1 * var(--popup-pad));
+    margin: var(--popup-gap) calc(-1 * var(--popup-pad)) calc(-1 * var(--popup-pad)) !important;
+    padding: 10px var(--popup-pad) !important;
+    background: var(--surface);
+  }
+  :root:root:root:root .operator-level-form-dialog-footer > button { height: var(--popup-btn); min-height: var(--popup-btn) !important; padding-inline: 12px; }
+}
+
+/* ===== Round 3 (owner 18/11) ===== */
+@media (max-width: 600px) {
+  /* Sửa đề tables on phone: one compact mini card per item. */
+  :root:root:root .monthly-final-mini-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  :root:root:root .monthly-final-mini-list > li { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 13.5px; line-height: 1.4; overflow-wrap: anywhere; }
+  :root:root:root .monthly-final-mini-list > li .xs { font-size: 12px; }
+  :root:root:root .monthly-final-mini-field { display: grid; gap: 2px; margin-top: 4px; color: var(--muted); font-size: 12px; font-weight: 600; }
+
+  /* Page titles: one phone scale for every role (learner PageTitle can use the same tokens). */
+  :root {
+    --phone-page-h1: 20px;
+    --phone-page-eyebrow: 12px; /* 11px requested; the phone contract test keeps text ≥ 12px */
+    --phone-page-subtitle: 13px;
+  }
+  :root:root:root:root :is(main, .app-operator, .manager-page, .settings-page) :is(.page-title, .manager-page-title, .operator-page-title) h1,
+  :root:root:root:root main.app-content h1 {
+    font-size: var(--phone-page-h1) !important;
+    line-height: 1.25 !important;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
+  :root:root:root:root main.app-content h1:has(.info-tip, .section-tip) { display: block; -webkit-line-clamp: unset; line-clamp: none; overflow: visible; }
+  :root:root:root:root :is(.page-title, .manager-page-title) :is(.eyebrow, .kicker) { font-size: var(--phone-page-eyebrow) !important; }
+  :root:root:root:root :is(.page-title, .manager-page-title) > :is(p, .page-subtitle), :root:root:root:root .page-title .small { font-size: var(--phone-page-subtitle) !important; }
+}
+@media (max-width: 1024px) {
+  /* Long choices (Sửa đề › thành phần chính/phụ): the select grows to show ALL its text, never cut or overlapping. */
+  :root:root:root:root [role="dialog"] select { height: auto !important; min-height: var(--phone-field-h, 34px); white-space: normal !important; text-overflow: clip !important; overflow: visible !important; line-height: 1.35; padding-block: 6px; }
+
+  /* Header actions (✎, ?, ×): the same bordered square, side by side. */
+  :root:root:root:root:root:root :is(.dialog, [role="dialog"]) > :is(header:not(.avatar-dialog-preview), .row.between:first-child, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading) :is(button, .btn):is(:has(> .action-icon-only), .app-guide-popup-trigger, .modal-close) {
+    box-sizing: border-box;
+    display: inline-grid !important;
+    place-items: center;
+    width: var(--popup-btn, 34px) !important;
+    min-width: var(--popup-btn, 34px) !important;
+    max-width: var(--popup-btn, 34px) !important;
+    height: var(--popup-btn, 34px) !important;
+    min-height: var(--popup-btn, 34px) !important;
+    padding: 0 !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 10px !important;
+    background: var(--surface) !important;
+    color: var(--text) !important;
+    box-shadow: none !important;
+  }
+}
+@media (max-width: 600px) {
+  /* ONE phone type scale (owner 18/11). Tokens first; screens use them through the roles below.
+     h1 20 · section/card title (h2/h3) 16 · sub-title (h4) 15 · body/list/inputs/buttons 14 ·
+     secondary/meta 13 · captions/chips/badges/labels 12 · eyebrow 11 · reading text 15.
+     Only deliberate big numbers (scores, KPI values) may be 22–28px. */
+  :root {
+    --type-h1: 20px; --type-title: 16px; --type-subtitle: 15px; --type-body: 14px;
+    --type-meta: 13px; --type-caption: 12px; --type-eyebrow: 11px; --type-reading: 15px;
+    --phone-h1: var(--type-h1); --phone-h2: var(--type-title); --phone-h3: var(--type-title);
+    --phone-text: var(--type-body); --phone-meta: var(--type-meta);
+    --phone-page-h1: var(--type-h1); --phone-page-eyebrow: var(--type-eyebrow); --phone-page-subtitle: var(--type-meta);
+  }
+  :root:root:root :is(main, .dialog, [role="dialog"]) :is(h2, h3) { font-size: var(--type-title) !important; line-height: 1.3 !important; }
+  :root:root:root :is(main, .dialog, [role="dialog"]) h4 { font-size: var(--type-subtitle) !important; line-height: 1.3 !important; }
+  :root:root:root :is(main, .dialog, [role="dialog"]) :is(h5, h6) { font-size: var(--type-body) !important; }
+  :root:root:root :is(main, .dialog, [role="dialog"], .inbox-dialog) :is(.small, small, .muted.small, .list-pager-status, dd) { font-size: var(--type-meta) !important; }
+  :root:root:root :is(main, .dialog, [role="dialog"], .inbox-dialog) :is(.xs, time, th, dt, label > small, .badge, .chip, .inbox-category, .inbox-count) { font-size: var(--type-caption) !important; }
+  :root:root:root :is(main, .dialog, [role="dialog"]) :is(.eyebrow, [class*="kicker"]) { font-size: var(--type-eyebrow) !important; }
+  :root:root:root :is(main, .dialog, [role="dialog"], .inbox-dialog) :is(p, li, dd):not(.xs):not(.small):not(.badge):not(.chip):not(.eyebrow):not([class*="kicker"]):not([class*="emoji"]):not([class*="figure"]):not([class*="kpi"]):not([class*="score"]):not(.action-icon-label):not(.inbox-category):not(.inbox-count):not(.account-avatar):not(.list-pager-status) {
+    font-size: max(var(--type-meta), min(1em, var(--type-body)));
+  }
+  :root:root:root :is(.dialog, [role="dialog"]) :is(button, .btn) { font-size: var(--type-body); }
+  :root:root #saved { font-size: var(--type-caption); }
+  :root:root:root :is(.lesson-page, .assessment-passage) :is(p, li) { font-size: var(--type-reading); }
+}
+@media (max-width: 600px) {
+  /* Type scale, second pass: roles that screens had sized in rem (0.8–0.9rem → 11.2–12.6px). */
+  :root:root:root:root:root :is(main, .dialog, [role="dialog"]) :is(h2, h3):not([class*="kpi"]):not([class*="score"]) { font-size: var(--type-title) !important; }
+  :root:root:root:root :is(main, .dialog, [role="dialog"]) :is(button, .btn, a.btn):not([role="tab"]):not(.app-scroll-jump):not(.info-tip-button) { font-size: var(--type-body) !important; }
+  :root:root:root:root :is(main, .dialog, [role="dialog"]) :is([role="tab"], .segmented button, button.active, button.selected) { font-size: var(--type-meta) !important; }
+  :root:root:root:root :is(main, .dialog, [role="dialog"]) :is(summary, td) { font-size: var(--type-meta); }
+  :root:root:root:root :is(main, .dialog, [role="dialog"]) :is(summary, td) :is(b, strong, span:not(.badge):not(.xs)) { font-size: inherit; }
+  :root:root:root:root :is(.app-guide-panel) :is(.app-guide-title, .app-guide-count) { font-size: var(--type-caption); }
+  :root:root:root:root nav :is(a, a *) { font-size: var(--type-caption); }
+}
+@media (max-width: 600px) { :root:root:root:root:root :is(main, .dialog, [role="dialog"]) h4 { font-size: var(--type-subtitle) !important; } }
+@media (max-width: 600px) {
+  /* Type scale, third pass: rem-sized captions on Sinh bài, Yêu cầu. */
+  :root:root:root:root :is(.monthly-month-short, .monthly-resource-cards button strong, td.request-kind) { font-size: var(--type-caption) !important; }
 }

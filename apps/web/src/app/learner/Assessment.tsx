@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { Ban, CheckCircle2, Clock3, Headphones, Mic, Sprout, Volume2 } from "lucide-react";
+import { Ban, CheckCircle2, Clock3, Headphones, Info, Mic, Sprout, Volume2 } from "lucide-react";
 import type { AssessmentResponseView, AssessmentSectionCode, AssessmentTaskView, SaveAssessmentResponseInput } from "@e4s/contracts";
 import type { AssessmentView, LearnerCallbacks } from "./contracts.js";
 import { AssessmentAppealForm } from "./AssessmentAppealForm.js";
@@ -9,7 +9,6 @@ import { useExperience } from "../../features/experience/Experience.js";
 import { cancelExclusiveAudio } from "../../features/experience/audio-precedence.js";
 import { ApiError } from "../../api/runtime.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
-import { InfoTitle } from "../shared/CompactUi.js";
 import { formatScore, formatScoreOutOf } from "../shared/format-score.js";
 
 const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing", "speaking"];
@@ -32,6 +31,7 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
   const draftSaveTimersRef = useRef(new Map<string, number>());
   const [starting, setStarting] = useState(false);
   const [startConfirmOpen, setStartConfirmOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [checkingMicrophone, setCheckingMicrophone] = useState(false);
   const [microphoneSamples, setMicrophoneSamples] = useState<number[]>([]);
   const [microphoneCheck, setMicrophoneCheck] = useState<"unknown" | "ready" | "denied">("unknown");
@@ -125,7 +125,7 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
 
   if (view.screenState === "preparation" || !view.attempt) {
     const timed = view.timed !== false;
-    const examNote = definition.kind === "pass-course" ? <Notice><b>Form A cố định · C1.</b> Bài thi 90 phút, 100 điểm và bốn kỹ năng. Người vận hành xét cấp chứng chỉ khi tổng điểm đạt từ <b>85/100</b>. Kết quả thấp hơn sẽ đặt lại trạng thái sẵn sàng C1. Bạn có <b>72 giờ</b> để kháng nghị sau khi có kết quả.</Notice> : definition.kind === "level-up" && targetLevel ? <Notice>Đề ngắn ở mức <b>{targetLevel}</b>. Đạt khi tổng ≥70/100 và mỗi kỹ năng ≥50%; sau đó hoàn thành <b>6 lượt thử thách với Season</b> để gửi yêu cầu duyệt. Nếu chưa đạt, bạn có thể thử lại sau <b>14 ngày</b>.</Notice> : targetLevel ? <Notice>Đề ngắn ở mức <b>{targetLevel}</b>. Đạt khi tổng ≥70/100 và mỗi kỹ năng ≥50%.</Notice> : null;
+    const examNote = definition.kind === "pass-course" ? <Notice><b>Form A cố định · C1.</b> Bài thi 90 phút, 100 điểm và bốn kỹ năng. Người vận hành xét cấp chứng chỉ khi tổng điểm đạt từ <b>85/100</b>. Kết quả thấp hơn sẽ đặt lại trạng thái sẵn sàng C1.</Notice> : definition.kind === "level-up" && targetLevel ? <Notice>Đề ngắn ở mức <b>{targetLevel}</b>. Đạt khi tổng ≥70/100 và mỗi kỹ năng ≥50%; sau đó hoàn thành <b>6 lượt thử thách với Season</b> để gửi yêu cầu duyệt. Nếu chưa đạt, bạn có thể thử lại sau <b>14 ngày</b>.</Notice> : targetLevel ? <Notice>Đề ngắn ở mức <b>{targetLevel}</b>. Đạt khi tổng ≥70/100 và mỗi kỹ năng ≥50%.</Notice> : null;
     const readingNote = definition.sections.some(section => section.code === "reading" && /ngữ pháp|từ vựng/i.test(section.title));
     // Phones/tablets: the three rule boxes become three must-know lines; every rule stays in the ⓘ of "Quy định làm bài".
     const ruleGroups: ReadonlyArray<readonly [string, string[]]> = [
@@ -133,10 +133,11 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
       ["Không được phép", ["Không mở tab/cửa sổ khác, không dịch/AI, không quay lại phần đã nộp.", "Mỗi đoạn nghe chỉ được phát tối đa 2 lần."]],
       ["Lưu ý", [`Câu trả lời được tự động lưu; đồng hồ ${timed ? "chạy liên tục, kể cả khi bạn thoát ra và không thể tạm dừng" : "không giới hạn"}.`, timed ? "Hết giờ tự chuyển phần; rời màn hình sẽ hiện cảnh báo để bạn quay lại." : "Không tính giờ, nhưng nộp phần nào là khoá phần đó.", "Vượt quá 3 cảnh báo sẽ tự động nộp bài."]]
     ];
-    const shortRules = [
-      timed ? "Làm liền 4 phần, đồng hồ không dừng." : "Làm lần lượt 4 phần, nộp phần nào khoá phần đó.",
-      "Không đổi tab, dịch hay dùng AI.",
-      "Mỗi đoạn nghe phát tối đa 2 lần."
+    // 18/11 #16: each short rule carries its group colour (Bắt buộc / Không được phép / Lưu ý), like the desktop boxes.
+    const shortRules: ReadonlyArray<readonly ["required" | "restricted" | "notice", string, string]> = [
+      ["required", "Bắt buộc", timed ? "Làm liền 4 phần, đồng hồ không dừng." : "Làm lần lượt 4 phần, nộp phần nào khoá phần đó."],
+      ["restricted", "Không được phép", "Đổi tab, dịch hay dùng AI. Mỗi đoạn nghe tối đa 2 lần."],
+      ["notice", "Lưu ý", "Bài tự lưu. Quá 3 cảnh báo, bài tự nộp."]
     ];
     const rules = <div className="grid cols-3 assessment-rules">
       <Rule title="Bắt buộc" icon={<CheckCircle2 size={17} aria-hidden="true" />} tone="required" lines={compact
@@ -151,7 +152,7 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
           timed ? "Hết giờ tự chuyển phần; rời màn hình sẽ hiện cảnh báo để bạn quay lại." : "Không tính giờ, nhưng nộp phần nào là khoá phần đó.", "Vượt quá 3 cảnh báo sẽ tự động nộp bài."]} />
     </div>;
     const why = definition.kind === "placement" ? <article className="card flat assessment-why" aria-label="Vì sao cần bài test"><div className="assessment-why-line"><Sprout size={18} aria-hidden="true" /><b>Vì sao cần bước này?</b></div><p>{compact ? "Bài đầu vào giúp chọn mức phù hợp. Bạn không cần ôn trước." : "Bài test chọn mức vừa sức; hãy làm đúng khả năng, không cần ôn trước."}</p></article> : null;
-    const equipmentChecks = <div className={`row prep${compact ? " prep-compact" : ""}`} role="group" aria-label="Cần chuẩn bị: tai nghe hoặc loa, và micro, kể cả mic trên tai nghe"><button type="button" aria-label="Thử tai nghe" data-equipment="sound" className={`prep-device ${equipment.sound === "Đã phát xong ✓" ? "is-ready" : ""}`} title="Tai nghe hoặc loa" onClick={checkSound}><Headphones size={18} aria-hidden="true" /> {compact ? "Nghe thử" : "Tai nghe"}</button><button type="button" aria-label="Thử micro" data-equipment="microphone" className={`prep-device ${equipment.microphone === "Micro sẵn sàng ✓" ? "is-ready" : ""}`} title="Micro trên máy hoặc mic tai nghe" disabled={checkingMicrophone} onClick={() => void checkMicrophoneForTest()}><Mic size={18} aria-hidden="true" /> {compact ? "Thử micro" : "Micro"}</button><div className="stack prep-checks"><div className="row prep-check">{compact ? null : <button className="btn-sm" type="button" onClick={checkSound}>Nghe thử</button>}<span className="xs muted" role="status" aria-label="Trạng thái âm thanh" aria-live="polite">{equipment.sound}</span></div><div className="row prep-check">{compact ? null : <button className="btn-sm" type="button" disabled={checkingMicrophone} onClick={() => void checkMicrophoneForTest()}>Kiểm tra micro</button>}<span className="xs muted" role="status" aria-label="Trạng thái micro" aria-live="polite">{equipment.microphone}</span></div>{checkingMicrophone || microphoneSamples.length > 0 ? <MicrophoneWaveform samples={microphoneSamples} active={checkingMicrophone} /> : null}</div></div>;
+    const equipmentChecks = <div className={`row prep${compact ? " prep-compact" : ""}`} role="group" aria-label="Cần chuẩn bị: tai nghe hoặc loa, và micro, kể cả mic trên tai nghe"><button type="button" aria-label="Thử tai nghe" data-equipment="sound" className={`prep-device ${equipment.sound === "Đã phát xong ✓" ? "is-ready" : ""}`} title="Tai nghe hoặc loa" onClick={checkSound}>{equipment.sound === "Đã phát xong ✓" ? <CheckCircle2 size={18} aria-hidden="true" /> : <Headphones size={18} aria-hidden="true" />} {compact ? "Nghe thử" : "Tai nghe"}</button><button type="button" aria-label="Thử micro" data-equipment="microphone" className={`prep-device ${equipment.microphone === "Micro sẵn sàng ✓" ? "is-ready" : ""}`} title="Micro trên máy hoặc mic tai nghe" disabled={checkingMicrophone} onClick={() => void checkMicrophoneForTest()}>{equipment.microphone === "Micro sẵn sàng ✓" ? <CheckCircle2 size={18} aria-hidden="true" /> : <Mic size={18} aria-hidden="true" />} {compact ? "Thử micro" : "Micro"}</button><div className="stack prep-checks"><div className="row prep-check">{compact ? null : <button className="btn-sm" type="button" onClick={checkSound}>Nghe thử</button>}<span className="xs muted" role="status" aria-label="Trạng thái âm thanh" aria-live="polite">{equipment.sound === "chưa thử" ? "" : equipment.sound}</span></div><div className="row prep-check">{compact ? null : <button className="btn-sm" type="button" disabled={checkingMicrophone} onClick={() => void checkMicrophoneForTest()}>Kiểm tra micro</button>}<span className="xs muted" role="status" aria-label="Trạng thái micro" aria-live="polite">{equipment.microphone === "chưa thử" ? "" : equipment.microphone}</span></div>{checkingMicrophone || microphoneSamples.length > 0 ? <MicrophoneWaveform samples={microphoneSamples} active={checkingMicrophone} /> : null}</div></div>;
     const deviceError = microphoneCheck === "denied"
       ? <p className="small form-error" role="alert">{microphoneMessage ?? "Chưa truy cập được micro. Hãy cấp quyền rồi thử lại."}</p>
       : null;
@@ -188,8 +189,10 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
           {definition.kind === "placement" ? <ScoreScale compact /> : null}
           {examNote}
           <section className="assessment-prep-details" aria-label="Quy định làm bài">
-            <InfoTitle as="h3" title="Quy định làm bài" tip={<span className="assessment-rules-tip">{ruleGroups.map(([title, lines]) => <span key={title}><b>{title}</b><span>{lines.join(" ")}</span></span>)}</span>} label="Quy định làm bài: đầy đủ" />
-            <ul className="assessment-rules-short">{shortRules.map((line) => <li key={line}>{line}</li>)}</ul>
+            {/* The full rules are longer than a tip: they open in a popup (≤80% high, header with ×), not an inline popover. */}
+            <h3 className="info-title"><span className="info-title-text">Quy định làm bài</span><span className="info-tip"><button type="button" className="info-tip-button" aria-label="Quy định làm bài: đầy đủ" aria-haspopup="dialog" onClick={() => setRulesOpen(true)}><Info size={15} aria-hidden="true" /></button></span></h3>
+            {rulesOpen ? <Modal title="Quy định làm bài" className="assessment-rules-dialog" onClose={() => setRulesOpen(false)} dismissOnBackdrop><ul className="assessment-rules-short assessment-rules-full">{ruleGroups.map(([title, lines], index) => <li key={title} className={`assessment-rule-line assessment-rule-line--${(["required", "restricted", "notice"] as const)[index]}`}><span className="assessment-rule-tag">{title}</span><span>{lines.join(" ")}</span></li>)}</ul></Modal> : null}
+            <ul className="assessment-rules-short">{shortRules.map(([tone, label, line]) => <li key={line} className={`assessment-rule-line assessment-rule-line--${tone}`}><span className="assessment-rule-tag">{label}</span><span>{line}</span></li>)}</ul>
           </section>
         </> : <>
           <h2>{definition.title}</h2>
@@ -484,6 +487,11 @@ function sectionSummary(code: AssessmentSectionCode) {
 }
 
 /** Short answer options (all ≤ 14 characters) sit in two columns on phones/tablets (CSS), halving a task's height. */
+/** Up to 4 one-word options (≤ 8 letters): one row of 4 on phones, so a 40-question section stays compact. */
+export function assessmentTinyChoices(options: ReadonlyArray<{ label: string }> | undefined): boolean {
+  return Boolean(options?.length) && options!.length <= 4 && options!.every((option) => option.label.trim().length <= 8 && !option.label.trim().includes(" "));
+}
+
 export function assessmentShortChoices(options: ReadonlyArray<{ label: string }> | undefined): boolean {
   return Boolean(options?.length) && options!.length <= 6 && options!.every((option) => option.label.trim().length <= 14);
 }
@@ -577,7 +585,7 @@ function Task({ task, number, questionNumber, value, response, view, actions, se
       <span className="small muted">Tối đa {task.interaction.maxLearnerTurns} lượt hoặc {Math.floor(task.interaction.durationSeconds / 60)} phút; kết thúc sớm khi khách hàng chấp nhận giải pháp. Nếu hệ thống không thể tạo lượt phản hồi, bản ghi một chiều vẫn được lưu và chuyển duyệt tay.</span>
     </div> : null}
     {task.hint ? <p className="small muted assessment-task-hint">{task.hint}</p> : null}
-    {task.responseType === "single_choice" ? <fieldset className={assessmentShortChoices(task.options) ? "assessment-choices assessment-choices--short" : "assessment-choices"} aria-labelledby={promptId} style={{ border: 0, margin: 0, padding: 0 }}><legend className="sr-only">Chọn một đáp án</legend>{task.options?.map((option) => <label className={`opt assessment-choice ${value === option.value ? "sel" : ""}`} key={option.value}><input className="assessment-choice-input" type="radio" name={task.key} checked={value === option.value} aria-describedby={answerHint ? hintId : undefined} onChange={() => onSave({ value: option.value, evidenceType: "choice" })} /><span>{option.label}</span></label>)}</fieldset> : task.responseType === "speaking_evidence" ? null : <>
+    {task.responseType === "single_choice" ? <fieldset className={assessmentShortChoices(task.options) ? `assessment-choices assessment-choices--short${assessmentTinyChoices(task.options) ? " assessment-choices--tiny" : ""}` : "assessment-choices"} aria-labelledby={promptId} style={{ border: 0, margin: 0, padding: 0 }}><legend className="sr-only">Chọn một đáp án</legend>{task.options?.map((option) => <label className={`opt assessment-choice ${value === option.value ? "sel" : ""}`} key={option.value}><input className="assessment-choice-input" type="radio" name={task.key} checked={value === option.value} aria-describedby={answerHint ? hintId : undefined} onChange={() => onSave({ value: option.value, evidenceType: "choice" })} /><span>{option.label}</span></label>)}</fieldset> : task.responseType === "speaking_evidence" ? null : <>
       <label><span className="sr-only">Câu trả lời {task.key}</span><textarea aria-label={`Câu trả lời ${task.key}`} aria-labelledby={promptId} aria-describedby={answerHint ? hintId : undefined} value={value} minLength={task.minWords} onChange={(event) => onSave({ value: limitWords(event.target.value, task.maxWords), evidenceType: "text" })} placeholder="Nhập câu trả lời" /></label>
       {wordTarget ? <div className="assessment-word-count" aria-live="polite">{wordCount(value)} / {wordTarget} từ</div> : null}
     </>}
@@ -723,7 +731,7 @@ function assessmentPendingCopy(view: AssessmentView): { title: string; detail: s
   if (view.definition.kind === "pass-course") {
     if (status === "approved") return { title: "Pass Course đã được duyệt", detail: "Bạn có thể xem chứng nhận trong hồ sơ và tiếp tục học." };
     if (status === "needs_retry") return { title: "Pass Course chưa đạt", detail: "Trạng thái sẵn sàng C1 đã được đặt lại. Bạn có 72 giờ từ lúc có kết quả để gửi kháng nghị nếu cần." };
-    return { title: "Pass Course đang chờ xét", detail: "Vận hành đang đối chiếu bốn kỹ năng và tổng điểm. Bạn có 72 giờ để kháng nghị sau khi có kết quả." };
+    return { title: "Pass Course đang chờ xét", detail: "Vận hành đang đối chiếu bốn kỹ năng và tổng điểm. Bạn sẽ nhận thông báo khi có kết quả." };
   }
   const retake = view.placementRetake;
   if (view.definition.key === "placement-retake" || (retake?.status === "used" && retake.retakeAttemptId === view.attempt?.id)) {

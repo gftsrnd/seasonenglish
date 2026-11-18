@@ -33,9 +33,13 @@ describe("uncounted (học thử) month on Home", () => {
     render(<LearnerHome view={homeView({ lessons: [lessonOne, completed, review] })} actions={actions} />);
     expect(screen.queryByText(/Tháng này bạn học thử để làm quen/)).not.toBeInTheDocument();
     const progress = screen.getByRole("region", { name: "Tiến độ tháng" });
-    expect(within(progress).getByText("Tháng học thử. Tiến độ bắt đầu tính từ 01/12.")).toBeInTheDocument();
-    expect(within(progress).getAllByText("–", { exact: true })).toHaveLength(4);
-    expect(within(progress).getByText("Điểm huy hiệu")).toBeInTheDocument();
+    // Trial progress: the trial lessons actually learned, not four empty counted metrics.
+    expect(within(progress).getByText("Tiến độ học thử")).toBeInTheDocument();
+    expect(progress).toHaveTextContent("Điểm danh, điểm huy hiệu và bài thi tính từ 01/12.");
+    expect(within(progress).getByText("Bài mới")).toBeInTheDocument();
+    expect(progress.querySelector('[data-home-metric="lessons"]')).toHaveTextContent("1/2");
+    expect(progress.querySelector('[data-home-metric="reviews"]')).toHaveTextContent("1/1");
+    expect(within(progress).queryByText("Điểm huy hiệu")).toBeNull();
     expect(screen.getByRole("gridcell", { name: "2026-11-03" })).toHaveTextContent("Đã học");
     expect(screen.getByText(/Gợi ý học thử/)).toBeInTheDocument();
     // The learner is not told to wait: lesson 1 is offered as a catch-up lesson.

@@ -99,19 +99,15 @@ async function renderReview(session: WeeklyReviewSessionView, extra: Record<stri
 }
 
 describe("learner lesson guide", () => {
-  it("walks the A2 study tab card by card, with the translate icons", () => {
+  it("walks the A2 study tab through its main cards only", () => {
     expect(renderLesson(monthlyLesson("A2"), "study")).toEqual([
-      "Đầu bài học", "Mục tiêu bài", "Hướng dẫn", "Từ vựng", "Nhóm từ bao trùm", "Từ liên quan", "Ngữ pháp", "Phát âm", "Xong phần Học", "Hoàn thành bài"
+      "Đầu bài học", "Từ vựng", "Ngữ pháp", "Phát âm", "Xong phần Học", "Hoàn thành bài"
     ]);
-    const text = (title: string) => findSteps(guideDefinitions("learner", "/lesson/1")!, document).find((step) => step.title === title)?.text ?? "";
-    expect(text("Từ vựng")).toMatch(/biểu tượng dịch/);
-    expect(text("Từ liên quan")).toMatch(/biểu tượng dịch/);
-    expect(text("Ngữ pháp")).toMatch(/biểu tượng dịch/);
   });
 
   it("walks the A2 practice tab, from the speaking lock note to the bottom bar", () => {
     expect(renderLesson(monthlyLesson("A2", { completedPartCodes: [...studyDone, "listening"], evidence: listeningCorrect }), "practice", { appealLessonPart: vi.fn() })).toEqual([
-      "Đầu bài học", "Hướng dẫn", "Nghe", "Trả lời và nộp", "Bản dịch câu hỏi", "Đọc", "Viết", "Từ loại", "Dùng từ", "Mở phần Nói", "Hoàn thành bài"
+      "Đầu bài học", "Trả lời và nộp", "Mở phần Nói", "Hoàn thành bài"
     ]);
     const answer = findSteps(guideDefinitions("learner", "/lesson/1")!, document).find((step) => step.title === "Trả lời và nộp");
     expect(answer?.text).toMatch(/Báo lỗi câu này/);
@@ -125,13 +121,13 @@ describe("learner lesson guide", () => {
 
   it("walks a B1 lesson without translate icons and with Speaking unlocked", () => {
     expect(renderLesson(monthlyLesson("B1"), "study")).toEqual([
-      "Đầu bài học", "Mục tiêu bài", "Hướng dẫn", "Từ vựng", "Nhóm từ bao trùm", "Từ liên quan", "Ngữ pháp", "Phát âm", "Xong phần Học", "Hoàn thành bài"
+      "Đầu bài học", "Từ vựng", "Ngữ pháp", "Phát âm", "Xong phần Học", "Hoàn thành bài"
     ]);
     const steps = findSteps(guideDefinitions("learner", "/lesson/1")!, document);
     expect(steps.filter((step) => /biểu tượng dịch/.test(step.text))).toEqual([]);
     cleanup();
     expect(renderLesson(monthlyLesson("B1", { completedPartCodes: [...studyDone, ...practiceCodes] }), "practice")).toEqual([
-      "Đầu bài học", "Hướng dẫn", "Nghe", "Trả lời và nộp", "Đọc", "Viết", "Từ loại", "Dùng từ", "Nói", "Hoàn thành bài"
+      "Đầu bài học", "Trả lời và nộp", "Nói", "Hoàn thành bài"
     ]);
   });
 
@@ -150,7 +146,7 @@ describe("learner lesson guide", () => {
     expect(await renderReview(reviewSession(), { answerWeeklyReview })).toEqual(["Bài ôn thứ Sáu", "Các phần bài ôn", "Câu đang làm"]);
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "deadline" })); });
     await screen.findByText("Send the ___.");
-    expect(titles()).toEqual(["Bài ôn thứ Sáu", "Các phần bài ôn", "Bản dịch câu vừa làm", "Câu đang làm"]);
+    expect(titles()).toEqual(["Bài ôn thứ Sáu", "Các phần bài ôn", "Câu đang làm"]);
     cleanup();
 
     expect(await renderReview(reviewSession({ completed: true, currentQuestion: null }))).toEqual(["Bài ôn thứ Sáu", "Các phần bài ôn", "Đã xong bài ôn"]);
@@ -175,6 +171,10 @@ describe("learner lesson guide", () => {
     await screen.findByTestId("review-exercise-translation");
     collect(titles());
     collect(await renderReview(reviewSession({ completed: true, currentQuestion: null })));
+    // Phones and tablets split the study tab into steps.
+    const matchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({ matches: true, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false })) as typeof window.matchMedia;
+    try { collect(renderLesson(monthlyLesson("A2"), "study")); } finally { window.matchMedia = matchMedia; }
     // Each variant (with or without translate icons, report button, speaking lock) counts separately.
     const missing = guideDefinitions("learner", "/lesson/1")!.filter(([selector]) => !resolvedSelectors.has(selector)).map(([selector, title]) => `${title}: ${selector}`);
     expect(missing).toEqual([]);

@@ -147,7 +147,33 @@ export function AssessmentRuntime({ view, actions, submitError, children }: Asse
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [violationDialog]);
 
-  const runtimeDialogOpen = Boolean(violationDialog || autoCountdown !== null);
+  // Leaving a section in progress through the app's own links (bottom nav, brand logo, side menu…) asks first,
+  // like logout does. The link click is caught before the router sees it; only an explicit "Rời bài thi" navigates.
+  const [leaveTarget, setLeaveTarget] = useState<string | null>(null);
+  const inProgress = Boolean(attempt) && serverRuntime?.status === "in_progress";
+  useEffect(() => {
+    if (!inProgress) return undefined;
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+      if (!link || link.target === "_blank" || link.hasAttribute("download") || link.closest("[role=dialog]")) return;
+      const url = new URL(link.href, window.location.href);
+      if (url.origin !== window.location.origin || url.pathname === window.location.pathname) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setLeaveTarget(`${url.pathname}${url.search}${url.hash}`);
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [inProgress]);
+  useEffect(() => {
+    if (!leaveTarget) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); setLeaveTarget(null); } };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [leaveTarget]);
+
+  const runtimeDialogOpen = Boolean(violationDialog || autoCountdown !== null || leaveTarget);
   useEffect(() => {
     if (runtimeDialogOpen && !runtimeDialogWasOpen.current) {
       focusedBeforeRuntimeDialog.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -281,6 +307,11 @@ export function AssessmentRuntime({ view, actions, submitError, children }: Asse
       <p id="assessment-violation-description">{violationReasonText(violationDialog.reason)} Trong lúc thi, <strong>không được mở tab, cửa sổ khác hoặc sao chép nội dung</strong>.</p>
       <p className="small muted"><strong>Bài test vẫn tiếp tục</strong>; thời gian vẫn đang chạy.</p>
       <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}><button className="btn-primary" type="button" onClick={() => setViolationDialog(null)}>Đã hiểu, tiếp tục</button></div>
+    </div></div> : null}
+    {leaveTarget && !violationDialog && autoCountdown === null ? <div className="modal-backdrop" role="presentation"><div ref={runtimeDialogRef} className="dialog assessment-leave-dialog" role="dialog" aria-modal="true" aria-labelledby="assessment-leave-title" aria-describedby="assessment-leave-description" tabIndex={-1} onKeyDown={trapDialogFocus}>
+      <h2 id="assessment-leave-title"><TriangleAlert size={22} aria-hidden="true" /><span>Rời bài thi?</span></h2>
+      <p id="assessment-leave-description">Bài thi đang làm dở. <strong>Đồng hồ vẫn chạy</strong> khi bạn rời trang; câu trả lời đã được lưu và bạn có thể quay lại làm tiếp.</p>
+      <div className="row modal-actions" style={{ justifyContent: "flex-end", marginTop: 16 }}><button className="btn" type="button" onClick={() => { const target = leaveTarget; setLeaveTarget(null); actions.navigate(target); }}>Rời bài thi</button><button className="btn-primary" type="button" onClick={() => setLeaveTarget(null)}>Ở lại làm bài</button></div>
     </div></div> : null}
     {autoCountdown !== null ? <div className="modal-backdrop" role="presentation"><div ref={runtimeDialogRef} className="dialog assessment-auto-submit-dialog" role="dialog" aria-modal="true" aria-labelledby="assessment-auto-submit-title" aria-describedby="assessment-auto-submit-description" tabIndex={-1} onKeyDown={trapDialogFocus}>
       <h2 id="assessment-auto-submit-title"><Clock3 size={22} aria-hidden="true" /> Tự động nộp bài</h2>

@@ -936,7 +936,8 @@ describe("Manager guide coverage and bounded scroll regions", () => {
     await screen.findByRole("heading", { name: "Chưa làm test (1)" });
     expect(screen.getByRole("link", { name: "Mở danh sách 1 người cần nhắc" })).toBeInTheDocument();
     const { found, missing } = guideCoverage("manager", "/mgr");
-    expect(missing).toEqual([]);
+    // Conditional steps: the delete-request card and the ≤ 1024px waiting tabs are not on this desktop screen.
+    expect(missing).toEqual(["Yêu cầu xoá tài khoản", "Chờ xếp mức"]);
     expect(found.map((step) => step.title)).toEqual(["Ba chỉ số chính", "Danh sách đang học", "Thao tác nhanh", "Chờ duyệt mức", "Đang làm test", "Chưa làm test"]);
     expect(uncoveredCards(document.querySelectorAll(".manager-progress-page > section"), found)).toEqual([]);
     const toolbar = found.find((step) => step.title === "Thao tác nhanh")!.target;
@@ -962,7 +963,7 @@ describe("Manager guide coverage and bounded scroll regions", () => {
     expect(history).toHaveAttribute("tabindex", "0");
     expect(within(history).getByRole("table", { name: "Lịch sử nhắc học" })).toBeInTheDocument();
     const { found, missing } = guideCoverage("manager", "/mgr/reminders");
-    expect(missing).toEqual([]);
+    expect(missing).toEqual(["Không ai cần nhắc"]); // empty state only
     expect(found.map((step) => step.title)).toEqual(["Người cần nhắc", "Danh sách cần nhắc", "Lời nhắc", "Lịch sử nhắc"]);
   });
 

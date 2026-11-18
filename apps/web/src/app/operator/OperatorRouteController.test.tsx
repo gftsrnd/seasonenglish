@@ -226,7 +226,10 @@ describe("OperatorRouteController", () => {
     await user.click(edit);
     const editor = await screen.findByRole("dialog", { name: "Chi tiết Đề B1" });
     const header = editor.querySelector<HTMLElement>(".operator-level-form-dialog-header")!;
-    expect(within(header).getAllByRole("button").map(button => button.textContent)).toEqual(["Lưu bản nháp", "Đóng"]);
+    // The header holds only the close button; edit actions sit in the sticky footer (owner 18/11).
+    expect(within(header).getAllByRole("button").map(button => button.textContent)).toEqual(["Đóng"]);
+    const footer = editor.querySelector<HTMLElement>(".operator-level-form-dialog-footer")!;
+    expect(within(footer).getAllByRole("button").map(button => button.textContent)).toEqual(["Hủy", "Lưu bản nháp"]);
     const status = within(editor).getByRole("region", { name: "Trạng thái đề lên mức" });
     const publish = within(status).getByRole("button", { name: "Duyệt & phát hành" });
     expect(publish).toBeDisabled();
@@ -280,10 +283,10 @@ describe("OperatorRouteController", () => {
   });
 
   it.each([
-    ["coach", "Chưa có lượt luyện nào.", "Theo dõi phản hồi"],
-    ["appeals", "Chưa có kháng nghị.", "Lọc kháng nghị"],
-    ["sent", "Chưa có yêu cầu gửi Quản lý.", "Theo dõi yêu cầu"],
-    ["attempts", "Chưa có câu bài ngày sai cả hai lượt.", "Theo dõi cảnh báo"]
+    ["coach", "Chưa có lượt luyện nào.", "Phản hồi Season"],
+    ["appeals", "Chưa có kháng nghị.", "Lọc theo trạng thái"],
+    ["sent", "Chưa có yêu cầu gửi Quản lý.", "Yêu cầu đã gửi"],
+    ["attempts", "Chưa có câu bài ngày sai cả hai lượt.", "Cảnh báo bài tập"]
   ])("guides the active %s review tab even when its list is empty", async (tab, empty, heading) => {
     const layout = vi.spyOn(HTMLElement.prototype, "getClientRects").mockImplementation(function (this: HTMLElement) {
       return (this.closest("[hidden]") ? [] : [new DOMRect(20, 60, 260, 50)]) as unknown as DOMRectList;

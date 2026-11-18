@@ -1765,3 +1765,6 @@ table[aria-label="Lịch sử nhắc học"] td:nth-child(3){overflow-wrap:anywh
 
 .manager-operational-help { margin: 2px 0 8px; }
 .manager-account-create-title { margin-top: 0; }
+
+/* Tiến độ table: a long learner name wraps inside its cell instead of running into the next column. */
+:root:root:root td.manager-progress-name, :root:root:root td.manager-progress-name > :is(b, strong, span) { white-space: normal !important; overflow-wrap: anywhere; }

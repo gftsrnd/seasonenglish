@@ -67,3 +67,101 @@
 .learner-reward-dialog > .row:not(:first-child) { justify-content: center; }
 .learner-reward-dialog > .row.modal-actions { justify-content: center !important; }
 .learner-reward-dialog .reward-simulation { position: absolute; inset-block-start: 18px; inset-inline-start: 18px; }
+
+/* Confirm/prompt popups (ModalProvider) use the same square icon close as every other popup. */
+#modal .app-modal-heading > .app-modal-close.modal-close {
+  position: static;
+  display: grid;
+  place-items: center;
+  flex: none;
+  box-sizing: border-box;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  font-size: 1rem;
+}
+/* Icon-only close buttons are squares, never stretched into ovals. */
+.modal-close.modal-close--icon { aspect-ratio: 1; }
+/* No focus ring on a popup's auto-focused control after a tap/click; keyboard users still see it (ModalProvider tracks input). */
+:root[data-input="pointer"] :is(.dialog, [role="dialog"], .monthly-resource-panel) :is(button, a, summary, [tabindex]):is(:focus, :focus-visible):not(:hover) { outline: none !important; box-shadow: none !important; }
+
+/* Desktop: long detail popups (Xem bài làm, Hồ sơ) keep their title row and close
+   button pinned while the content scrolls, like on phones (the × scrolled away). */
+@media (min-width: 1025px) {
+  .modal-backdrop > .dialog.operator-detail-dialog > .row.between:first-child,
+  .modal-backdrop > .dialog.operator-profile-dialog > :is(.row.between, header):first-child,
+  .modal-backdrop > .dialog.manager-learner-profile-dialog > .row.between:first-child {
+    position: sticky;
+    z-index: 8;
+    background: inherit;
+  }
+  .modal-backdrop > .dialog.operator-detail-dialog > .row.between:first-child { top: -16px; margin-top: -16px; padding-top: 16px; padding-bottom: 8px; }
+  .modal-backdrop > .dialog.operator-profile-dialog > :is(.row.between, header):first-child { top: -24px; margin-top: -24px; padding-top: 24px; padding-bottom: 8px; }
+  .modal-backdrop > .dialog.manager-learner-profile-dialog > .row.between:first-child { top: -22px; margin-top: -22px; padding-top: 22px; padding-bottom: 8px; }
+}
+
+/* ===== ONE popup header at every width (owner 18/11, root fix) =====
+   A single flex row, items centred: [title …(flex 1, ellipsis)] [other actions] [?] [×].
+   Wrappers that only group the title and buttons (.operator-editor-heading,
+   .operator-level-form-dialog-actions, …) dissolve (display: contents), so "?"
+   and × are always neighbours with an 8px gap, whatever DOM the popup uses.
+   Nothing in the header is absolutely positioned. A full-width strip (findings)
+   wraps onto its own line under the row. */
+:root:root:root:root:root:root :is(.dialog, [role="dialog"], .monthly-resource-panel) > :is(header:not(.avatar-dialog-preview), .row.between:first-child, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading, .inbox-heading) {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  column-gap: 8px !important;
+  row-gap: 0 !important;
+  text-align: start;
+}
+:root:root:root:root:root:root :is(.dialog, [role="dialog"], .monthly-resource-panel) > :is(header:not(.avatar-dialog-preview), .row.between:first-child, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading, .inbox-heading) > :not(.modal-close):not(.app-guide-popup-trigger):has(> :is(.modal-close, .app-guide-popup-trigger)) {
+  display: contents !important;
+}
+/* Title: takes the free space, one line, ellipsis. */
+:root:root:root:root:root:root :is(.dialog, [role="dialog"], .monthly-resource-panel) > :is(header:not(.avatar-dialog-preview), .row.between:first-child, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading, .inbox-heading) :is(h1, h2, h3, h4):not(.info-tip-dialog-body *) {
+  flex: 1 1 0;
+  order: 0;
+  min-width: 0;
+  margin: 0 !important;
+  overflow: hidden;
+  white-space: nowrap !important;
+  text-overflow: ellipsis;
+  text-align: start !important;
+}
+/* A title block (kicker + title + status) is the flexible item instead. */
+:root:root:root:root:root:root :is(.dialog, [role="dialog"], .monthly-resource-panel) > :is(header:not(.avatar-dialog-preview), .row.between:first-child, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading, .inbox-heading) > :first-child:not(button):not(:is(h1, h2, h3, h4)):not([style*="contents"]) {
+  flex: 1 1 0;
+  min-width: 0;
+}
+/* Buttons in the row: never stretched, never moved out of the row; ? then × at the end. */
+:root:root:root:root:root:root :is(.dialog, [role="dialog"], .monthly-resource-panel) > :is(header:not(.avatar-dialog-preview), .row.between:first-child, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading, .inbox-heading) > :is(button, .btn):not(.info-tip-button),
+:root:root:root:root:root:root :is(.dialog, [role="dialog"], .monthly-resource-panel) > :is(header:not(.avatar-dialog-preview), .row.between:first-child, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading, .inbox-heading) > :not(.modal-close):has(> :is(.modal-close, .app-guide-popup-trigger)) > :is(button, .btn):not(.info-tip-button) {
+  position: static !important;
+  inset: auto !important;
+  flex: none !important;
+  align-self: auto !important;
+  margin: 0 !important;
+  transform: none !important;
+  order: 90;
+}
+:root:root:root:root:root:root :is(.dialog, [role="dialog"], .monthly-resource-panel) > :is(header, .row.between:first-child, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading, .inbox-heading) .app-guide-popup-trigger { order: 98 !important; }
+:root:root:root:root:root:root :is(.dialog, [role="dialog"], .monthly-resource-panel) > :is(header, .row.between:first-child, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading, .inbox-heading) :is(.modal-close, .app-modal-close) { order: 99 !important; }
+/* Full-width strips inside the header (lesson editor findings) sit on their own line below the row. */
+:root:root:root:root:root:root .operator-editor-sticky-header > .operator-editor-findings { order: 100 !important; flex: 0 0 100% !important; }
+:root:root:root:root:root:root:root:root:root :is(.dialog, [role="dialog"]) > .operator-editor-sticky-header:has(> .operator-editor-findings) { flex-wrap: wrap !important; }
+
+/* Opened accordion parts in Xem đề (all widths): the part is ONE rounded card — its header row
+   and its opened body share the card's border and radius; the body has an even 12px inset. */
+:root:root:root:root .assessment-definition-preview-section-row { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+:root:root:root:root .assessment-definition-preview-section-row > .assessment-definition-preview-section-trigger { width: 100%; margin: 0 !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+:root:root:root:root .assessment-definition-preview-section-row > .assessment-definition-preview-section { margin: 0 !important; border: 0 !important; border-top: 1px solid var(--line) !important; border-radius: 0 !important; }
+:root:root:root:root .assessment-definition-preview-section-row .assessment-definition-preview-section-body { padding: 12px !important; }
+/* A title block of several lines (eyebrow + title + status): the action group aligns to its top;
+   a one-line title stays centred with the buttons. The group never wraps onto its own line. */
+:root:root:root:root:root:root:root :is(.dialog, [role="dialog"], .monthly-resource-panel) > :is(header:not(.avatar-dialog-preview), .row.between:first-child, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading, .inbox-heading):has(> :first-child:not(button):not(:is(h1, h2, h3, h4)):not(.operator-editor-heading):not(.row) > :is(h1, h2, h3, h4, p, span, div) + *) { align-items: flex-start !important; }

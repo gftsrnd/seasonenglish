@@ -157,9 +157,11 @@ describe("app profile avatar dialog affordances", () => {
       expect(assessment.getByRole("region", { name: "Điểm đầu vào" })).toBeVisible();
       const exit = within(assessment.getByRole("region", { name: "Điểm đầu ra" }));
       expect(await exit.findByText("88")).toBeVisible();
-      await userEvent.click(exit.getByText("Chi tiết điểm đầu ra"));
-      expect(exit.getByText("36/40")).toBeVisible();
-      expect(exit.getByText("Đạt bài thi đầu ra.")).toBeVisible();
+      // Same view button and popup as the placement result.
+      await userEvent.click(exit.getByRole("button", { name: "Xem lại bài làm" }));
+      const dialog = within(screen.getByRole("dialog", { name: "Bài thi đầu ra" }));
+      expect(dialog.getByText("Đọc · 36/40")).toBeVisible();
+      expect(dialog.getByText("Đạt bài thi đầu ra.")).toBeVisible();
     } finally {
       result.mockRestore();
     }

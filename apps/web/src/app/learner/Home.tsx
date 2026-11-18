@@ -49,6 +49,10 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
   const monthlyPreparation = view.monthlyPreparation === true;
   const trial = view.monthlyUncounted;
   const { completedLessons, totalLessons, completedReviews = 0, totalReviews = 0 } = view.metrics;
+  // Trial month: the counted metrics stay empty, so its progress is the trial lessons actually learned.
+  const trialCount = (review: boolean) => { const list = view.lessons.filter((lesson) => (lesson.kind === "review") === review); return { done: list.filter((lesson) => lesson.status === "completed").length, total: list.length }; };
+  const trialNew = trialCount(false);
+  const trialReview = trialCount(true);
   return <div className="app-learner-page home-page" data-monthly-preparation={monthlyPreparation || !monthly || (!next && !view.lessons.length)} style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
     <PageTitle eyebrow={monthly ? `Tháng ${formatMonth(monthly.month)} · ${monthly.themeTitle}` : "Lộ trình tháng đang được chuẩn bị"} title={`Chào ${view.learner.displayName}!`} aside={<span className={`badge lvl lvl-${view.learner.cefr}`}>Trình độ {view.learner.cefr}</span>} />
     <div className="bao-row" style={{ marginBottom: 16 }} aria-label="Lời chào của Season AI Coach"><div className="bubble home-today-heading" style={{ flex: 1 }}>Hôm nay học gì nào?</div></div>
@@ -68,20 +72,25 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
       </div>
     </section> : null}
     {!monthlyPreparation ? <section data-home-block="metrics" aria-label="Tiến độ tháng" style={{ marginTop: 16, padding: "16px 18px", borderRadius: 18, background: "var(--mint)", border: "1px solid var(--border)" }}>
-      <div><div className="eyebrow">Theo tháng</div><h2 style={{ margin: "2px 0 0" }}>Tiến độ học tập</h2></div>
-      {trial ? <p className="small muted" style={{ margin: "6px 0 0" }}>Tháng học thử. Tiến độ bắt đầu tính từ {trial.countsFrom.slice(8, 10)}/{trial.countsFrom.slice(5, 7)}.</p> : null}
+      <div><div className="eyebrow">{trial ? "Tháng học thử" : "Theo tháng"}</div><h2 style={{ margin: "2px 0 0" }}>{trial ? "Tiến độ học thử" : "Tiến độ học tập"}</h2></div>
+      {trial ? <p className="small muted home-trial-note" style={{ margin: "6px 0 0" }}>Điểm danh, điểm huy hiệu và bài thi tính từ <b>{trial.countsFrom.slice(8, 10)}/{trial.countsFrom.slice(5, 7)}</b>.</p> : null}
       <div className="stats monthly-home-metrics" data-trial={trial ? "" : undefined} style={{ marginTop: 12 }}>
-        <Metric metric="lessons" label="Bài theo lịch" value={trial ? "–" : `${completedLessons}/${totalLessons}`} percent={trial ? 0 : ratio(completedLessons, totalLessons)} />
-        <Metric metric="reviews" label="Bài ôn" value={trial ? "–" : `${completedReviews}/${totalReviews}`} percent={trial ? 0 : ratio(completedReviews, totalReviews)} color="var(--primary)" />
-        {trial ? <Metric metric="attendance" label="Điểm danh" value="–" percent={0} color="var(--peach)" /> : <HomeAttendanceMetric eligibility={view.monthlyEligibility} />}
-        {trial ? <Metric metric="points" label="Điểm huy hiệu" value="–" percent={0} color="var(--primary)" /> : <HomePointsMetric points={view.metrics.seasonPoints ?? view.metrics.points} totalPoints={view.metrics.points} level={view.learner.cefr} nextTier={view.metrics.nextPointsTier ?? null} />}
+        {trial ? <>
+          <Metric metric="lessons" label="Bài mới" value={`${trialNew.done}/${trialNew.total}`} percent={ratio(trialNew.done, trialNew.total)} />
+          <Metric metric="reviews" label="Bài ôn" value={`${trialReview.done}/${trialReview.total || totalReviews}`} percent={ratio(trialReview.done, trialReview.total || totalReviews)} color="var(--primary)" />
+        </> : <>
+          <Metric metric="lessons" label="Bài theo lịch" value={`${completedLessons}/${totalLessons}`} percent={ratio(completedLessons, totalLessons)} />
+          <Metric metric="reviews" label="Bài ôn" value={`${completedReviews}/${totalReviews}`} percent={ratio(completedReviews, totalReviews)} color="var(--primary)" />
+          <HomeAttendanceMetric eligibility={view.monthlyEligibility} />
+          <HomePointsMetric points={view.metrics.seasonPoints ?? view.metrics.points} totalPoints={view.metrics.points} level={view.learner.cefr} nextTier={view.metrics.nextPointsTier ?? null} />
+        </>}
       </div>
       {!trial && view.monthlyEligibility ? <AbsenceChip absenceDays={view.monthlyEligibility.absenceDays} maxAbsences={view.monthlyEligibility.maxAbsences} /> : null}
     </section> : null}
     {monthly ? <MonthlyCalendar month={monthly} lessons={view.lessons} actions={actions} uncounted={Boolean(view.monthlyUncounted)} /> : null}
     <section className="grid cols-2" style={{ marginTop: 16, alignItems: "stretch", gridAutoRows: "1fr", minWidth: 0 }} data-home-block="activities" aria-label="Hoạt động tháng">
       <AppLink className={`tile ${!monthlyPreparation && (view.coach.turnsToday ?? 0) > 0 ? "mint" : "peach"}`} style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/coach" navigate={actions.navigate}><ActivityIcon /><span className="t">Season AI Coach</span><span className={`s${monthlyPreparation ? " home-tile-desc" : ""}`}>{monthlyPreparation ? "Luyện theo trình độ đã được duyệt trong khi chờ bộ bài tháng." : `Lượt hợp lệ hôm nay ${view.coach.turnsToday ?? 0}/${view.coach.targetTurns}`}</span></AppLink>
-      <AppLink className="tile mint" style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/monthly" navigate={actions.navigate}><BookOpen aria-hidden="true" /><span className="t">Bài tháng</span><span className="s home-tile-desc">{monthlyPreparation ? "Xem trạng thái chuẩn bị lộ trình tháng." : "Xem lịch bài học, bài ôn và bài thi tháng."}</span></AppLink>
+      <AppLink className="tile mint" style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/monthly" navigate={actions.navigate}><BookOpen aria-hidden="true" /><span className="t">Bài tháng</span><span className="s home-tile-desc">{monthlyPreparation ? "Xem trạng thái chuẩn bị lộ trình tháng." : view.monthlyUncounted ? "Xem lịch bài học và bài ôn tháng học thử." : "Xem lịch bài học, bài ôn và bài thi tháng."}</span></AppLink>
     </section>
     {!monthlyPreparation && view.learner.cefr !== "C1" ? <LevelReadinessCard readiness={view.levelReadiness} phase={view.levelUpPhase} monthLabel={monthly ? formatMonth(monthly.month) : undefined} navigate={actions.navigate} className="home-readiness" /> : null}
     {view.monthlyExam ? <MonthlyExamOverview exam={view.monthlyExam} month={!view.monthlyEligibility || view.monthlyEligibility.month === monthly?.month ? monthly : null} navigate={actions.navigate} /> : null}
@@ -158,7 +167,7 @@ function PrimaryLesson({ view, next, actions }: { view: LearnerHomeView; next: L
     return <section className="hero" style={{ background: "var(--mint)", color: "var(--text)" }} data-home-block="primary"><div className="eyebrow">{period}</div><h2>{dateLocked ? next.lock.opensAt ? `Bài này mở vào ${formatLessonDate(next.lock.opensAt)}` : "Bài này chưa mở" : reviewGate ? `Hoàn thành ${reviewLabel} để mở bài này` : "Học bù bài trước đã nhé"}</h2><p>{dateLocked ? "Chưa đến ngày học nên chưa có nút học bài này." : reviewGate ? "Bài đầu tuần mới chỉ mở khi đã xong bài ôn của tuần trước." : "Hoàn thành bài trước để mở bài này."}</p>{!dateLocked && blocker ? <AppLink className="btn btn-primary" href={`/lesson/${blocker.id}`} navigate={actions.navigate}>{reviewGate ? `Làm ${reviewLabel}` : `Học ${blocker.label ? learnerLessonPhrase(blocker.label) : monthly ? `bài ${blocker.dayNumber}` : `bài T${blocker.dayNumber + 1}`} ngay`}</AppLink> : null}</section>;
   }
   const catchUp = !view.monthlyUncounted && isCatchUp(view, next);
-  return <section className={`hero home-primary-lesson${catchUp ? " home-primary-lesson--catch-up" : ""}`} data-home-block="primary"><div><div className="eyebrow">{view.monthlyUncounted ? "Gợi ý học thử" : catchUp ? "Bài học bù" : "Bài hôm nay"} · {learnerLessonLabel(next)} · {period}</div><h2>{catchUp ? "Học bù bài trước đã nhé" : next.title}</h2>{catchUp ? <p style={{ margin: 0 }}>Hoàn thành {learnerLessonPhrase(learnerLessonLabel(next))}: {next.title}</p> : <div style={{ fontWeight: 700 }}>{monthly.themeTitle}</div>}</div><div className="row" style={{ gap: 14, fontWeight: 800, fontSize: ".9rem" }}><span className="row" style={{ gap: 6 }}><ClockIcon /> {view.schedule.lessonMinutes} phút</span>{view.monthlyUncounted ? null : <span>{view.metrics.completedLessons}/{view.metrics.totalLessons} bài đã học</span>}</div><AppLink className="btn btn-primary btn-lg btn-block" href={`/lesson/${next.id}`} navigate={actions.navigate}>{next.status === "in_progress" && view.monthlyUncounted ? "Học tiếp" : catchUp ? `Học ${learnerLessonPhrase(learnerLessonLabel(next))} ngay` : "Học ngay"}</AppLink></section>;
+  return <section className={`hero home-primary-lesson${catchUp ? " home-primary-lesson--catch-up" : ""}`} data-home-block="primary"><div><div className="eyebrow">{view.monthlyUncounted ? "Gợi ý học thử" : catchUp ? "Bài học bù" : "Bài hôm nay"} · {learnerLessonLabel(next)} · {period}</div><h2>{catchUp ? "Học bù bài trước đã nhé" : next.title}</h2>{catchUp ? <p style={{ margin: 0 }}>Hoàn thành {learnerLessonPhrase(learnerLessonLabel(next))}: {next.title}</p> : null}</div><div className="row" style={{ gap: 14, fontWeight: 800, fontSize: ".9rem" }}><span className="row" style={{ gap: 6 }}><ClockIcon /> {view.schedule.lessonMinutes} phút</span>{view.monthlyUncounted ? null : <span>{view.metrics.completedLessons}/{view.metrics.totalLessons} bài đã học</span>}</div><AppLink className="btn btn-primary btn-lg btn-block" href={`/lesson/${next.id}`} navigate={actions.navigate}>{next.status === "in_progress" && view.monthlyUncounted ? "Học tiếp" : catchUp ? `Học ${learnerLessonPhrase(learnerLessonLabel(next))} ngay` : "Học ngay"}</AppLink></section>;
 }
 
 function lessonTimingLabel(view: LearnerHomeView, lesson: LearnerHomeView["lessons"][number]) {
@@ -320,7 +329,7 @@ export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actio
   const publishState = exam?.inProgress ? "Đang làm bài" : exam?.status === "completed" ? "Đã hoàn thành" : eligibility?.entryClosed ? "Đã hết giờ vào thi" : exam?.status === "ready" || eligibility?.formPublished ? "Đề đã phát hành" : "Đề chưa phát hành";
   const formNote = exam?.inProgress ? "Mở lại bài thi từ vị trí đã lưu."
     : canStart ? "Chuẩn bị tai nghe và micro trước khi bắt đầu."
-      : exam?.status === "completed" ? "Kết quả được lưu trong hồ sơ của bạn."
+      : exam?.status === "completed" ? "Đã nộp bài. Khi có điểm, bạn nhận thông báo ở chuông."
         : exam?.requirement || (eligibility?.entryClosed ? null : eligibility?.formPublished ? "Chờ đến giờ mở đề." : "Đề đang được chuẩn bị cho trình độ của bạn.");
 
   return <div className="app-learner-page monthly-assessment-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
