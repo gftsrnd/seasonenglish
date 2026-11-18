@@ -201,9 +201,9 @@ export function notificationContent(item: InboxNotificationView): NotificationCo
     case "duel_completed":
       return { title: item.kind === "duel_invited" ? "Bạn có lời mời thách đấu" : "Đã có kết quả thách đấu", description: "Xem chi tiết trong Mini game.", path: "/games", action: "Mở Mini game" };
     case "arena_turn":
-      return { title: "Tới lượt bạn chơi", description: "Có trận đấu trường đang chờ bạn chơi.", path: "/games", action: "Mở Mini game" };
+      return { title: "Tới lượt bạn chơi", description: "Có trận đấu trường đang chờ bạn chơi.", path: item.relatedId ? `/arena/match/${encodeURIComponent(item.relatedId)}` : "/arena", action: "Mở trận" };
     case "arena_result":
-      return { title: "Trận đã có kết quả", description: "Xem kết quả trận đấu trường trong Mini game.", path: "/games", action: "Mở Mini game" };
+      return { title: "Trận đã có kết quả", description: "Xem kết quả trận đấu trường.", path: item.relatedId ? `/arena/match/${encodeURIComponent(item.relatedId)}` : "/arena", action: "Xem kết quả" };
     case "course_ready":
       return { title: "Bạn đã đủ điều kiện thi đầu ra", description: "Mở bài thi để xem hướng dẫn và kiểm tra thiết bị.", path: "/test/pass-course", action: "Mở bài thi đầu ra" };
     case "certificate_issued":

@@ -50,8 +50,14 @@ export function registerArenaRoutes(app: FastifyInstance, pool: Pool): void {
     return handle(reply, () => arena.acceptChallenge(request.e4sSession!.user.id, params.data.matchId));
   });
 
+  app.post("/api/v1/arena/quick-match", { preHandler: learnerOnly }, async (request, reply) => {
+    const parsed = z.object({ requestId: z.uuid(), game: gameKey, setKind: z.enum(["curriculum", "personal"]).optional() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "INVALID_ARENA_CHALLENGE" });
+    return handle(reply, () => arena.quickMatch(request.e4sSession!.user.id, parsed.data));
+  });
+
   app.post("/api/v1/arena/friendly", { preHandler: learnerOnly }, async (request, reply) => {
-    const parsed = z.object({ requestId: z.uuid(), opponentId: z.uuid(), game: gameKey, setKind }).safeParse(request.body);
+    const parsed = z.object({ requestId: z.uuid(), opponentId: z.uuid(), game: gameKey, setKind: z.enum(["curriculum", "personal"]).optional() }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_ARENA_INVITE" });
     return handle(reply, () => arena.inviteFriendly(request.e4sSession!.user.id, parsed.data), 201);
   });

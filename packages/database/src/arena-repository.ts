@@ -88,6 +88,8 @@ interface MatchRow {
 
 const ATTEMPT_SEED = 0;
 const ACTIVE_STATUSES = ["open", "invited", "accepted"] as const;
+/** A candidate another learner just took, that expired or whose pair got busy: try the next one. */
+const QUICK_MATCH_SKIP = new Set(["ARENA_CHALLENGE_TAKEN", "ARENA_CHALLENGE_EXPIRED", "ARENA_PAIR_BUSY", "ARENA_MATCH_NOT_FOUND", "ARENA_OWN_CHALLENGE", "ARENA_SEASON_CHANGED", "ARENA_LEVEL_MISMATCH"]);
 
 export class ArenaRepository {
   private readonly engagement;
@@ -221,9 +223,39 @@ export class ArenaRepository {
     return (await this.match(learnerId, matchId))!;
   }
 
+  /**
+   * "Đấu" on a Mini game card: join the oldest open ranked challenge of this game and level that the
+   * learner may take (not their own, not a pair already in play, within the open cap); otherwise post
+   * one with the learner's current Mini game set. Each step is the phase-2 accept/post transaction with
+   * its row and player locks, so a challenge taken by someone else in between is skipped, never doubled.
+   */
+  async quickMatch(learnerId: string, input: { requestId: string; game: GameKey; setKind?: ArenaSetKind | undefined }): Promise<{ joined: boolean; match: ArenaMatchView }> {
+    await this.eligibleContext(learnerId);
+    const replay = await this.byRequestKey(learnerId, input.requestId);
+    if (replay) return { joined: false, match: replay };
+    if (await this.openRankedCount(this.pool, learnerId) >= ARENA_MAX_OPEN_RANKED) throw new ArenaError("ARENA_OPEN_LIMIT", 409, { max: ARENA_MAX_OPEN_RANKED });
+    const candidates = (await this.openChallenges(learnerId)).filter((challenge) => challenge.game === input.game);
+    for (const candidate of candidates) {
+      try {
+        return { joined: true, match: await this.acceptChallenge(learnerId, candidate.id) };
+      } catch (error) {
+        if (error instanceof ArenaError && QUICK_MATCH_SKIP.has(error.code)) continue;
+        throw error;
+      }
+    }
+    const setKind = input.setKind ?? await this.activeSetKind(learnerId);
+    return { joined: false, match: await this.postChallenge(learnerId, { requestId: input.requestId, game: input.game, setKind }) };
+  }
+
+  /** The Mini game hub's current set: the learner's own topic set when one is active, else the curriculum set. */
+  private async activeSetKind(learnerId: string): Promise<ArenaSetKind> {
+    const sources = await this.engagement.arenaWordSources(learnerId);
+    return sources?.personal ? "personal" : "curriculum";
+  }
+
   // ---------------------------------------------------------------- friendly
 
-  async inviteFriendly(learnerId: string, input: { requestId: string; opponentId: string; game: GameKey; setKind: ArenaSetKind }): Promise<ArenaMatchView> {
+  async inviteFriendly(learnerId: string, input: { requestId: string; opponentId: string; game: GameKey; setKind?: ArenaSetKind | undefined }): Promise<ArenaMatchView> {
     const context = await this.eligibleContext(learnerId);
     const existing = await this.byRequestKey(learnerId, input.requestId);
     if (existing) return existing;
@@ -232,16 +264,18 @@ export class ArenaRepository {
     if (!opponent || opponent.organizationId !== context.organizationId || !arenaEligible(opponent.cefr)) {
       throw new ArenaError("ARENA_OPPONENT_NOT_ELIGIBLE", 400);
     }
-    const snapshot = await this.snapshotSource(learnerId, input.game, input.setKind);
+    // Without an explicit set the invite uses the learner's current Mini game set, like "Đấu".
+    const setKind = input.setKind ?? await this.activeSetKind(learnerId);
+    const snapshot = await this.snapshotSource(learnerId, input.game, setKind);
     const id = await this.withTx(async (client) => {
-      const setId = await this.insertSnapshot(client, snapshot, input.game, input.setKind);
+      const setId = await this.insertSnapshot(client, snapshot, input.game, setKind);
       const inserted = await client.query<{ id: string }>(
         `insert into arena_matches (organization_id, mode, game_key, cefr, poster_id, poster_cefr, opponent_id, opponent_cefr,
            request_key, game_set_id, set_kind, set_topic, status, accept_deadline)
          values ($1, 'friendly', $2, $3, $4, $3, $5, $6, $7, $8, $9, $10, 'invited', now() + make_interval(hours => $11))
          on conflict (poster_id, request_key) do nothing returning id`,
         [context.organizationId, input.game, context.cefr, learnerId, opponent.id, opponent.cefr, input.requestId, setId,
-          input.setKind, snapshot.topic, ARENA_ACCEPT_HOURS]);
+          setKind, snapshot.topic, ARENA_ACCEPT_HOURS]);
       return inserted.rows[0]?.id ?? null;
     });
     return id ? (await this.match(learnerId, id))! : (await this.byRequestKey(learnerId, input.requestId))!;

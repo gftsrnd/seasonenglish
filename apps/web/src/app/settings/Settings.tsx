@@ -84,12 +84,14 @@ export type SettingsProps = {
   operatorOverview?: OperatorSettingsOverviewView;
   actions: Partial<SettingsActions>;
   accounts?: ReactNode;
+  /** Manager only: the arena "Ngày bắt đầu mùa xếp hạng" field (self-loading). */
+  arenaSeason?: ReactNode;
 };
 
 /** `tip`: guidance shown as ⓘ next to the panel title on phones/tablets (the card paragraph is desktop-only). */
 type SettingsPanel = { id: string; label: string; content: ReactNode; tip?: { label: string; text: ReactNode } };
 
-export function SettingsPage({ role, manager, product, experience, capabilities, ai, operatorOverview, actions, accounts }: SettingsProps) {
+export function SettingsPage({ role, manager, product, experience, capabilities, ai, operatorOverview, actions, accounts, arenaSeason }: SettingsProps) {
   const compact = useMediaQuery("(max-width: 1180px)");
   const [openPanels, setOpenPanels] = useState<Readonly<Record<string, boolean>>>({});
   const [aiDraft, setAiDraft] = useState<AiConfigurationInput | null>(ai ? { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model, speechToTextModel: ai.speechToTextModel } : null);
@@ -118,6 +120,7 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
       themePanel,
       musicPanel,
       { id: "policy", label: "Nhắc học và báo cáo", tip: { label: "Nhắc học và báo cáo là gì?", text: SETTINGS_TIPS.policy }, content: <PolicySection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> },
+      { id: "arena-season", label: "Mùa xếp hạng", tip: { label: "Mùa xếp hạng là gì?", text: "Ngày bắt đầu mùa đầu tiên của đấu trường; mỗi mùa 3 tháng. Khi mùa đã có trận, ngày mới áp dụng từ mùa sau." }, content: arenaSeason },
       { id: "accounts", label: "Người dùng", tip: { label: "Người dùng là gì?", text: SETTINGS_TIPS.managerAccounts }, content: accounts }
     ] satisfies SettingsPanel[] : [])
   ] : [

@@ -254,6 +254,7 @@ const managerSettings: readonly GuideStep[] = [
   themeGuide,
   musicGuide,
   settingsStep("policy", "Nhắc học và báo cáo", "Số **ngày không hoạt động** thì cần nhắc học, và có gửi **báo cáo tháng** hay không."),
+  settingsStep("arena-season", "Mùa xếp hạng", "**Ngày bắt đầu** mùa xếp hạng của đấu trường; mỗi mùa 3 tháng."),
   settingsStep("accounts", "Người dùng", "Vai trò và trạng thái từng tài khoản. Mỗi hàng có **Khoá**, **Đặt lại** mật khẩu hoặc PIN và **Xoá**; cuối thẻ để thêm người dùng."),
 ];
 const operatorSettings: readonly GuideStep[] = [

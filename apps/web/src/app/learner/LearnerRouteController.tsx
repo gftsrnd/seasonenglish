@@ -29,6 +29,7 @@ import type { LearnerContractBundle, LearnerUiState } from "./Router.js";
 import { LearnerController, normalizeLearnerPath } from "./Router.js";
 import { CourseCompletion } from "./CourseCompletion.js";
 import { LearnerRequestHistory } from "./LearnerRequestHistory.js";
+import { ArenaRoute, arenaRouteMatch } from "./arena/ArenaRoutes.js";
 import { Empty, Notice, PageTitle, AppLink, Button, Modal } from "./ui.js";
 
 type StaticRouteName = "home" | "monthly" | "onboard" | "coach" | "challenge" | "practice" | "survey" | "profile" | "games";
@@ -128,6 +129,7 @@ function LearnerRoutes(props: LearnerRouteProps) {
   if (path === "/support") return <LearnerRequestHistory />;
   if (path === "/survey/monthly") return <Navigate replace to="/support?type=feedback" />;
   if (path === "/reward/course") return <CourseCompletion onPrint={printLearnerReward} />;
+  if (arenaRouteMatch(path)) return <ArenaRoute path={path} learnerId={props.learnerId} />;
   return <LearnerContent {...props} />;
 }
 

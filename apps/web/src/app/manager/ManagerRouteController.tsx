@@ -6,6 +6,7 @@ import type { ManagerAccountView, ManagerAccountsView, ManagerDeleteRequestsView
 import { managerApiClient as apiClient } from "../../api/manager.js";
 import { AccountStatusBadge, providerTestLabel, SettingsPage, webhookTestLabel } from "../settings/index.js";
 import { ManagerOperations } from "./Operations.js";
+import { ArenaSeasonSetting } from "./ArenaSeasonSetting.js";
 import { ManagerRequests } from "./Requests.js";
 import { ManagerHolidays } from "./Holidays.js";
 import { ManagerProgress } from "./Progress.js";
@@ -414,7 +415,7 @@ function SettingsRoute({ role, currentUserId, onSessionRevoked }: ManagerRouteCo
   const maintenanceActions = role === "manager" && capabilities.maintenance === true ? { onSeedData: () => requestMaintenance("seed_demo"), onWipeData: () => requestMaintenance("wipe_data") } : {};
   return <>
     {loadError ? <div className="banner danger" role="alert"><div className="body small">{loadError}</div></div> : null}
-    <SettingsPage role={role} {...(manager ? { manager } : {})} {...(operatorOverview ? { operatorOverview } : {})} {...(provider ? { ai: provider } : {})} product={product} experience={experience} capabilities={capabilities} actions={{ onSaveManager: saveManager, onSaveProduct: saveProduct, onSaveExperience: saveExperience, ...(saveAi ? { onSaveAi: saveAi } : {}), ...(testAi ? { onTestAi: testAi } : {}), ...managerActions, ...maintenanceActions }} {...(accounts ? { accounts: <AccountsPanel view={accounts} currentUserId={currentUserId} reload={loadAccounts} notify={notify} onSessionRevoked={onSessionRevoked} /> } : {})} />
+    <SettingsPage role={role} {...(manager ? { manager } : {})} {...(operatorOverview ? { operatorOverview } : {})} {...(provider ? { ai: provider } : {})} product={product} experience={experience} capabilities={capabilities} actions={{ onSaveManager: saveManager, onSaveProduct: saveProduct, onSaveExperience: saveExperience, ...(saveAi ? { onSaveAi: saveAi } : {}), ...(testAi ? { onTestAi: testAi } : {}), ...managerActions, ...maintenanceActions }} {...(accounts ? { accounts: <AccountsPanel view={accounts} currentUserId={currentUserId} reload={loadAccounts} notify={notify} onSessionRevoked={onSessionRevoked} /> } : {})} {...(role === "manager" ? { arenaSeason: <ArenaSeasonSetting notify={notify} /> } : {})} />
     {maintenanceDialog ? <MaintenanceConfirmationDialog confirmation={maintenanceDialog.confirmation} busy={maintenanceBusy} onCancel={() => setMaintenanceDialog(undefined)} onConfirm={(phrase) => confirmMaintenance({ confirmationToken: maintenanceDialog.confirmation.token, confirmationPhrase: phrase })} /> : null}
   </>;
 }

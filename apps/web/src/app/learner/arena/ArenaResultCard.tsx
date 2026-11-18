@@ -1,0 +1,52 @@
+import type { ReactNode } from "react";
+import { Bell, Swords, Trophy } from "lucide-react";
+import type { ArenaMatch } from "../../../api/arena.js";
+import { ARENA_GAME_NAMES, bandLabel, decidedByLine, outcomeTitle, signed } from "./arena-text.js";
+
+/**
+ * The arena result is the solo Mini game result card (`.game-result`, same icon, score box and
+ * actions) with one extra line for the opponent and one for XH. Actions: ONE primary "Đấu tiếp"
+ * plus an optional text link (the caller passes "Về bảng xếp hạng").
+ */
+export function ArenaResultCard({ match, onAgain, againBusy = false, link }: {
+  match: ArenaMatch;
+  onAgain?: (() => void) | undefined;
+  againBusy?: boolean;
+  link?: ReactNode;
+}) {
+  const result = match.status === "settled" ? match.result : null;
+  const waiting = !result && match.me.played && match.status === "accepted";
+  const state = result ? result.outcome : waiting ? "waiting" : "closed";
+  const mode = `${match.mode === "ranked" ? "Xếp hạng" : "Giao hữu"} · ${ARENA_GAME_NAMES[match.game]}`;
+  return <section className={`card game-result ${waiting ? "is-pending" : "is-complete"} arena-result`} data-arena-result={state} aria-live="polite">
+    <div className="game-result__icon" aria-hidden="true">{waiting ? <Bell size={30} strokeWidth={1.8} /> : <Trophy size={32} strokeWidth={1.8} />}</div>
+    <div className="game-result__copy">
+      <div className="eyebrow">{mode}</div>
+      {result ? <>
+        <h2>{outcomeTitle(result.outcome)}</h2>
+        <p>{match.opponent?.displayName ?? "Đối thủ"}: <b>{match.them.score ?? 0}</b> điểm · {decidedByLine(match)}</p>
+        <p className="arena-result__xh" data-arena-xh>{match.mode === "ranked" && result.rating
+          ? <><span className="badge" data-arena-chip>{signed(result.rating.change)} điểm xếp hạng</span> · {rankedExplanation(match)}</>
+          : "Giao hữu không tính điểm xếp hạng."}</p>
+      </> : waiting ? <>
+        <h2>Chờ đối thủ</h2>
+        <p>Chờ đối thủ, có kết quả sẽ báo ở chuông</p>
+      </> : <h2>Trận đã đóng</h2>}
+    </div>
+    {result || waiting ? <div className="game-result__score"><strong>{match.me.score ?? 0}</strong><span>điểm của bạn</span></div> : null}
+    {onAgain || link ? <div className="game-result__actions">
+      {onAgain ? <button className="btn-primary" type="button" disabled={againBusy} aria-busy={againBusy || undefined} onClick={onAgain}><Swords className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" />{againBusy ? "Đang tìm…" : "Đấu tiếp"}</button> : null}
+      {link}
+    </div> : null}
+  </section>;
+}
+
+/** "Ngang sức · lần gặp 1 · tính 50%": band label, meeting of the day and the repeat rate when it applies. */
+export function rankedExplanation(match: ArenaMatch): string {
+  const result = match.result;
+  if (!result?.rating) return "";
+  const parts = [bandLabel(result.rating.base, result.outcome)];
+  if (result.rating.meetingIndex) parts.push(`lần gặp ${result.rating.meetingIndex}`);
+  if (result.rating.decayPercent !== null && result.rating.decayPercent < 100) parts.push(`tính ${result.rating.decayPercent}%`);
+  return parts.join(" · ");
+}

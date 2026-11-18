@@ -986,12 +986,12 @@ describe("Manager guide coverage and bounded scroll regions", () => {
     const { container } = renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
     await waitFor(() => expect(container.querySelector("#setting-accounts > .card")).not.toBeNull());
     const panels = Array.from(container.querySelectorAll('.settings-panel-content[id^="setting-"]'));
-    expect(panels.map((panel) => panel.id)).toEqual(["setting-test-date", "setting-monthly", "setting-theme", "setting-music", "setting-policy", "setting-accounts"]);
+    expect(panels.map((panel) => panel.id)).toEqual(["setting-test-date", "setting-monthly", "setting-theme", "setting-music", "setting-policy", "setting-arena-season", "setting-accounts"]);
     const { definitions, found, missing } = guideCoverage("manager", "/settings");
     expect(missing).toEqual([]);
     expect(found).toHaveLength(definitions.length);
     expect(found.map((step) => settingsPanelId(step.target))).toEqual(panels.map((panel) => panel.id));
-    expect(found.map((step) => step.title)).toEqual(["Ngày hệ thống thử", "Học theo tháng", "Giao diện theo mùa", "Nhạc nền", "Nhắc học và báo cáo", "Người dùng"]);
+    expect(found.map((step) => step.title)).toEqual(["Ngày hệ thống thử", "Học theo tháng", "Giao diện theo mùa", "Nhạc nền", "Nhắc học và báo cáo", "Mùa xếp hạng", "Người dùng"]);
   });
 
   it("gives every Operator settings card one step, in reading order", async () => {
