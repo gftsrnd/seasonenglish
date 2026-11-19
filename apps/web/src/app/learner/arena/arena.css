@@ -44,11 +44,13 @@
 .arena-state h2, .arena-state p { margin: 0; }
 .arena-actions { gap: 8px; flex-wrap: nowrap; }
 
-/* Rank 1–3: round medal (inline SVG) on a ribbon in the theme colours; 4+ plain numbers. */
-.rank-badge { display: inline-grid; place-items: center; justify-self: center; width: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.rank-badge--medal svg { display: block; width: 28px; height: 34px; filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, .18)); }
-.rank-badge--large { width: 48px; }
-.rank-badge--large svg { width: 48px; height: 58px; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .2)); }
+/* Rank 1–3: round medal (public/arena files) under a two-strap ribbon in the theme colours; 4+ plain. */
+.rank-badge { --medal: 24px; display: inline-grid; justify-items: center; justify-self: center; width: calc(var(--medal) + 4px); font-weight: 700; font-variant-numeric: tabular-nums; }
+.rank-badge--large { --medal: 40px; }
+.rank-badge__ribbon { display: flex; justify-content: center; height: calc(var(--medal) * .62); margin-bottom: calc(var(--medal) * -.22); }
+.rank-badge__ribbon i { display: block; width: calc(var(--medal) * .42); height: 100%; margin: 0 calc(var(--medal) * -.07); background: var(--primary); clip-path: polygon(0 0, 52% 0, 100% 100%, 48% 100%); }
+.rank-badge__ribbon i + i { background: var(--primary-dark); clip-path: polygon(48% 0, 100% 0, 52% 100%, 0 100%); }
+.rank-badge__medal { position: relative; display: block; width: var(--medal); height: var(--medal); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .2)); }
 .rank-badge--plain { color: var(--muted); }
 
 /* Popups ≤ 80% height, sticky header with × top-right. */
@@ -100,8 +102,7 @@ a.arena-entry-card__link:hover h2 { text-decoration: underline; text-underline-o
 .arena-podium__step--1 { padding-top: 22px; padding-bottom: 22px; background: color-mix(in srgb, var(--primary) 16%, white); border-color: var(--primary-line); }
 .arena-podium__step--3 { padding-bottom: 8px; }
 .arena-podium__step.is-me { outline: 2px solid var(--primary); outline-offset: -2px; }
-.arena-podium .rank-badge--large svg { width: 44px; height: 53px; }
-.arena-podium__step--1 .rank-badge--large svg { width: 56px; height: 67px; }
+.arena-podium__step--1 .rank-badge--large { --medal: 52px; }
 .arena-podium__name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .arena-podium__name small { color: var(--muted); font-weight: 400; }
 .arena-podium__rating { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--primary-dark); }
@@ -153,6 +154,6 @@ a.arena-entry-card__link:hover h2 { text-decoration: underline; text-underline-o
 /* Phone: same tinted tile as the Mini game cards. */
 @media (max-width: 600px) {
   :root:root:root .learner-root .arena-page .arena-game-tile { background: var(--primary-soft); border-radius: 14px; }
-  .arena-podium .rank-badge--large svg { width: 34px; height: 41px; }
-  .arena-podium__step--1 .rank-badge--large svg { width: 42px; height: 50px; }
+  .arena-podium .rank-badge--large { --medal: 32px; }
+  .arena-podium__step--1 .rank-badge--large { --medal: 40px; }
 }
