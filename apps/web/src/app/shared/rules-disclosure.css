@@ -1,24 +1,22 @@
-/* A rules line that opens in place: bold title + chevron, a calm body that is easy to read. */
-.rules-disclosure { margin-top: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
-.rules-disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 0 14px; font-weight: 700; font-size: .95rem; color: var(--text); cursor: pointer; list-style: none; }
-.rules-disclosure > summary::-webkit-details-marker { display: none; }
-.rules-disclosure > summary:hover { background: color-mix(in srgb, var(--primary-soft) 40%, var(--surface)); }
-/* Black ▼ like the app's selects; it turns ▲ when open. */
-.rules-disclosure__chevron { flex: none; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 7px solid var(--text, #1f1f1f); transition: transform .18s ease; }
-.rules-disclosure[open] > summary { border-bottom: 1px solid var(--line); }
-.rules-disclosure[open] .rules-disclosure__chevron { transform: rotate(180deg); }
-.rules-disclosure__body { display: grid; gap: 16px; padding: 14px 16px 16px; font-size: 14px; line-height: 1.55; color: var(--text); }
-.rules-disclosure__body h4 { margin: 0 0 6px; font-size: 14px; font-weight: 700; color: var(--primary-dark, var(--text)); }
-.rules-disclosure__body ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
-.rules-disclosure__body li::marker { color: var(--muted); }
+/* Rules that open in place, styled like Bài thi tháng's "▼ Quy tắc điểm danh và giờ vào đề" (owner 19/11):
+   a small line with the native triangle, then plain lists – no card, no tinted boxes. */
+.rules-disclosure { margin-top: 10px; }
+.rules-disclosure > summary { font-weight: 700; }
+.rules-disclosure__body { display: grid; gap: 10px; padding: 2px 0 6px; }
+.rules-disclosure__body h4 { margin: 0 0 4px; font-size: .875rem; font-weight: 700; color: var(--text); }
+.rules-disclosure__body ul { margin: 0; padding-left: 18px; }
+.rules-disclosure__body li + li { margin-top: 4px; }
 
-/* Point tables: label left, points as a pill on the right, the condition in small grey under the label. */
-.rules-points { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-.rules-points section { padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--primary-soft) 35%, var(--surface)); }
-.rules-points dl { display: grid; gap: 8px; margin: 0; }
-.rules-points dl > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; }
-.rules-points dt { margin: 0; }
-.rules-points dt small { display: block; color: var(--muted); font-size: 12.5px; }
-.rules-points dd { margin: 0; padding: 1px 8px; border-radius: 999px; background: var(--surface); color: var(--primary-dark, var(--primary)); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.rules-points dd.is-minus { color: #b3261e; }
+/* Point rows: "Việc ........ +N", condition in small grey under it; groups side by side when there is room. */
+.rules-points { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 24px; }
+.rules-points section { padding: 0; background: none; }
+.rules-points dl { display: grid; gap: 4px; margin: 0; }
+.rules-points dl > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 8px; }
+.rules-points dt { margin: 0; color: var(--text); }
+.rules-points dt small { display: block; color: var(--muted); font-size: 12px; }
+.rules-points dd { margin: 0; color: var(--primary-dark, var(--primary)); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rules-points dd .is-minus { color: #b3261e; }
 .rules-list { max-width: 80ch; }
+/* Same look on manager pages, where learner.css may not be loaded. */
+.rules-disclosure { color: var(--muted); font-size: .875rem; line-height: 1.5; }
+.rules-disclosure > summary { cursor: pointer; color: var(--text); min-height: 44px; align-content: center; }
