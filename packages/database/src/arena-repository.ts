@@ -144,6 +144,25 @@ export class ArenaRepository {
     return (await this.views(learnerId, [row]))[0] ?? null;
   }
 
+  /**
+   * The words of a match's round, to revise before playing (owner, 19/11): for the two players, and
+   * for anyone of the same level while it is an open ranked challenge (the poster stays hidden).
+   */
+  async matchWords(learnerId: string, matchId: string): Promise<{ topic: string; words: Array<{ id: string; english: string; vietnamese: string }> } | null> {
+    const row = await this.matchRow(this.pool, matchId);
+    if (!row) return null;
+    const participant = row.poster_id === learnerId || row.opponent_id === learnerId;
+    if (!participant) {
+      const context = await this.learnerContext(learnerId);
+      const visible = row.mode === "ranked" && row.status === "open" && Boolean(context)
+        && context!.organizationId === row.organization_id && context!.cefr === row.cefr;
+      if (!visible) return null;
+    }
+    const { wordSet, unitIds } = await this.round(matchId);
+    const units = unitIds.length ? unitIds.map((id) => wordSet.words.find((word) => word.id === id)).filter((word): word is GameWordSetView["words"][number] => Boolean(word)) : wordSet.words;
+    return { topic: wordSet.topic, words: units.map((word) => ({ id: word.id, english: word.english, vietnamese: word.vietnamese })) };
+  }
+
   // ---------------------------------------------------------------- open challenges
 
   /** Open ranked challenges of the learner's level: game, set topic and deadline only, never the poster. */

@@ -102,25 +102,51 @@ describe("Đấu trường page", () => {
     acceptChallenge: vi.fn().mockResolvedValue(match()),
     inviteFriendly: vi.fn().mockResolvedValue(match()), answerFriendly: vi.fn(),
     cancel: vi.fn().mockResolvedValue(match({ status: "cancelled" })), forfeit: vi.fn(),
+    words: vi.fn().mockResolvedValue({ topic: "budget", words: [{ id: "w1", english: "budget", vietnamese: "ngân sách" }, { id: "w2", english: "risk", vietnamese: "rủi ro" }] }),
     ...overrides
   });
-  const page = (api: ReturnType<typeof client>, navigate = vi.fn(), notify = vi.fn()) =>
-    render(<ModalProvider><ArenaLeaderboard navigate={navigate} notify={notify} learnerId="me" client={api as never} /></ModalProvider>);
+  const hub = { cefr: "B1", aiAvailable: true, learnedVocabularyAvailable: true, games: [], topicModeration: { state: "empty" },
+    wordSet: { id: "s", topic: "project change", cefr: "B1", source: "custom", words: [{ id: "p1", english: "scope", vietnamese: "phạm vi", definition: "", partOfSpeech: "noun" }] } };
+  const sets = () => ({ getGames: vi.fn().mockResolvedValue(hub), generateGameWordSet: vi.fn().mockResolvedValue({ ...hub, wordSet: { ...hub.wordSet, topic: "travel" } }), useWeeklyGameWordSet: vi.fn().mockResolvedValue(hub) });
+  const page = (api: ReturnType<typeof client>, navigate = vi.fn(), notify = vi.fn(), setClient = sets()) =>
+    render(<ModalProvider><ArenaLeaderboard navigate={navigate} notify={notify} learnerId="me" client={api as never} setClient={setClient as never} /></ModalProvider>);
 
-  it("shows the season banner, the rules ⓘ, the back link and the two tabs", async () => {
+  it("has a Mini game style title that follows the tab, the rules ⓘ and the back link", async () => {
     page(client());
-    expect(await screen.findByRole("heading", { level: 1, name: /Đấu trường B1/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: /Giao đấu/ })).toBeInTheDocument();
+    expect(screen.getByText(/Đấu trường B1/)).toBeInTheDocument();
     expect(screen.getByText(/6\.000 điểm XH tổng · Hạng 4\/5/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Luật đấu trường" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Về Mini game/ })).toHaveAttribute("href", "/games");
-    expect(screen.getByRole("tab", { name: "Đấu" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Bảng xếp hạng" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Bảng xếp hạng" }));
+    expect(screen.getByRole("heading", { level: 1, name: /Bảng xếp hạng/ })).toBeInTheDocument();
+  });
+
+  it("shows the set's words and changes the set right here (also the Mini game set)", async () => {
+    const api = client();
+    const setClient = sets();
+    page(api, vi.fn(), vi.fn(), setClient);
+    expect(await screen.findByText("scope")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Đổi bộ" }));
+    fireEvent.change(screen.getByLabelText("Chủ đề bộ từ"), { target: { value: "travel" } });
+    fireEvent.click(screen.getByRole("button", { name: "Tạo bộ từ" }));
+    await waitFor(() => expect(setClient.generateGameWordSet).toHaveBeenCalledWith(expect.objectContaining({ topic: "travel" })));
+    await waitFor(() => expect(api.home).toHaveBeenCalledTimes(2));
+  });
+
+  it("lets me see the words of an open challenge before taking it", async () => {
+    const api = client();
+    page(api);
+    const row = (await screen.findByText(/budget · còn/)).closest("li") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Xem từ" }));
+    expect(await within(row).findByText("ngân sách", { exact: false })).toBeInTheDocument();
+    expect(api.words).toHaveBeenCalledWith("c1");
   });
 
   it("posts a ranked challenge with the set in use after confirming, and hides cancelled matches", async () => {
     const api = client();
     page(api);
-    expect(await screen.findByText("project change · 12 từ")).toBeInTheDocument();
+    expect(await screen.findByText(/Dùng bộ project change · 12 từ/)).toBeInTheDocument();
     expect(screen.queryByText("Đã huỷ")).toBeNull();
     fireEvent.click(screen.getByRole("radio", { name: /Phân loại từ/ }));
     fireEvent.click(screen.getByRole("button", { name: "Đăng thách đấu" }));

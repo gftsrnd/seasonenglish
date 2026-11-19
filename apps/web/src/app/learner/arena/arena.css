@@ -1,5 +1,5 @@
 /*
- * Arena (Đấu trường), owner reference 19/11: the Mini game entry card, the season banner, the app's
+ * Arena (Đấu trường), owner reference 19/11: the Mini game entry card (season colours + scenery), the app's
  * segmented tabs (Đấu | Bảng xếp hạng), the two play panels and the leaderboard table. Season colours
  * come from the theme tokens and the scenery from the current season's background.svg.
  * Phone ≤ 600px compact, tablet 601–1024px middle tier, desktop normal.
@@ -36,33 +36,24 @@
 :root:root .chip.arena-filter.is-active { background: var(--primary); color: var(--primary-ink); font-weight: 600; }
 
 /* Mini game › last card: season colours + scenery on the right, no character. */
-:root:root .arena-entry { position: relative; display: flex; align-items: center; gap: 14px; min-height: 92px; padding: 18px 22px; overflow: hidden; border-radius: 20px; color: var(--primary-ink); text-decoration: none; background: linear-gradient(100deg, var(--primary-dark) 0%, var(--primary) 70%); box-shadow: 0 8px 22px var(--primary-glow); }
+:root:root .arena-entry { position: relative; display: flex; align-items: center; gap: 14px; min-height: 92px; padding: 18px 22px; overflow: hidden; border-radius: 20px; color: var(--primary-ink); text-decoration: none; background: linear-gradient(100deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 72%, white) 78%); box-shadow: 0 8px 22px var(--primary-glow); }
 .arena-entry__icon { position: relative; z-index: 1; flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: color-mix(in srgb, white 16%, transparent); }
 .arena-entry__text { position: relative; z-index: 1; display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
 .arena-entry__text b { font-size: 20px; line-height: 1.2; }
 .arena-entry__text small { font-size: 14px; opacity: .9; }
-.arena-entry__scene { position: absolute; inset: 0 0 0 auto; width: 46%; background-size: cover; background-position: center; opacity: .5; -webkit-mask-image: linear-gradient(90deg, transparent, #000 60%); mask-image: linear-gradient(90deg, transparent, #000 60%); pointer-events: none; }
+.arena-entry__scene { position: absolute; inset: 0 0 0 auto; width: 46%; background-size: cover; background-position: center; opacity: .65; -webkit-mask-image: linear-gradient(90deg, transparent, #000 60%); mask-image: linear-gradient(90deg, transparent, #000 60%); pointer-events: none; }
 .arena-entry__chevron { position: relative; z-index: 1; flex: none; }
 :root:root:root .arena-entry :is(b, small, .arena-entry__chevron) { color: var(--primary-ink); }
 :root:root:root .arena-entry .arena-entry__text small { opacity: 1; font-weight: 500; }
-:root:root:root .arena-entry .arena-entry__icon { background: var(--primary-ink); color: var(--primary-dark); box-shadow: 0 4px 12px rgba(0, 0, 0, .18); }
+:root:root:root .arena-entry .arena-entry__icon { background: #fff; color: var(--primary-dark); box-shadow: 0 4px 12px rgba(0, 0, 0, .18); }
 :root:root:root .arena-entry.is-locked .arena-entry__icon { color: #5c5c56; }
 :root:root a.arena-entry:hover { filter: brightness(1.05); }
 :root:root .arena-entry.is-locked { background: linear-gradient(100deg, color-mix(in srgb, var(--primary-dark) 45%, #8a8a84) 0%, color-mix(in srgb, var(--primary) 35%, #a3a39c) 70%); box-shadow: none; }
 .arena-entry.is-locked .arena-entry__scene { opacity: .25; filter: grayscale(1); }
 
-/* Banner of the arena page: same colours and scenery, larger. */
-.arena-banner { position: relative; overflow: hidden; display: flex; align-items: center; min-height: 168px; padding: 26px 32px; border-radius: 24px; color: var(--primary-ink); background: linear-gradient(100deg, var(--primary-dark) 0%, var(--primary) 62%); box-shadow: 0 10px 26px var(--primary-glow); }
-.arena-banner__scene { position: absolute; inset: 0 0 0 auto; width: 58%; background-size: cover; background-position: center; opacity: .55; -webkit-mask-image: linear-gradient(90deg, transparent, #000 55%); mask-image: linear-gradient(90deg, transparent, #000 55%); pointer-events: none; }
-.arena-banner__text { position: relative; z-index: 1; display: grid; gap: 6px; min-width: 0; }
-.arena-banner__eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; opacity: .92; }
-:root:root:root .arena-banner h1 { margin: 0; color: inherit; font-size: 36px; line-height: 1.1; }
-:root:root:root .arena-banner :is(.info-title-text, .info-tip-button, .info-tip-button svg, p, span) { color: var(--primary-ink); }
-.arena-banner p { margin: 0; font-size: 16px; opacity: .95; }
 :root:root .arena-page .arena-tabs { margin: 0; }
 
-/* Đấu: two panels side by side (stacked on tablet and phone). */
-.arena-play { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+/* Giao đấu: cards top to bottom, like the Mini game page. */
 .arena-panel { display: grid; gap: 14px; margin: 0; padding: 22px; border-radius: 20px; }
 .arena-panel h2 { margin: 0; }
 .arena-panel__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -84,6 +75,23 @@
 :root:root .arena-set__change { flex: none; color: var(--primary-dark); font-weight: 600; text-decoration: none; }
 :root:root .arena-submit { justify-self: start; min-width: 180px; }
 .arena-note { margin: 0; }
+:root:root .arena-panel__head .arena-mode-tabs { flex: none; }
+.arena-submit-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.arena-set-topic { margin-left: 10px; font-size: 15px; font-weight: 500; color: var(--muted); }
+.arena-set-edit { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: color-mix(in srgb, var(--primary-soft) 55%, var(--surface)); }
+.arena-set-form { display: flex; gap: 8px; }
+.arena-set-form input { flex: 1 1 auto; min-width: 0; }
+.arena-set-edit > .btn { justify-self: start; }
+.arena-set-edit > p { margin: 0; }
+.arena-word-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.arena-word-chips li { padding: 6px 12px; border-radius: 999px; background: var(--primary-soft); font-size: 14px; color: var(--text); }
+.arena-word-chips li b { font-weight: 600; }
+.arena-words { display: grid; gap: 8px; width: 100%; padding: 6px 0 10px 52px; }
+.arena-words > p { margin: 0; }
+.arena-words-title { margin: 8px 0 0; font-size: 15px; }
+.arena-state .arena-words { padding-left: 0; }
+.arena-list__row { flex-wrap: wrap; }
+.arena-list__line { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; }
 
 /* Bảng xếp hạng: chips + level on one row, a table with the six games and the total. */
 .arena-board__filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
@@ -141,9 +149,7 @@
 :root:root:root .app-learner-page.arena-page--narrow { max-width: 560px !important; margin-inline: auto !important; }
 
 @media (max-width: 1024px) {
-  .arena-banner { min-height: 140px; padding: 22px 24px; }
-  :root:root:root .arena-banner h1 { font-size: 28px; }
-  .arena-play { grid-template-columns: minmax(0, 1fr); }
+  .arena-game-picks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
   .arena-page { gap: 10px; }
@@ -151,9 +157,6 @@
   .arena-entry__icon { width: 36px; height: 36px; }
   .arena-entry__text b { font-size: 17px; }
   .arena-entry__text small { font-size: 12px; }
-  .arena-banner { min-height: 0; padding: 16px; border-radius: 18px; }
-  :root:root:root .arena-banner h1 { font-size: 22px; }
-  .arena-banner p, .arena-banner__eyebrow { font-size: 13px; }
   .arena-panel { padding: 14px; gap: 10px; border-radius: 16px; }
   .arena-game-picks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   :root:root:root .arena-game-pick { min-height: 40px; padding: 0 10px; gap: 8px; font-size: 14px; }
@@ -162,6 +165,11 @@
   .arena-list__text b { font-size: 14px; }
   .arena-list__text small { font-size: 12px; }
   :root:root:root:root .arena-list__row .arena-row-action { height: 30px; min-height: 30px !important; max-height: 30px; padding: 0 12px !important; font-size: 13px !important; }
-  :root:root .arena-submit { justify-self: stretch; }
+  :root:root .arena-submit { flex: 1 1 100%; }
+  .arena-words { padding-left: 0; }
+  .arena-set-form { flex-wrap: wrap; }
+  .arena-set-form .btn-primary { flex: 1 1 100%; }
+  .arena-word-chips li { font-size: 13px; padding: 4px 10px; }
+  .arena-panel__head { flex-wrap: wrap; }
   .dialog.arena-dialog > .row.between:first-child { margin: 0 -16px 8px; padding: 10px 16px 8px; }
 }

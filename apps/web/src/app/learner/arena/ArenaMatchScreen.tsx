@@ -7,11 +7,12 @@ import { GameEngine } from "../Games.js";
 import { AppLink, Notice } from "../ui.js";
 import { ArenaGameIcon } from "./ArenaGameIcon.js";
 import { ArenaResultCard } from "./ArenaResultCard.js";
+import { ArenaWords } from "./ArenaWords.js";
 import { ARENA_GAME_NAMES, hoursLeft, isInviteForMe, matchStatusLine } from "./arena-text.js";
 import { arenaErrorMessage, useArenaQuickMatch } from "./useArenaQuickMatch.js";
 import "./arena.css";
 
-type Client = Pick<ArenaApiClient, "match" | "start" | "submit" | "forfeit" | "answerFriendly" | "quickMatch">;
+type Client = Pick<ArenaApiClient, "match" | "start" | "submit" | "forfeit" | "answerFriendly" | "quickMatch"> & Partial<Pick<ArenaApiClient, "words">>;
 
 /**
  * Screen 1 – the game in arena mode (`/arena/match/:id`): the existing game engine with one small
@@ -100,13 +101,14 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
           : busy && pending.current
             ? <section className="card game-result is-pending" aria-live="polite"><div className="game-result__icon game-result__spinner" aria-hidden="true" /><div><div className="eyebrow">Đang hoàn tất</div><h2>Đang ghi kết quả…</h2></div></section>
             : <GameEngine game={match.game} wordSet={round.wordSet} attempt={round.attemptSeed} finish={submit} />)
-        : <ArenaMatchState match={match} busy={busy} onStart={start} onAnswer={answer} again={again} link={boardLink} />}
+        : <ArenaMatchState match={match} busy={busy} onStart={start} onAnswer={answer} again={again} link={boardLink} client={client} />}
     </section>
   </div>;
 }
 
 /** Non-playing states of the match screen: one action at most, plus the text link back to the board. */
-function ArenaMatchState({ match, busy, onStart, onAnswer, again, link }: {
+function ArenaMatchState({ match, busy, onStart, onAnswer, again, link, client }: {
+  client: Client;
   match: ArenaMatch;
   busy: boolean;
   onStart: () => void;
@@ -137,6 +139,7 @@ function ArenaMatchState({ match, busy, onStart, onAnswer, again, link }: {
       <h2>{match.me.started ? "Chơi tiếp ván đấu" : "Sẵn sàng đấu"}</h2>
       <p className="small muted">Còn {hoursLeft(match.playDeadline)} giờ</p>
       <div className="row arena-actions"><button className="btn-primary" type="button" disabled={busy} aria-busy={busy || undefined} onClick={onStart}><Play className="game-control-icon" size={16} aria-hidden="true" />{match.me.started ? "Chơi tiếp" : "Bắt đầu"}</button></div>
+      {client.words ? <><h3 className="arena-words-title">Từ trong ván – ôn trước khi chơi</h3><ArenaWords matchId={match.id} client={client as Pick<ArenaApiClient, "words">} /></> : null}
     </section>;
   }
   if (match.status === "accepted" || match.status === "settled") {

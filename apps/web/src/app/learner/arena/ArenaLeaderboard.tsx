@@ -1,46 +1,50 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { CefrLevel, GameKey } from "@e4s/contracts";
-import { ArrowLeft, ChevronDown, ChevronRight, CircleHelp, Inbox, Trophy, Users } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import type { CefrLevel, GameHubView, GameKey } from "@e4s/contracts";
+import { ArrowLeft, ChevronDown, ChevronRight, CircleHelp, Inbox, Users } from "lucide-react";
 import { arenaApiClient, type ArenaApiClient, type ArenaBoardGame, type ArenaHome, type ArenaLeaderboard as Board, type ArenaMatch, type ArenaOpenChallenge } from "../../../api/arena.js";
+import { learnerApiClient, type LearnerApiClient } from "../../../api/learner.js";
 import { InfoTip } from "../../shared/CompactUi.js";
 import { useModal } from "../../shared/ModalProvider.js";
 import { Pager } from "../../shared/Pager.js";
 import { useMediaQuery } from "../../shared/useMediaQuery.js";
 import { AppLink, Modal, Notice } from "../ui.js";
 import { ArenaGameIcon } from "./ArenaGameIcon.js";
-import { myMatchRows, useArenaSceneStyle } from "./ArenaHub.js";
+import { myMatchRows } from "./ArenaHub.js";
 import { ArenaResultCard } from "./ArenaResultCard.js";
-import { ARENA_GAMES, ARENA_GAME_NAMES, ARENA_RULES, hoursLeft, isInviteForMe, isMyTurn, matchStatusLine } from "./arena-text.js";
+import { ArenaWords } from "./ArenaWords.js";
+import { ARENA_GAMES, ARENA_GAME_NAMES, ARENA_RULES, hoursLeft, isInviteForMe, matchStatusLine } from "./arena-text.js";
 import { arenaErrorMessage } from "./useArenaQuickMatch.js";
 import "./arena.css";
 
-type Client = Pick<ArenaApiClient, "home" | "leaderboard" | "challenges" | "postChallenge" | "acceptChallenge" | "inviteFriendly" | "answerFriendly" | "cancel" | "forfeit">;
+type Client = Pick<ArenaApiClient, "home" | "leaderboard" | "challenges" | "postChallenge" | "acceptChallenge" | "inviteFriendly" | "answerFriendly" | "cancel" | "forfeit" | "words">;
+type SetClient = Pick<LearnerApiClient, "getGames" | "generateGameWordSet" | "useWeeklyGameWordSet">;
 type Tab = "play" | "board";
 type Person = { id: string; name: string; level: CefrLevel };
 
 const numberFormat = new Intl.NumberFormat("vi-VN");
 const dateFormat = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 const LEVELS: CefrLevel[] = ["B1", "B2", "C1"];
+const TAB_TITLES: Record<Tab, string> = { play: "Giao đấu", board: "Bảng xếp hạng" };
 
 /**
- * Đấu trường (`/arena`, owner reference 19/11): a season banner (season colours + scenery, no
- * character), then the app's segmented tabs "Đấu | Bảng xếp hạng".
- * - Đấu: left card Xếp hạng / Giao hữu (pick a game, the word set in use, one button);
- *   right card "Trận của bạn" (≤ 3, with Huỷ / Nhận / Chơi / Bỏ trận) and "Thách đấu đang mở".
- * - Bảng xếp hạng: Tổng / 6 game chips, level select, a table with the six games and the total
- *   (phone: rank · name · score, tap a row for the six games), "Bạn đang hạng x/y".
+ * Đấu trường (`/arena`, owner 19/11): laid out like the Mini game page – back link, page title
+ * (eyebrow "Đấu trường B1", the title follows the tab: Giao đấu / Bảng xếp hạng), the app's
+ * segmented tabs, then cards top to bottom.
+ * - Giao đấu: Bộ từ (words shown, change the set right here – it is the Mini game set too),
+ *   Đăng thách đấu (Xếp hạng / Giao hữu), Trận của bạn, Thách đấu đang mở (see the words before taking it).
+ * - Bảng xếp hạng: Tổng / 6 game chips, level select, the 6-game table, "Bạn đang hạng x/y".
  */
-export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaApiClient, initialTab = "play" }: {
+export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaApiClient, setClient = learnerApiClient, initialTab = "play" }: {
   navigate: (path: string) => void;
   notify: (message: string) => void;
   learnerId?: string | undefined;
   client?: Client;
+  setClient?: SetClient;
   initialTab?: Tab;
 }) {
   const [home, setHome] = useState<ArenaHome | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>(initialTab);
-  const scene = useArenaSceneStyle();
 
   const load = useCallback(async () => {
     try { setHome(await client.home()); setError(""); } catch { setError("Không tải được đấu trường."); }
@@ -53,30 +57,28 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
   if (!home.eligible) return <div className="app-learner-page arena-page">{back}<Notice tone="warn">Đấu trường mở từ B1. Bạn đang ở mức {home.level ?? "—"}.</Notice></div>;
 
   const rankLine = home.rank && home.rank.of > 1 ? `Hạng ${home.rank.position}/${home.rank.of}` : "Chưa xếp hạng";
+  const seasonLine = home.season ? ` · mùa đến ${dateFormat.format(new Date(`${home.season.endsOn}T00:00:00+07:00`))}` : "";
   return <div className="app-learner-page arena-page">
     {back}
-    <section className="arena-banner" aria-labelledby="arena-title">
-      <span className="arena-banner__scene" style={scene} aria-hidden="true" />
-      <div className="arena-banner__text">
-        <span className="arena-banner__eyebrow"><Trophy size={15} aria-hidden="true" />Mùa xếp hạng{home.season ? ` · đến ${dateFormat.format(new Date(`${home.season.endsOn}T00:00:00+07:00`))}` : ""}</span>
-        <h1 id="arena-title" className="info-title"><span className="info-title-text">Đấu trường {home.level}</span><InfoTip label="Luật đấu trường" text={<ol className="arena-rules">{ARENA_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ol>} /></h1>
-        <p>{numberFormat.format(home.total)} điểm XH tổng · {rankLine}</p>
-      </div>
-    </section>
+    <header className="page-title arena-page-title"><div>
+      <div className="eyebrow">Đấu trường {home.level}{seasonLine}</div>
+      <h1 className="info-title"><span className="info-title-text">{TAB_TITLES[tab]}</span><InfoTip label="Luật đấu trường" text={<ol className="arena-rules">{ARENA_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ol>} /></h1>
+      <p className="muted">{numberFormat.format(home.total)} điểm XH tổng · {rankLine}</p>
+    </div></header>
     <div className="tabs arena-tabs" role="tablist" aria-label="Đấu trường">
-      <button type="button" role="tab" aria-selected={tab === "play"} className={tab === "play" ? "active" : ""} onClick={() => setTab("play")}>Đấu</button>
+      <button type="button" role="tab" aria-selected={tab === "play"} className={tab === "play" ? "active" : ""} onClick={() => setTab("play")}>Giao đấu</button>
       <button type="button" role="tab" aria-selected={tab === "board"} className={tab === "board" ? "active" : ""} onClick={() => setTab("board")}>Bảng xếp hạng</button>
     </div>
     {tab === "play"
-      ? <ArenaPlayTab home={home} client={client} learnerId={learnerId} navigate={navigate} notify={notify} reload={load} />
+      ? <ArenaPlayTab home={home} client={client} setClient={setClient} learnerId={learnerId} navigate={navigate} notify={notify} reload={load} />
       : <ArenaBoardTab level={home.level ?? "B1"} client={client} learnerId={learnerId} />}
   </div>;
 }
 
-/* ------------------------------------------------------------------ Đấu */
+/* ------------------------------------------------------------------ Giao đấu */
 
-function ArenaPlayTab({ home, client, learnerId, navigate, notify, reload }: {
-  home: ArenaHome; client: Client; learnerId: string | undefined; navigate: (path: string) => void; notify: (message: string) => void; reload: () => Promise<void>;
+function ArenaPlayTab({ home, client, setClient, learnerId, navigate, notify, reload }: {
+  home: ArenaHome; client: Client; setClient: SetClient; learnerId: string | undefined; navigate: (path: string) => void; notify: (message: string) => void; reload: () => Promise<void>;
 }) {
   const modal = useModal();
   const [mode, setMode] = useState<"ranked" | "friendly">("ranked");
@@ -85,6 +87,7 @@ function ArenaPlayTab({ home, client, learnerId, navigate, notify, reload }: {
   const [challenges, setChallenges] = useState<ArenaOpenChallenge[] | null>(null);
   const [opponent, setOpponent] = useState("");
   const [result, setResult] = useState<ArenaMatch | null>(null);
+  const [wordsFor, setWordsFor] = useState<string | null>(null);
   const people = useArenaPeople(client, learnerId, mode === "friendly");
 
   const loadChallenges = useCallback(async () => {
@@ -128,20 +131,22 @@ function ArenaPlayTab({ home, client, learnerId, navigate, notify, reload }: {
     if (await modal.confirm({ title: "Bỏ trận?", message, confirmLabel: "Bỏ trận", cancelLabel: "Quay lại", tone: "danger" }))
       await run(match.id, async () => { await client.forfeit(match.id); await refresh(); }, "Chưa bỏ trận được.");
   };
+  const wordsToggle = (id: string) => <button type="button" className="btn btn-sm arena-row-action" aria-expanded={wordsFor === id} onClick={() => setWordsFor(wordsFor === id ? null : id)}>{wordsFor === id ? "Ẩn từ" : "Xem từ"}</button>;
 
   const rows = myMatchRows(home);
-  return <div className="arena-play">
-    <section className="card arena-panel" aria-labelledby="arena-start-title">
-      <div className="ltabs arena-mode-tabs" role="tablist" aria-label="Chế độ">
-        <button type="button" role="tab" aria-selected={mode === "ranked"} className={mode === "ranked" ? "active" : ""} onClick={() => setMode("ranked")}>Xếp hạng</button>
-        <button type="button" role="tab" aria-selected={mode === "friendly"} className={mode === "friendly" ? "active" : ""} onClick={() => setMode("friendly")}>Giao hữu</button>
-      </div>
-      <h2 id="arena-start-title">{mode === "ranked" ? "Đăng thách đấu" : "Mời bạn giao hữu"}</h2>
-      <div className="arena-field">
-        <span className="arena-field__label">Chọn trò</span>
-        <div className="arena-game-picks" role="radiogroup" aria-label="Chọn trò">
-          {ARENA_GAMES.map((key) => <button key={key} type="button" role="radio" aria-checked={game === key} className={`arena-game-pick${game === key ? " is-selected" : ""}`} onClick={() => setGame(key)}><ArenaGameIcon game={key} />{ARENA_GAME_NAMES[key]}</button>)}
+  return <>
+    <ArenaSetCard setClient={setClient} notify={notify} onChanged={reload} />
+
+    <section className="card games-section-card arena-panel" aria-labelledby="arena-start-title">
+      <div className="arena-panel__head">
+        <h2 id="arena-start-title">{mode === "ranked" ? "Đăng thách đấu" : "Mời bạn giao hữu"}</h2>
+        <div className="ltabs arena-mode-tabs" role="tablist" aria-label="Chế độ">
+          <button type="button" role="tab" aria-selected={mode === "ranked"} className={mode === "ranked" ? "active" : ""} onClick={() => setMode("ranked")}>Xếp hạng</button>
+          <button type="button" role="tab" aria-selected={mode === "friendly"} className={mode === "friendly" ? "active" : ""} onClick={() => setMode("friendly")}>Giao hữu</button>
         </div>
+      </div>
+      <div className="arena-game-picks" role="radiogroup" aria-label="Chọn trò">
+        {ARENA_GAMES.map((key) => <button key={key} type="button" role="radio" aria-checked={game === key} className={`arena-game-pick${game === key ? " is-selected" : ""}`} onClick={() => setGame(key)}><ArenaGameIcon game={key} />{ARENA_GAME_NAMES[key]}</button>)}
       </div>
       {mode === "friendly" ? <label className="arena-field">
         <span className="arena-field__label">Người nhận</span>
@@ -150,50 +155,96 @@ function ArenaPlayTab({ home, client, learnerId, navigate, notify, reload }: {
           {(people ?? []).map((person) => <option key={person.id} value={person.id}>{person.name} · {person.level}</option>)}
         </select>
       </label> : null}
-      <div className="arena-set">
-        <span><small>Bộ từ đang dùng</small><b>{setLine}</b></span>
-        <AppLink className="arena-set__change" href="/games" navigate={navigate}>Đổi bộ</AppLink>
+      <div className="arena-submit-row">
+        {mode === "ranked"
+          ? <><button className="btn-primary arena-submit" type="button" disabled={full || busy === "post" || !home.set} aria-busy={busy === "post" || undefined} onClick={() => void post()}>{busy === "post" ? "Đang đăng…" : "Đăng thách đấu"}</button>
+            <span className="small muted">{full ? `Đã đủ ${home.maxOpenRanked} trận đang mở. Huỷ trận đang chờ để đăng thêm.` : `Dùng bộ ${setLine}.`}</span></>
+          : <><button className="btn-primary arena-submit" type="button" disabled={!opponent || busy === "invite" || !home.set} aria-busy={busy === "invite" || undefined} onClick={() => void invite()}>{busy === "invite" ? "Đang gửi…" : "Gửi lời mời"}</button>
+            <span className="small muted">Giao hữu không tính điểm xếp hạng.</span></>}
       </div>
-      {mode === "ranked"
-        ? <>
-          <button className="btn-primary arena-submit" type="button" disabled={full || busy === "post" || !home.set} aria-busy={busy === "post" || undefined} onClick={() => void post()}>{busy === "post" ? "Đang đăng…" : "Đăng thách đấu"}</button>
-          {full ? <p className="small muted arena-note">Đã đủ {home.maxOpenRanked} trận đang mở. Huỷ trận đang chờ để đăng thêm.</p> : null}
-        </>
-        : <>
-          <button className="btn-primary arena-submit" type="button" disabled={!opponent || busy === "invite" || !home.set} aria-busy={busy === "invite" || undefined} onClick={() => void invite()}>{busy === "invite" ? "Đang gửi…" : "Gửi lời mời"}</button>
-          <p className="small muted arena-note">Giao hữu không tính điểm xếp hạng.</p>
-        </>}
     </section>
 
-    <section className="card arena-panel" aria-labelledby="arena-mine-title">
+    <section className="card games-section-card arena-panel" aria-labelledby="arena-mine-title">
       <div className="arena-panel__head"><h2 id="arena-mine-title">Trận của bạn</h2><span className="badge arena-open-badge">{home.openRanked}/{home.maxOpenRanked} đang mở</span></div>
       {rows.length ? <ul className="arena-list">{rows.map((match) => {
         const rowBusy = busy === match.id;
-        const text = <><span className="arena-list__icon"><ArenaGameIcon game={match.game} /></span><span className="arena-list__text"><b>{ARENA_GAME_NAMES[match.game]}{match.mode === "friendly" ? <Users className="arena-mode-icon" size={12} role="img" aria-label="Giao hữu" /> : null}</b><small>{matchStatusLine(match)}</small></span></>;
+        const text = <><span className="arena-list__icon"><ArenaGameIcon game={match.game} /></span><span className="arena-list__text"><b>{ARENA_GAME_NAMES[match.game]}{match.mode === "friendly" ? <Users className="arena-mode-icon" size={12} role="img" aria-label="Giao hữu" /> : null}</b><small>{match.setTopic} · {matchStatusLine(match)}</small></span></>;
+        const canReview = match.status !== "settled";
         const actions = isInviteForMe(match)
           ? <><button className="btn-primary btn-sm arena-row-action" type="button" disabled={rowBusy} onClick={() => void accept(match)}>Nhận</button><button className="btn btn-sm arena-row-action" type="button" disabled={rowBusy} onClick={() => void decline(match)}>Từ chối</button></>
           : match.postedByMe && (match.status === "open" || match.status === "invited") ? <button className="btn btn-sm arena-row-action" type="button" disabled={rowBusy} onClick={() => void withdraw(match)}>Huỷ</button>
           : match.status === "accepted" && !match.me.played ? <><AppLink className="btn btn-primary btn-sm arena-row-action" href={`/arena/match/${match.id}`} navigate={navigate}>Chơi</AppLink><button className="btn btn-sm arena-row-action" type="button" disabled={rowBusy} onClick={() => void giveUp(match)}>Bỏ trận</button></>
           : null;
         return <li key={match.id} className="arena-list__row" data-arena-row={match.status}>
-          {match.status === "settled"
-            ? <button type="button" className="arena-list__open" aria-label={`Xem kết quả ${ARENA_GAME_NAMES[match.game]}`} onClick={() => setResult(match)}>{text}<ChevronRight className="arena-list__chevron" size={16} aria-hidden="true" /></button>
-            : <span className="arena-list__open">{text}</span>}
-          {actions ? <span className="arena-row-actions">{actions}</span> : null}
+          <div className="arena-list__line">
+            {match.status === "settled"
+              ? <button type="button" className="arena-list__open" aria-label={`Xem kết quả ${ARENA_GAME_NAMES[match.game]}`} onClick={() => setResult(match)}>{text}<ChevronRight className="arena-list__chevron" size={16} aria-hidden="true" /></button>
+              : <span className="arena-list__open">{text}</span>}
+            {canReview || actions ? <span className="arena-row-actions">{canReview ? wordsToggle(match.id) : null}{actions}</span> : null}
+          </div>
+          {wordsFor === match.id ? <ArenaWords matchId={match.id} client={client} /> : null}
         </li>;
       })}</ul> : <p className="arena-empty"><Inbox size={18} aria-hidden="true" />Chưa có trận nào.</p>}
+    </section>
 
-      <h2 className="arena-panel__sub">Thách đấu đang mở</h2>
+    <section className="card games-section-card arena-panel" aria-labelledby="arena-open-title">
+      <h2 id="arena-open-title">Thách đấu đang mở</h2>
       {!challenges ? <p className="small muted">Đang tải…</p> : challenges.length ? <ul className="arena-list">{challenges.slice(0, 5).map((challenge) => <li key={challenge.id} className="arena-list__row">
-        <span className="arena-list__open"><span className="arena-list__icon"><ArenaGameIcon game={challenge.game} /></span><span className="arena-list__text"><b>{ARENA_GAME_NAMES[challenge.game]}</b><small>{challenge.setTopic} · còn {hoursLeft(challenge.acceptDeadline)} giờ</small></span></span>
-        <span className="arena-row-actions"><button className="btn-primary btn-sm arena-row-action" type="button" disabled={full || busy === challenge.id} onClick={() => void take(challenge)}>Nhận</button></span>
+        <div className="arena-list__line">
+          <span className="arena-list__open"><span className="arena-list__icon"><ArenaGameIcon game={challenge.game} /></span><span className="arena-list__text"><b>{ARENA_GAME_NAMES[challenge.game]}</b><small>{challenge.setTopic} · còn {hoursLeft(challenge.acceptDeadline)} giờ</small></span></span>
+          <span className="arena-row-actions">{wordsToggle(challenge.id)}<button className="btn-primary btn-sm arena-row-action" type="button" disabled={full || busy === challenge.id} onClick={() => void take(challenge)}>Nhận</button></span>
+        </div>
+        {wordsFor === challenge.id ? <ArenaWords matchId={challenge.id} client={client} /> : null}
       </li>)}</ul> : <p className="arena-empty"><Inbox size={18} aria-hidden="true" />Chưa có thách đấu nào để nhận.</p>}
     </section>
 
     {result ? <Modal className="arena-dialog" title="Kết quả trận" onClose={() => setResult(null)} dismissOnBackdrop>
       <ArenaResultCard match={result} />
     </Modal> : null}
-  </div>;
+  </>;
+}
+
+/** "Bộ từ": the Mini game set used for new challenges, its words, and changing it right here. */
+function ArenaSetCard({ setClient, notify, onChanged }: { setClient: SetClient; notify: (message: string) => void; onChanged: () => Promise<void> }) {
+  const [hub, setHub] = useState<GameHubView | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [topic, setTopic] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    setClient.getGames().then((next) => { if (live) setHub(next); }).catch(() => { if (live) setFailed(true); });
+    return () => { live = false; };
+  }, [setClient]);
+  const apply = async (work: () => Promise<GameHubView>, done: string) => {
+    setBusy(true);
+    try { const next = await work(); setHub(next); setEditing(false); setTopic(""); notify(done); await onChanged(); }
+    catch { notify("Chưa đổi được bộ từ. Hãy thử chủ đề khác."); }
+    finally { setBusy(false); }
+  };
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!topic.trim()) return;
+    void apply(() => setClient.generateGameWordSet({ requestId: crypto.randomUUID(), topic: topic.trim() }), "Đã tạo bộ từ mới cho Mini game và Đấu trường.");
+  };
+  const words = hub?.wordSet?.words ?? [];
+  return <section className="card games-section-card arena-panel" aria-labelledby="arena-set-title">
+    <div className="arena-panel__head">
+      <h2 id="arena-set-title">Bộ từ{hub?.wordSet ? <small className="arena-set-topic">{hub.wordSet.topic} · {words.length} từ</small> : null}</h2>
+      <button type="button" className="btn btn-sm" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>{editing ? "Đóng" : "Đổi bộ"}</button>
+    </div>
+    {editing ? <div className="arena-set-edit">
+      {hub?.aiAvailable ? <form className="arena-set-form" onSubmit={submit}>
+        <input aria-label="Chủ đề bộ từ" placeholder="1–3 từ tiếng Anh, ví dụ coffee shop" value={topic} disabled={busy} onChange={(event) => setTopic(event.target.value)} />
+        <button className="btn-primary" type="submit" disabled={busy || !topic.trim()} aria-busy={busy || undefined}>{busy ? "Đang tạo…" : "Tạo bộ từ"}</button>
+      </form> : null}
+      {hub?.learnedVocabularyAvailable ? <button className="btn btn-sm" type="button" disabled={busy} onClick={() => void apply(() => setClient.useWeeklyGameWordSet(), "Đã dùng từ đã học trong tháng.")}>Dùng từ đã học trong tháng</button> : null}
+      <p className="small muted">Bộ mới cũng là bộ của Mini game.</p>
+    </div> : null}
+    {failed ? <p className="small muted">Không tải được bộ từ.</p> : !hub ? <p className="small muted" aria-live="polite">Đang tải…</p> : words.length
+      ? <ul className="arena-word-chips" aria-label="Từ của bộ đang dùng">{words.map((word) => <li key={word.id}><b>{word.english}</b> · {word.vietnamese}</li>)}</ul>
+      : <p className="arena-empty"><Inbox size={18} aria-hidden="true" />Chưa có bộ từ. Bấm Đổi bộ để tạo.</p>}
+  </section>;
 }
 
 /** Every B1+ learner on the three boards except me, for the friendly invite. */
@@ -263,7 +314,7 @@ function ArenaBoardTab({ level: myLevel, client, learnerId }: { level: CefrLevel
   const isMe = (row: Row) => learnerId ? row.learnerId === learnerId : Boolean(me && row.rank === me.rank && (sort === "total" ? row.total : row.games[sort as GameKey]) === me.rating);
   const score = (row: Row) => sort === "total" ? row.total : row.games[sort as GameKey] ?? 0;
 
-  return <section className="card arena-panel arena-board" aria-label="Bảng xếp hạng">
+  return <section className="card games-section-card arena-panel arena-board" aria-label="Bảng xếp hạng">
     <div className="arena-board__filters">
       <div className="chips" role="group" aria-label="Xếp theo">
         {(["total", ...ARENA_GAMES] as ArenaBoardGame[]).map((key) => <button key={key} type="button" className={`chip arena-filter${sort === key ? " is-active" : ""}`} aria-pressed={sort === key} onClick={() => setSort(key)}>{key === "total" ? "Tổng" : ARENA_GAME_NAMES[key]}</button>)}

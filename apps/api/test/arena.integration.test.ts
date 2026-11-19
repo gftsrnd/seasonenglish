@@ -231,6 +231,17 @@ describe("arena phase 2: XH, open challenges, friendly invites and the ledger", 
     expect(giveUp.json()).toMatchObject({ status: "settled", result: { outcome: "lose", decidedBy: "forfeit" } });
   });
 
+  it("shows a challenge's round words to the same level before accepting, never to another level", async () => {
+    await pool.query("update arena_matches set status = 'cancelled' where status in ('open', 'accepted')");
+    const matchId = await post(l3, "scramble");
+    const seen = await call(l4.cookie, "GET", `/api/v1/arena/matches/${matchId}/words`);
+    expect(seen.statusCode, seen.body).toBe(200);
+    expect(seen.json().words.length).toBeGreaterThan(0);
+    expect(seen.json().words[0]).toEqual(expect.objectContaining({ english: expect.any(String), vietnamese: expect.any(String) }));
+    expect((await call(l6.cookie, "GET", `/api/v1/arena/matches/${matchId}/words`)).statusCode).toBe(404);
+    expect((await call(l3.cookie, "GET", `/api/v1/arena/matches/${matchId}/words`)).statusCode).toBe(200);
+  });
+
   it("lets only the poster withdraw a challenge nobody accepted, without XH change", async () => {
     await pool.query("update arena_matches set status = 'cancelled' where status in ('open', 'accepted')");
     const matchId = await post(l3, "sort");

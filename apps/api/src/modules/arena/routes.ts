@@ -102,6 +102,13 @@ export function registerArenaRoutes(app: FastifyInstance, pool: Pool): void {
     return handle(reply, () => arena.forfeit(request.e4sSession!.user.id, params.data.matchId));
   });
 
+  app.get("/api/v1/arena/matches/:matchId/words", { preHandler: learnerOnly }, async (request, reply) => {
+    const params = matchParams.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "INVALID_ARENA_MATCH" });
+    const words = await arena.matchWords(request.e4sSession!.user.id, params.data.matchId);
+    return words ?? reply.code(404).send({ code: "ARENA_MATCH_NOT_FOUND" });
+  });
+
   app.post("/api/v1/arena/matches/:matchId/cancel", { preHandler: learnerOnly }, async (request, reply) => {
     const params = matchParams.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_ARENA_MATCH" });

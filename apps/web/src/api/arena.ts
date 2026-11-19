@@ -49,6 +49,9 @@ export interface ArenaHome {
   matches: { open: ArenaMatch[]; active: ArenaMatch[]; done: ArenaMatch[] };
 }
 
+/** The words of a match's round, to revise before playing. */
+export interface ArenaRoundWords { topic: string; words: Array<{ id: string; english: string; vietnamese: string }> }
+
 /** An open ranked challenge someone else posted: the poster stays hidden until accepted. */
 export interface ArenaOpenChallenge { id: string; game: GameKey; setKind: ArenaSetKind; setTopic: string; acceptDeadline: string; createdAt: string }
 
@@ -76,6 +79,7 @@ export interface ArenaApiClient {
   challenges(): Promise<{ challenges: ArenaOpenChallenge[] }>;
   postChallenge(input: { requestId: string; game: GameKey }): Promise<ArenaMatch>;
   acceptChallenge(id: string): Promise<ArenaMatch>;
+  words(id: string): Promise<ArenaRoundWords>;
   match(id: string): Promise<ArenaMatch>;
   start(id: string): Promise<ArenaRound>;
   submit(id: string, input: GameFinishInput & { requestId: string }): Promise<{ match: ArenaMatch; result: { score: number; correct: number; total: number } }>;
@@ -96,6 +100,7 @@ export const arenaApiClient: ArenaApiClient = {
   challenges: () => request("/api/v1/arena/challenges"),
   postChallenge: (input) => request("/api/v1/arena/challenges", post(input)),
   acceptChallenge: (id) => request(`/api/v1/arena/challenges/${encodeURIComponent(id)}/accept`, post()),
+  words: (id) => request(`/api/v1/arena/matches/${encodeURIComponent(id)}/words`),
   match: (id) => request(`/api/v1/arena/matches/${encodeURIComponent(id)}`),
   start: (id) => request(`/api/v1/arena/matches/${encodeURIComponent(id)}/start`, post()),
   submit: (id, input) => request(`/api/v1/arena/matches/${encodeURIComponent(id)}/result`, post({
