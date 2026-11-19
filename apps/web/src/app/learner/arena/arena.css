@@ -317,7 +317,7 @@
 /* The outcome banner in the popup is a rounded box with even side margins, like the card top on the match page. */
 :root:root:root:root .dialog.arena-dialog .arena-result__banner { margin: 0 16px; border-radius: 14px; }
 /* Owner 19/11: a settled row shows its score and points in the outcome colour – win green, lose red, draw amber. */
-.arena-list__text small .arena-outcome { font-weight: 600; }
+/* only the colour changes; size and weight stay those of the status line */
 .arena-outcome.is-win { color: #1f7a45; }
 .arena-outcome.is-lose { color: #b3261e; }
 .arena-outcome.is-draw { color: #8a6100; }
