@@ -20,10 +20,10 @@ describe("app onboard affordances", () => {
     const { container } = render(<ThemeProvider><ThemeControls /><LearnerOnboard view={{ profile: {}, mode: "new" }} actions={actions} /></ThemeProvider>);
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Đông" }));
-    expect(container.querySelector(".learner-mascot--onboard")).toHaveAttribute("src", "/media/seasons/hero-penguin.png");
+    expect(container.querySelector(".learner-mascot--onboard img")).toHaveAttribute("src", "/media/avatars/penguin.webp");
     await user.type(screen.getByRole("textbox", { name: "Họ tên *" }), "Mai");
     await user.click(screen.getByRole("button", { name: "Tết" }));
-    expect(container.querySelector(".learner-mascot--onboard")).toHaveAttribute("src", "/media/seasons/hero-swallow.png");
+    expect(container.querySelector(".learner-mascot--onboard img")).toHaveAttribute("src", "/media/avatars/swallow.webp");
     expect(screen.getByRole("textbox", { name: "Họ tên *" })).toHaveValue("Mai");
   });
 

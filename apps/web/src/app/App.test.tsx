@@ -118,8 +118,8 @@ describe("App session shell", () => {
       expect(container.querySelector(".shell-account-trigger img")).toHaveAttribute("src", "/media/avatars/penguin.webp");
     }
     const { container, unmount } = render(<App />);
-    await screen.findByRole("heading", { name: "Hồ sơ cá nhân" });
-    await user.click(within(screen.getByRole("region", { name: "Hồ sơ cá nhân" })).getAllByRole("button", { name: "Đổi avatar" })[0]!);
+    await screen.findByRole("heading", { name: "Tiến độ & hồ sơ" });
+    await user.click(within(screen.getByRole("region", { name: /^Hồ sơ của / })).getAllByRole("button", { name: "Đổi avatar" })[0]!);
     const dialog = within(screen.getByRole("dialog", { name: "Avatar của bạn" }));
     await user.click(dialog.getByRole("button", { name: "Cánh cụt" }));
     expect(dialog.getByRole("button", { name: "Cánh cụt" })).toHaveAttribute("aria-pressed", "true");
@@ -129,7 +129,7 @@ describe("App session shell", () => {
 
     unmount();
     const reloaded = render(<App />);
-    await screen.findByRole("heading", { name: "Hồ sơ cá nhân" });
+    await screen.findByRole("heading", { name: "Tiến độ & hồ sơ" });
     await waitFor(() => expectCharacter(reloaded.container));
   });
 

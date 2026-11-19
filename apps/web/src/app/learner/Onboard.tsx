@@ -4,11 +4,10 @@ import type { LearnerProfileData } from "@e4s/contracts";
 import type { LearnerCallbacks, OnboardView } from "./contracts.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { useTheme } from "../shared/ThemeProvider.js";
-import { seasonVisual } from "../games/season-visual.js";
-import { ProductArt } from "../shared/media/ProductArt.js";
-import { AVATAR_CHARACTER_NAMES, AvatarCharacterArt } from "../shared/AccountAvatar.js";
+import { AVATAR_CHARACTER_NAMES, AvatarCharacterArt, SEASON_AVATAR_CHARACTER } from "../shared/AccountAvatar.js";
 import { InfoTip } from "../shared/CompactUi.js";
 import { ErrorText, Notice, AppLink } from "./ui.js";
+
 
 const defaults: LearnerProfileData = { fullName: "", email: "", goals: [], environmentUse: "", familyUse: "", habits: [], learningStyles: [], explanationLanguage: "auto", durationMinutes: 10, device: "both", selfLevel: "unknown", certificates: [] };
 const goals = [["customer", "Nói chuyện với khách hàng, đối tác"], ["email", "Viết email, tin nhắn công việc"], ["meeting", "Họp và trình bày"], ["docs", "Đọc tài liệu kỹ thuật"], ["career", "Thăng tiến / phỏng vấn"], ["confidence", "Tự tin hơn khi nói"]] as const;
@@ -39,9 +38,10 @@ export function LearnerOnboard({ view, actions }: { view: OnboardView; actions: 
   const compactEdit = editing ? narrow : phoneForm;
   const [editSection, setEditSection] = useState<EditSection>("personal");
   const { resolvedTheme } = useTheme();
-  // 18/11 #11: the mascot is the avatar character the learner chose; without one, the season's mascot.
+  // 18/11 #11 + 19/11: the mascot is always one of the 7 avatar characters – the one the learner chose,
+  // else the character of the current season.
   const chosen = view.profile.avatar?.character;
-  const avatarCharacter = chosen && Object.hasOwn(AVATAR_CHARACTER_NAMES, chosen) ? chosen : undefined;
+  const avatarCharacter = chosen && Object.hasOwn(AVATAR_CHARACTER_NAMES, chosen) ? chosen : SEASON_AVATAR_CHARACTER[resolvedTheme];
   const [profile, setProfile] = useState<LearnerProfileData>(() => {
     const initial = view.profile;
     return { ...defaults, ...initial, goals: initial.goals ?? [], habits: initial.habits ?? [], learningStyles: initial.learningStyles ?? [], certificates: initial.certificates ?? [] };
@@ -86,7 +86,7 @@ export function LearnerOnboard({ view, actions }: { view: OnboardView; actions: 
   const invalid = (target: ValidationTarget) => localError?.target === target;
   return <div className={compactEdit ? "app-learner-page profile-compact-edit" : "app-learner-page"} style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}>
      <button className="btn btn-sm profile-form-back" type="button" onClick={() => actions.navigate(back)} disabled={busy} aria-busy={pendingAction === "draft" || undefined} title={busy ? "Đang lưu hồ sơ…" : undefined}>← Quay lại</button>
-    <header className="bao-row" style={{ marginBottom: 16, gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>{avatarCharacter ? <span className="learner-mascot learner-mascot--onboard learner-mascot--avatar" aria-hidden="true"><AvatarCharacterArt character={avatarCharacter} /></span> : <ProductArt id={seasonVisual(resolvedTheme).heroArt} className="learner-mascot learner-mascot--onboard" decorative />}<div style={{ minWidth: 0, flex: "1 1 240px" }}><div className="eyebrow">Hồ sơ</div><h1 style={{ margin: "2px 0 6px" }}>{editing ? "Sửa hồ sơ của bạn" : "Cho Season biết về bạn nhé"}</h1><div className="bubble" style={{ display: "inline-block", maxWidth: "100%" }}>Mình dùng thông tin này để chọn ví dụ sát công việc và cách học hợp với bạn. Khoảng 2 phút thôi.</div></div></header>
+    <header className="bao-row" style={{ marginBottom: 16, gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}><span className="learner-mascot learner-mascot--onboard learner-mascot--avatar" aria-hidden="true"><AvatarCharacterArt character={avatarCharacter} /></span><div style={{ minWidth: 0, flex: "1 1 240px" }}><div className="eyebrow">Hồ sơ</div><h1 style={{ margin: "2px 0 6px" }}>{editing ? "Sửa hồ sơ của bạn" : "Cho Season biết về bạn nhé"}</h1><div className="bubble" style={{ display: "inline-block", maxWidth: "100%" }}>Mình dùng thông tin này để chọn ví dụ sát công việc và cách học hợp với bạn. Khoảng 2 phút thôi.</div></div></header>
     {view.draftAvailable ? <Notice>Đã khôi phục phần bạn <b>lưu tạm</b> lần trước. Điền nốt rồi bấm Lưu.</Notice> : null}<p className="small profile-required-legend" style={{ margin: "0 0 8px", fontWeight: 800 }}>{phoneForm ? "Mục có * là bắt buộc." : <>Các mục có dấu <RequiredMark /> là bắt buộc; các mục còn lại có thể bỏ trống.</>}</p><ErrorText message={view.error} id={errorId} />
     <form ref={formRef} onSubmit={(event) => void submit(event)} noValidate className="stack profile-form" style={{ gap: 20, minWidth: 0 }} aria-busy={busy || undefined} aria-describedby={errorMessage ? errorId : undefined}>
       {compactEdit ? <div className="profile-edit-sections" role="group" aria-label="Mục hồ sơ">

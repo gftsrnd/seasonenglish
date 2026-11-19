@@ -1,5 +1,6 @@
 import { Cloud, Droplets, Flower2, Leaf, Snowflake, Star, Sun } from "lucide-react";
 import type { AvatarCharacter, LearnerAvatarData } from "@e4s/contracts";
+import { useTheme } from "./ThemeProvider.js";
 import "./account-avatar.css";
 
 export const AVATAR_CHARACTER_NAMES = {
@@ -11,6 +12,9 @@ export const AVATAR_COLOR_HEX = {
 } satisfies Record<LearnerAvatarData["color"], string>;
 export const AVATAR_BG = ["#FBB829", "#F6D3CB", "#E3DCFB", "#DCE8C8", "#FFF4D9", "#D6CCBF"] as const;
 const avatarIcons = { leaf: Leaf, sun: Sun, flower: Flower2, cloud: Cloud, star: Star, drop: Droplets, snow: Snowflake };
+
+/** The avatar character of each season (the 7 Season English characters) – the default before a learner picks one. */
+export const SEASON_AVATAR_CHARACTER = { spring: "rabbit", summer: "cricket", autumn: "squirrel", winter: "penguin", tet: "swallow", midautumn: "jade-rabbit", christmas: "reindeer" } as const satisfies Record<string, AvatarCharacter>;
 
 export function AvatarCharacterArt({ character }: { character: AvatarCharacter }) {
   return <img src={`/media/avatars/${character}.webp`} alt="" decoding="async" draggable={false} />;
@@ -27,7 +31,9 @@ export function AccountAvatar({ avatar, name, size = 88 }: {
   size?: number;
 }) {
   const dimension = `var(--profile-avatar-size, ${size}px)`;
-  const character = avatar?.character && Object.hasOwn(AVATAR_CHARACTER_NAMES, avatar.character) ? avatar.character : undefined;
+  const { resolvedTheme } = useTheme();
+  // Nothing chosen yet → the season's character (19/11), never bare initials.
+  const character = avatar?.character && Object.hasOwn(AVATAR_CHARACTER_NAMES, avatar.character) ? avatar.character : avatar ? undefined : SEASON_AVATAR_CHARACTER[resolvedTheme];
   const accessory = avatar?.acc && avatar.acc !== "none" && Object.hasOwn(avatarIcons, avatar.acc) ? avatar.acc : undefined;
   const initials = name.trim().split(/\s+/u).slice(-2).map(word => word[0]).join("").toUpperCase();
   return <span className="account-avatar" role="img" aria-label={`Avatar của ${name}`}

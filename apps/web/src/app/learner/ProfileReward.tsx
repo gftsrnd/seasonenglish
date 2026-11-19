@@ -11,7 +11,8 @@ import { CourseAssessmentResult } from "./CourseCompletion.js";
 import { SeasonProgressCard } from "../shared/SeasonProgressCard.js";
 import { useCompactUi } from "../shared/CompactUi.js";
 import { formatPercent, formatScore, formatScoreOutOf } from "../shared/format-score.js";
-import { AccountAvatar, AvatarCharacterArt, AvatarMark, AVATAR_BG, AVATAR_CHARACTER_NAMES, AVATAR_COLOR_HEX } from "../shared/AccountAvatar.js";
+import { AccountAvatar, AvatarCharacterArt, AvatarMark, AVATAR_BG, AVATAR_CHARACTER_NAMES, AVATAR_COLOR_HEX, SEASON_AVATAR_CHARACTER } from "../shared/AccountAvatar.js";
+import { useTheme } from "../shared/ThemeProvider.js";
 
 export function LearnerSurvey({ view, actions }: { view: SurveyView; actions: LearnerCallbacks }) {
   const [rating, setRating] = useState<number | null>(view.answers?.rating ?? null);
@@ -51,6 +52,7 @@ export function LearnerProfile({ view, actions, courseCompleted = false }: { vie
   const [profileOpen, setProfileOpen] = useState(false);
   const compactUi = useCompactUi();
   const avatarReturnRef = useRef<HTMLButtonElement | null>(null);
+  const { resolvedTheme } = useTheme();
   const openAvatar = (event: MouseEvent<HTMLButtonElement>) => {
     avatarReturnRef.current = event.currentTarget;
     setAvatarOpen(true);
@@ -65,11 +67,11 @@ export function LearnerProfile({ view, actions, courseCompleted = false }: { vie
   const goals = labels(view.learner.profile.goals, GOALS);
   const detail = level ? `Trình độ ${level} – ${CEFR_LABELS[level]}${goals ? ` · ${goals}.` : ""}` : "Chưa duyệt trình độ";
   return <div className="app-learner-page profile-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}>
-    <PageTitle eyebrow="Tiến độ & hồ sơ" title={view.learner.displayName} detail={detail} aside={level ? <span className={`badge lvl lvl-${level}`}>{level}</span> : null} />
-    <section className="card learner-summary-card learner-summary-card--profile profile-identity-card" aria-label="Hồ sơ cá nhân">
+    <PageTitle title="Tiến độ & hồ sơ" detail={detail} aside={level ? <span className={`badge lvl lvl-${level}`}>{level}</span> : null} />
+    <section className="card learner-summary-card learner-summary-card--profile profile-identity-card" aria-label={`Hồ sơ của ${view.learner.displayName}`}>
       <div className="profile-identity-header">
         <button ref={avatarReturnRef} className="btn-ghost profile-avatar-button" type="button" aria-label="Đổi avatar" onClick={openAvatar}><AccountAvatar avatar={view.learner.profile.avatar} name={view.learner.displayName} /></button>
-        <div className="profile-identity-title"><h2>Hồ sơ cá nhân</h2><div className="small muted">{avatarDescription(view.learner.profile.avatar)}</div></div>
+        <div className="profile-identity-title"><h2>{view.learner.displayName}</h2><div className="small muted">{avatarDescription(view.learner.profile.avatar, resolvedTheme)}</div></div>
         <div className="profile-identity-actions"><button className="btn-primary" type="button" onClick={openAvatar}>Đổi avatar</button><button className="btn" type="button" aria-expanded={profileOpen} aria-controls={profileOpen ? "profile-identity-details" : undefined} onClick={() => setProfileOpen((value) => !value)}>{profileOpen ? "Đóng thông tin" : "Xem hồ sơ"}</button></div>
       </div>
       {profileOpen ? <ProfileDetails view={view} navigate={actions.navigate} /> : null}
@@ -283,9 +285,9 @@ const AVATAR_COLOR_LABELS: Record<string, string> = { ink: "Mực", brown: "Nâu
 const AVATAR_BG_LABELS = ["Vàng", "Hồng nhạt", "Tím nhạt", "Xanh nhạt", "Kem", "Be"] as const;
 function label(value: string | undefined, dictionary: Record<string, string>) { return value ? dictionary[value] ?? value : ""; }
 function labels(values: readonly string[] | undefined, dictionary: Record<string, string>) { return (values ?? []).map((value) => label(value, dictionary)).join(", "); }
-function avatarDescription(avatar: Partial<LearnerAvatarData> | undefined) {
+function avatarDescription(avatar: Partial<LearnerAvatarData> | undefined, theme: keyof typeof SEASON_AVATAR_CHARACTER) {
   if (avatar?.character && AVATAR_CHARACTER_NAMES[avatar.character]) return AVATAR_CHARACTER_NAMES[avatar.character];
-  return avatar ? `${label(avatar.acc, AVATAR_ACC_LABELS)} · nét ${label(avatar.color, AVATAR_COLOR_LABELS).toLowerCase()}` : "Chưa chọn – đang hiện chữ cái đầu";
+  return avatar ? `${label(avatar.acc, AVATAR_ACC_LABELS)} · nét ${label(avatar.color, AVATAR_COLOR_LABELS).toLowerCase()}` : `Chưa chọn – đang dùng ${AVATAR_CHARACTER_NAMES[SEASON_AVATAR_CHARACTER[theme]]} theo mùa`;
 }
 
 export function LearnerReward({ view, actions }: { view: RewardView; actions: LearnerCallbacks }) {
