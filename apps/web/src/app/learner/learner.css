@@ -2189,9 +2189,3 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
 .learner-root .operator-detail-modal > .dialog.course-result-dialog { max-height: 80vh; overflow-y: auto; }
 .learner-root .profile-page .profile-completion-heading > div:first-child { flex: 1 1 auto; min-width: 0; }
 
-/* Owner 19/11: on phones the Home progress keeps its two rings (smaller), centred like on desktop. */
-@media(max-width:700px){
-  :root:root .app-learner-page.home-page .monthly-home-metrics .stat{align-items:center;text-align:center;padding:10px}
-  :root:root .monthly-home-metrics .stat .ring{width:52px;height:52px;border-radius:50%;background:conic-gradient(var(--c) calc(var(--p)*1%),var(--track) 0)}
-  :root:root .monthly-home-metrics .stat .ring>b{width:38px;height:38px;border-radius:50%;background:var(--surface);font-size:.85rem}
-}
