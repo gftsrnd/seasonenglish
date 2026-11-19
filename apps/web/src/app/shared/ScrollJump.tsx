@@ -73,7 +73,12 @@ export function ScrollJumpButton({ atTop, onClick, inExam = false, style }: {
     window.addEventListener("resize", place);
     return () => { cancelAnimationFrame(frame); document.removeEventListener("scroll", place, true); window.removeEventListener("resize", place); };
   }, [inExam, atTop]);
-  const placed: CSSProperties | undefined = inExam || lift === 0 ? style : { ...style, ...(lift === null ? { visibility: "hidden" } : { transform: `translateY(${lift}px)` }) };
+  // Phones/tablets (owner 19/11): the button never jumps up the screen – it keeps its corner and
+  // fades out while a control is under it. Desktop still steps past controls.
+  const compactCorner = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(COMPACT_SCROLL_JUMP_QUERY).matches;
+  const placed: CSSProperties | undefined = inExam || lift === 0 ? style
+    : compactCorner ? { ...style, opacity: 0, pointerEvents: "none" }
+    : { ...style, ...(lift === null ? { visibility: "hidden" } : { transform: `translateY(${lift}px)` }) };
   const button = <button
     ref={ref}
     className={`app-scroll-jump no-print${inExam ? " app-scroll-jump--exam" : ""}`}

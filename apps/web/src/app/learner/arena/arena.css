@@ -329,3 +329,18 @@
 .arena-result__crown.is-draw { background: #e0a82e; color: #3b2a00; }
 .arena-result__side.is-lose .arena-result__score { color: #b3261e; }
 .arena-result__side.is-draw .arena-result__score { color: #8a6100; }
+/* Phones (owner 19/11): the three leaderboard filters share one row, compact like the rest of the phone UI. */
+@media (max-width: 600px) {
+  :root:root:root .arena-board__filters { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  :root:root:root:root .arena-board__filters > select { height: 36px; min-height: 36px !important; padding: 0 22px 0 8px !important; font-size: 13px !important; font-weight: 500; border-radius: 10px; background-position: right 6px center; text-overflow: ellipsis; }
+}
+/* A tapped match row shows no lasting outline; keyboard focus still gets the ring. */
+.arena-list__open:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+@media (max-width: 600px) {
+  :root:root:root:root:root .arena-board__filters > select { white-space: nowrap; overflow: hidden; line-height: 34px !important; padding: 0 20px 0 8px !important; font-size: 12.5px !important; background-position: right 6px center !important; background-size: 9px auto !important; }
+}
+/* Phones (owner 19/11): the Xếp hạng / Giao hữu switch at phone size. */
+@media (max-width: 600px) {
+  :root:root:root:root .arena-page .arena-mode-tabs { padding: 2px; gap: 2px; border-radius: 10px; }
+  :root:root:root:root .arena-page .arena-mode-tabs > button { height: 30px; min-height: 30px !important; max-height: 30px; padding: 0 12px !important; font-size: 13px !important; border-radius: 8px; }
+}

@@ -1804,3 +1804,15 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
 @media (max-width: 420px) {
   .keyboard-row:not(.keyboard-row--actions) > button { flex-basis: calc((100% - 9 * 3px) / 10); }
 }
+
+/* Owner 19/11: the word stays on one row – slots and letters shrink to share the width (max 52px each). */
+:root:root:root .scramble-scene .answer-slots,
+:root:root:root .scramble-scene .letter-bank { flex-wrap: nowrap; gap: 6px; }
+:root:root:root .scramble-scene .answer-slots span,
+:root:root:root .scramble-scene .letter-bank button { flex: 1 1 0; min-width: 0 !important; max-width: 52px; width: auto !important; padding: 0 !important; }
+@media (max-width: 600px) {
+  :root:root:root .scramble-scene .answer-slots,
+  :root:root:root .scramble-scene .letter-bank { gap: 4px; }
+  :root:root:root .scramble-scene .answer-slots span,
+  :root:root:root .scramble-scene .letter-bank button { height: 40px; min-height: 40px !important; font-size: .95rem; }
+}
