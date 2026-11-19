@@ -2,10 +2,11 @@ import { useId, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { Award, ChevronRight } from "lucide-react";
 import { ManagerTitle, PageTitle } from "./shared.js";
-import { ActionLabel, Description, useCompactUi } from "../shared/CompactUi.js";
+import { ActionLabel, Description, useCompactUi, useUiTier } from "../shared/CompactUi.js";
+import { RulesIconButton } from "../shared/RulesDisclosure.js";
 import type { BadgeRoadmapItem, CefrLevel, SeasonLevelView } from "@e4s/contracts";
 import { REWARD_SEASONS, rewardBadgeThreshold, rewardSeasonLabel, type RewardBadgeKey } from "@e4s/domain/engagement";
-import { REWARD_POINT_RULES, REWARD_SEASON_RULES, SeasonProgressCard } from "../shared/SeasonProgressCard.js";
+import { RewardRulesDialog, SeasonProgressCard } from "../shared/SeasonProgressCard.js";
 import { RewardBadgeImage } from "../shared/RewardIcon.js";
 import { RewardAnnouncementDialog } from "../learner/RewardAnnouncementDialog.js";
 import { rewardBadgeCatalogAt } from "./reward-catalog.js";
@@ -27,6 +28,8 @@ const cases = [
 ] as const;
 
 export function ManagerRewards() {
+  const rewardTier = useUiTier();
+  const [rewardRulesOpen, setRewardRulesOpen] = useState(false);
   const [pointsInput, setPointsInput] = useState("0");
   const [cefr, setCefr] = useState<CefrLevel>("A1");
   const [earned, setEarned] = useState<readonly string[]>([]);
@@ -118,7 +121,9 @@ export function ManagerRewards() {
       </section>
       <section className="card section manager-reward-result-pane" id="manager-reward-result" aria-label="Xem trước hồ sơ học viên" hidden={compactUi && pane !== "result"}>
         <header className="row between manager-section-heading manager-reward-preview-heading">
-          <ManagerTitle as="h2" title={compactUi ? "Học viên thấy" : "Học viên sẽ thấy"} label="Cách tính điểm và lên Season" tip={<>{REWARD_POINT_RULES.map(([label, value]) => `${label}: ${value}`).join(" · ")}. {REWARD_SEASON_RULES.join(" ")}</>} />
+          {/* Owner 19/11: the long rules open in a popup from the book button, not in the ⓘ. */}
+          <h2 className="info-title">{compactUi ? "Học viên thấy" : "Học viên sẽ thấy"}{rewardTier !== "desktop" ? <RulesIconButton label="Cách tính điểm và lên Season" onClick={() => setRewardRulesOpen(true)} /> : null}</h2>
+          {rewardRulesOpen ? <RewardRulesDialog onClose={() => setRewardRulesOpen(false)} /> : null}
           <div className="manager-reward-preview-actions" role="group" aria-label="Xem thông báo lên cấp">
             {[2, 3].map((tier) => <button className="btn-sm" type="button" key={tier} onClick={() => setPreview(tier - 1)} aria-label={`Xem lên cấp ${tier}`}>{compactUi ? `Cấp ${tier}` : `Xem lên cấp ${tier}`}</button>)}
             {compactUi ? <Link className="btn btn-sm" to={certificatePath} aria-label="Xem trước chứng nhận" title="Xem trước chứng nhận"><ActionLabel icon={Award} label="Xem trước chứng nhận" /></Link> : null}

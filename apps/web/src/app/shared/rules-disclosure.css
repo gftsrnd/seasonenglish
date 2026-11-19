@@ -38,3 +38,7 @@
 .rules-icon-button__ring { display: grid; place-items: center; width: 14px; height: 14px; box-sizing: border-box; border: 1.5px solid currentColor; border-radius: 50%; }
 /* whole pixels so the book never sits off-centre after rounding */
 .rules-icon-button__ring > svg { display: block; width: 9px; height: 9px; }
+/* A page title followed by its rules (book) button on one line. */
+.page-title-with-rules { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.page-title-with-rules > h1 { margin: 0; min-width: 0; }
+.rules-popup-body { line-height: 1.55; }

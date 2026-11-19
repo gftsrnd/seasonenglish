@@ -49,7 +49,7 @@ function RewardPointRules({ className }: { className?: string }) {
 }
 
 /** Phones: the rules open in a popup (≤80% high, sticky header with ×), in two tabs, never as an inline popover. */
-function RewardRulesDialog({ onClose }: { onClose: () => void }) {
+export function RewardRulesDialog({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<"points" | "season">("points");
   return <Modal title="Cách tính điểm và lên Season" className="reward-rules-dialog" onClose={onClose} dismissOnBackdrop>
     <div className="reward-rules-tabs" role="tablist" aria-label="Luật điểm">

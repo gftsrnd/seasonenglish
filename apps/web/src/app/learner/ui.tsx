@@ -1,7 +1,8 @@
 import { useDialog } from "../shared/ModalProvider.js";
 import { ChevronRight } from "lucide-react";
 import { InfoTitle, ModalCloseButton, useCompactUi, useUiTier } from "../shared/CompactUi.js";
-import { useLayoutEffect, useId, useRef, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type CSSProperties, type HTMLAttributes, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { RulesIconButton } from "../shared/RulesDisclosure.js";
+import { useLayoutEffect, useId, useRef, useState, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type CSSProperties, type HTMLAttributes, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
 /** "Bài 5" / "Ôn tuần 2" at A1–A2; `english` (B1+ learners, who see no Vietnamese) gives "Lesson 5" / "Week 2 review". */
 export function learnerLessonLabel(lesson: { dayNumber: number; newLessonNumber?: number; teachingLabel?: string; kind?: "new" | "review" }, english = false) {
@@ -124,12 +125,18 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "warn" | "
  * (desktop renders the plain title, unchanged); `compactDetail: false` hides the detail
  * line on phones/tablets (use it when the same text is in `tip`).
  */
-export function PageTitle({ eyebrow, title, detail, aside, tip }: { eyebrow?: string; title: string; detail?: ReactNode; aside?: ReactNode; tip?: ReactNode; compactDetail?: boolean }) {
+export function PageTitle({ eyebrow, title, detail, aside, tip, rules }: { eyebrow?: string; title: string; detail?: ReactNode; aside?: ReactNode; tip?: ReactNode; compactDetail?: boolean; rules?: { label: string; content: ReactNode } }) {
   // Owner 19/11: phones put the short description behind the ⓘ beside the title; tablets and
   // desktop have room and show it as the line under the title (no ⓘ for the same text).
-  const phone = useUiTier() === "phone";
+  // Long rules never go in the ⓘ: on phones/tablets they open in a popup from the book button.
+  const tier = useUiTier();
+  const phone = tier === "phone";
+  const [rulesOpen, setRulesOpen] = useState(false);
   const info = phone ? tip ?? detail : tip;
-  return <header className="page-title"><div>{eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}{info ? <InfoTitle as="h1" title={title} tip={info} /> : <h1>{title}</h1>}{!phone && detail ? <p className="muted">{detail}</p> : null}</div>{aside}</header>;
+  const book = rules && tier !== "desktop" ? <RulesIconButton label={rules.label} onClick={() => setRulesOpen(true)} /> : null;
+  const heading = info ? <InfoTitle as="h1" title={title} tip={info} /> : <h1>{title}</h1>;
+  return <header className="page-title"><div>{eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}{book ? <div className="page-title-with-rules">{heading}{book}</div> : heading}{!phone && detail ? <p className="muted">{detail}</p> : null}</div>{aside}
+    {rulesOpen && rules ? <Modal title={rules.label} onClose={() => setRulesOpen(false)} dismissOnBackdrop><div className="rules-popup-body">{rules.content}</div></Modal> : null}</header>;
 }
 
 export function Progress({ value, max, label, segmented = false }: { value: number; max: number; label: string; segmented?: boolean }) {

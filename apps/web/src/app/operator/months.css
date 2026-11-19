@@ -559,3 +559,4 @@ details.monthly-resource-editor-section>:not(summary)+:not(summary){margin-top:1
 :root:root .monthly-day-cell .btn-sm { font-size: 11px; }
 :root:root .monthly-plan-day-open, :root:root .monthly-plan-day-body small { font-size: 11px; }
 :root:root .operator-months-page small { font-size: max(11px, .72rem); }
+:root:root:root .monthly-day-cell .monthly-day-actions > button, :root:root:root .monthly-day-cell .monthly-day-actions > button span { font-size: 11px; }
