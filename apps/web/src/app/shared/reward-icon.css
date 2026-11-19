@@ -10,7 +10,7 @@
 .reward-icon--inline { margin-right: 2px; }
 .inbox-reward-icon { margin-right: 6px; vertical-align: -6px; }
 .inbox-arrival-open .inbox-reward-icon { margin-right: 0; vertical-align: middle; }
-.badge-celebration__img { width: 78px; height: 78px; }
+.badge-celebration__img { width: 64px; height: 64px; }
 .badge-celebration__more-item { white-space: nowrap; }
 .badge-celebration__more-item .reward-icon { margin: 0 3px; vertical-align: -4px; }
 .manager-reward-badge-icon .reward-icon { display: block; }
