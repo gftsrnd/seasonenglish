@@ -162,8 +162,8 @@ export function SectionTip({ text, label, desktop = false }: { text: ReactNode; 
 export function Description({ text, short, className = "small muted", page = false }: { text: ReactNode; short?: ReactNode; className?: string; page?: boolean }) {
   const tier = useUiTier();
   if (tier === "desktop") return <p className={className}>{text}</p>;
-  // A page description lives behind the title's ⓘ on phones and tablets (owner 19/11).
-  if (page) return null;
+  // A page description: tablets show the full line like desktop; phones put it behind the title's ⓘ (owner 19/11).
+  if (page) return tier === "tablet" ? <p className={className}>{text}</p> : null;
   // Tablet: one short line under the title; the longer guidance is in the title's ⓘ.
   if (tier === "tablet") return <p className={`${className} tier-one-line`} title={typeof text === "string" ? text : undefined}>{short ?? text}</p>;
   return short ? <p className={className}>{short}</p> : null;

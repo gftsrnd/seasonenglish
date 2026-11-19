@@ -17,15 +17,14 @@ export function ManagerSectionLayout({ children }: { children: ReactNode }) {
   const item = section?.items.find(entry => entry.to === pathname);
   const [description, setDescription] = useState<HTMLDivElement | null>(null);
   const compact = useCompactUi();
-  const tablet = useUiTier() === "tablet";
   if (!item) return <>{children}</>;
   const hasOwnDescription = "description" in item;
   return <ManagerSectionDescription.Provider value={hasOwnDescription ? null : description}>
     <header className="page-title manager-page-title manager-section-title no-print" data-section={section?.id}>
       <div className="manager-page-title__content">
-        {/* Owner 19/11: phones and tablets put the description behind the ⓘ beside the title, no line under it. */}
-        <h1 className={(compact || tablet) && hasOwnDescription ? "info-title" : undefined}>{(compact || tablet) && hasOwnDescription ? <><span className="info-title-text">{"title" in item ? item.title : item.label}</span><InfoTip text={item.description} /></> : "title" in item ? item.title : item.label}</h1>
-        {hasOwnDescription ? (compact || tablet ? null : <div className="manager-section-description"><p className="muted">{item.description}</p></div>)
+        {/* Owner 19/11: phones put the description behind the ⓘ beside the title; tablets and desktop show the line. */}
+        <h1 className={compact && hasOwnDescription ? "info-title" : undefined}>{compact && hasOwnDescription ? <><span className="info-title-text">{"title" in item ? item.title : item.label}</span><InfoTip text={item.description} /></> : "title" in item ? item.title : item.label}</h1>
+        {hasOwnDescription ? (compact ? null : <div className="manager-section-description"><p className="muted">{item.description}</p></div>)
           : <div ref={setDescription} className="manager-section-description" />}
       </div>
       <ManagerSectionNavigation readOnly={operatorReadOnlyTabs.some((tab) => tab.to === pathname)} />
@@ -108,8 +107,8 @@ export function PageTitle({ children, description, actions }: { children: ReactN
  */
 export function PageDescription({ text, tip = true }: { text: ReactNode; tip?: boolean }) {
   const tier = useUiTier();
-  if (tier === "desktop") return <p className="muted">{text}</p>;
-  // Phones and tablets: behind the ⓘ (owner 19/11), never a line under the title.
+  if (tier !== "phone") return <p className="muted">{text}</p>;
+  // Phones: behind the ⓘ (owner 19/11); tablets and desktop have room for the line.
   return tip ? <InfoTip text={text} /> : null;
 }
 

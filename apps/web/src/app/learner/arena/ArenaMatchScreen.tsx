@@ -30,7 +30,7 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
   client?: Client;
 }) {
   const modal = useModal();
-  const compact = useUiTier() !== "desktop";
+  const compact = useUiTier() === "phone";
   const [match, setMatch] = useState<ArenaMatch | null>(null);
   const [round, setRound] = useState<ArenaRound | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -93,7 +93,7 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
     <header className="row between game-running-header arena-match-header">
       <div className="arena-match-header__text">
         <div className="eyebrow game-running-title"><span className="game-title-icon" aria-hidden="true"><ArenaGameIcon game={match.game} size={18} /></span><span>{name}</span></div>
-        <InfoTitle as="h1" title={match.setTopic} tip={modeLine} />
+        {compact ? <InfoTitle as="h1" title={match.setTopic} tip={modeLine} /> : <h1>{match.setTopic}</h1>}
         {compact ? null : <p className="small muted arena-mode-line" data-arena-mode-line>{modeLine}</p>}
       </div>
       {playing

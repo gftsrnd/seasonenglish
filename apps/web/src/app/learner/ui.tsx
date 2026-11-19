@@ -125,11 +125,11 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "warn" | "
  * line on phones/tablets (use it when the same text is in `tip`).
  */
 export function PageTitle({ eyebrow, title, detail, aside, tip }: { eyebrow?: string; title: string; detail?: ReactNode; aside?: ReactNode; tip?: ReactNode; compactDetail?: boolean }) {
-  // Owner 19/11: on phones and tablets every short description goes behind the ⓘ beside the title
-  // (no line under it); desktop keeps the line.
-  const desktop = useUiTier() === "desktop";
-  const info = tip ?? detail;
-  return <header className="page-title"><div>{eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}{info ? <InfoTitle as="h1" title={title} tip={info} /> : <h1>{title}</h1>}{desktop && detail ? <p className="muted">{detail}</p> : null}</div>{aside}</header>;
+  // Owner 19/11: phones put the short description behind the ⓘ beside the title; tablets and
+  // desktop have room and show it as the line under the title (no ⓘ for the same text).
+  const phone = useUiTier() === "phone";
+  const info = phone ? tip ?? detail : tip;
+  return <header className="page-title"><div>{eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}{info ? <InfoTitle as="h1" title={title} tip={info} /> : <h1>{title}</h1>}{!phone && detail ? <p className="muted">{detail}</p> : null}</div>{aside}</header>;
 }
 
 export function Progress({ value, max, label, segmented = false }: { value: number; max: number; label: string; segmented?: boolean }) {

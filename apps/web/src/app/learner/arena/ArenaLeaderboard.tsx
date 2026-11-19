@@ -51,7 +51,8 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
   }, [client]);
   useEffect(() => { void load(); }, [load]);
 
-  const compact = useUiTier() !== "desktop";
+  // Phones: description behind ⓘ; tablets/desktop show the line (owner 19/11).
+  const compact = useUiTier() === "phone";
   const back = <AppLink className="btn arena-back-button page-back-link" href="/games" navigate={navigate} title="Về Game từ vựng"><PageBackContent label="Về Game từ vựng" /></AppLink>;
   const simpleHeader = <header className="page-title arena-page-title"><div><h1>Đấu trường từ vựng</h1></div>{back}</header>;
   if (error && !home) return <div className="app-learner-page arena-page">{simpleHeader}<Notice tone="danger">{error}</Notice></div>;
@@ -61,7 +62,7 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
   return <div className="app-learner-page arena-page">
     <header className="page-title arena-page-title"><div>
       {/* Phone/tablet rule: the description goes behind an ⓘ beside the title; desktop shows the line. */}
-      <InfoTitle as="h1" title="Đấu trường từ vựng" tip={ARENA_PAGE_DESCRIPTION} />
+      {compact ? <InfoTitle as="h1" title="Đấu trường từ vựng" tip={ARENA_PAGE_DESCRIPTION} /> : <h1>Đấu trường từ vựng</h1>}
       {compact ? null : <p className="muted">{ARENA_PAGE_DESCRIPTION}</p>}
     </div>{back}</header>
     <nav className="request-tabs arena-tabs" aria-label="Đấu trường">
