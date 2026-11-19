@@ -14,8 +14,9 @@ const RULES = [
   "Thắng thua so điểm ván; bằng điểm thì ai chơi nhanh hơn thắng.",
   "Điểm xếp hạng tính riêng cho từng trò; ai cũng bắt đầu với 1.000 điểm. Mạnh hay yếu là so điểm xếp hạng của trò đó lúc nhận trận.",
   "Bị trừ: người thua mất đúng số điểm người thắng được (cột Thua ở bảng trên); hoà thì không ai được hay mất; điểm không xuống dưới 0.",
+  "Bỏ trận, hoặc quá 24 giờ mà chưa chơi: tính thua, bị trừ điểm như bảng trên. Cả hai đều chưa chơi thì trận bị huỷ, không ai mất điểm. Huỷ thách đấu khi chưa có người nhận thì không mất điểm.",
   "Gặp lại cùng người trong ngày: lần 2 tính 50%, lần 3 tính 25%, từ lần 4 không tính.",
-  "Không biết trước đối thủ xếp hạng; đã nhận phải đấu trong 24 giờ, quá hạn tính thua; tối đa 3 trận đang mở.",
+  "Không biết trước đối thủ xếp hạng; đã nhận thì có 24 giờ để chơi; tối đa 3 trận đang mở.",
   "Giao hữu không tính điểm xếp hạng. Mỗi mùa xếp hạng 3 tháng."
 ];
 

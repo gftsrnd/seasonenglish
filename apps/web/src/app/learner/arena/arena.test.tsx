@@ -251,9 +251,9 @@ describe("arena match screen", () => {
     fireEvent.click(screen.getByRole("button", { name: /Chơi tiếp/ }));
     await waitFor(() => expect(api.start).toHaveBeenCalledWith(ID));
     fireEvent.click(await screen.findByRole("button", { name: /Thoát/ }));
-    expect(await screen.findByText("Thoát sẽ tính thua.")).toBeInTheDocument();
+    expect(await screen.findByText(/^Thoát sẽ tính thua/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Tiếp tục chơi" }));
-    await waitFor(() => expect(screen.queryByText("Thoát sẽ tính thua.")).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/^Thoát sẽ tính thua/)).toBeNull());
     expect(api.forfeit).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /Thoát/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Thoát và chịu thua" }));

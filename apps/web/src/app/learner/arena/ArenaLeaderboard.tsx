@@ -8,6 +8,7 @@ import { Pager } from "../../shared/Pager.js";
 import { useMediaQuery } from "../../shared/useMediaQuery.js";
 import { AppLink, Modal, Notice } from "../ui.js";
 import { InfoTitle, useUiTier } from "../../shared/CompactUi.js";
+import { PageBackContent } from "../../shared/PageBackLink.js";
 import { ArenaRulesBody, ArenaRulesLine } from "./ArenaRules.js";
 
 const ARENA_PAGE_DESCRIPTION = "Thách đấu bạn cùng cấp bằng bộ từ đang học và leo bảng xếp hạng mùa.";
@@ -16,7 +17,7 @@ import { myMatchRows } from "./ArenaHub.js";
 import { ArenaResultCard } from "./ArenaResultCard.js";
 import { ArenaWords } from "./ArenaWords.js";
 import { ArenaCountdown } from "./ArenaCountdown.js";
-import { ARENA_GAMES, ARENA_GAME_NAMES, isInviteForMe, matchDeadline, matchStatusLabel } from "./arena-text.js";
+import { ARENA_GAMES, ARENA_GAME_NAMES, forfeitMessage, isInviteForMe, matchDeadline, matchStatusLabel } from "./arena-text.js";
 import { arenaErrorMessage } from "./useArenaQuickMatch.js";
 import "../../shared/request-workspace.css";
 import "./arena.css";
@@ -50,7 +51,7 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
   useEffect(() => { void load(); }, [load]);
 
   const compact = useUiTier() !== "desktop";
-  const back = <AppLink className="btn arena-back-button" href="/games" navigate={navigate}><ArrowLeft size={16} aria-hidden="true" />Về Game từ vựng</AppLink>;
+  const back = <AppLink className="btn arena-back-button page-back-link" href="/games" navigate={navigate} title="Về Game từ vựng"><PageBackContent label="Về Game từ vựng" /></AppLink>;
   const simpleHeader = <header className="page-title arena-page-title"><div><h1>Đấu trường từ vựng</h1></div>{back}</header>;
   if (error && !home) return <div className="app-learner-page arena-page">{simpleHeader}<Notice tone="danger">{error}</Notice></div>;
   if (!home) return <div className="app-learner-page arena-page">{simpleHeader}<section className="card" aria-live="polite">Đang tải đấu trường…</section></div>;
@@ -123,7 +124,7 @@ function ArenaPlayTab({ home, client, setClient, learnerId, navigate, notify, re
       await run(match.id, async () => { await client.cancel(match.id); await refresh(); }, "Chưa huỷ được thách đấu.");
   };
   const giveUp = async (match: ArenaMatch) => {
-    const message = match.mode === "ranked" ? "Bỏ trận sẽ tính thua và trừ điểm xếp hạng." : "Bỏ trận giao hữu tính thua, không trừ điểm xếp hạng.";
+    const message = forfeitMessage(match, "Bỏ trận");
     if (await modal.confirm({ title: "Bỏ trận?", message, confirmLabel: "Bỏ trận", cancelLabel: "Quay lại", tone: "danger" }))
       await run(match.id, async () => { await client.forfeit(match.id); await refresh(); }, "Chưa bỏ trận được.");
   };

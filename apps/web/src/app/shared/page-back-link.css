@@ -1,0 +1,7 @@
+.page-back-link { display: inline-flex; align-items: center; gap: 6px; flex: none; white-space: nowrap; }
+@media (max-width: 600px) {
+  :root:root:root:root .page-back-link { width: 36px; min-width: 36px; height: 36px; min-height: 36px !important; padding: 0 !important; justify-content: center; border-radius: 10px; }
+  .page-back-link .page-back-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  /* the title row keeps the square on its right */
+  .page-title:has(> .page-back-link), .page-title:has(> * > .page-back-link) { display: flex; flex-wrap: nowrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+}

@@ -110,3 +110,12 @@ export function shortReason(match: ArenaMatch): string {
   if (result.decidedBy === "time") return mine ? "Bằng điểm, bạn nhanh hơn" : "Bằng điểm, chậm hơn";
   return "";
 }
+
+/** Confirm text for giving up / leaving a match (owner 19/11: say how many points it costs). */
+export function forfeitMessage(match: ArenaMatch, verb: "Bỏ trận" | "Thoát"): string {
+  if (match.mode !== "ranked") return `${verb} trận giao hữu tính thua, không trừ điểm xếp hạng.`;
+  const game = ARENA_GAME_NAMES[match.game];
+  return match.forfeitLoss !== undefined
+    ? `${verb} sẽ tính thua: bạn bị trừ ${match.forfeitLoss} điểm xếp hạng của trò ${game}.`
+    : `${verb} sẽ tính thua và bị trừ điểm xếp hạng của trò ${game} như thua một trận.`;
+}

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { CefrLevel, GameKey, GameWordSetView } from "@e4s/contracts";
 import {
   ARENA_ACCEPT_HOURS, ARENA_GAMES, ARENA_MAX_OPEN_RANKED, ARENA_MIN_ROUND_UNITS, ARENA_PLAY_HOURS, ARENA_SEASON_MONTHS,
-  ARENA_START_RATING, GAME_RULES_VERSION, arenaEligible, arenaTotal, decideOutcome, gameRoundWords, scoreGameRound, settle,
+  ARENA_START_RATING, GAME_RULES_VERSION, arenaEligible, arenaTotal, decayedPoints, decideOutcome, gameRoundWords, ratingBand, repeatDecay, scoreGameRound, settle,
   type GameAnswer, type GameEvent
 } from "@e4s/domain/engagement";
 import type { Pool, PoolClient } from "pg";
@@ -39,6 +39,8 @@ export interface ArenaMatchView {
   opponent: { id: string; displayName: string; cefr: CefrLevel | null; avatar?: Record<string, unknown> } | null;
   /** The learner's own avatar, for the Bạn side of the result card. */
   myAvatar?: Record<string, unknown>;
+  /** Ranked and still to play: the rating points the learner loses by giving up (or by not playing in time). */
+  forfeitLoss?: number;
   createdAt: string;
   acceptDeadline: string;
   acceptedAt: string | null;
@@ -797,6 +799,9 @@ export class ArenaRepository {
         opponent: otherId && (row.mode === "friendly" || row.status !== "open")
           ? { id: otherId, displayName: names.get(otherId) ?? "", cefr: side === "poster" ? row.opponent_cefr : row.poster_cefr, ...(avatars.has(otherId) ? { avatar: avatars.get(otherId)! } : {}) } : null,
         ...(avatars.has(learnerId) ? { myAvatar: avatars.get(learnerId)! } : {}),
+        ...(row.mode === "ranked" && row.status === "accepted" && row[`${side}_score` as const] === null
+          ? { forfeitLoss: decayedPoints(ratingBand(row[`${other}_rating_snapshot` as const] ?? ARENA_START_RATING, row[`${side}_rating_snapshot` as const] ?? ARENA_START_RATING).win, repeatDecay(row.meeting_index ?? 1)) }
+          : {}),
         createdAt: row.created_at.toISOString(), acceptDeadline: row.accept_deadline.toISOString(),
         acceptedAt: row.accepted_at?.toISOString() ?? null, playDeadline: row.play_deadline?.toISOString() ?? null,
         settledAt: row.settled_at?.toISOString() ?? null, cancelReason: row.cancel_reason,

@@ -12,7 +12,7 @@ import { InfoTitle, useUiTier } from "../../shared/CompactUi.js";
 import { ArenaGameIcon } from "./ArenaGameIcon.js";
 import { ArenaResultCard } from "./ArenaResultCard.js";
 import { ArenaWords } from "./ArenaWords.js";
-import { ARENA_GAME_NAMES, isInviteForMe, matchStatusLine } from "./arena-text.js";
+import { ARENA_GAME_NAMES, forfeitMessage, isInviteForMe, matchStatusLine } from "./arena-text.js";
 import { arenaErrorMessage, useArenaQuickMatch } from "./useArenaQuickMatch.js";
 import "./arena.css";
 
@@ -74,7 +74,7 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
   const exit = async () => {
     if (!round) return;
     const leave = await modal.confirm({
-      title: "Thoát trận?", message: "Thoát sẽ tính thua.", confirmLabel: "Thoát và chịu thua", cancelLabel: "Tiếp tục chơi", tone: "danger", countdownSeconds: 0
+      title: "Thoát trận?", message: match ? forfeitMessage(match, "Thoát") : "Thoát sẽ tính thua.", confirmLabel: "Thoát và chịu thua", cancelLabel: "Tiếp tục chơi", tone: "danger", countdownSeconds: 0
     });
     if (!leave) return;
     await run(async () => { const next = await client.forfeit(matchId); setRound(null); setMatch(next); }, "Chưa thoát được trận.");

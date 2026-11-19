@@ -1,3 +1,4 @@
+import { PageBackContent } from "../shared/PageBackLink.js";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 import type { AssessmentAppealTargetView, AssessmentPlacementRetakeRequestView, LearnerAcademicAppealView, LearnerComplaintKind, LearnerComplaintView } from "@e4s/contracts";
@@ -184,7 +185,7 @@ export function LearnerRequestHistory() {
 
   return <div className="app-learner-page learner-support-page request-workspace">
     <PageTitle title="Hỗ trợ học tập" detail={data?.levelApproved === false ? "Theo dõi khiếu nại của bạn." : "Theo dõi khiếu nại, kháng nghị và góp ý của bạn."} tip={data?.levelApproved === false ? "Theo dõi khiếu nại của bạn." : "Theo dõi khiếu nại, kháng nghị và góp ý của bạn."} compactDetail={false}
-      aside={<Link className="btn" to={fromProfile ? "/profile" : "/home"}>{fromProfile ? "Về Tiến độ & hồ sơ" : "Về Trang chủ"}</Link>} />
+      aside={<Link className="btn page-back-link" to={fromProfile ? "/profile" : "/home"} title={fromProfile ? "Về Tiến độ & hồ sơ" : "Về Trang chủ"}><PageBackContent label={fromProfile ? "Về Tiến độ & hồ sơ" : "Về Trang chủ"} /></Link>} />
     <nav className="request-tabs" aria-label="Các mục hỗ trợ học tập">
       {filters.map(item => {
         const search = new URLSearchParams();

@@ -20,6 +20,8 @@ export interface ArenaMatch {
   postedByMe: boolean;
   opponent: { id: string; displayName: string; cefr: CefrLevel | null; avatar?: Partial<LearnerAvatarData> } | null;
   myAvatar?: Partial<LearnerAvatarData>;
+  /** Ranked and still to play: points lost by giving up or not playing in time. */
+  forfeitLoss?: number;
   createdAt: string;
   acceptDeadline: string;
   acceptedAt: string | null;

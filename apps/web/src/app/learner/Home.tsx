@@ -49,10 +49,6 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
   const monthlyPreparation = view.monthlyPreparation === true;
   const trial = view.monthlyUncounted;
   const { completedLessons, totalLessons, completedReviews = 0, totalReviews = 0 } = view.metrics;
-  // Trial month: the counted metrics stay empty, so its progress is the trial lessons actually learned.
-  const trialCount = (review: boolean) => { const list = view.lessons.filter((lesson) => (lesson.kind === "review") === review); return { done: list.filter((lesson) => lesson.status === "completed").length, total: list.length }; };
-  const trialNew = trialCount(false);
-  const trialReview = trialCount(true);
   return <div className="app-learner-page home-page" data-monthly-preparation={monthlyPreparation || !monthly || (!next && !view.lessons.length)} style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
     <PageTitle title={`Chào ${view.learner.displayName}!`} detail="Xem việc cần làm hôm nay và học tiếp từ chỗ đang dừng." aside={<span className={`badge lvl lvl-${view.learner.cefr}`}>Trình độ {view.learner.cefr}</span>} />
     <div className="bao-row" style={{ marginBottom: 16 }} aria-label="Lời chào của Season AI Coach"><div className="bubble home-today-heading" style={{ flex: 1 }}>Hôm nay học gì nào?</div></div>
@@ -75,9 +71,12 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
       <div><div className="eyebrow">{trial ? "Tháng học thử" : "Theo tháng"}</div><h2 style={{ margin: "2px 0 0" }}>{trial ? "Tiến độ học thử" : "Tiến độ học tập"}</h2></div>
       {trial ? <p className="small muted home-trial-note" style={{ margin: "6px 0 0" }}>Điểm danh, điểm huy hiệu và bài thi tính từ <b>{trial.countsFrom.slice(8, 10)}/{trial.countsFrom.slice(5, 7)}</b>.</p> : null}
       <div className="stats monthly-home-metrics" data-trial={trial ? "" : undefined} style={{ marginTop: 12 }}>
+        {/* Owner 19/11: the trial month keeps all four boxes, each "–" since none of them counts yet. */}
         {trial ? <>
-          <Metric metric="lessons" label="Bài mới" value={`${trialNew.done}/${trialNew.total}`} percent={ratio(trialNew.done, trialNew.total)} />
-          <Metric metric="reviews" label="Bài ôn" value={`${trialReview.done}/${trialReview.total || totalReviews}`} percent={ratio(trialReview.done, trialReview.total || totalReviews)} color="var(--primary)" />
+          <Metric metric="lessons" label="Bài theo lịch" value="–" percent={0} />
+          <Metric metric="reviews" label="Bài ôn" value="–" percent={0} color="var(--primary)" />
+          <Metric metric="attendance" label="Điểm danh" value="–" percent={0} color="var(--peach)" />
+          <Metric metric="points" label="Điểm huy hiệu" value="–" percent={0} color="var(--primary)" />
         </> : <>
           <Metric metric="lessons" label="Bài theo lịch" value={`${completedLessons}/${totalLessons}`} percent={ratio(completedLessons, totalLessons)} />
           <Metric metric="reviews" label="Bài ôn" value={`${completedReviews}/${totalReviews}`} percent={ratio(completedReviews, totalReviews)} color="var(--primary)" />
