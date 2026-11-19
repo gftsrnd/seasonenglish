@@ -197,3 +197,10 @@ export function ModalCloseButton({ onClick, disabled, label = "Đóng", iconOnly
   const iconOnly = useUiTier() === "tablet" || iconOnlyProp;
   return <button ref={ref} type="button" className={iconOnly ? "btn-sm modal-close modal-close--icon" : "btn-sm modal-close"} aria-label={label} title={label} disabled={disabled} onClick={onClick}>{iconOnly ? <X size={16} strokeWidth={2.2} aria-hidden="true" /> : <ActionLabel icon={X} label="Đóng" />}</button>;
 }
+
+/** A page title with its short description: the line under the title on tablets and desktop,
+ *  behind the ⓘ beside the title on phones (owner 19/11). */
+export function PhoneTitle({ title, description, as: Tag = "h1" }: { title: string; description: ReactNode; as?: "h1" | "h2" }) {
+  const phone = useUiTier() === "phone";
+  return phone ? <InfoTitle as={Tag} title={title} tip={description} /> : <><Tag>{title}</Tag><p className="muted">{description}</p></>;
+}

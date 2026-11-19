@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { Pager, usePaged } from "../shared/Pager.js";
-import { SectionTip, useCompactUi } from "../shared/CompactUi.js";
+import { PhoneTitle, SectionTip, useCompactUi } from "../shared/CompactUi.js";
 import { OPERATOR_TIPS } from "./section-tips.js";
 import type { AssessmentReviewLearnerView } from "@e4s/contracts";
 import { Badge, Button, LevelChip, OperatorPage, PageTitle } from "./primitives.js";
@@ -90,7 +90,8 @@ export function OperatorDashboard({ view, actions, readOnly = false, unavailable
   return <OperatorPage title="Duyệt trình độ">
     {/* Mini game topic reports and deletion requests reach staff through the notification bell. */}
       <PageTitle>
-      <h1>Duyệt trình độ</h1><p className="muted">{view.approved.length} người học đang hoạt động.</p>
+      {/* Owner 19/11: phones put the description behind the ⓘ; tablets and desktop show the line. */}
+      <PhoneTitle title="Duyệt trình độ" description={`${view.approved.length} người học đang hoạt động.`} />
     </PageTitle>
 
     <section className="section" data-guide="op-pending"><h3>Chờ duyệt ({view.pending.length}){<SectionTip text={OPERATOR_TIPS.pending} desktop label="Chờ duyệt là gì?" />}</h3>{view.pending.length ? <div aria-label="Danh sách chờ duyệt" className="bounded-scroll-region operator-pending-list">{pendingPaged.visible.map(item => {

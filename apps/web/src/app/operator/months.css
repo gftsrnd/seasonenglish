@@ -554,3 +554,8 @@ details.monthly-resource-editor-section>:not(summary)+:not(summary){margin-top:1
   align-items: center;
 }
 :root:root:root:root .monthly-resource-editor textarea.line-field { box-sizing: border-box; min-height: 34px !important; padding-block: 7px !important; line-height: 1.35; }
+
+/* Audit 19/11: nothing in the monthly planner below 11px (cell buttons were 9–10px). */
+:root:root .monthly-day-cell .btn-sm { font-size: 11px; }
+:root:root .monthly-plan-day-open, :root:root .monthly-plan-day-body small { font-size: 11px; }
+:root:root .operator-months-page small { font-size: max(11px, .72rem); }

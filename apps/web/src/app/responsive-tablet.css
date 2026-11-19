@@ -74,3 +74,8 @@
     [data-guide="op-signals"] > .grid > .card > p.small.muted
   ) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+
+/* Audit 19/11: tablets have room – short descriptions wrap instead of ending in "…". */
+@media (min-width: 601px) and (max-width: 1024px) {
+  :root:root .tier-one-line { white-space: normal; overflow: visible; text-overflow: clip; }
+}

@@ -2194,3 +2194,14 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
 /* Home lesson card: the minutes / day / lesson line wraps beside "Học ngay" instead of running under it. */
 .learner-root .home-lesson-meta { flex: 1 1 auto; min-width: 0; }
 .learner-root .home-lesson-meta > span { white-space: normal; overflow-wrap: anywhere; }
+
+/* Audit 19/11 – readability fixes */
+/* calendar day status was 10.7px; at least 11.5px */
+.learner-root .monthly-learner-calendar-day small { font-size: max(.72rem, 11.5px); }
+/* phones: the readiness label wraps instead of ending in "…" */
+@media (max-width: 600px) {
+  :root:root:root:root .learner-root .home-page .level-readiness-card .readiness-label { white-space: normal; overflow: visible; text-overflow: clip; }
+  /* badge chips: one line ("Chuỗi ngày học" broke onto two) */
+  :root:root:root:root .learner-root .bdg-chip { gap: 4px; padding-inline: 8px; }
+  :root:root:root:root .learner-root .bdg-chip > b { white-space: nowrap; font-size: 13px; }
+}
