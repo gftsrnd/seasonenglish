@@ -10,6 +10,7 @@ import "./shared.css";
 import { hasAssessmentLogoutGuard, requestAssessmentLogout } from "./assessment-logout-guard.js";
 import { useDialog } from "./ModalProvider.js";
 import { managerSectionForPath } from "../manager/navigation.js";
+import { BadgeCelebration } from "./BadgeCelebration.js";
 import { NotificationBell } from "./NotificationBell.js";
 import { organisationThemeStorageKey, useTheme } from "./ThemeProvider.js";
 import { ScrollJumpButton, useScrollJump } from "./ScrollJump.js";
@@ -136,6 +137,8 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
   const bottomNav = useRef<HTMLElement>(null);
   const [bottomNavHeight, setBottomNavHeight] = useState(0);
   const notificationBell = <NotificationBell key={`${session.user.id}:${role}`} deferArrival={guideActive} />;
+  // Learners: a new badge also opens the celebration popup (owner 19/11).
+  const badgeCelebration = role === "learner" ? <BadgeCelebration key={session.user.id} /> : null;
   const appGuide = <AppGuide key={`${session.user.id}:${role}:${location.pathname}`} role={role} pathname={location.pathname} compact={compact} onOpenChange={setGuideActive} />;
   useEffect(() => {
     const nav = bottomNav.current;
@@ -233,6 +236,7 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
         {logoutFeedback}
       </div>}
     </header>
+    {badgeCelebration}
     {!compact && <header className="shell-desktop-header no-print">
       <div className="shell-desktop-controls" role="group" aria-label="Tiện ích ứng dụng">
         {notificationBell}

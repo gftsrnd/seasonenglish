@@ -23,7 +23,7 @@ function stub(compact: boolean) {
   return { edges, notify: (top: boolean, bottom: boolean) => act(() => notify([{ target: edges[0]!, isIntersecting: top }, { target: edges[1]!, isIntersecting: bottom }])) };
 }
 
-it("on phones and tablets steps aside once the end of the page is in view", () => {
+it("on phones and tablets keeps the up arrow at the end of the page (owner 19/11)", () => {
   const page = stub(true);
   render(<Page />);
   page.notify(true, false);
@@ -31,7 +31,7 @@ it("on phones and tablets steps aside once the end of the page is in view", () =
   page.notify(false, false);
   expect(screen.getByRole("button", { name: "Cuộn lên đầu trang" })).toBeInTheDocument();
   page.notify(false, true);
-  expect(screen.queryByRole("button", { name: /Cuộn/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Cuộn lên đầu trang" })).toBeInTheDocument();
 });
 
 it("on desktop keeps the up arrow at the end of the page", () => {

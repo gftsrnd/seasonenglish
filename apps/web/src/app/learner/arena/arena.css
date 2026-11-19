@@ -292,8 +292,12 @@
 /* Phone: the score note stays on one line (it stretched the result popup). */
 @media (max-width: 600px) { .arena-result__side small { white-space: nowrap; font-size: 11px; } }
 .arena-state__versus .arena-result__side { padding-block: 14px 12px; }
-:root:root:root:root .dialog.arena-dialog .card.arena-result { padding: 0 0 16px !important; margin: 0 -22px; border: 0; border-radius: 0; }
 .arena-state .arena-result__reason { display: block; text-align: center; line-height: 1.5; }
 .arena-state .arena-result__reason > svg { display: inline-block; vertical-align: -2px; margin-right: 4px; }
-:root:root:root:root .dialog.arena-dialog .card.arena-result { width: calc(100% + 44px); max-width: none; box-sizing: border-box; }
 :root:root .modal-backdrop > .dialog.arena-dialog { overflow-x: hidden; }
+/* Result popup (owner 19/11, banner was shifted): the popup has no side padding; its header and the
+   result card bring their own, so the banner spans edge to edge at every width. */
+:root:root:root:root .modal-backdrop > .dialog.arena-dialog { padding: 0 !important; }
+:root:root:root:root .dialog.arena-dialog > .row.between:first-child { margin: 0 0 8px !important; padding: 14px 20px 10px !important; }
+:root:root:root:root .dialog.arena-dialog .card.arena-result { width: 100%; margin: 0; padding: 0 0 18px !important; border: 0; border-radius: 0; box-shadow: none; }
+@media (min-width: 601px) { :root:root:root:root:root .modal-backdrop > .dialog.arena-dialog { width: min(520px, calc(100vw - 48px)) !important; max-width: 520px !important; } }

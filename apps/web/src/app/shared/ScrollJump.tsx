@@ -36,11 +36,9 @@ export function useScrollJump(contained = false) {
     });
   };
 
-  // On phones and tablets the floating button sits over the page's last row (actions, composers,
-  // inputs), so it steps aside once the end of the page is in view; desktop keeps the up arrow there.
-  const compact = typeof window !== "undefined" && typeof window.matchMedia === "function"
-    && window.matchMedia(COMPACT_SCROLL_JUMP_QUERY).matches;
-  return { start, end, jump, atTop: edges.top, visible: compact ? !edges.bottom : !edges.top || !edges.bottom };
+  // Every width keeps the up arrow at the end of a long page (owner 19/11: phones lost the way back up).
+  // The button steps past controls under it (dodgeTop) and hides only when no free spot is left.
+  return { start, end, jump, atTop: edges.top, visible: !edges.top || !edges.bottom };
 }
 
 export function ScrollJumpButton({ atTop, onClick, inExam = false, style }: {
