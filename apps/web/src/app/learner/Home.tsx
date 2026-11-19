@@ -54,7 +54,7 @@ export function LearnerHome({ view, actions, courseCompleted = false }: { view: 
   const trialNew = trialCount(false);
   const trialReview = trialCount(true);
   return <div className="app-learner-page home-page" data-monthly-preparation={monthlyPreparation || !monthly || (!next && !view.lessons.length)} style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
-    <PageTitle eyebrow={monthly ? `Tháng ${formatMonth(monthly.month)} · ${monthly.themeTitle}` : "Lộ trình tháng đang được chuẩn bị"} title={`Chào ${view.learner.displayName}!`} aside={<span className={`badge lvl lvl-${view.learner.cefr}`}>Trình độ {view.learner.cefr}</span>} />
+    <PageTitle title={`Chào ${view.learner.displayName}!`} detail="Xem việc cần làm hôm nay và học tiếp từ chỗ đang dừng." aside={<span className={`badge lvl lvl-${view.learner.cefr}`}>Trình độ {view.learner.cefr}</span>} />
     <div className="bao-row" style={{ marginBottom: 16 }} aria-label="Lời chào của Season AI Coach"><div className="bubble home-today-heading" style={{ flex: 1 }}>Hôm nay học gì nào?</div></div>
     {/* Absence warnings and content updates live in the notification bell. Only the last day before the
         account lock stays on the page, as one compact line. */}
