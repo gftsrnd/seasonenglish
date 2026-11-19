@@ -20,3 +20,14 @@
 /* Same look on manager pages, where learner.css may not be loaded. */
 .rules-disclosure { color: var(--muted); font-size: .875rem; line-height: 1.5; }
 .rules-disclosure > summary { cursor: pointer; color: var(--text); min-height: 44px; align-content: center; }
+/* Owner 19/11: always show the triangle (some pages reset summary markers): ▶ closed, ▼ open. */
+.rules-disclosure > summary { display: flex; align-items: center; gap: 6px; list-style: none; }
+.rules-disclosure > summary::-webkit-details-marker { display: none; }
+.rules-disclosure > summary::before { content: "\25B6"; font-size: .7em; color: var(--text); }
+.rules-disclosure[open] > summary::before { content: "\25BC"; }
+/* The point groups are split by thin vertical lines when they sit side by side. */
+.rules-points { column-gap: 0; }
+.rules-points > section { padding: 0 18px; }
+.rules-points > section:first-child { padding-left: 0; }
+.rules-points > section + section { border-left: 1px solid var(--line); }
+@media (max-width: 700px) { .rules-points > section { padding: 0; } .rules-points > section + section { border-left: 0; } }
