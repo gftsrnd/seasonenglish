@@ -62,7 +62,7 @@ export function WeeklyReview({ title, cefr, actions }: { title: string; cefr: Ce
 
   const header = <div className="row" style={{ gap: 8, alignItems: "center" }}>
     <AppLink className="lesson-back" href="/home" navigate={actions.navigate} ariaLabel={english ? "Back to home" : "Về trang chủ"} title={english ? "Back to home" : "Về trang chủ"}><ChevronLeft size={22} aria-hidden="true" /></AppLink>
-    <div><div className="eyebrow">{english ? "Friday review" : "Bài ôn thứ Sáu"}</div><h2 style={{ margin: 0 }}>{title}</h2></div>
+    <div><h2 style={{ margin: 0 }}>{title}</h2><p className="small muted" style={{ margin: "2px 0 0" }}>{english ? "Friday review" : "Bài ôn thứ Sáu"}</p></div>
   </div>;
 
   const sectionList = <ol className="weekly-review-sections" aria-label={english ? "Review sections" : "Các phần bài ôn"}>

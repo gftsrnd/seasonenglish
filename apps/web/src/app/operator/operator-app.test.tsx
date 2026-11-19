@@ -162,7 +162,7 @@ describe("Operator app rebuild", () => {
     render(<OperatorLevelForms embedded view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "B1", forms: [] }] } as any} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onDelete: vi.fn() }} />);
 
     expect(screen.queryByRole("heading", { name: "Đề thi lên mức" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "B1" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mức đích B1" })).toBeInTheDocument();
   });
 
   it("opens a real manual-authoring action for an empty target level", async () => {

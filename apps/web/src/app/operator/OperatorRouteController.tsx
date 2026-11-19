@@ -1098,7 +1098,7 @@ function AssessmentPreviewControl({
   return <>
     {kind === "final" ? <div className="tabs operator-monthly-bank-tabs" role="tablist" aria-label="Tháng của đề thi">{months.map(month => <button type="button" role="tab" key={month} aria-selected={activeMonth === month} className={activeMonth === month ? "active" : ""} onClick={() => setSelectedMonth(month)}>{month === "unassigned" ? "Chưa rõ tháng" : `${month.slice(5)}/${month.slice(0, 4)}`}</button>)}</div> : null}
     <section className="card operator-assessment-form-list" data-assessment-kind={kind} aria-label="Phiên bản đề thi đã lưu">
-      <div className="row between"><div><p className="xs muted">PHIÊN BẢN ĐỀ ĐÃ LƯU</p><h2>{kind === "placement" ? "Đề đầu vào" : kind === "final" ? "Bài thi tháng" : kind === "level_up" ? "Đề lên mức" : "Đề đầu ra"}<SectionTip desktop text={OPERATOR_TIPS.savedForms} label="Phiên bản đề đã lưu là gì?" /></h2></div><span className="badge">{visibleForms.length} phiên bản</span></div>
+      <div className="row between"><div><h2>{kind === "placement" ? "Đề đầu vào" : kind === "final" ? "Bài thi tháng" : kind === "level_up" ? "Đề lên mức" : "Đề đầu ra"}<SectionTip desktop text={OPERATOR_TIPS.savedForms} label="Phiên bản đề đã lưu là gì?" /></h2></div><span className="badge">{visibleForms.length} phiên bản</span></div>
       {notice ? <p role="status" className="small">{notice}</p> : null}
       {editorError && !selected ? <p role="alert" className="small form-error">{editorError}</p> : null}
       <div className="stack">{visibleForms.map(form => <article className="item operator-assessment-form-row" key={form.versionId}>

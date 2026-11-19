@@ -78,7 +78,8 @@ describe("profile Season card", () => {
   it("shows the current level's ladder, points in the level toward the next threshold and the lifetime total", () => {
     render(<LearnerProfile view={b1} actions={actions} />);
     expect(screen.getByTestId("season-ladder-title")).toHaveTextContent("Mùa hạ · B1");
-    expect(screen.getByTestId("season-points-summary")).toHaveTextContent("Điểm trong B1: 1.250 · Tổng điểm tích lũy: ★ 3.100");
+    // Owner 19/11: one description line under the title (the points in level are on the meter below).
+    expect(screen.getByTestId("season-points-summary")).toHaveTextContent(/^Mùa học \d\/4 · .+ · Tổng điểm tích lũy: ★ 3\.100$/);
     expect(screen.getByText("1.250 / 2.000")).toBeInTheDocument();
     expect(screen.getByText(/Thiếu huy hiệu/).parentElement).toHaveTextContent("Tuần trọn vẹn, Bạn của Season");
   });

@@ -147,7 +147,8 @@ describe("app onboard affordances", () => {
     expect(screen.queryByText("Cá nhân hoá ví dụ và cách giải thích.")).not.toBeInTheDocument();
     expect(screen.queryByText("Xếp CEFR để bài học vừa sức.")).not.toBeInTheDocument();
     expect(screen.getByText((_, element) => element?.tagName === "P" && element.textContent === "Các mục có dấu * bắt buộc là bắt buộc; các mục còn lại có thể bỏ trống.")).toBeInTheDocument();
-    expect(screen.getByText("Hồ sơ")).toBeInTheDocument();
+    // Owner 19/11: no uppercase "Hồ sơ" line above the title any more.
+    expect(screen.queryByText("Hồ sơ", { selector: ".eyebrow" })).toBeNull();
     // The Season style choice was removed from the profile form.
     expect(screen.queryByRole("group", { name: "Phong cách của Season" })).not.toBeInTheDocument();
     expect(screen.queryByText("Informal · Thân thiện")).not.toBeInTheDocument();

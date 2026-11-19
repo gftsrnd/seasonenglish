@@ -48,7 +48,8 @@ describe("assessment bank delivery dialog", () => {
     const heading = await screen.findByRole("heading", { name: "Đề đầu vào" });
     const list = heading.closest("section")!;
     expect(list).toHaveClass("card", "operator-assessment-form-list", "assessment-bank");
-    expect(within(list).getByText("PHIÊN BẢN ĐỀ ĐÃ LƯU")).toHaveClass("xs", "muted");
+    // Owner 19/11: card headers are title + one line, no uppercase label above the title.
+    expect(within(list).queryByText("PHIÊN BẢN ĐỀ ĐÃ LƯU")).toBeNull();
     expect(within(list).getByText("3 phiên bản")).toHaveClass("badge");
     expect(list.querySelector(".assessment-bank-policy")).toBeNull();
     expect(within(list).queryByText("Dùng nguyên một bộ")).not.toBeInTheDocument();

@@ -89,7 +89,6 @@ export function ManagerMonthlyReport({ view, filter, selectFilter, loading, erro
     {view ? <article className="report">
       <header className="rhead">
         <div className="manager-monthly-report-title">
-          <div className="eyebrow">Báo cáo tháng</div>
           <h2>Season English · {view.organizationName}</h2>
           <div className="meta">Tháng {view.month} · {view.cefr ?? "Tất cả mức"} · Ngày lập {formatDate(view.generatedAt)}</div>
         </div>

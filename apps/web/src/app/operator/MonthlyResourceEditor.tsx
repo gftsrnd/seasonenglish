@@ -171,7 +171,7 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
   return <div className="monthly-lesson-preview-backdrop" role="presentation">
     <section className="monthly-resource-editor card" role="dialog" aria-modal="true" aria-label={`Sửa tay tài nguyên ${cefr}`}>
       <header className="monthly-resource-editor-header">
-        <div><span className="eyebrow">Bản nháp · {cefr}</span><h2>Sửa tay tài nguyên tháng</h2><p className="small muted">{draft.coreTerms.length} từ cốt lõi (cố định) · mỗi từ 3–9 từ mở rộng · 2 chủ điểm ngữ pháp · 4 mục tiêu phát âm.</p></div>
+        <div><h2>Sửa tay tài nguyên tháng</h2><p className="small muted">Bản nháp · {cefr} · {draft.coreTerms.length} từ cốt lõi (cố định) · mỗi từ 3–9 từ mở rộng · 2 chủ điểm ngữ pháp · 4 mục tiêu phát âm.</p></div>
         <ModalCloseButton iconOnly label="Đóng" disabled={saving} onClick={onClose} />
       </header>
       {prefill && <p className="monthly-resource-editor-prefill" role="status">Đã nạp phần AI đã sinh: {[

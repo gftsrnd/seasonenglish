@@ -60,8 +60,8 @@ export function LearnerMonthlySurveys({ surveys, month }: { surveys: ReturnType<
       {form ? <section className="card monthly-survey-stack" aria-labelledby="monthly-survey-open">
         <div className="monthly-survey-heading">
           <div>
-            <div className="eyebrow">{surveyMonthLabel(form.month)}</div>
             <h2 id="monthly-survey-open">{form.title}</h2>
+            <p className="small muted" style={{ margin: "2px 0 0" }}>{surveyMonthLabel(form.month)}</p>
           </div>
           {available.length > 1 ? <label>Tháng khảo sát <select value={form.month} onChange={event => setSelectedMonth(event.target.value)}>
             {available.map(item => <option value={item.form.month} key={item.form.month}>{surveyMonthLabel(item.form.month)}</option>)}

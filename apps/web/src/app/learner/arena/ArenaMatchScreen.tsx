@@ -92,9 +92,9 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
   return <div className={`app-learner-page game-page arena-page${preparing ? " arena-page--ready" : playing ? "" : " arena-page--narrow"}`} data-arena-match={match.id}>
     <header className="row between game-running-header arena-match-header">
       <div className="arena-match-header__text">
-        <div className="eyebrow game-running-title"><span className="game-title-icon" aria-hidden="true"><ArenaGameIcon game={match.game} size={18} /></span><span>{name}</span></div>
-        {compact ? <InfoTitle as="h1" title={match.setTopic} tip={modeLine} /> : <h1>{match.setTopic}</h1>}
-        {compact ? null : <p className="small muted arena-mode-line" data-arena-mode-line>{modeLine}</p>}
+        {/* Owner 19/11: title + one line – the game's name joins the mode line (no uppercase line on top). */}
+        {compact ? <InfoTitle as="h1" title={match.setTopic} tip={`${name} · ${modeLine}`} /> : <h1>{match.setTopic}</h1>}
+        {compact ? null : <p className="small muted arena-mode-line" data-arena-mode-line>{name} · {modeLine}</p>}
       </div>
       {playing
         ? <button className="btn btn-sm btn-danger game-exit-link" type="button" disabled={busy} onClick={() => void exit()}><LogOut size={15} strokeWidth={2.2} aria-hidden="true" />Thoát</button>

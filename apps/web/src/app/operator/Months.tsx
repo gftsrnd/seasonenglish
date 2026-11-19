@@ -489,7 +489,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
   };
   const resourceColumn = <div className="monthly-resource-column">
         <section className="monthly-resources card">
-        <div className="monthly-section-title"><div><span className="eyebrow">{cefr}</span><h2>Tài nguyên tháng<SectionTip text={OPERATOR_TIPS.resources} label="Tài nguyên tháng là gì?" /></h2></div><span className={`monthly-status ${framework?.status ?? "missing"}`}>{frameworkStatus(framework?.status)}</span></div>
+        <div className="monthly-section-title"><div><h2>Tài nguyên tháng · {cefr}<SectionTip text={OPERATOR_TIPS.resources} label="Tài nguyên tháng là gì?" /></h2></div><span className={`monthly-status ${framework?.status ?? "missing"}`}>{frameworkStatus(framework?.status)}</span></div>
         <p className="small muted">AI chuẩn bị một bộ tài nguyên thống nhất cho cả tháng.</p>
         {!framework?.resources ? <div className="monthly-resource-proposal" aria-label="Số lượng đề xuất theo lịch học">
           <span className="eyebrow">Số lượng đề xuất theo lịch học</span>
@@ -548,7 +548,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
         </section>
       </div>;
   const calendarSection = <section className="monthly-calendar-section card" id="monthly-teaching-calendar" ref={calendarRef}>
-        <div className="monthly-section-title"><div><span className="eyebrow">{cefr}</span><h2>Lịch học {monthLabel(month)}<SectionTip desktop text={OPERATOR_TIPS.calendar} label="Lịch học là gì?" /></h2></div><div className="monthly-calendar-legend"><span className="lesson">Học mới</span><span className="review">Ôn tập</span><span className="weekend">Nghỉ</span><span className="holiday">Ngày lễ</span><span className="final">Bài thi tháng</span></div></div>
+        <div className="monthly-section-title"><div><h2>Lịch học {monthLabel(month)} · {cefr}<SectionTip desktop text={OPERATOR_TIPS.calendar} label="Lịch học là gì?" /></h2></div><div className="monthly-calendar-legend"><span className="lesson">Học mới</span><span className="review">Ôn tập</span><span className="weekend">Nghỉ</span><span className="holiday">Ngày lễ</span><span className="final">Bài thi tháng</span></div></div>
         {agenda ? <div className="monthly-agenda-picker" role="group" aria-label="Tuần trong tháng">
           <button type="button" className="btn-sm" aria-label="Tuần trước" disabled={agendaWeek === 0} onClick={() => setAgendaSelection({ month, week: agendaWeek - 1 })}><ChevronLeft size={18} aria-hidden="true" /></button>
           <b aria-live="polite">{agendaDates[0]?.dateLabel}–{agendaDates.at(-1)?.dateLabel}/{month.slice(5)}</b>
@@ -599,7 +599,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       </div>
     </section>
     <section className="monthly-topic-card card">
-      <div className="monthly-section-title"><div><span className="eyebrow">Nội dung chung</span><h2>Chủ đề tháng<SectionTip desktop text={OPERATOR_TIPS.topic} label="Chủ đề tháng là gì?" /></h2></div><span className="monthly-version">{briefLocked ? "Đã chốt" : overview.brief ? "Đang soạn" : "Chưa có"}</span></div>
+      <div className="monthly-section-title"><div><h2>Chủ đề tháng<SectionTip desktop text={OPERATOR_TIPS.topic} label="Chủ đề tháng là gì?" /></h2></div><span className="monthly-version">{briefLocked ? "Đã chốt" : overview.brief ? "Đang soạn" : "Chưa có"}</span></div>
       {compact && briefLocked ? <div className="monthly-brief-summary">
         <b>{overview.brief?.title || brief.title}</b>
         <button type="button" className="btn-sm" aria-expanded={briefEditorMonth === month} aria-controls="monthly-brief-fields" onClick={() => setBriefEditorMonth(briefEditorMonth === month ? undefined : month)}>{briefEditorMonth === month ? "Thu gọn" : canEdit ? "Xem hoặc sửa chủ đề" : "Xem chủ đề"}</button>
@@ -623,7 +623,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy: extern
       {compact && resourcesApproved ? <>{calendarSection}{resourceColumn}</> : <>{resourceColumn}{calendarSection}</>}
       {framework?.resources && resourcePanel && compactUiPanel ? <div className="monthly-resource-backdrop" role="presentation" onClick={() => setResourcePanel(null)} /> : null}
       {framework?.resources && resourcePanel && <section className="monthly-resource-panel card" role="dialog" aria-modal="false" aria-label={resourcePanel === "plan" ? "Phân bổ tài nguyên và bài tập" : "Tài nguyên tháng"}>
-        <header><div><span className="eyebrow">Tài nguyên tháng</span><h2>{resourcePanel === "plan" ? "Phân bổ tài nguyên & bài tập" : resources.find((item) => item.key === resourcePanel)?.label}{RESOURCE_PANEL_TIPS[resourcePanel] ? <SectionTip text={RESOURCE_PANEL_TIPS[resourcePanel]} label="Giải thích tài nguyên" /> : null}</h2></div><ModalCloseButton label="Đóng tài nguyên" onClick={() => setResourcePanel(null)} /></header>
+        <header><div><h2>{resourcePanel === "plan" ? "Phân bổ tài nguyên & bài tập" : resources.find((item) => item.key === resourcePanel)?.label}{RESOURCE_PANEL_TIPS[resourcePanel] ? <SectionTip text={RESOURCE_PANEL_TIPS[resourcePanel]} label="Giải thích tài nguyên" /> : null}</h2></div><ModalCloseButton label="Đóng tài nguyên" onClick={() => setResourcePanel(null)} /></header>
         {resourcePanel === "core" && <VocabularyPanel items={framework.resources.coreTerms} variant="core" />}
         {resourcePanel === "expanded" && <VocabularyPanel items={framework.resources.supportTerms} variant="expanded" registerCores={framework.resources.coreTerms} />}
         {resourcePanel === "grammar" && <GrammarResourcePanel topics={framework.resources.grammarTopics} {...(framework.resources.roadmap ? { roadmap: framework.resources.roadmap } : {})} />}

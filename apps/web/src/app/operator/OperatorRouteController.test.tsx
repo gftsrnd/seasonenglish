@@ -40,7 +40,7 @@ describe("OperatorRouteController", () => {
     vi.spyOn(window, "scrollTo").mockImplementation((_x, y) => { scrollY = Number(y); });
     render(<ToastProvider><MemoryRouter initialEntries={["/op/months"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
 
-    await screen.findByRole("heading", { name: "Tài nguyên tháng" });
+    await screen.findByRole("heading", { name: /^Tài nguyên tháng/ });
     scrollY = 420;
     await user.click(screen.getByRole("tab", { name: "A2" }));
     await waitFor(() => expect(client.getContentMonthResourceCheckpoint).toHaveBeenLastCalledWith(expect.any(String), "A2"));
@@ -62,7 +62,7 @@ describe("OperatorRouteController", () => {
     };
     const client = { getContentMonth: vi.fn().mockResolvedValue(overview), getContentMonthResourceCheckpoint: vi.fn().mockResolvedValue(undefined), saveContentMonthDay: vi.fn(), uploadContentMedia: vi.fn() };
     const { container } = render(<ToastProvider><MemoryRouter initialEntries={["/op/months"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
-    await screen.findByRole("heading", { name: "Tài nguyên tháng" });
+    await screen.findByRole("heading", { name: /^Tài nguyên tháng/ });
 
     const newCell = await waitFor(() => container.querySelector<HTMLElement>(`#monthly-day-${calendar.effectiveDays[afterReview - 1]}`)!);
     await user.click(within(newCell).getByRole("button", { name: `Soạn tay bài ${ordinal}` }));
@@ -91,7 +91,7 @@ describe("OperatorRouteController", () => {
     };
     const client = { getContentMonth: vi.fn().mockResolvedValue(overview), getContentMonthResourceCheckpoint: vi.fn().mockResolvedValue(undefined), saveContentMonthDay: vi.fn(), uploadContentMedia: vi.fn() };
     const { container } = render(<ToastProvider><MemoryRouter initialEntries={["/op/months"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
-    await screen.findByRole("heading", { name: "Tài nguyên tháng" });
+    await screen.findByRole("heading", { name: /^Tài nguyên tháng/ });
     const cell = await waitFor(() => container.querySelector<HTMLElement>(`#monthly-day-${date}`)!);
     await user.click(within(cell).getByRole("button", { name: `Soạn tay bài ${ordinal}` }));
     expect(await screen.findByLabelText("Tiêu đề bài")).toHaveValue(`Bài ${ordinal}`);
@@ -111,7 +111,7 @@ describe("OperatorRouteController", () => {
     };
     const client = { getContentMonth: vi.fn().mockResolvedValue(overview), getContentMonthResourceCheckpoint: vi.fn().mockResolvedValue(undefined), saveContentMonthDay: vi.fn(), uploadContentMedia: vi.fn() };
     const { container } = render(<ToastProvider><MemoryRouter initialEntries={["/op/months"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
-    await screen.findByRole("heading", { name: "Tài nguyên tháng" });
+    await screen.findByRole("heading", { name: /^Tài nguyên tháng/ });
     await user.click(screen.getByRole("tab", { name: "B1" }));
 
     const reviewCell = await waitFor(() => container.querySelector<HTMLElement>(`#monthly-day-${calendar.effectiveDays[firstReview - 1]}`)!);
@@ -194,7 +194,7 @@ describe("OperatorRouteController", () => {
     ] }) };
     render(<MemoryRouter initialEntries={["/settings/prompts"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
 
-    expect(await screen.findByText("Đường dẫn vận hành không tồn tại.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Không tìm thấy trang" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Prompt & rubric" })).not.toBeInTheDocument();
     expect(client.getContentPrompts).not.toHaveBeenCalled();
   });
@@ -411,7 +411,7 @@ describe("OperatorRouteController", () => {
     const retakeCard = await screen.findByRole("region", { name: "Đề thi lại" });
     expect(within(retakeCard).getByRole("heading", { name: "Đề thi lại" })).toBeInTheDocument();
     expect(within(retakeCard).getByText("Chưa có đề")).toBeInTheDocument();
-    expect(within(retakeCard).queryByRole("heading", { name: "B1" })).not.toBeInTheDocument();
+    expect(within(retakeCard).queryByRole("heading", { name: "Mức đích B1" })).not.toBeInTheDocument();
     // Between the "Đề đầu vào" versions card and the learners' results.
     const versionsCard = screen.getByRole("region", { name: "Chưa có nội dung đề thi" });
     expect(versionsCard.compareDocumentPosition(retakeCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -439,7 +439,7 @@ describe("OperatorRouteController", () => {
 
     await user.click(screen.getByRole("tab", { name: "Đề lên mức" }));
     const levelCard = await screen.findByRole("region", { name: "Phiên bản đề lên mức" });
-    expect(within(levelCard).getByRole("heading", { name: "B1" })).toBeInTheDocument();
+    expect(within(levelCard).getByRole("heading", { name: "Mức đích B1" })).toBeInTheDocument();
     expect(levelCard).not.toHaveTextContent("Đề thi lại");
     expect(screen.queryByRole("region", { name: "Đề thi lại" })).not.toBeInTheDocument();
   });

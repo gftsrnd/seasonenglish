@@ -247,7 +247,7 @@ describe("arena match screen", () => {
       forfeit: vi.fn().mockResolvedValue(settled("lose", -50))
     };
     render(<ModalProvider><ArenaMatchScreen matchId={ID} navigate={vi.fn()} notify={vi.fn()} client={api as never} /></ModalProvider>);
-    expect(await screen.findByText("Xếp hạng · đối thủ ẩn")).toBeInTheDocument();
+    expect(await screen.findByText(/Xếp hạng · đối thủ ẩn$/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Chơi tiếp/ }));
     await waitFor(() => expect(api.start).toHaveBeenCalledWith(ID));
     fireEvent.click(await screen.findByRole("button", { name: /Thoát/ }));

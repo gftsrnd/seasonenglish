@@ -106,11 +106,10 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
     <div className="profile-season-heading">
       <SeasonFigure level={currentLevel} />
       <div>
-        <div className="eyebrow">Mùa học {currentLevel}/4{cefr ? ` · Trình độ ${cefr}` : ""}</div>
         {compact ? <h2 className="profile-season-title info-title" data-testid="season-ladder-title"><span className="info-title-text">{current.shortName}{cefr ? ` · ${cefr}` : ""}</span><InfoTip label="Mùa học: chi tiết" text={<>{nextLine}. Điểm {inLevel}: <b>{formatPoints(pointsInLevel)}</b> · Tổng điểm tích lũy: <b>★ {formatPoints(view.points)}</b></>} /></h2> : <>
         <h2 className="profile-season-title" data-testid="season-ladder-title">{current.shortName}{cefr ? ` · ${cefr}` : ""}</h2>
-        <div className="small muted">{nextLine}</div>
-        <div className="small muted" data-testid="season-points-summary">Điểm {inLevel}: <b>{formatPoints(pointsInLevel)}</b> · Tổng điểm tích lũy: <b>★ {formatPoints(view.points)}</b></div></>}
+        {/* Owner 19/11: title + one description line (no uppercase line above the title). */}
+        <div className="small muted" data-testid="season-points-summary">Mùa học {currentLevel}/4 · {nextLine} · Tổng điểm tích lũy: <b>★ {formatPoints(view.points)}</b></div></>}
       </div>
     </div>
     {next && <>
