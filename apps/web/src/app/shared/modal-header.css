@@ -183,3 +183,5 @@
 /* Audit 19/11: popups stay within 80% of the screen height and scroll inside (staff learner profile, test preview). */
 :root:root:root .modal-backdrop > .dialog.manager-learner-profile-dialog,
 :root:root:root .modal-backdrop > .dialog.operator-assessment-preview-dialog { max-height: 80dvh !important; overflow-y: auto; }
+/* Audit 19/11: a popup title wraps (max 2 lines) instead of ending in "…" (test preview on phones). */
+:root:root:root:root .operator-level-form-dialog-title h3 { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }

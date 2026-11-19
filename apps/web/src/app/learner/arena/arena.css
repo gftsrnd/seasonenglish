@@ -351,3 +351,5 @@
   :root:root:root .arena-set { padding: 12px 14px; }
   :root:root:root .arena-list__row { padding-block: 6px; }
 }
+/* Audit 19/11: the rules popup shares the result popup's zero padding – give its text normal side margins. */
+:root:root:root .dialog.arena-rules-dialog .arena-rules { padding: 4px 20px 20px; }
