@@ -5,6 +5,7 @@ import { getNotificationInbox, markInboxRead } from "../../api/notifications.js"
 import { hasAssessmentLogoutGuard } from "./assessment-logout-guard.js";
 import { ModalCloseButton } from "./CompactUi.js";
 import { RewardBadgeImage } from "./RewardIcon.js";
+import { rewardBadgeKeyForLabel } from "./reward-badge-icons.js";
 import "./badge-celebration.css";
 
 const CELEBRATED_KEY = "e4s:badge-celebrated";
@@ -67,7 +68,7 @@ export function BadgeCelebration() {
     <section className="dialog badge-celebration" role="dialog" aria-modal="true" aria-labelledby="badge-celebration-title">
       <div className="badge-celebration__close"><ModalCloseButton iconOnly label="Đóng" onClick={() => close(false)} /></div>
       <div className="badge-celebration__burst" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <i key={index} style={{ ["--i" as string]: index }} />)}</div>
-      <div className="badge-celebration__medal" aria-hidden="true"><RewardBadgeImage label={first!.context} size={78} className="badge-celebration__img" /></div>
+      <div className="badge-celebration__medal" aria-hidden="true" data-badge={first!.context ? rewardBadgeKeyForLabel(first!.context) ?? "other" : "other"}><RewardBadgeImage label={first!.context} size={78} className="badge-celebration__img" /></div>
       {/* Owner 19/11: the title stays on one line – the lead-in is the small line, the badge name is the title. */}
       <p className="badge-celebration__eyebrow">Chúc mừng! Bạn vừa nhận huy hiệu</p>
       <h2 id="badge-celebration-title" aria-label={`Bạn vừa nhận huy hiệu ${label}`}>{label}</h2>

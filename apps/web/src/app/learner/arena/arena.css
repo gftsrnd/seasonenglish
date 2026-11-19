@@ -305,3 +305,6 @@
 .arena-rules { display: grid; gap: 14px; }
 .arena-rules .rules-points dd .is-minus { color: #b3261e; }
 .arena-rules-line { margin-top: 14px; }
+/* Owner 19/11: on the ready screen the page head (title + Thoát) lines up with the card's edges. */
+:root:root:root:root .app-learner-page.arena-page--ready { max-width: 760px !important; }
+:root:root:root .arena-page--ready .game-board > .arena-ready { max-width: none; }
