@@ -21,7 +21,7 @@
 
 @media (min-width: 601px) and (max-width: 1024px) {
   :root {
-    --tablet-text: 15px;
+    --tablet-text: 14.5px; /* owner 19/11: same body size as desktop (15px read larger than desktop) */
     --tablet-h1: 24px;
     --tablet-h2: 18px;
     --tablet-h3: 16px;

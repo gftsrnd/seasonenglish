@@ -622,3 +622,9 @@
 
   .manager-progress-learner-card summary { padding-block: 7px; cursor: pointer; }
 }
+
+/* Owner 19/11: tablets show the section description as its own line under the title (phones keep the ⓘ). */
+@media (min-width: 601px) and (max-width: 1024px) {
+  :root:root:root:root:has(.manager-root) .manager-section-title .manager-section-description:has(> p) { display: block; flex-basis: 100%; }
+  :root:root:root:root:has(.manager-root) .manager-section-title .manager-section-description > p { margin: 2px 0 0; }
+}

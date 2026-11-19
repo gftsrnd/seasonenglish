@@ -35,4 +35,6 @@
 .rules-points dd .is-plus { color: #1f7a45; }
 /* The rules button reuses ⓘ's wrapper and button (info-tip / info-tip-button), so only the drawing differs:
    a circle the size of the ⓘ glyph (15px box, ~13.5px ring) with a small book inside. */
-.rules-icon-button__ring { display: grid; place-items: center; width: 13.5px; height: 13.5px; box-sizing: border-box; border: 1.3px solid currentColor; border-radius: 50%; }
+.rules-icon-button__ring { display: grid; place-items: center; width: 14px; height: 14px; box-sizing: border-box; border: 1.5px solid currentColor; border-radius: 50%; }
+/* whole pixels so the book never sits off-centre after rounding */
+.rules-icon-button__ring > svg { display: block; width: 9px; height: 9px; }

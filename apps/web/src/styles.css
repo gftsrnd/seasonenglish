@@ -1022,3 +1022,11 @@ dd { margin: 0; font-weight: 650; }
 /* Owner 19/11: table rows line up on the row's middle (text, badges and row buttons such as Xóa);
    lesson matrices keep their own top alignment. */
 table td, .table-wrap table td { vertical-align: middle; }
+
+/* Owner 19/11 (reading width): on desktop a paragraph of notes or description stops at ~75 characters
+   per line instead of running the whole card width; cards, tables and buttons keep their width.
+   Centred blocks keep their paragraph centred. */
+@media (min-width: 1025px) {
+  main :is(p.muted, p.small, .page-title p, .card > p, section > p) { max-width: 75ch; }
+  main :is(.empty, .status-state, .badge-celebration, .app-status-card, .game-result, .arena-result, [style*="text-align: center"]) p { margin-inline: auto; }
+}

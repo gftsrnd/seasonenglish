@@ -15,7 +15,7 @@
 @media (max-width: 480px) {
   :root {
     --phone-text: 14px;
-    --phone-meta: 12.5px;
+    --phone-meta: 13.5px; /* owner 19/11: secondary lines were too small to read */
     --phone-h1: 21px;
     --phone-h2: 17px;
     --phone-h3: 15.5px;
@@ -1091,7 +1091,7 @@
      Only deliberate big numbers (scores, KPI values) may be 22–28px. */
   :root {
     --type-h1: 20px; --type-title: 16px; --type-subtitle: 15px; --type-body: 14px;
-    --type-meta: 13px; --type-caption: 12px; --type-eyebrow: 11px; --type-reading: 15px;
+    --type-meta: 13.5px; --type-caption: 12px; --type-eyebrow: 11px; --type-reading: 15px;
     --phone-h1: var(--type-h1); --phone-h2: var(--type-title); --phone-h3: var(--type-title);
     --phone-text: var(--type-body); --phone-meta: var(--type-meta);
     --phone-page-h1: var(--type-h1); --phone-page-eyebrow: var(--type-eyebrow); --phone-page-subtitle: var(--type-meta);
