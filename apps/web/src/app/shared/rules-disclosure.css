@@ -36,3 +36,5 @@
 /* The rules button: a book in an outlined circle, the same size and grey as ⓘ (owner 19/11). */
 .rules-icon-button { display: inline-grid; place-items: center; width: 18px; height: 18px; min-width: 18px; min-height: 18px !important; margin-inline-start: 6px; padding: 0 !important; border: 1.6px solid currentColor; border-radius: 50%; background: transparent; color: var(--muted, #6b6b6b); vertical-align: middle; cursor: pointer; box-shadow: none; box-sizing: border-box; }
 .rules-icon-button:hover { color: var(--text); }
+/* Keep it a true circle: the app-wide 44px touch minimum stretched it into a pill. */
+:root:root:root:root:root:root .rules-icon-button { width: 18px !important; min-width: 18px !important; height: 18px !important; min-height: 18px !important; max-width: 18px; flex: none; }
