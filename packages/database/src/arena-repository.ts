@@ -669,19 +669,16 @@ export class ArenaRepository {
        select p.id as learner_id, p.display_name,
               (case when $4 = 'total'
                  then coalesce(sum(r.rating), 0) + (6 - count(r.game_key)) * ${ARENA_START_RATING}
-                 else coalesce(max(r.rating) filter (where r.game_key = $4), ${ARENA_START_RATING}) end)::int as rating
+                 else coalesce(max(r.rating) filter (where r.game_key = $4), ${ARENA_START_RATING}) end)::int as rating,
+              (case when $4 = 'total' then max(r.updated_at) else max(r.updated_at) filter (where r.game_key = $4) end) as reached_at
        from players p
        left join arena_ratings r on r.learner_id = p.id and r.season_id = $3 and r.cefr = $2
        group by p.id, p.display_name
-       order by rating desc, p.display_name, p.id`,
+       order by rating desc, reached_at asc nulls last, p.display_name, p.id`,
       [organizationId, level, seasonId, game, includeCurrentMembers]);
-    // Equal ratings share a rank (no tie-breaker in the rules).
-    let rank = 0;
-    let previous: number | null = null;
-    return rows.rows.map((row, index) => {
-      if (row.rating !== previous) { rank = index + 1; previous = row.rating; }
-      return { rank, learnerId: row.learner_id, displayName: row.display_name, rating: row.rating };
-    });
+    // No shared ranks (owner, 19/11): on equal ratings the one who reached that rating first is above;
+    // players who have not played yet come after, then by name.
+    return rows.rows.map((row, index) => ({ rank: index + 1, learnerId: row.learner_id, displayName: row.display_name, rating: row.rating }));
   }
 
   private async snapshotSource(learnerId: string, game: GameKey, setKind: ArenaSetKind): Promise<GameWordSetView & { unitIds: string[] }> {

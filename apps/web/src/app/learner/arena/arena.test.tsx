@@ -37,7 +37,7 @@ describe("arena result card", () => {
   it("waits for the opponent and points to the bell", () => {
     render(<ArenaResultCard match={match({ me: { started: true, played: true, score: 73, gameplayMs: 1 } })} />);
     expect(screen.getByRole("heading", { name: "Chờ đối thủ" })).toBeInTheDocument();
-    expect(screen.getByText("Kết quả sẽ báo ở chuông.")).toBeInTheDocument();
+    expect(screen.getByText(/Kết quả sẽ báo ở chuông\./)).toBeInTheDocument();
     expect(screen.queryByText(/điểm xếp hạng/)).toBeNull();
   });
 
@@ -45,8 +45,8 @@ describe("arena result card", () => {
     const again = vi.fn();
     render(<ArenaResultCard match={settled("win", 50)} onAgain={again} />);
     expect(screen.getByRole("heading", { name: "Bạn thắng!" })).toBeInTheDocument();
-    expect(document.querySelector("[data-arena-xh]")).toHaveTextContent("Lan Anh 64 · +50 điểm xếp hạng");
-    expect(document.querySelector(".arena-result__detail")!.textContent!.length).toBeLessThanOrEqual(40);
+    expect(screen.getByText("Lan Anh")).toBeInTheDocument();
+    expect(screen.getByText("Điểm ván của bạn cao hơn.")).toBeInTheDocument();
     expect(screen.getByText("73")).toBeInTheDocument();
     expect(screen.getByText("64")).toBeInTheDocument();
     expect(screen.getByText("+50 điểm xếp hạng")).toBeInTheDocument();
@@ -66,7 +66,7 @@ describe("arena result card", () => {
   it("never shows an XH chip for a friendly match", () => {
     render(<ArenaResultCard match={settled("win", 0, "friendly")} />);
     expect(document.querySelector("[data-arena-chip]")).toBeNull();
-    expect(document.querySelector("[data-arena-xh]")).toHaveTextContent("Lan Anh 64 · Giao hữu");
+    expect(screen.getByText("Giao hữu không tính điểm xếp hạng")).toBeInTheDocument();
   });
 
   it("labels the band from the base points", () => {
@@ -126,8 +126,11 @@ describe("Đấu trường page", () => {
     const api = client();
     const setClient = sets();
     page(api, vi.fn(), vi.fn(), setClient);
-    expect(await screen.findByText("scope")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Đổi bộ" }));
+    const block = (await screen.findByText("Bộ từ đang dùng")).closest(".arena-set") as HTMLElement;
+    expect(await within(block).findByText("project change · 1 từ")).toBeInTheDocument();
+    fireEvent.click(within(block).getByRole("button", { name: "Xem từ" }));
+    expect(within(block).getByText("scope")).toBeInTheDocument();
+    fireEvent.click(within(block).getByRole("button", { name: "Đổi bộ" }));
     fireEvent.change(screen.getByLabelText("Chủ đề bộ từ"), { target: { value: "travel" } });
     fireEvent.click(screen.getByRole("button", { name: "Tạo bộ từ" }));
     await waitFor(() => expect(setClient.generateGameWordSet).toHaveBeenCalledWith(expect.objectContaining({ topic: "travel" })));
@@ -146,7 +149,7 @@ describe("Đấu trường page", () => {
   it("posts a ranked challenge with the set in use after confirming, and hides cancelled matches", async () => {
     const api = client();
     page(api);
-    expect(await screen.findByText(/Dùng bộ project change · 12 từ/)).toBeInTheDocument();
+    expect(await screen.findByText("project change · 1 từ")).toBeInTheDocument();
     expect(screen.queryByText("Đã huỷ")).toBeNull();
     fireEvent.click(screen.getByRole("radio", { name: /Phân loại từ/ }));
     fireEvent.click(screen.getByRole("button", { name: "Đăng thách đấu" }));

@@ -9,6 +9,7 @@
 .arena-page .page-title { margin-bottom: 0; }
 .arena-rules { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 .arena-game-icon { flex: none; color: var(--muted); }
+:root:root .arena-back-button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 :root:root .arena-back-link { display: inline-flex; align-items: center; gap: 6px; justify-self: start; color: var(--text); font-weight: 600; text-decoration: none; }
 :root:root .arena-back-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 
@@ -68,11 +69,13 @@
 :root:root:root .arena-game-pick { display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-width: 0; min-height: 50px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; font-weight: 500; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: none; cursor: pointer; }
 :root:root:root .arena-game-pick.is-selected { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); font-weight: 700; }
 .arena-game-pick .arena-game-icon { color: var(--primary-dark); }
-.arena-set { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-radius: 12px; background: color-mix(in srgb, var(--primary-soft) 60%, var(--surface)); }
-.arena-set > span { display: grid; gap: 2px; min-width: 0; }
-.arena-set small { color: var(--muted); font-size: 13px; }
-.arena-set b { overflow-wrap: anywhere; }
-:root:root .arena-set__change { flex: none; color: var(--primary-dark); font-weight: 600; text-decoration: none; }
+.arena-set { display: grid; gap: 10px; padding: 12px 16px; border-radius: 12px; background: color-mix(in srgb, var(--primary-soft) 60%, var(--surface)); }
+.arena-set__row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.arena-set__row > span:first-child { display: grid; gap: 2px; min-width: 0; }
+.arena-set__row small { color: var(--muted); font-size: 13px; }
+.arena-set__row b { overflow-wrap: anywhere; font-size: 15px; }
+.arena-set__actions { display: inline-flex; flex: none; gap: 6px; }
+.arena-set .arena-set-edit { background: var(--surface); }
 :root:root .arena-submit { justify-self: start; min-width: 180px; }
 .arena-note { margin: 0; }
 :root:root .arena-panel__head .arena-mode-tabs { flex: none; }
@@ -101,19 +104,19 @@
 .arena-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .arena-table th { padding: 10px 12px; font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--muted); text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
 .arena-table th:nth-child(-n+2) { text-align: left; }
-.arena-table td { padding: 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.arena-table td { padding: 10px 12px; font-size: 14px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .arena-table td:nth-child(-n+2) { text-align: left; }
-.arena-table .is-sorted { color: var(--text); font-weight: 600; }
+.arena-table th.is-sorted { color: var(--text); font-weight: 600; }
 .arena-table__name { font-weight: 500; }
-:root:root .arena-table td.arena-table__total { color: var(--primary-dark); font-weight: 700; font-size: 17px; }
+:root:root .arena-table td.arena-table__total { color: var(--primary-dark); font-weight: 700; font-size: 14px; }
 .arena-table tr.is-me td { background: color-mix(in srgb, var(--primary-soft) 70%, var(--surface)); }
 .arena-table tr.is-me td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
-.arena-rank { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; border-radius: 8px; background: color-mix(in srgb, var(--line) 55%, var(--surface)); font-weight: 700; }
+.arena-rank { display: inline-grid; place-items: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: 8px; font-size: 13px; background: color-mix(in srgb, var(--line) 55%, var(--surface)); font-weight: 700; }
 .arena-rank.is-gold { background: linear-gradient(135deg, #FFE58A, #F2BD2C); color: #5C3D00; box-shadow: inset 0 0 0 1px #D9A21B; }
 .arena-rank.is-silver { background: linear-gradient(135deg, #F4F6F8, #C5CCD4); color: #3E4752; box-shadow: inset 0 0 0 1px #A7B0BA; }
 .arena-rank.is-bronze { background: linear-gradient(135deg, #F6CBA8, #D58D58); color: #4F2A10; box-shadow: inset 0 0 0 1px #B8733F; }
 .arena-board__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; }
-.arena-board__foot b { color: var(--primary-dark); }
+.arena-board__foot b { color: var(--primary-dark); font-size: 14px; }
 .arena-board__foot .small { display: inline-flex; align-items: center; gap: 4px; }
 .arena-board-row { border-bottom: 1px solid var(--line); }
 .arena-board-row.is-me { background: color-mix(in srgb, var(--primary-soft) 70%, var(--surface)); border-radius: 10px; }
@@ -172,4 +175,30 @@
   .arena-word-chips li { font-size: 13px; padding: 4px 10px; }
   .arena-panel__head { flex-wrap: wrap; }
   .dialog.arena-dialog > .row.between:first-child { margin: 0 -16px 8px; padding: 10px 16px 8px; }
+}
+
+/* Kết quả trận: side-by-side comparison, then the XH box. */
+.arena-result { display: grid; gap: 14px; justify-items: center; text-align: center; padding: 22px; border-radius: 18px; }
+.arena-result__head { display: grid; gap: 4px; }
+:root:root:root .arena-result__head h2 { margin: 0; font-size: 26px; color: var(--primary-dark); }
+.arena-result.is-lose .arena-result__head h2 { color: var(--text); }
+.arena-result__head p { margin: 0; }
+.arena-result__versus { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; width: 100%; max-width: 460px; }
+.arena-result__side { display: grid; justify-items: center; gap: 4px; min-width: 0; padding: 12px 8px; border-radius: 14px; }
+.arena-result__side.is-winner { background: color-mix(in srgb, var(--primary-soft) 70%, var(--surface)); box-shadow: inset 0 0 0 1px var(--primary-line); }
+.arena-result__side b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.arena-result__side small { color: var(--muted); }
+.arena-result__avatar { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: color-mix(in srgb, var(--line) 60%, var(--surface)); color: var(--text); font-weight: 700; font-size: 16px; }
+.arena-result__avatar.is-me { background: var(--primary); color: var(--primary-ink); font-size: 14px; }
+:root:root .arena-result__score { font-size: 44px; line-height: 1; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.arena-result__vs { color: var(--muted); font-weight: 700; font-size: 14px; }
+.arena-result__reason { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); }
+.arena-result__xh { display: grid; gap: 4px; width: 100%; max-width: 460px; padding: 12px 16px; border-radius: 12px; background: color-mix(in srgb, var(--primary-soft) 60%, var(--surface)); }
+.arena-result__xh b { color: var(--primary-dark); font-size: 16px; }
+.arena-result__actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; }
+@media (max-width: 600px) {
+  .arena-result { padding: 16px 12px; gap: 10px; }
+  :root:root:root .arena-result__head h2 { font-size: 22px; }
+  .arena-result__avatar { width: 44px; height: 44px; }
+  :root:root .arena-result__score { font-size: 36px; }
 }
