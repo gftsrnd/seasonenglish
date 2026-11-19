@@ -242,3 +242,11 @@
 .arena-ready__words { display: grid; gap: 8px; }
 .arena-ready__words .arena-words { padding: 0; }
 .arena-ready__actions { display: flex; gap: 10px; }
+
+/* Tablet and desktop: every arena action button is the app's standard 40px button (owner 19/11). */
+@media (min-width: 601px) {
+  :root:root:root:root .arena-list__row .arena-row-action,
+  :root:root:root .arena-set__actions > .btn,
+  :root:root:root .arena-page .arena-mode-tabs > button { height: 40px; min-height: 40px !important; max-height: 40px; padding: 0 16px !important; font-size: .9rem !important; border-radius: 10px; }
+  :root:root .arena-submit { min-height: 40px; }
+}
