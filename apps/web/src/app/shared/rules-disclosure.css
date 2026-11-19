@@ -23,8 +23,9 @@
 /* Owner 19/11: always show the triangle (some pages reset summary markers): ▶ closed, ▼ open. */
 .rules-disclosure > summary { display: flex; align-items: center; gap: 6px; list-style: none; }
 .rules-disclosure > summary::-webkit-details-marker { display: none; }
-.rules-disclosure > summary::before { content: "\25B6"; font-size: .7em; color: var(--text); }
-.rules-disclosure[open] > summary::before { content: "\25BC"; }
+/* Drawn with borders (no text glyph): ▶ closed, turned to ▼ when open. */
+.rules-disclosure > summary::before { content: ""; width: 0; height: 0; border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent; border-left: 7px solid var(--text); transition: transform .15s ease; }
+.rules-disclosure[open] > summary::before { transform: rotate(90deg); }
 /* The point groups are split by thin vertical lines when they sit side by side. */
 .rules-points { column-gap: 0; }
 .rules-points > section { padding: 0 18px; }

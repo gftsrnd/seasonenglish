@@ -1,3 +1,4 @@
+import { NotFoundState, StatusHomeIcon } from "./shared/StatusPage.js";
 import { Component, createContext, Suspense, useContext, useEffect, useState, type ComponentType, type ErrorInfo, type ReactNode } from "react";
 import { Link, Navigate, useLocation } from "react-router";
 import { CircleHelp, LockKeyhole } from "lucide-react";
@@ -102,7 +103,7 @@ export function RoleRoutes({ session, onSessionRevoked, ...learnerProps }: { ses
     if (!isKnownOperatorRoute(pathname)) return <OperatorRouteNotFound />;
     return <RoleRouteLoadingBoundary label={loadingLabel(pathname)}><OperatorRouteController session={session} /></RoleRouteLoadingBoundary>;
   }
-  return <section className="empty"><div className="big" aria-hidden="true"><CircleHelp size={32} strokeWidth={1.8} /></div><p>Không tìm thấy trang.</p><Link className="btn" to={role === "operator" ? "/op" : "/mgr"}>Về trang chủ</Link></section>;
+  return <NotFoundState home={<Link className="btn btn-primary" to={role === "operator" ? "/op" : "/mgr"}><StatusHomeIcon />Về trang chủ</Link>} />;
 }
 
 function RoleRouteLoadingBoundary({ children, label }: { children: ReactNode; label: string }) {
@@ -157,7 +158,7 @@ export class RoleRouteErrorBoundary extends Component<{ children: ReactNode }, {
 }
 
 function OperatorRouteNotFound() {
-  return <section className="card danger" role="alert"><div className="row"><p>Đường dẫn vận hành không tồn tại.</p></div></section>;
+  return <NotFoundState message="Đường dẫn vận hành này không tồn tại hoặc đã đổi. Hãy quay về trang chủ Vận hành." home={<Link className="btn btn-primary" to="/op"><StatusHomeIcon />Về trang chủ</Link>} />;
 }
 
 function isKnownOperatorRoute(pathname: string): boolean {

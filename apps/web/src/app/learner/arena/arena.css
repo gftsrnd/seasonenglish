@@ -344,3 +344,10 @@
   :root:root:root:root .arena-page .arena-mode-tabs { padding: 2px; gap: 2px; border-radius: 10px; }
   :root:root:root:root .arena-page .arena-mode-tabs > button { height: 30px; min-height: 30px !important; max-height: 30px; padding: 0 12px !important; font-size: 13px !important; border-radius: 8px; }
 }
+/* Phones (owner 19/11): more breathing room in the cards – it felt crowded. */
+@media (max-width: 600px) {
+  :root:root:root .arena-panel { padding: 16px; gap: 14px; }
+  :root:root:root .arena-game-picks { gap: 10px; }
+  :root:root:root .arena-set { padding: 12px 14px; }
+  :root:root:root .arena-list__row { padding-block: 6px; }
+}

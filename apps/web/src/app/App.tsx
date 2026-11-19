@@ -17,6 +17,7 @@ import { preloadRoleRoute, RoleRoutes } from "./RoleRoutes.js";
 import { AvatarDialog } from "./learner/ProfileReward.js";
 import { LockedLearnerSupport } from "./shared/LockedLearnerSupport.js";
 import { ModalScrollJump } from "./shared/ModalScrollJump.js";
+import "./shared/status-page.css";
 import "./app-layout.css";
 import "./responsive-compact.css";
 import "./responsive-phone.css";
@@ -287,7 +288,13 @@ function isUnauthenticatedSessionError(error: unknown): error is ApiError {
 
 export function AppStatus({ children, tone = "loading", onRetry }: { children: ReactNode; tone?: "loading" | "error"; onRetry?: () => void }) {
   if (tone === "loading") {
-    return <main className="app-status-page app-status-page--loading"><section className="app-status-card" role="status"><span className="spinner" aria-hidden="true" /><p>{children}</p></section></main>;
+    return <main className="app-status-page app-status-page--loading"><section className="app-loading" role="status">
+      <span className="app-loading__logo" aria-hidden="true"><SeasonMark className="app-loading__mark" /></span>
+      <p className="app-loading__brand">Season English</p>
+      <p className="app-loading__tagline">English for Every Season</p>
+      <span className="app-loading__bar" aria-hidden="true"><span /></span>
+      <p className="app-loading__text">{children}</p>
+    </section></main>;
   }
   return <main className="app-status-page app-status-page--error">
     <section className="app-status-card" role="alert" aria-labelledby="app-status-title">

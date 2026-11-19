@@ -1,3 +1,4 @@
+import { NotFoundState, StatusHomeIcon } from "../shared/StatusPage.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
 import type {
@@ -580,7 +581,7 @@ function LearnerContent({ courseCompleted = false, learnerId, onLearnerCefr, onP
 
   if (loading) return <div className="app-learner-page"><section className="card" aria-live="polite">{loadingLabel(route.name)}…</section></div>;
   if (error) return <LearnerLoadFailure route={route.name} message={error} onRetry={() => navigate(0)} navigate={navigate} />;
-  if (route.name === "notFound") return <div className="app-learner-page"><PageTitle title="Không tìm thấy trang." /><button type="button" onClick={() => navigate("/home")}>Về trang chủ</button></div>;
+  if (route.name === "notFound") return <div className="app-learner-page"><NotFoundState home={<button type="button" className="btn-primary" onClick={() => navigate("/home")}><StatusHomeIcon />Về trang chủ</button>} /></div>;
   const onHome = route.name === "home";
   const retakeGranted = onHome ? retakeActivity === "granted" : contracts.assessment?.placementRetake?.status === "granted";
   const acknowledgeRetake = () => {

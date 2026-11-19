@@ -202,7 +202,7 @@ describe("RoleRoutes authorization boundary", () => {
   it("shows the existing not-found fallback for an unknown nested Manager route", () => {
     renderRoute("/mgr/not-a-real-route", manager);
 
-    expect(screen.getByText("Không tìm thấy trang.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Không tìm thấy trang" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Về trang chủ" })).toHaveAttribute("href", "/mgr");
   });
 

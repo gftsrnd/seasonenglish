@@ -53,7 +53,9 @@ describe("learner app UI primitives", () => {
     render(<LearnerController path="/not-found" contracts={{}} callbacks={{ navigate } as never} />);
 
     expect(screen.getByRole("heading", { name: "Không tìm thấy trang" })).toBeInTheDocument();
-    expect(screen.getByRole("note")).toHaveTextContent("Không tìm thấy trang.");
+    // Owner 19/11: a proper error card – code, title, next step, Về trang chủ and Quay lại.
+    expect(screen.getByText("Lỗi 404")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Quay lại" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Về trang chủ" })).toHaveAttribute("href", "/home");
   });
 

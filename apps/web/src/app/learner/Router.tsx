@@ -1,3 +1,4 @@
+import { NotFoundState, StatusHomeIcon } from "../shared/StatusPage.js";
 import type { AssessmentView, CoachView, GameHubView, LearnerHomeView, LearnerProfileView, LearnerProgressView, LessonLockView, LessonView, LevelChallengeView, RewardView, SurveyView, WeeklyPracticeView } from "@e4s/contracts";
 import type { LearnerCallbacks, LearnerScreen } from "./contracts.js";
 import { LearnerAssessment } from "./Assessment.js";
@@ -65,4 +66,8 @@ function decodeSegment(value: string) { try { return decodeURIComponent(value); 
 function MiniGameLocked({ actions }: { actions: LearnerCallbacks }) {
   return <div className="app-learner-page games-page"><PageTitle title="Game từ vựng" detail="Game từ vựng sẽ mở khi có bài học tháng đã được phát hành." /><section className="card"><h2>Bạn cần làm gì?</h2><p>Quay về trang chủ để xem lộ trình tháng. Khi bài học được phát hành, bạn có thể tự nhập topic để tạo bộ từ hoặc dùng từ vựng đã học.</p><Notice tone="info">Không cần hoàn thành toàn bộ bài tháng mới dùng Mini game; chỉ cần lộ trình học đã được mở.</Notice><AppLink className="btn btn-primary" href="/home" navigate={actions.navigate}>Về trang chủ học</AppLink></section></div>;
 }
-function Missing({ route, message, href, label, actions }: { route: string; message: string; href: string; label: string; actions: LearnerCallbacks }) { return <div className="app-learner-page"><PageTitle {...(route === "/" ? {} : { eyebrow: route })} title={message === "Không tìm thấy trang." ? "Không tìm thấy trang" : "Chưa thể mở trang"} /><Empty description={<Notice tone="warn">{message}</Notice>} action={<AppLink className="btn" href={href} navigate={actions.navigate}>{label}</AppLink>} /></div>; }
+function Missing({ message, href, label, actions }: { route: string; message: string; href: string; label: string; actions: LearnerCallbacks }) {
+  // Owner 19/11: a proper error card – 404 for a wrong address, otherwise the reason the page is not ready.
+  const notFound = message === "Không tìm thấy trang.";
+  return <div className="app-learner-page"><NotFoundState {...(notFound ? {} : { title: "Chưa thể mở trang", message, code: null })} home={<AppLink className="btn btn-primary" href={href} navigate={actions.navigate}><StatusHomeIcon />{label}</AppLink>} /></div>;
+}
