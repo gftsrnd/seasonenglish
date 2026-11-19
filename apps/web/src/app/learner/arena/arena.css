@@ -150,29 +150,15 @@
 :root:root:root .app-learner-page.arena-page--narrow { max-width: 560px !important; margin-inline: auto !important; }
 :root:root:root .app-learner-page.arena-page--ready { max-width: 1060px !important; margin-inline: auto !important; }
 :root:root .arena-page--ready #gm-board { margin-top: 0; }
-:root:root .arena-page--ready .game-board > .arena-ready { max-width: none; padding: 0; overflow: hidden; gap: 0; justify-items: stretch; }
-.arena-ready__banner { position: relative; isolation: isolate; overflow: hidden; min-height: 138px; padding: 22px 26px; display: flex; align-items: center; background: var(--primary-dark); color: var(--primary-ink); }
-.arena-ready__scene { position: absolute; z-index: -1; inset: 0 0 0 36%; background-position: center; background-size: cover; mask-image: linear-gradient(to right, transparent, black 60%); opacity: .8; }
-.arena-ready__copy { z-index: 1; display: grid; justify-items: start; gap: 8px; }
-:root:root .arena-ready__copy h2, :root:root .arena-ready__copy p { color: var(--primary-ink); }
-.arena-match-countdown { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid color-mix(in srgb, var(--primary-ink) 35%, transparent); border-radius: 9px; background: var(--primary-dark); color: var(--primary-ink); font-variant-numeric: tabular-nums; }
-.arena-match-countdown strong { font-size: 18px; }
-.arena-ready__words { display: grid; gap: 5px; padding: 17px 24px 12px; }
 .arena-ready .arena-word-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .arena-ready .arena-word-chips li { border-radius: 10px; }
-.arena-ready__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 12px; padding: 14px 24px; border-top: 1px solid var(--line); }
-:root:root .arena-ready__actions .arena-text-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; text-decoration: none; font-weight: 600; }
-:root:root .arena-ready__actions .arena-text-link:hover { text-decoration: underline; }
 
 @media (max-width: 1024px) {
   .arena-game-picks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
   .arena-board__filters { grid-template-columns: 1fr; gap: 6px; }
-  .arena-ready__banner { min-height: 126px; padding: 14px 16px; }
-  .arena-ready__words { padding-inline: 14px; }
   .arena-ready .arena-word-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .arena-ready__actions { justify-content: space-between; padding-inline: 14px; }
   .arena-page { gap: 10px; }
   :root:root .arena-entry { min-height: 72px; padding: 12px 14px; gap: 10px; border-radius: 16px; }
   .arena-entry__icon { width: 36px; height: 36px; }
@@ -249,3 +235,13 @@
   :root:root .arena-result__score { font-size: 36px; }
   .arena-board__filters { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Sẵn sàng đấu: the app's plain card – title and the clock on one row, the words, the button left. */
+:root:root .arena-page .game-board > .arena-ready { width: 100%; max-width: 760px; justify-self: center; display: grid; gap: 14px; justify-items: stretch; text-align: left; }
+.arena-ready__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.arena-ready__head h2 { margin: 0; }
+.arena-match-countdown { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; background: var(--primary-soft); color: var(--text); font-variant-numeric: tabular-nums; }
+.arena-match-countdown strong { color: var(--primary-dark); font-size: 16px; }
+.arena-ready__words { display: grid; gap: 8px; }
+.arena-ready__words .arena-words { padding: 0; }
+.arena-ready__actions { display: flex; gap: 10px; }

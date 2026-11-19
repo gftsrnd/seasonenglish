@@ -6,7 +6,6 @@ import { useModal } from "../../shared/ModalProvider.js";
 import { GameEngine } from "../Games.js";
 import { AppLink, Notice } from "../ui.js";
 import { ArenaGameIcon } from "./ArenaGameIcon.js";
-import { useArenaSceneStyle } from "./ArenaHub.js";
 import { ArenaResultCard } from "./ArenaResultCard.js";
 import { ArenaWords } from "./ArenaWords.js";
 import { ARENA_GAME_NAMES, hoursLeft, isInviteForMe, matchStatusLine } from "./arena-text.js";
@@ -152,7 +151,6 @@ function ArenaReady({ match, busy, onStart, link, wordsClient }: {
   link: ReactNode;
   wordsClient: Pick<ArenaApiClient, "words"> | undefined;
 }) {
-  const scene = useArenaSceneStyle();
   const deadline = match.playDeadline ? Date.parse(match.playDeadline) : NaN;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -170,24 +168,19 @@ function ArenaReady({ match, busy, onStart, link, wordsClient }: {
     .map((part) => String(part).padStart(2, "0")).join(":");
 
   return <section className="card arena-state arena-ready" data-arena-state="ready">
-    <div className="arena-ready__banner">
-      <span className="arena-ready__scene" style={scene} aria-hidden="true" />
-      <div className="arena-ready__copy">
-        <h2>{match.me.started ? "Chơi tiếp ván đấu" : "Sẵn sàng đấu"}</h2>
-        {clock ? <div className="arena-match-countdown" role="timer" aria-label="Thời gian còn lại">
-          <Clock3 size={17} aria-hidden="true" /><span>Còn</span><strong>{clock}</strong>
-        </div> : null}
-        {expired ? <p role="status">Đã hết thời gian hoàn thành lượt.</p> : null}
-      </div>
+    <div className="arena-ready__head">
+      <h2>{match.me.started ? "Chơi tiếp ván đấu" : "Sẵn sàng đấu"}</h2>
+      {clock ? <span className="arena-match-countdown" role="timer" aria-label="Thời gian còn lại"><Clock3 size={16} aria-hidden="true" />Còn <strong>{clock}</strong></span> : null}
     </div>
+    {expired ? <p role="status" className="small">Đã hết thời gian hoàn thành lượt.</p> : null}
     {wordsClient ? <div className="arena-ready__words">
       <h3 className="arena-words-title">Ôn từ trước khi chơi</h3>
       <ArenaWords matchId={match.id} client={wordsClient} />
     </div> : null}
-    <footer className="arena-ready__actions">
+    <div className="arena-ready__actions">
       <button className="btn-primary" type="button" disabled={busy || expired} aria-busy={busy || undefined} onClick={onStart}>
         <Play className="game-control-icon" size={16} aria-hidden="true" />{match.me.started ? "Chơi tiếp" : "Bắt đầu"}
       </button>
-    </footer>
+    </div>
   </section>;
 }
