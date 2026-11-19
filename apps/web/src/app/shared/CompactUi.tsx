@@ -159,9 +159,11 @@ export function SectionTip({ text, label, desktop = false }: { text: ReactNode; 
  * `short` (one short line) when given, otherwise nothing; with `info` the full
  * text moves into an ⓘ tooltip instead (render <InfoTip> next to the title).
  */
-export function Description({ text, short, className = "small muted" }: { text: ReactNode; short?: ReactNode; className?: string }) {
+export function Description({ text, short, className = "small muted", page = false }: { text: ReactNode; short?: ReactNode; className?: string; page?: boolean }) {
   const tier = useUiTier();
   if (tier === "desktop") return <p className={className}>{text}</p>;
+  // A page description lives behind the title's ⓘ on phones and tablets (owner 19/11).
+  if (page) return null;
   // Tablet: one short line under the title; the longer guidance is in the title's ⓘ.
   if (tier === "tablet") return <p className={`${className} tier-one-line`} title={typeof text === "string" ? text : undefined}>{short ?? text}</p>;
   return short ? <p className={className}>{short}</p> : null;

@@ -62,7 +62,7 @@ export function ManagerRewards() {
   const selectedCase = cases.findIndex(([, casePoints, caseBadges]) => points === casePoints && equalSets(earned, caseBadges));
   const certificatePath = level.level === 4 ? `/reward/preview?points=${points}&level=${cefr}` : `/reward/preview?level=${cefr}`;
   return <div className="manager-page manager-rewards-page">
-    <PageTitle><Link to="/mgr" className="manager-page-back small">← Tiến độ nhóm</Link><ManagerTitle as="h1" title="Giả lập phần thưởng" tip="Xem phần thưởng theo tình huống mẫu. Mỗi trình độ có 4 Season, tính bằng điểm kiếm được trong trình độ; huy hiệu được giữ mãi." /><Description className="muted" text="Xem phần thưởng theo tình huống mẫu. Mỗi trình độ có 4 Season, tính bằng điểm kiếm được trong trình độ; huy hiệu được giữ mãi." /></PageTitle>
+    <PageTitle><Link to="/mgr" className="manager-page-back small">← Tiến độ nhóm</Link><ManagerTitle as="h1" title="Giả lập phần thưởng" tip="Xem phần thưởng theo tình huống mẫu. Mỗi trình độ có 4 Season, tính bằng điểm kiếm được trong trình độ; huy hiệu được giữ mãi." /><Description page className="muted" text="Xem phần thưởng theo tình huống mẫu. Mỗi trình độ có 4 Season, tính bằng điểm kiếm được trong trình độ; huy hiệu được giữ mãi." /></PageTitle>
     <div className="manager-reward-workspace">
       <section className="card manager-reward-controls" aria-label="Thiết lập giả lập">
         <label className="field">

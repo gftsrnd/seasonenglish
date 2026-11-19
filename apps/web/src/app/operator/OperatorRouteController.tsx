@@ -1155,7 +1155,7 @@ function TestsRoute({ client, readOnly, initialTab, retakeGeneration }: { client
     placement: ["placement"], monthly: ["final"], promotion: ["level_up"], exit: ["pass_course"]
   };
   return <OperatorPage title="Kết quả bài thi">
-    <PageTitle><h1>Kết quả bài thi<SectionTip text={OPERATOR_TIPS.testsPage} label="Kết quả bài thi là gì?" /></h1><Description className="muted" text="Xem đề và kết quả đầu vào, bài thi tháng, đề lên mức và đề đầu ra." /></PageTitle>
+    <PageTitle><h1>Kết quả bài thi<SectionTip text={OPERATOR_TIPS.testsPage} label="Kết quả bài thi là gì?" /></h1><Description page className="muted" text="Xem đề và kết quả đầu vào, bài thi tháng, đề lên mức và đề đầu ra." /></PageTitle>
     <div className="tabs operator-review-tabs" role="tablist" aria-label="Loại bài kiểm tra">
       <button type="button" role="tab" aria-selected={activeTab === "placement"} className={activeTab === "placement" ? "active" : ""} onClick={() => setActiveTab("placement")}>Đề đầu vào</button>
       <button type="button" role="tab" aria-selected={activeTab === "monthly"} className={activeTab === "monthly" ? "active" : ""} onClick={() => setActiveTab("monthly")}>Bài thi tháng</button>

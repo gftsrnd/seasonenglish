@@ -169,7 +169,7 @@ export function ManagerRequests() {
   return <div className="manager-page request-workspace">
     <PageTitle>
       <ManagerTitle as="h1" title={tableLabel} tip={`${complaintTab ? "Xem và phản hồi khiếu nại của học viên." : "Duyệt yêu cầu mở khóa tài khoản và nội dung học."} Mục chờ xử lý nằm đầu danh sách.`} />
-      <Description className="muted" text={<>{complaintTab ? "Xem và phản hồi khiếu nại của học viên." : "Duyệt yêu cầu mở khóa tài khoản và nội dung học."} Mục chờ xử lý nằm đầu danh sách.</>} />
+      <Description page className="muted" text={<>{complaintTab ? "Xem và phản hồi khiếu nại của học viên." : "Duyệt yêu cầu mở khóa tài khoản và nội dung học."} Mục chờ xử lý nằm đầu danh sách.</>} />
     </PageTitle>
     <nav className="request-tabs" aria-label="Loại yêu cầu">
       <Link to={{ search: archivedOnly ? "?archived=1" : "" }} aria-current={!complaintTab ? "page" : undefined}>Yêu cầu mở khóa</Link>
