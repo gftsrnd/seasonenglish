@@ -250,3 +250,16 @@
   :root:root:root .arena-page .arena-mode-tabs > button { height: 40px; min-height: 40px !important; max-height: 40px; padding: 0 16px !important; font-size: .9rem !important; border-radius: 10px; }
   :root:root .arena-submit { min-height: 40px; }
 }
+
+/* Tablet and desktop: arena text on the app's type scale (owner 19/11) – card title 19.2px (h2),
+   body / list titles 14.5px, secondary lines 13.12px, table 14.5px. Big score numbers stay large. */
+@media (min-width: 601px) {
+  :root:root:root .arena-page :is(.arena-set__row b, .arena-list__text b, .arena-table td, .arena-board-row__name, .arena-result__side b, .arena-result__reason) { font-size: 14.5px; }
+  :root:root:root .arena-page :is(.arena-set__row small, .arena-list__text small, .arena-countdown, .arena-countdown b, .arena-result__side small, .arena-result__title small, .arena-word-chips li, .arena-words > p, .arena-board__foot, .arena-board__foot b, .arena-table th) { font-size: 13.12px; }
+  :root:root:root .arena-page :is(.arena-result__title h2, .arena-ready__head h2, .arena-words-title) { font-size: 19.2px; }
+  :root:root:root .arena-page .arena-words-title { font-size: 15.68px; }
+  :root:root:root .arena-page .arena-match-countdown strong { font-size: 14.5px; }
+  :root:root:root .arena-page .arena-result__delta { font-size: 14.5px; }
+  :root:root:root .arena-entry__text b { font-size: 19.2px; }
+  :root:root:root .arena-entry__text small { font-size: 13.12px; }
+}
