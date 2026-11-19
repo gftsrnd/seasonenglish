@@ -68,8 +68,9 @@ export function BadgeCelebration() {
       <div className="badge-celebration__close"><ModalCloseButton iconOnly label="Đóng" onClick={() => close(false)} /></div>
       <div className="badge-celebration__burst" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <i key={index} style={{ ["--i" as string]: index }} />)}</div>
       <div className="badge-celebration__medal" aria-hidden="true"><RewardBadgeImage label={first!.context} size={78} className="badge-celebration__img" /></div>
-      <p className="badge-celebration__eyebrow">Chúc mừng bạn!</p>
-      <h2 id="badge-celebration-title">Bạn vừa nhận huy hiệu {label}</h2>
+      {/* Owner 19/11: the title stays on one line – the lead-in is the small line, the badge name is the title. */}
+      <p className="badge-celebration__eyebrow">Chúc mừng! Bạn vừa nhận huy hiệu</p>
+      <h2 id="badge-celebration-title" aria-label={`Bạn vừa nhận huy hiệu ${label}`}>{label}</h2>
       {more.length ? <p className="badge-celebration__more">Cùng {more.length} huy hiệu khác: {more.map((item, index) => <span className="badge-celebration__more-item" key={item.id}>{index ? ", " : ""}<RewardBadgeImage label={item.context} size={18} />{item.context}</span>)}</p> : null}
       <p className="small muted">Huy hiệu được giữ mãi, kể cả khi đổi trình độ.</p>
       <div className="badge-celebration__actions">
