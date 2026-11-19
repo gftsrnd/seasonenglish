@@ -391,6 +391,18 @@ export class ArenaRepository {
   }
 
   /** Leaving a started match counts as a loss (A.11), settled at once. */
+  /** The poster withdraws a challenge or friendly invite that nobody has accepted yet (no XH change). */
+  async withdraw(learnerId: string, matchId: string): Promise<ArenaMatchView> {
+    await this.withTx(async (client) => {
+      const match = await this.matchRow(client, matchId, true);
+      if (!match || match.poster_id !== learnerId) throw new ArenaError("ARENA_MATCH_NOT_FOUND", 404);
+      if (match.status !== "open" && match.status !== "invited") throw new ArenaError("ARENA_MATCH_CLOSED", 409);
+      await client.query("update arena_matches set status = 'cancelled', cancel_reason = 'withdrawn', settled_at = now() where id = $1", [matchId]);
+    });
+    return (await this.match(learnerId, matchId))!;
+  }
+
+  /** Giving up an accepted match, before or during play, counts as a loss (decided_by = forfeit). */
   async forfeit(learnerId: string, matchId: string): Promise<ArenaMatchView> {
     await this.withTx(async (client) => {
       const match = await this.matchRow(client, matchId, true);
@@ -398,7 +410,6 @@ export class ArenaRepository {
       if (!match || !side) throw new ArenaError("ARENA_MATCH_NOT_FOUND", 404);
       if (match.status !== "accepted") throw new ArenaError("ARENA_MATCH_CLOSED", 409);
       if (match[`${side}_score` as const] !== null) throw new ArenaError("ARENA_ALREADY_PLAYED", 409);
-      if (!match[`${side}_started_at` as const]) throw new ArenaError("ARENA_NOT_STARTED", 409);
       await client.query("update arena_matches set forfeited_by = $2 where id = $1", [matchId, learnerId]);
       await this.settleLocked(client, match, side === "poster" ? "opponent" : "poster", "forfeit");
     });

@@ -208,7 +208,7 @@ describe("arena phase 2: XH, open challenges, friendly invites and the ledger", 
     expect((await matchRow(sortMatch)).meeting_index).toBe(5);
   });
 
-  it("wins on time on equal scores, and a forfeit after start loses", async () => {
+  it("wins on time on equal scores, and giving up an accepted match loses (before or after start)", async () => {
     await pool.query("update arena_matches set status = 'cancelled' where status in ('open', 'accepted')");
     const matchId = await post(l3, "typing");
     await accept(l4, matchId);
@@ -218,14 +218,30 @@ describe("arena phase 2: XH, open challenges, friendly invites and the ledger", 
 
     const forfeitMatch = await post(l3, "typing");
     await accept(l4, forfeitMatch);
-    const early = await call(l3.cookie, "POST", `/api/v1/arena/matches/${forfeitMatch}/forfeit`);
-    expect(early.statusCode).toBe(409);
-    expect(early.json()).toMatchObject({ code: "ARENA_NOT_STARTED" });
     expect((await call(l3.cookie, "POST", `/api/v1/arena/matches/${forfeitMatch}/start`)).statusCode).toBe(200);
     const quit = await call(l3.cookie, "POST", `/api/v1/arena/matches/${forfeitMatch}/forfeit`);
     expect(quit.statusCode, quit.body).toBe(200);
     expect(quit.json()).toMatchObject({ status: "settled", result: { outcome: "lose", decidedBy: "forfeit" } });
     expect(await matchRow(forfeitMatch)).toMatchObject({ outcome: "opponent", decided_by: "forfeit", forfeited_by: l3.id });
+
+    const unplayed = await post(l3, "typing");
+    await accept(l4, unplayed);
+    const giveUp = await call(l4.cookie, "POST", `/api/v1/arena/matches/${unplayed}/forfeit`);
+    expect(giveUp.statusCode, giveUp.body).toBe(200);
+    expect(giveUp.json()).toMatchObject({ status: "settled", result: { outcome: "lose", decidedBy: "forfeit" } });
+  });
+
+  it("lets only the poster withdraw a challenge nobody accepted, without XH change", async () => {
+    await pool.query("update arena_matches set status = 'cancelled' where status in ('open', 'accepted')");
+    const matchId = await post(l3, "sort");
+    expect((await call(l4.cookie, "POST", `/api/v1/arena/matches/${matchId}/cancel`)).statusCode).toBe(404);
+    const withdrawn = await call(l3.cookie, "POST", `/api/v1/arena/matches/${matchId}/cancel`);
+    expect(withdrawn.statusCode, withdrawn.body).toBe(200);
+    expect(withdrawn.json()).toMatchObject({ status: "cancelled", cancelReason: "withdrawn", result: null });
+    expect((await call(l3.cookie, "POST", `/api/v1/arena/matches/${matchId}/cancel`)).statusCode).toBe(409);
+    const accepted = await post(l3, "sort");
+    await accept(l4, accepted);
+    expect((await call(l3.cookie, "POST", `/api/v1/arena/matches/${accepted}/cancel`)).statusCode).toBe(409);
   });
 
   it("caps open ranked matches at 3 per player, posted and accepted together", async () => {

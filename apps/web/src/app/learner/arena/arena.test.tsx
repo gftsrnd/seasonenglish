@@ -111,9 +111,9 @@ describe("arena leaderboard", () => {
   it("gives ranks 1–3 the medal badges and keeps 4+ as plain numbers, my row highlighted", async () => {
     render(<ModalProvider><ArenaLeaderboard navigate={vi.fn()} notify={vi.fn()} learnerId="me" client={client() as never} /></ModalProvider>);
     await screen.findByText("An");
-    expect(screen.getByRole("img", { name: "Hạng 1 · huy hiệu vàng" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Hạng 2 · huy hiệu bạc" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Hạng 3 · huy hiệu đồng" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Hạng 1 · huy chương vàng" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Hạng 2 · huy chương bạc" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Hạng 3 · huy chương đồng" })).toBeInTheDocument();
     expect(document.querySelectorAll(".rank-badge--medal")).toHaveLength(3);
     const four = document.querySelector('[data-rank="4"]')!;
     expect(four.querySelector(".rank-badge--plain")).toHaveTextContent("4");
@@ -136,8 +136,10 @@ describe("arena leaderboard", () => {
     render(<ModalProvider><ArenaLeaderboard navigate={vi.fn()} notify={vi.fn()} learnerId="me" client={api as never} /></ModalProvider>);
     expect(await screen.findByText(/^Lan Anh mời bạn$/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Nhận/ })).toBeInTheDocument();
-    // One action per row: Từ chối lives in the invite details, not on the row.
-    expect(screen.queryByRole("button", { name: /Từ chối/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Từ chối" }));
+    expect(await screen.findByRole("dialog", { name: "Từ chối lời mời?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Quay lại" }));
+    expect(api.answerFriendly).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Ô chữ" }));
     await waitFor(() => expect(api.leaderboard).toHaveBeenCalledWith({ game: "crossword" }));
   });
@@ -209,6 +211,17 @@ describe("manager arena season field", () => {
 });
 
 describe("Đấu trường entry and game picker", () => {
+  it("lets the poster cancel an open challenge after confirming, and links back to Mini game", async () => {
+    const cancel = vi.fn().mockResolvedValue(match({ status: "cancelled" }));
+    const api = { home: vi.fn().mockResolvedValue(home({ open: [match({ status: "open", opponent: null, postedByMe: true })] })), leaderboard: vi.fn().mockResolvedValue(board), answerFriendly: vi.fn(), inviteFriendly: vi.fn(), quickMatch: vi.fn(), cancel, forfeit: vi.fn() };
+    render(<ModalProvider><ArenaLeaderboard navigate={vi.fn()} notify={vi.fn()} learnerId="me" client={api as never} /></ModalProvider>);
+    expect(await screen.findByRole("link", { name: /Về Mini game/ })).toHaveAttribute("href", "/games");
+    fireEvent.click(screen.getByRole("button", { name: "Huỷ" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Huỷ thách đấu" }));
+    await waitFor(() => expect(cancel).toHaveBeenCalledWith(ID));
+    expect(screen.getByRole("button", { name: /Mời bạn/ })).toBeInTheDocument();
+  });
+
   it("is its own card on the Mini game page: B1+ opens /arena, below B1 says it opens from B1", async () => {
     const { ArenaEntryCard } = await import("./ArenaHub.js");
     const { unmount } = render(<ArenaEntryCard level="B1" navigate={vi.fn()} />);
@@ -225,6 +238,9 @@ describe("Đấu trường entry and game picker", () => {
     const api = { home: vi.fn().mockResolvedValue(home({})), leaderboard: vi.fn().mockResolvedValue(board), answerFriendly: vi.fn(), inviteFriendly: vi.fn(), quickMatch };
     render(<ModalProvider><ArenaLeaderboard navigate={navigate} notify={vi.fn()} learnerId="me" client={api as never} /></ModalProvider>);
     fireEvent.click(await screen.findByRole("button", { name: "Đấu Đua gõ từ" }));
+    expect(await screen.findByRole("dialog", { name: "Đấu Đua gõ từ?" })).toBeInTheDocument();
+    expect(quickMatch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Đấu" }));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/arena/match/${ID}`));
     expect(quickMatch).toHaveBeenCalledWith(expect.objectContaining({ game: "typing", requestId: expect.any(String) }));
   });

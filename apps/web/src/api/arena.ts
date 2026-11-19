@@ -70,6 +70,7 @@ export interface ArenaApiClient {
   start(id: string): Promise<ArenaRound>;
   submit(id: string, input: GameFinishInput & { requestId: string }): Promise<{ match: ArenaMatch; result: { score: number; correct: number; total: number } }>;
   forfeit(id: string): Promise<ArenaMatch>;
+  cancel(id: string): Promise<ArenaMatch>;
   leaderboard(input: { game?: ArenaBoardGame; level?: CefrLevel }): Promise<ArenaLeaderboard>;
   inviteFriendly(input: { requestId: string; opponentId: string; game: GameKey }): Promise<ArenaMatch>;
   answerFriendly(id: string, answer: "accept" | "decline"): Promise<ArenaMatch>;
@@ -88,6 +89,7 @@ export const arenaApiClient: ArenaApiClient = {
     requestId: input.requestId, answers: input.answers, ...(input.events?.length ? { events: input.events } : {})
   })),
   forfeit: (id) => request(`/api/v1/arena/matches/${encodeURIComponent(id)}/forfeit`, post()),
+  cancel: (id) => request(`/api/v1/arena/matches/${encodeURIComponent(id)}/cancel`, post()),
   leaderboard: ({ game, level }) => {
     const query = new URLSearchParams();
     if (game) query.set("game", game);

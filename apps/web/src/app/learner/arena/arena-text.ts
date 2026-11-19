@@ -7,6 +7,12 @@ export const ARENA_GAME_NAMES: Record<GameKey, string> = {
   scramble: "Xếp chữ", crossword: "Ô chữ", eggs: "Season catch", mario: "Season-rio", sort: "Phân loại từ", typing: "Đua gõ từ"
 };
 
+/** Same one-line descriptions as the Mini game cards, so the arena cards read the same. */
+export const ARENA_GAME_DESCRIPTIONS: Record<GameKey, string> = {
+  scramble: "Xếp chữ thành từ đúng.", crossword: "Điền từ theo gợi ý.", eggs: "Hứng đúng vật phẩm, giữ 3 mạng.",
+  mario: "Vượt cổng, đánh boss từ vựng.", sort: "Xếp từ theo nhóm nghĩa.", typing: "Gõ từ trước khi hết giờ."
+};
+
 /** ⓘ next to "Xếp hạng B1": the five rules (DAU-TRUONG-YEU-CAU-GIAO-DIEN, "Popup và chữ cố định"). */
 export const ARENA_RULES: readonly string[] = [
   "Thắng thua so điểm ván; bằng điểm thì ai nhanh hơn thắng.",

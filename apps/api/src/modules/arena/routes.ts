@@ -103,6 +103,12 @@ export function registerArenaRoutes(app: FastifyInstance, pool: Pool): void {
     return handle(reply, () => arena.forfeit(request.e4sSession!.user.id, params.data.matchId));
   });
 
+  app.post("/api/v1/arena/matches/:matchId/cancel", { preHandler: learnerOnly }, async (request, reply) => {
+    const params = matchParams.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "INVALID_ARENA_MATCH" });
+    return handle(reply, () => arena.withdraw(request.e4sSession!.user.id, params.data.matchId));
+  });
+
   app.get("/api/v1/arena/leaderboard", { preHandler: learnerOnly }, async (request, reply) => {
     const parsed = z.object({
       level: z.enum(["B1", "B2", "C1"]).optional(), game: z.union([gameKey, z.literal("total")]).optional(), season: z.uuid().optional()
