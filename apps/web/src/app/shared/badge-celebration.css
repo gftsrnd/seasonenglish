@@ -31,7 +31,7 @@
   box-shadow: 0 0 0 6px color-mix(in srgb, #f6d77a 35%, transparent), 0 10px 26px rgba(160, 110, 10, .28);
   animation: badge-pop 520ms cubic-bezier(.2, 1.4, .4, 1) both;
 }
-.badge-celebration__medal span { font-size: 52px; line-height: 1; }
+
 @keyframes badge-pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .badge-celebration__eyebrow { margin: 0; color: var(--primary-dark, var(--primary)); font-weight: 700; font-size: .9rem; }
 :root:root .badge-celebration h2 { margin: 4px 0 6px; font-size: 1.25rem; line-height: 1.3; }

@@ -54,7 +54,7 @@ describe("profile 'Cách tính điểm'", () => {
     expect(rules).not.toHaveTextContent(/bí mật/);
     expect(REWARD_POINT_RULES).toHaveLength(9);
     const season = screen.getByTestId("reward-season-rules");
-    expect(season).toHaveTextContent("Mỗi trình độ (A1–C1) có 4 Season: 🌱 Mùa xuân (bắt đầu) → ☀️ Mùa hạ 500 điểm → 🍂 Mùa thu 2.000 điểm → ❄️ Mùa đông 5.000 điểm");
+    expect(season).toHaveTextContent("Mỗi trình độ (A1–C1) có 4 Season: Mùa xuân (bắt đầu) → Mùa hạ 500 điểm → Mùa thu 2.000 điểm → Mùa đông 5.000 điểm");
     expect(season).toHaveTextContent("Season bắt đầu lại từ Mùa xuân của trình độ mới");
     expect(season).toHaveTextContent("huy hiệu đã nhận được giữ mãi");
     expect(season).toHaveTextContent("Mini game, luyện Season không tính; cuối tuần, ngày nghỉ lễ không tính và không làm đứt chuỗi");
@@ -87,7 +87,8 @@ describe("profile Season card", () => {
     render(<LearnerProfile view={b1} actions={actions} />);
     const friday = document.querySelector<HTMLElement>("[data-badge-key='friday']")!;
     expect(within(friday).getByText("Đạt ở B1")).toBeInTheDocument();
-    expect(within(friday).getByRole("img", { name: "Biểu tượng Ôn tập đúng hẹn" })).toHaveTextContent("⏰");
+    // Owner-supplied picture (19/11) instead of the emoji.
+    expect(within(friday).getByRole("img", { name: "Biểu tượng Ôn tập đúng hẹn" }).querySelector("img")).toHaveAttribute("src", "/media/rewards/friday.webp");
     const coach = document.querySelector<HTMLElement>("[data-badge-key='coach_friend']")!;
     expect(within(coach).getByRole("img", { name: "Chưa đạt" })).toBeInTheDocument();
     expect(coach).toHaveTextContent("Có 50 lượt luyện hợp lệ với Season");

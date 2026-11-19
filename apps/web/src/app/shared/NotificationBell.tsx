@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import { Bell, X } from "lucide-react";
@@ -6,7 +6,7 @@ import type { InboxNotificationView, NotificationInboxView } from "@e4s/contract
 import { getNotificationInbox, markInboxRead, resolveTopicReport } from "../../api/notifications.js";
 import { hasAssessmentLogoutGuard } from "./assessment-logout-guard.js";
 import { useDialog } from "./ModalProvider.js";
-import { rewardBadgeIconForLabel } from "./reward-badge-icons.js";
+import { RewardBadgeImage, RewardSeasonImage } from "./RewardIcon.js";
 import { monthlyUncountedCountsFromText } from "./monthly-uncounted.js";
 import "./notification-bell.css";
 import { ModalCloseButton } from "./CompactUi.js";
@@ -26,7 +26,8 @@ const complaintNames: Record<string, string> = {
   exam_eligibility: "điều kiện dự thi", lesson_unlock: "mở khóa bài học", account_unlock: "mở khóa tài khoản",
   attendance: "điểm danh", lesson_count: "số bài học", account: "tài khoản"
 };
-const seasonNames: Record<string, string> = { "2": "☀️ Mùa hạ", "3": "🍂 Mùa thu", "4": "❄️ Mùa đông" }; // media-scan: allow-avatar-reward -- deliberate reward symbols
+/** Season names; their pictures come from the owner-supplied reward images (19/11). */
+const seasonNames: Record<string, string> = { "2": "Mùa hạ", "3": "Mùa thu", "4": "Mùa đông" };
 const categoryLabels = { support: "Khiếu nại", reopen: "Yêu cầu mở lại", appeal: "Kháng nghị học tập", exam: "Bài thi", account: "Tài khoản", learning: "Học tập" };
 function notificationCategory(value: InboxNotificationView["kind"]): keyof typeof categoryLabels {
   // Server kinds are free text in the database; unknown kinds must never break the inbox.
@@ -92,6 +93,8 @@ function topicReportContent(item: InboxNotificationView): NotificationContent {
 
 type NotificationContent = {
   title: string;
+  /** Owner-supplied badge / Season picture shown before the title (19/11). */
+  icon?: ReactNode;
   description: string;
   /** Where the item opens; "" keeps the user in the bell. */
   path: string;
@@ -224,14 +227,13 @@ export function notificationContent(item: InboxNotificationView): NotificationCo
       return { title: item.kind === "challenge_passed" ? "Đã hoàn thành thử thách lên mức" : "Có kết quả thử thách lên mức", description: "Xem kết quả và bước tiếp theo trong hồ sơ.", path: "/profile", action: "Xem hồ sơ" };
     case "badge_earned":
     {
-      const icon = item.context ? rewardBadgeIconForLabel(item.context) : undefined;
-      return { title: `Bạn vừa nhận huy hiệu ${item.context ? `${icon ? `${icon} ` : ""}${item.context}` : "mới"}`, description: "Huy hiệu được giữ mãi, kể cả khi đổi trình độ. Xem tiến độ Season trong hồ sơ.", path: "/profile", action: "Xem huy hiệu" };
+      return { icon: <RewardBadgeImage label={item.context} size={22} className="inbox-reward-icon" />, title: `Bạn vừa nhận huy hiệu ${item.context || "mới"}`, description: "Huy hiệu được giữ mãi, kể cả khi đổi trình độ. Xem tiến độ Season trong hồ sơ.", path: "/profile", action: "Xem huy hiệu" };
     }
     case "season_reached": {
       // Context "3:B1" (Season 3 of B1); older notifications carry the Season only ("3").
       const [seasonLevel = "", level] = item.context.split(":");
       const season = seasonNames[seasonLevel];
-      return { title: season ? `Chúc mừng! Bạn đã lên ${season}${level ? ` · ${level}` : ""}` : "Chúc mừng! Bạn đã lên Season mới", description: "Xem Season hiện tại và huy hiệu của Season tiếp theo trong hồ sơ.", path: "/profile", action: "Xem Season" };
+      return { ...(season ? { icon: <RewardSeasonImage level={Number(seasonLevel)} size={22} className="inbox-reward-icon" /> } : {}), title: season ? `Chúc mừng! Bạn đã lên ${season}${level ? ` · ${level}` : ""}` : "Chúc mừng! Bạn đã lên Season mới", description: "Xem Season hiện tại và huy hiệu của Season tiếp theo trong hồ sơ.", path: "/profile", action: "Xem Season" };
     }
     default:
       // Unknown or newer server kinds get a neutral row instead of crashing the whole inbox.
@@ -489,7 +491,7 @@ export function NotificationBell({ deferArrival = false }: { deferArrival?: bool
               const category = notificationCategory(item.kind);
               return <li key={item.id} data-category={category} className={item.readAt ? "inbox-item" : "inbox-item inbox-item--unread"}>
                 <div className="inbox-item-heading"><span className="inbox-category">{categoryLabels[category]}</span><time dateTime={item.createdAt}>{notificationTime.format(new Date(item.createdAt))}</time></div>
-                <strong className="inbox-item-title">{content.title}</strong>
+                <strong className="inbox-item-title">{content.icon}{content.title}</strong>
                 <p>{content.description}</p>
                 {content.action ? <button type="button" className="btn-sm inbox-item-action" disabled={pending} onClick={() => void read(item)}>{content.action}</button> : null}
               </li>;
@@ -504,7 +506,7 @@ export function NotificationBell({ deferArrival = false }: { deferArrival?: bool
       onPointerEnter={() => setArrivalHeld(true)} onPointerLeave={() => setArrivalHeld(false)}
       onFocus={() => setArrivalHeld(true)} onBlur={() => setArrivalHeld(false)}>
       <button type="button" className="inbox-arrival-open" onClick={openArrival}>
-        <Bell size={16} strokeWidth={1.8} aria-hidden="true" />
+        {arrivalContent?.icon ?? <Bell size={16} strokeWidth={1.8} aria-hidden="true" />}
         <strong>{arrivalContent ? arrivalContent.title : arrival.count > 1 ? `${arrival.count} thông báo mới` : "Có thông báo mới"}</strong>
       </button>
       <button type="button" className="inbox-arrival-close" aria-label="Ẩn thông báo mới" onClick={() => announce(null)}><X size={16} aria-hidden="true" /></button>

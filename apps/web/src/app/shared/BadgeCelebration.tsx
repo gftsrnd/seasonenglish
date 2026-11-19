@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { Award } from "lucide-react";
 import type { InboxNotificationView } from "@e4s/contracts";
 import { getNotificationInbox, markInboxRead } from "../../api/notifications.js";
 import { hasAssessmentLogoutGuard } from "./assessment-logout-guard.js";
 import { ModalCloseButton } from "./CompactUi.js";
-import { rewardBadgeIconForLabel } from "./reward-badge-icons.js";
+import { RewardBadgeImage } from "./RewardIcon.js";
 import "./badge-celebration.css";
 
 const CELEBRATED_KEY = "e4s:badge-celebrated";
@@ -64,15 +63,14 @@ export function BadgeCelebration() {
   if (!open) return null;
   const [first, ...more] = badges;
   const label = first!.context ?? "mới";
-  const icon = first!.context ? rewardBadgeIconForLabel(first!.context) : undefined;
   return <div className="modal-backdrop badge-celebration-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) close(false); }}>
     <section className="dialog badge-celebration" role="dialog" aria-modal="true" aria-labelledby="badge-celebration-title">
       <div className="badge-celebration__close"><ModalCloseButton iconOnly label="Đóng" onClick={() => close(false)} /></div>
       <div className="badge-celebration__burst" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <i key={index} style={{ ["--i" as string]: index }} />)}</div>
-      <div className="badge-celebration__medal" aria-hidden="true">{icon ? <span>{icon}</span> : <Award size={52} strokeWidth={1.8} />}</div>
+      <div className="badge-celebration__medal" aria-hidden="true"><RewardBadgeImage label={first!.context} size={78} className="badge-celebration__img" /></div>
       <p className="badge-celebration__eyebrow">Chúc mừng bạn!</p>
       <h2 id="badge-celebration-title">Bạn vừa nhận huy hiệu {label}</h2>
-      {more.length ? <p className="badge-celebration__more">Cùng {more.length} huy hiệu khác: {more.map((item) => `${item.context ? rewardBadgeIconForLabel(item.context) ?? "" : ""} ${item.context ?? ""}`.trim()).join(", ")}</p> : null}
+      {more.length ? <p className="badge-celebration__more">Cùng {more.length} huy hiệu khác: {more.map((item, index) => <span className="badge-celebration__more-item" key={item.id}>{index ? ", " : ""}<RewardBadgeImage label={item.context} size={18} />{item.context}</span>)}</p> : null}
       <p className="small muted">Huy hiệu được giữ mãi, kể cả khi đổi trình độ.</p>
       <div className="badge-celebration__actions">
         <button type="button" className="btn" onClick={() => close(true)}>Xem huy hiệu</button>

@@ -3,7 +3,8 @@ import { exportManagerMonthlyCsv, monthlyExamLabel } from "./MonthlyOverview.js"
 import { Bell, Download, Gift, UserRound } from "lucide-react";
 import { useState } from "react";
 import { ActionLabel, useCompactUi } from "../shared/CompactUi.js";
-import { rewardBadgeIcon, rewardSeasonOfLearner } from "../shared/reward-badge-icons.js";
+import { rewardBadgeIcon, rewardBadgeKey, rewardSeasonOfLearner } from "../shared/reward-badge-icons.js";
+import { RewardBadgeImage, RewardSeasonImage } from "../shared/RewardIcon.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { Pager, usePaged } from "../shared/Pager.js";
 import { Badge, ManagerTitle, OperationalCards, PageDescription, PageTitle, formatDate, percent, type ManagerOperationalProps } from "./shared.js";
@@ -99,7 +100,9 @@ function LearnerRow({ learner, monthly, weekStartDate, onOpen }: { learner: Mana
   const missed = learner.missedDays ?? 0; const reward = rewardSeasonOfLearner(learner);
   const status = managerLearnerStatus(learner, weekStartDate);
   const badgeDetailText = (learner.earnedBadgeDetails ?? []).map((badge) => `${badge.label}: ${badge.description}`).join(" · ");
-  const earnedIcons = [...new Set([...learner.earnedBadges, ...(learner.earnedBadgeDetails ?? []).map(({ key }) => key)].map(rewardBadgeIcon))].join("");
+  // Owner-supplied pictures (19/11) for the Season and each earned badge.
+  const earnedKeys = [...new Set([...learner.earnedBadges, ...(learner.earnedBadgeDetails ?? []).map(({ key }) => key)].filter((key) => rewardBadgeIcon(key)).map(rewardBadgeKey))];
+  const earnedIcons = earnedKeys.length ? <span className="reward-icon-row">{earnedKeys.map((key) => <RewardBadgeImage key={key} badgeKey={key} size={18} />)}</span> : null;
   const lessonCount = monthly ? `${monthly.lessons.completed}/${monthly.lessons.scheduled}` : learner.totalLessonsThisWeek ? `${learner.completedLessons}/${learner.totalLessonsThisWeek}` : "—";
   const assessment = monthly ? monthly.attendanceAppealRequired
     ? <Badge tone="warn">Cần kháng nghị</Badge>
@@ -107,7 +110,7 @@ function LearnerRow({ learner, monthly, weekStartDate, onOpen }: { learner: Mana
     ? <Badge tone={(learner.weeklyPracticeScore ?? 0) >= 70 ? "ok" : "warn"}>{formatScore(learner.weeklyPracticeScore)}</Badge>
     : learner.weeklyPracticeStatus === "pending_review" ? <Badge tone="warn">chờ chấm</Badge> : <span className="muted">chưa</span>;
   const coach = monthly ? <>{monthly.season.turns}<span className="xs muted"> /{monthly.season.target}</span></> : <>{learner.coachTurnsThisWeek}{learner.coachTurnsThisWeek >= 50 ? " ✓" : <span className="xs muted"> /50</span>}</>;
-  const rewardPoints = <>{reward.icon} <b>★ {learner.rewardPoints}</b>{earnedIcons && <> {earnedIcons}</>}</>;
+  const rewardPoints = <><RewardSeasonImage level={reward.level} size={18} className="reward-icon--inline" /> <b>★ {learner.rewardPoints}</b>{earnedIcons && <> {earnedIcons}</>}</>;
   const lastActivity = learner.lastActivityAt
     ? <>{formatDate(learner.lastActivityAt)}{missed ? <span className="muted"> ({missed} ngày)</span> : null}</>
     : <span className="muted">Chưa vào học</span>;

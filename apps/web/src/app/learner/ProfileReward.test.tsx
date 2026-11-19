@@ -359,8 +359,8 @@ describe("app reward CTA hierarchy", () => {
     expect(certificate.querySelector(".cert-sign")).toHaveTextContent("Vận hành");
     expect(certificate.querySelector(".cert-sign")).toHaveTextContent("Quản lý");
     expect(certificate.querySelector("[aria-label='Đã đạt']")).toHaveTextContent("✓");
-    expect(within(summary).getByRole("img", { name: "Biểu tượng Khởi động" })).toHaveTextContent("🐣");
-    expect(within(summary).getByRole("img", { name: "Biểu tượng Học đều" })).toHaveTextContent("🔥");
+    expect(within(summary).getByRole("img", { name: "Biểu tượng Khởi động" }).querySelector("img")).toHaveAttribute("src", "/media/rewards/starter.webp");
+    expect(within(summary).getByRole("img", { name: "Biểu tượng Học đều" }).querySelector("img")).toHaveAttribute("src", "/media/rewards/streak.webp");
     expect(document.querySelector(".cert-print-only .cert-doc")?.innerHTML).toBe(certificate.innerHTML);
     expect(screen.queryByRole("button", { name: /In \/ lưu chứng nhận/ })).not.toBeInTheDocument();
 

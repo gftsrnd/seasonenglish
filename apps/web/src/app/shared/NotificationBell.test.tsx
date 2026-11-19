@@ -112,9 +112,9 @@ describe("NotificationBell", () => {
     render(<MemoryRouter><NotificationBell /></MemoryRouter>);
     await user.click(await screen.findByRole("button", { name: /3 chưa đọc/ }));
     const dialog = screen.getByRole("dialog", { name: "Thông báo" });
-    expect(await within(dialog).findByText("Bạn vừa nhận huy hiệu 🗓️ Tuần trọn vẹn")).toBeInTheDocument();
-    expect(within(dialog).getByText("Chúc mừng! Bạn đã lên 🍂 Mùa thu · B1")).toBeInTheDocument();
-    expect(within(dialog).getByText("Chúc mừng! Bạn đã lên ☀️ Mùa hạ")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Bạn vừa nhận huy hiệu Tuần trọn vẹn")).toBeInTheDocument();
+    expect(within(dialog).getByText("Chúc mừng! Bạn đã lên Mùa thu · B1")).toBeInTheDocument();
+    expect(within(dialog).getByText("Chúc mừng! Bạn đã lên Mùa hạ")).toBeInTheDocument();
   });
 
   it("shows the test-date and unapproved upcoming-lesson notices with their dates", async () => {

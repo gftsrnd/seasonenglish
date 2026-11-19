@@ -40,6 +40,12 @@ export function rewardBadgeIcon(key: string): string | undefined {
   return Object.hasOwn(rewardBadgeIcons, canonical) ? rewardBadgeIcons[canonical] : undefined;
 }
 
+/** Badge key of a label (notifications carry the label only). */
+export function rewardBadgeKeyForLabel(label: string): string | undefined {
+  const key = labelKeys.get(label.trim());
+  return key && rewardBadgeIcon(key) ? rewardBadgeKey(key) : undefined;
+}
+
 export function rewardBadgeIconForLabel(label: string): string | undefined {
   const key = labelKeys.get(label.trim());
   return key ? rewardBadgeIcon(key) : undefined;

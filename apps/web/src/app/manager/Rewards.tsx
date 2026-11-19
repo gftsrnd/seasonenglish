@@ -6,7 +6,7 @@ import { ActionLabel, Description, useCompactUi } from "../shared/CompactUi.js";
 import type { BadgeRoadmapItem, CefrLevel, SeasonLevelView } from "@e4s/contracts";
 import { REWARD_SEASONS, rewardBadgeThreshold, rewardSeasonLabel, type RewardBadgeKey } from "@e4s/domain/engagement";
 import { REWARD_POINT_RULES, REWARD_SEASON_RULES, SeasonProgressCard } from "../shared/SeasonProgressCard.js";
-import { rewardBadgeIcon } from "../shared/reward-badge-icons.js";
+import { RewardBadgeImage } from "../shared/RewardIcon.js";
 import { RewardAnnouncementDialog } from "../learner/RewardAnnouncementDialog.js";
 import { rewardBadgeCatalogAt } from "./reward-catalog.js";
 import "./rewards.css";
@@ -110,7 +110,7 @@ export function ManagerRewards() {
                   setEarned((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
                   setRevealedBadgeLevel(levels.find(({ required }) => required.includes(id))?.level);
                 }}>
-                <span className="manager-reward-badge-icon" aria-hidden="true">{rewardBadgeIcon(id)}</span><span>{name}</span>
+                <span className="manager-reward-badge-icon" aria-hidden="true"><RewardBadgeImage badgeKey={id} size={22} /></span><span>{name}</span>
               </button>)}
             </div>
           </div>

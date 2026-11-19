@@ -4,13 +4,16 @@ import { dirname, extname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const suppliedAvatarIds = ["rabbit", "cricket", "squirrel", "penguin", "swallow", "jade-rabbit", "reindeer"].map(id => `avatar-${id}`);
+/** Owner-supplied progress icons (19/11): the four Seasons and the eight badges, SVG originals as WebP. */
+const suppliedRewardIds = ["spring", "summer", "autumn", "winter", "starter", "streak", "week_complete", "friday", "coach_friend", "first_try", "monthly_final_score", "wordsmith"].map(id => `reward-${id}`);
 
 export const REQUIRED_MEDIA_IDS = [
   "mascot", "basket", "dinosaur", "gift-closed", "gift-correct", "gift-wrong", "flag", "mushroom", "bomb",
   "hero-rabbit", "hero-cricket", "hero-squirrel", "hero-penguin", "hero-swallow", "hero-reindeer",
   "food-rabbit", "food-cricket", "food-squirrel", "food-penguin", "food-swallow", "food-reindeer",
   "catch-spring", "catch-summer", "catch-autumn", "catch-winter", "catch-tet", "catch-midautumn", "catch-christmas",
-  ...suppliedAvatarIds
+  ...suppliedAvatarIds,
+  ...suppliedRewardIds
 ];
 
 const rasterExtensions = new Set([".png", ".webp"]);
@@ -50,9 +53,11 @@ export async function verifyMediaAssets(options = {}) {
     if (paths.has(entry.localPath)) errors.push(`${label}: localPath bị trùng.`);
     else paths.add(entry.localPath);
     const extension = extname(entry.localPath).toLowerCase();
-    if (suppliedAvatarIds.includes(entry.id)) {
-      const expectedPath = `apps/web/public/media/avatars/${entry.id.slice("avatar-".length)}.webp`;
-      if (entry.localPath !== expectedPath) errors.push(`${label}: localPath avatar không hợp lệ.`);
+    if (suppliedAvatarIds.includes(entry.id) || suppliedRewardIds.includes(entry.id)) {
+      const expectedPath = suppliedRewardIds.includes(entry.id)
+        ? `apps/web/public/media/rewards/${entry.id.slice("reward-".length)}.webp`
+        : `apps/web/public/media/avatars/${entry.id.slice("avatar-".length)}.webp`;
+      if (entry.localPath !== expectedPath) errors.push(`${label}: localPath ảnh E4S cung cấp không hợp lệ.`);
       if (entry.licence !== "LicenseRef-E4S-supplied") errors.push(`${label}: thiếu giấy phép sử dụng ảnh do E4S cung cấp.`);
       if (typeof entry.suppliedBy !== "string" || !entry.suppliedBy.trim()) errors.push(`${label}: thiếu suppliedBy.`);
       if (typeof entry.sourcePack !== "string" || !entry.sourcePack.trim()) errors.push(`${label}: thiếu sourcePack.`);

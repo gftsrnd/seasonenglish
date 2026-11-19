@@ -4,7 +4,7 @@ import { InfoTip } from "./CompactUi.js";
 import type { LearnerProgressView } from "@e4s/contracts";
 import { REWARD_SEASONS, type RewardSeasonLevel } from "@e4s/domain/engagement";
 import { Modal, Progress } from "../learner/ui.js";
-import { REWARD_SEASON_ICONS } from "./reward-badge-icons.js";
+import { RewardSeasonImage } from "./RewardIcon.js";
 import { RulesDisclosure } from "./RulesDisclosure.js";
 import { RewardBadgeArtwork } from "./RewardBadgeArtwork.js";
 import "./season-progress-card.css";
@@ -62,7 +62,7 @@ function RewardRulesDialog({ onClose }: { onClose: () => void }) {
 
 /** How the Season ladder and the badges work (same rules as the server). */
 export const REWARD_SEASON_RULES: readonly string[] = [
-  `Mỗi trình độ (A1–C1) có 4 Season: ${REWARD_SEASONS.map((season) => `${REWARD_SEASON_ICONS[season.level]} ${season.shortName}${season.pointsRequired ? ` ${formatPoints(season.pointsRequired)} điểm` : " (bắt đầu)"}`).join(" → ")}, tính bằng điểm kiếm được từ khi vào trình độ.`,
+  `Mỗi trình độ (A1–C1) có 4 Season: ${REWARD_SEASONS.map((season) => `${season.shortName}${season.pointsRequired ? ` ${formatPoints(season.pointsRequired)} điểm` : " (bắt đầu)"}`).join(" → ")}, tính bằng điểm kiếm được từ khi vào trình độ.`,
   "Lên Season: đủ điểm trong trình độ và mọi huy hiệu của Season đó; đi lần lượt, không nhảy cấp.",
   "Đổi trình độ (lên mức, kháng nghị, điều chỉnh): Season bắt đầu lại từ Mùa xuân của trình độ mới. Tổng điểm tích lũy và huy hiệu đã nhận được giữ mãi.",
   "Huy hiệu chưa nhận dùng mức yêu cầu của trình độ hiện tại.",
@@ -133,7 +133,7 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
         return <div className="profile-season-level" data-season-level={seasonLevel} key={seasonLevel}>
           <div className="profile-season-level-heading">
             <span className={`badge ${completed ? "ok" : nextLevel ? "warn" : isCurrent ? "primary" : ""}`} {...(compact ? { title: `${meta.pointsRequired ? `${formatPoints(meta.pointsRequired)} điểm ${inLevel}` : "Bắt đầu trình độ"}${list.length ? ` + ${list.length} huy hiệu` : ""}` } : {})}>
-              <span className="profile-season-emoji" role="img" aria-label={`Biểu tượng ${meta.name}`}>{REWARD_SEASON_ICONS[meta.level]}</span>
+              <span className="profile-season-emoji" role="img" aria-label={`Biểu tượng ${meta.name}`}><RewardSeasonImage level={meta.level} size={18} /></span>
               <span>Cấp {seasonLevel} · {meta.shortName}</span>
             </span>
             {compact ? null : <span className="xs muted">{meta.pointsRequired ? `${formatPoints(meta.pointsRequired)} điểm` : "Bắt đầu"}{list.length ? ` + ${list.length} huy hiệu` : ""}{completed ? " · đã đạt" : isCurrent ? " · đang ở đây" : ""}</span>}
@@ -197,5 +197,5 @@ export function SeasonFigure({ level }: { level: number }) {
   const index = Math.max(0, Math.min(3, level - 1));
   const season = REWARD_SEASONS[index]!;
   const outerSize = sizes[index]! + 28;
-  return <span className="profile-season-figure" data-season-level={level} role="img" aria-label={season.shortName} style={{ position: "relative", display: "inline-grid", placeItems: "center", flexShrink: 0, width: outerSize, height: outerSize, borderRadius: "50%" }}><span className="profile-season-figure-emoji" aria-hidden="true">{REWARD_SEASON_ICONS[season.level as RewardSeasonLevel]}</span></span>;
+  return <span className="profile-season-figure" data-season-level={level} role="img" aria-label={season.shortName} style={{ position: "relative", display: "inline-grid", placeItems: "center", flexShrink: 0, width: outerSize, height: outerSize, borderRadius: "50%" }}><span className="profile-season-figure-emoji" aria-hidden="true"><RewardSeasonImage level={season.level} size={Math.round(sizes[index]! * .72)} className="profile-season-figure-img" /></span></span>;
 }
