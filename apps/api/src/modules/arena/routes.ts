@@ -7,7 +7,6 @@ import { gameResultInput, gameResultValidationError } from "../engagement/result
 import { createRoleGuard } from "../identity/policy.js";
 
 const gameKey = z.enum(["scramble", "crossword", "eggs", "mario", "sort", "typing"]);
-const setKind = z.enum(["curriculum", "personal"]).default("curriculum");
 const matchParams = z.object({ matchId: z.uuid() });
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)));
 
@@ -39,7 +38,7 @@ export function registerArenaRoutes(app: FastifyInstance, pool: Pool): void {
     handle(reply, async () => ({ challenges: await arena.openChallenges(request.e4sSession!.user.id) })));
 
   app.post("/api/v1/arena/challenges", { preHandler: learnerOnly }, async (request, reply) => {
-    const parsed = z.object({ requestId: z.uuid(), game: gameKey, setKind }).safeParse(request.body);
+    const parsed = z.object({ requestId: z.uuid(), game: gameKey, setKind: z.enum(["curriculum", "personal"]).optional() }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_ARENA_CHALLENGE" });
     return handle(reply, () => arena.postChallenge(request.e4sSession!.user.id, parsed.data), 201);
   });

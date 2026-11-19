@@ -40,10 +40,17 @@ export interface ArenaHome {
   season: ArenaSeason | null;
   ratings: Record<GameKey, number>;
   total: number;
+  /** Position on the level's total board this season; null until the learner has a rating row. */
+  rank?: { position: number; of: number } | null;
+  /** The word set a new challenge uses (the learner's current Mini game set). */
+  set?: { topic: string; words: number; kind: ArenaSetKind } | null;
   openRanked: number;
   maxOpenRanked: number;
   matches: { open: ArenaMatch[]; active: ArenaMatch[]; done: ArenaMatch[] };
 }
+
+/** An open ranked challenge someone else posted: the poster stays hidden until accepted. */
+export interface ArenaOpenChallenge { id: string; game: GameKey; setKind: ArenaSetKind; setTopic: string; acceptDeadline: string; createdAt: string }
 
 export interface ArenaRound { match: ArenaMatch; wordSet: GameWordSetView; attemptSeed: number; unitIds: string[] }
 
@@ -66,6 +73,9 @@ export interface ArenaSeasonSetting {
 export interface ArenaApiClient {
   home(): Promise<ArenaHome>;
   quickMatch(input: { requestId: string; game: GameKey; setKind?: ArenaSetKind }): Promise<{ joined: boolean; match: ArenaMatch }>;
+  challenges(): Promise<{ challenges: ArenaOpenChallenge[] }>;
+  postChallenge(input: { requestId: string; game: GameKey }): Promise<ArenaMatch>;
+  acceptChallenge(id: string): Promise<ArenaMatch>;
   match(id: string): Promise<ArenaMatch>;
   start(id: string): Promise<ArenaRound>;
   submit(id: string, input: GameFinishInput & { requestId: string }): Promise<{ match: ArenaMatch; result: { score: number; correct: number; total: number } }>;
@@ -83,6 +93,9 @@ const post = (body: unknown = {}) => ({ method: "POST", body: JSON.stringify(bod
 export const arenaApiClient: ArenaApiClient = {
   home: () => request("/api/v1/arena"),
   quickMatch: (input) => request("/api/v1/arena/quick-match", post(input)),
+  challenges: () => request("/api/v1/arena/challenges"),
+  postChallenge: (input) => request("/api/v1/arena/challenges", post(input)),
+  acceptChallenge: (id) => request(`/api/v1/arena/challenges/${encodeURIComponent(id)}/accept`, post()),
   match: (id) => request(`/api/v1/arena/matches/${encodeURIComponent(id)}`),
   start: (id) => request(`/api/v1/arena/matches/${encodeURIComponent(id)}/start`, post()),
   submit: (id, input) => request(`/api/v1/arena/matches/${encodeURIComponent(id)}/result`, post({

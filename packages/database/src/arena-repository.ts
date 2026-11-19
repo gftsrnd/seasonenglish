@@ -104,6 +104,8 @@ export class ArenaRepository {
     eligible: boolean; requiredLevel: "B1"; level: CefrLevel | null;
     season: ArenaSeasonView | null; ratings: Record<GameKey, number>; total: number;
     rank: { position: number; of: number } | null;
+    /** The word set a new challenge uses: the learner's current Mini game set (own topic, else the curriculum set). */
+    set: { topic: string; words: number; kind: ArenaSetKind } | null;
     openRanked: number; maxOpenRanked: number;
     matches: { open: ArenaMatchView[]; active: ArenaMatchView[]; done: ArenaMatchView[] };
   } | null> {
@@ -121,9 +123,12 @@ export class ArenaRepository {
     const board = season ? await this.board(context.organizationId, context.cefr, season.id, "total", true) : [];
     const own = board.find((entry) => entry.learnerId === learnerId);
     const matches = await this.myMatches(learnerId);
+    const sources = eligible ? await this.engagement.arenaWordSources(learnerId) : null;
+    const active = sources?.personal ? { set: sources.personal, kind: "personal" as const } : sources?.curriculum ? { set: sources.curriculum, kind: "curriculum" as const } : null;
     return {
       eligible, requiredLevel: "B1", level: context.cefr, season, ratings, total: arenaTotal(ratings),
       rank: own ? { position: own.rank, of: board.length } : null,
+      set: active ? { topic: active.set.topic, words: active.set.words.length, kind: active.kind } : null,
       openRanked: await this.openRankedCount(this.pool, learnerId), maxOpenRanked: ARENA_MAX_OPEN_RANKED,
       matches: {
         open: matches.filter((match) => match.status === "open" || match.status === "invited"),
@@ -161,10 +166,11 @@ export class ArenaRepository {
       acceptDeadline: row.accept_deadline.toISOString(), createdAt: row.created_at.toISOString() }));
   }
 
-  async postChallenge(learnerId: string, input: { requestId: string; game: GameKey; setKind: ArenaSetKind }): Promise<ArenaMatchView> {
+  async postChallenge(learnerId: string, request: { requestId: string; game: GameKey; setKind?: ArenaSetKind | undefined }): Promise<ArenaMatchView> {
     const context = await this.eligibleContext(learnerId);
-    const existing = await this.byRequestKey(learnerId, input.requestId);
+    const existing = await this.byRequestKey(learnerId, request.requestId);
     if (existing) return existing;
+    const input = { ...request, setKind: request.setKind ?? await this.activeSetKind(learnerId) };
     const snapshot = await this.snapshotSource(learnerId, input.game, input.setKind);
     const id = await this.withTx(async (client) => {
       await this.lockPlayers(client, [learnerId]);

@@ -74,7 +74,7 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
     await run(async () => { const next = await client.forfeit(matchId); setRound(null); setMatch(next); }, "Chưa thoát được trận.");
   };
 
-  const boardLink = <AppLink className="arena-text-link" href="/games" navigate={navigate}>Về Mini game</AppLink>;
+  const boardLink = <AppLink className="arena-text-link" href="/arena" navigate={navigate}>Về Đấu trường</AppLink>;
   if (loadError) return <div className="app-learner-page game-page arena-page"><Notice tone="warn">{loadError}</Notice>{boardLink}</div>;
   if (!match) return <div className="app-learner-page game-page arena-page"><section className="card" aria-live="polite">Đang tải trận…</section></div>;
 

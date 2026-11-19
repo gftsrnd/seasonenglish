@@ -11,7 +11,7 @@ import { useModal } from "../shared/ModalProvider.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { ActionLabel, InfoTitle, useCompactUi } from "../shared/CompactUi.js";
 import { Pager, usePaged } from "../shared/Pager.js";
-import { ArenaSection } from "./arena/ArenaHub.js";
+import { ArenaEntryCard } from "./arena/ArenaHub.js";
 import { gameScoringLine } from "../games/scoring-rule.js";
 import { gameRoundWords } from "@e4s/domain/engagement";
 
@@ -174,7 +174,7 @@ export function LearnerGames({ view, actions }: { view: GameHubView; actions: Le
       </details>
       {gamePicker}
     </> : <>{topicPanel}{wordPanel}{gamePicker}</>}
-    <ArenaSection level={view.cefr} setTopic={view.wordSet?.topic ?? null} hasWords={Boolean(view.wordSet?.words.length)} compact={compact} navigate={actions.navigate} />
+    <ArenaEntryCard level={view.cefr} navigate={actions.navigate} />
   </div>;
 }
 

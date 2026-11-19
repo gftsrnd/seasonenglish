@@ -1,194 +1,165 @@
 /*
- * Arena (Đấu trường): built from the app's own parts (.card, .btn, .chip, .badge, .page-title,
- * the solo .game-result card, Pager, Modal). This file only lays out the list rows, the small
- * rank medals, the Mini game entry card and the game picker. Theme tokens only.
+ * Arena (Đấu trường), owner reference 19/11: the Mini game entry card, the season banner, the app's
+ * segmented tabs (Đấu | Bảng xếp hạng), the two play panels and the leaderboard table. Season colours
+ * come from the theme tokens and the scenery from the current season's background.svg.
  * Phone ≤ 600px compact, tablet 601–1024px middle tier, desktop normal.
  */
-
-.arena-page { display: grid; gap: 12px; align-content: start; }
+.arena-page { display: grid; gap: 14px; align-content: start; }
 .arena-page > * { min-width: 0; margin-top: 0; margin-bottom: 0; }
 .arena-page .page-title { margin-bottom: 0; }
-.arena-eyebrow-link { display: inline-block; text-decoration: none; color: var(--muted); }
 .arena-rules { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 .arena-game-icon { flex: none; color: var(--muted); }
-.arena-mode-line { margin: 2px 0 0; }
-.arena-section { display: grid; gap: 10px; margin: 0; }
-.arena-section > h2 { margin: 0; }
+:root:root .arena-back-link { display: inline-flex; align-items: center; gap: 6px; justify-self: start; color: var(--text); font-weight: 600; text-decoration: none; }
+:root:root .arena-back-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 
-/* Text link (no button chrome): "Về bảng xếp hạng", "Mời bạn giao hữu". */
+/* Text link (no button chrome): "Về Đấu trường". */
 :root:root .arena-text-link { justify-self: start; display: inline; width: auto; min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--text); font: inherit; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 
-/* Plain list rows (like the app's other list pages): one line per item, divider between rows. */
+/* List rows: one line per item, divider between rows, compact actions at the right end. */
 .arena-list { list-style: none; margin: 0; padding: 0; display: grid; }
-.arena-list__row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.arena-list__row { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
 .arena-list__row:last-child { border-bottom: 0; }
-.arena-list__row.is-me { background: var(--primary-soft); border-radius: 8px; }
-:root:root .arena-list__open { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; width: auto; height: auto; min-height: 0; padding: 4px 0; border: 0; background: none; box-shadow: none; color: inherit; font: inherit; font-weight: inherit; text-align: left; justify-content: flex-start; text-decoration: none; cursor: pointer; }
+:root:root:root .arena-list__open { display: flex; align-items: center; gap: 12px; flex: 1 1 auto; min-width: 0; width: auto; height: auto; min-height: 0; padding: 4px 0 !important; border: 0; background: none; box-shadow: none; color: inherit; font: inherit; font-weight: inherit; text-align: left; justify-content: flex-start; text-decoration: none; cursor: pointer; }
+.arena-list__icon { flex: none; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--primary-soft); }
+.arena-list__icon .arena-game-icon { color: var(--primary-dark); }
 .arena-list__text { display: grid; flex: 1 1 auto; min-width: 0; }
-.arena-list__text small { color: var(--muted); overflow-wrap: anywhere; }
+.arena-list__text small { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .arena-list__chevron { flex: none; color: var(--muted); }
-.arena-list__row > .btn, .arena-list__row > button { flex: none; white-space: nowrap; }
-
-.arena-rank-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; }
-.arena-rank-row__name { min-width: 0; overflow-wrap: anywhere; }
-.arena-rank-row__rating { font-variant-numeric: tabular-nums; }
+.arena-mode-icon { margin-left: 6px; vertical-align: -1px; color: var(--muted); }
+.arena-row-actions { display: inline-flex; flex: none; align-items: center; gap: 6px; }
+:root:root:root:root .arena-list__row .arena-row-action { flex: none; display: inline-flex; align-items: center; justify-content: center; align-self: center; height: 34px; min-height: 34px !important; max-height: 34px; min-width: 0; padding: 0 16px !important; font-size: 14px !important; line-height: 1; border-radius: 10px; white-space: nowrap; text-decoration: none; }
+.arena-empty { display: flex; align-items: center; gap: 10px; margin: 0; padding: 14px 16px; border-radius: 12px; background: color-mix(in srgb, var(--line) 45%, var(--surface)); color: var(--muted); }
+.arena-confirm-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; text-align: left; }
 
 /* Filter chips: the app's .chip, the active one in the theme colour. */
-:root:root .chip.arena-filter { border: 0; box-shadow: none; min-height: 28px; cursor: pointer; }
+:root:root .chip.arena-filter { border: 0; box-shadow: none; min-height: 32px; cursor: pointer; }
 :root:root .chip.arena-filter.is-active { background: var(--primary); color: var(--primary-ink); font-weight: 600; }
 
-/* Result card = the solo .game-result; only the XH line is added. */
+/* Mini game › last card: season colours + scenery on the right, no character. */
+:root:root .arena-entry { position: relative; display: flex; align-items: center; gap: 14px; min-height: 92px; padding: 18px 22px; overflow: hidden; border-radius: 20px; color: var(--primary-ink); text-decoration: none; background: linear-gradient(100deg, var(--primary-dark) 0%, var(--primary) 70%); box-shadow: 0 8px 22px var(--primary-glow); }
+.arena-entry__icon { position: relative; z-index: 1; flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: color-mix(in srgb, white 16%, transparent); }
+.arena-entry__text { position: relative; z-index: 1; display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.arena-entry__text b { font-size: 20px; line-height: 1.2; }
+.arena-entry__text small { font-size: 14px; opacity: .9; }
+.arena-entry__scene { position: absolute; inset: 0 0 0 auto; width: 46%; background-size: cover; background-position: center; opacity: .5; -webkit-mask-image: linear-gradient(90deg, transparent, #000 60%); mask-image: linear-gradient(90deg, transparent, #000 60%); pointer-events: none; }
+.arena-entry__chevron { position: relative; z-index: 1; flex: none; }
+:root:root:root .arena-entry :is(b, small, .arena-entry__chevron) { color: var(--primary-ink); }
+:root:root:root .arena-entry .arena-entry__text small { opacity: 1; font-weight: 500; }
+:root:root:root .arena-entry .arena-entry__icon { background: var(--primary-ink); color: var(--primary-dark); box-shadow: 0 4px 12px rgba(0, 0, 0, .18); }
+:root:root:root .arena-entry.is-locked .arena-entry__icon { color: #5c5c56; }
+:root:root a.arena-entry:hover { filter: brightness(1.05); }
+:root:root .arena-entry.is-locked { background: linear-gradient(100deg, color-mix(in srgb, var(--primary-dark) 45%, #8a8a84) 0%, color-mix(in srgb, var(--primary) 35%, #a3a39c) 70%); box-shadow: none; }
+.arena-entry.is-locked .arena-entry__scene { opacity: .25; filter: grayscale(1); }
+
+/* Banner of the arena page: same colours and scenery, larger. */
+.arena-banner { position: relative; overflow: hidden; display: flex; align-items: center; min-height: 168px; padding: 26px 32px; border-radius: 24px; color: var(--primary-ink); background: linear-gradient(100deg, var(--primary-dark) 0%, var(--primary) 62%); box-shadow: 0 10px 26px var(--primary-glow); }
+.arena-banner__scene { position: absolute; inset: 0 0 0 auto; width: 58%; background-size: cover; background-position: center; opacity: .55; -webkit-mask-image: linear-gradient(90deg, transparent, #000 55%); mask-image: linear-gradient(90deg, transparent, #000 55%); pointer-events: none; }
+.arena-banner__text { position: relative; z-index: 1; display: grid; gap: 6px; min-width: 0; }
+.arena-banner__eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; opacity: .92; }
+:root:root:root .arena-banner h1 { margin: 0; color: inherit; font-size: 36px; line-height: 1.1; }
+:root:root:root .arena-banner :is(.info-title-text, .info-tip-button, .info-tip-button svg, p, span) { color: var(--primary-ink); }
+.arena-banner p { margin: 0; font-size: 16px; opacity: .95; }
+:root:root .arena-page .arena-tabs { margin: 0; }
+
+/* Đấu: two panels side by side (stacked on tablet and phone). */
+.arena-play { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.arena-panel { display: grid; gap: 14px; margin: 0; padding: 22px; border-radius: 20px; }
+.arena-panel h2 { margin: 0; }
+.arena-panel__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.arena-panel__sub { padding-top: 12px; border-top: 1px solid var(--line); }
+:root:root .arena-open-badge { background: color-mix(in srgb, #F5C842 22%, var(--surface)); color: #6B4A06; font-weight: 600; white-space: nowrap; }
+:root:root .arena-mode-tabs { width: auto; justify-self: start; }
+:root:root .arena-mode-tabs button { flex: 0 0 auto; min-height: 36px; padding: 0 22px; }
+.arena-field { display: grid; gap: 8px; }
+.arena-field__label { font-size: 14px; color: var(--muted); }
+.arena-field select { width: 100%; }
+.arena-game-picks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+:root:root:root .arena-game-pick { display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-width: 0; min-height: 50px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; font-weight: 500; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: none; cursor: pointer; }
+:root:root:root .arena-game-pick.is-selected { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); font-weight: 700; }
+.arena-game-pick .arena-game-icon { color: var(--primary-dark); }
+.arena-set { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-radius: 12px; background: color-mix(in srgb, var(--primary-soft) 60%, var(--surface)); }
+.arena-set > span { display: grid; gap: 2px; min-width: 0; }
+.arena-set small { color: var(--muted); font-size: 13px; }
+.arena-set b { overflow-wrap: anywhere; }
+:root:root .arena-set__change { flex: none; color: var(--primary-dark); font-weight: 600; text-decoration: none; }
+:root:root .arena-submit { justify-self: start; min-width: 180px; }
+.arena-note { margin: 0; }
+
+/* Bảng xếp hạng: chips + level on one row, a table with the six games and the total. */
+.arena-board__filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.arena-board__filters .chips { flex: 1 1 auto; }
+:root:root .arena-board__level { flex: none; width: auto; min-width: 84px; }
+.arena-table-wrap { overflow-x: auto; }
+.arena-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.arena-table th { padding: 10px 12px; font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--muted); text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.arena-table th:nth-child(-n+2) { text-align: left; }
+.arena-table td { padding: 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.arena-table td:nth-child(-n+2) { text-align: left; }
+.arena-table .is-sorted { color: var(--text); font-weight: 600; }
+.arena-table__name { font-weight: 500; }
+:root:root .arena-table td.arena-table__total { color: var(--primary-dark); font-weight: 700; font-size: 17px; }
+.arena-table tr.is-me td { background: color-mix(in srgb, var(--primary-soft) 70%, var(--surface)); }
+.arena-table tr.is-me td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
+.arena-rank { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; border-radius: 8px; background: color-mix(in srgb, var(--line) 55%, var(--surface)); font-weight: 700; }
+.arena-rank.is-first { background: color-mix(in srgb, #F5C842 30%, var(--surface)); color: #6B4A06; }
+.arena-board__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; }
+.arena-board__foot b { color: var(--primary-dark); }
+.arena-board__foot .small { display: inline-flex; align-items: center; gap: 4px; }
+.arena-board-row { border-bottom: 1px solid var(--line); }
+.arena-board-row.is-me { background: color-mix(in srgb, var(--primary-soft) 70%, var(--surface)); border-radius: 10px; }
+:root:root:root .arena-board-row__main { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto 18px; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 4px 6px; border: 0; background: none; box-shadow: none; color: inherit; font: inherit; text-align: left; }
+.arena-board-row__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.arena-board-row__chev { color: var(--muted); transition: transform .15s; }
+.arena-board-row__chev.is-open { transform: rotate(180deg); }
+.arena-board-row__games { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 14px; margin: 0; padding: 4px 10px 12px 48px; font-size: 13px; }
+.arena-board-row__games > div { display: flex; justify-content: space-between; gap: 6px; }
+.arena-board-row__games dt { color: var(--muted); }
+.arena-board-row__games dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* Result card = the solo .game-result; popups ≤ 80% height with a sticky header. */
 .game-result .arena-result__xh { margin-top: 4px; color: var(--text); }
 .arena-result__xh .badge { margin-right: 2px; }
+.arena-result__line { margin: 2px 0 0; color: var(--text) !important; }
+.arena-result__detail { margin: 2px 0 0 !important; }
 .arena-state { display: grid; gap: 8px; justify-items: start; }
 .arena-state h2, .arena-state p { margin: 0; }
 .arena-actions { gap: 8px; flex-wrap: nowrap; }
-
-/* Rank 1–3: round medal (public/arena files) under a two-strap ribbon in the theme colours; 4+ plain. */
-.rank-badge { --medal: 24px; display: inline-grid; justify-items: center; justify-self: center; width: calc(var(--medal) + 4px); font-weight: 700; font-variant-numeric: tabular-nums; }
-.rank-badge--large { --medal: 40px; }
-.rank-badge__ribbon { display: flex; justify-content: center; height: calc(var(--medal) * .62); margin-bottom: calc(var(--medal) * -.22); }
-.rank-badge__ribbon i { display: block; width: calc(var(--medal) * .42); height: 100%; margin: 0 calc(var(--medal) * -.07); background: var(--primary); clip-path: polygon(0 0, 52% 0, 100% 100%, 48% 100%); }
-.rank-badge__ribbon i + i { background: var(--primary-dark); clip-path: polygon(48% 0, 100% 0, 52% 100%, 0 100%); }
-.rank-badge__medal { position: relative; display: block; width: var(--medal); height: var(--medal); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .2)); }
-.rank-badge--plain { color: var(--muted); }
-
-/* Popups ≤ 80% height, sticky header with × top-right. */
 .modal-backdrop > .dialog.arena-dialog { width: min(520px, calc(100vw - 32px)); max-height: 80dvh; overflow: auto; padding-top: 0; }
 .dialog.arena-dialog > .row.between:first-child { position: sticky; top: 0; z-index: 2; margin: 0 -22px 8px; padding: 14px 22px 10px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .dialog.arena-dialog > .row.between:first-child h2 { margin: 0; }
 .dialog.arena-dialog .game-result { border: 0; padding: 0; box-shadow: none; }
-.arena-invite-dialog { display: grid; gap: 10px; }
 
-/* Game header: title block left, the existing red Thoát right, on one row. */
+/* Match page: title block left, the red Thoát right; outside play one centred 560px column. */
 :root:root .arena-page .arena-match-header { display: flex; flex-wrap: nowrap !important; align-items: flex-start; justify-content: space-between; gap: 8px; }
 :root:root .arena-page .arena-match-header > .arena-match-header__text { flex: 1 1 auto !important; min-width: 0; }
 :root:root .arena-page .arena-match-header > .game-exit-link { flex: none; }
-
-/* Mini game hub: "Đấu trường" is its own card under the personal games; the whole card opens /arena. */
-.arena-entry-card { padding-block: 14px; }
-:root:root .arena-entry-card__link { display: flex; align-items: center; gap: 12px; min-width: 0; color: inherit; text-decoration: none; }
-.arena-entry-card__text { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
-.arena-entry-card__text h2 { margin: 0; }
-.arena-entry-card__icon { flex: none; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--primary-soft); color: var(--primary-dark); }
-a.arena-entry-card__link:hover h2 { text-decoration: underline; text-underline-offset: 3px; }
-.arena-entry-card.is-locked .arena-entry-card__icon { background: var(--line); color: var(--muted); }
-
-/* Arena page: same structure as the Mini game page (back link, page title, numbered cards). */
-:root:root .arena-back-link { display: inline-flex; align-items: center; gap: 6px; justify-self: start; color: var(--text); font-weight: 600; text-decoration: none; }
-:root:root .arena-back-link:hover { text-decoration: underline; text-underline-offset: 3px; }
-.arena-confirm-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; text-align: left; }
-
-/* "Chọn trò để đấu": the Mini game .game-tile, with the per-game score and a "Đấu" pill in the foot. */
-:root:root:root .arena-game-tile { width: 100%; font: inherit; color: inherit; text-align: left; cursor: pointer; }
-:root:root:root .arena-game-tile:disabled { cursor: progress; opacity: .7; }
-.arena-game-tile .game-icon .arena-game-icon { color: inherit; }
-:root:root:root .arena-game-tile .arena-game-tile__foot { display: flex; justify-self: stretch; width: 100%; justify-content: space-between; align-items: center; } .arena-game-tile__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
-.arena-game-tile__cta { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 12px; border-radius: 999px; background: var(--primary); color: var(--primary-ink); font-size: 13px; font-weight: 700; white-space: nowrap; }
-
-/* My matches: one or two compact actions at the row's right end. */
-.arena-row-actions { display: inline-flex; flex: none; align-items: center; gap: 6px; }
-
-/* Friendly: a normal card with an icon, one line and a real button (not a bare text link). */
-.arena-friendly-card__row { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.arena-friendly-card__icon { flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--primary-soft); color: var(--primary-dark); }
-.arena-friendly-card__text { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
-.arena-friendly-card__text h2 { margin: 0; }
-:root:root .arena-friendly-card__button { flex: none; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-
-/* Podium: ranks 1–3 as three raised steps (2 · 1 · 3), the rest stay in the list below. */
-.arena-podium { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 10px; }
-.arena-podium__step { display: grid; justify-items: center; gap: 4px; min-width: 0; padding: 14px 8px 12px; border-radius: 16px 16px 10px 10px; background: var(--tile-3); border: 1px solid var(--line); text-align: center; }
-.arena-podium__step--1 { padding-top: 22px; padding-bottom: 22px; background: color-mix(in srgb, var(--primary) 16%, white); border-color: var(--primary-line); }
-.arena-podium__step--3 { padding-bottom: 8px; }
-.arena-podium__step.is-me { outline: 2px solid var(--primary); outline-offset: -2px; }
-.arena-podium__step--1 .rank-badge--large { --medal: 52px; }
-.arena-podium__name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
-.arena-podium__name small { color: var(--muted); font-weight: 400; }
-.arena-podium__rating { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--primary-dark); }
-
-
-@media (max-width: 600px) {
-  .arena-page { gap: 10px; }
-  .arena-section { gap: 8px; }
-  .arena-list__row { min-height: 44px; padding: 2px 4px; }
-  .arena-list__text b { font-size: 14px; }
-  .arena-list__text small { font-size: 12px; }
-  .dialog.arena-dialog > .row.between:first-child { margin: 0 -16px 8px; padding: 10px 16px 8px; }
-  .arena-entry-card { padding-block: 10px; }
-  .arena-entry-card__icon { width: 34px; height: 34px; border-radius: 10px; }
-  :root:root:root .learner-root .arena-page .arena-game-tile .arena-game-tile__foot { grid-column: 2; font-size: 12px; }
-  .arena-game-tile__cta { display: none; }
-  .arena-friendly-card__row { gap: 10px; }
-  .arena-friendly-card__icon { width: 34px; height: 34px; border-radius: 10px; }
-  .arena-friendly-card__text .small { font-size: 12px; }
-  .arena-row-actions { gap: 4px; }
-  .arena-podium { gap: 6px; }
-  .arena-podium__step { padding: 10px 4px 8px; }
-  .arena-podium__step--1 { padding-top: 14px; padding-bottom: 14px; }
-  .arena-podium__name { font-size: 12px; }
-  .arena-podium__rating { font-size: 13px; }
-}
-/* List rows: the tappable text starts flush left in every row. */
-:root:root:root .arena-page .arena-list__open { padding-left: 0 !important; padding-right: 0 !important; }
-
-/* Row actions ("Chơi" link and "Nhận" button): one compact size, centred in the row, at every width. */
-:root:root:root:root .arena-list__row .arena-row-action { flex: none; display: inline-flex; align-items: center; justify-content: center; align-self: center; height: 30px; min-height: 30px !important; max-height: 30px; min-width: 0; padding: 0 12px !important; font-size: 13px !important; line-height: 1; border-radius: 999px; white-space: nowrap; text-decoration: none; }
-.arena-mode-icon { margin-left: 6px; vertical-align: -1px; color: var(--muted); }
-.arena-list__text small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-/* Match page states and the result card: centred at a readable width under the header (tablet/desktop). */
+.arena-page .game-board { display: grid; }
 .arena-page .game-board > .arena-state,
 .arena-page .game-board > .arena-result { width: 100%; max-width: 560px; justify-self: center; margin-inline: auto; }
-.arena-page .game-board { display: grid; }
-.arena-result__line { margin: 2px 0 0; color: var(--text) !important; }
-.arena-result__detail { margin: 2px 0 0 !important; }
-/* Outside play the match page is one centred 560px column: header and card line up. */
 :root:root:root .app-learner-page.arena-page--narrow { max-width: 560px !important; margin-inline: auto !important; }
 
-/* Arena game cards copy the Mini game tile box (Games.tsx gameTileStyle) on tablet and desktop. */
-@media (min-width: 601px) {
-  :root:root:root .arena-game-tile { display: grid; align-content: start; align-items: stretch; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 5px; min-height: 130px; min-width: 0; height: 100%; border-radius: 14px; padding: 14px; background: var(--primary-soft); overflow-wrap: anywhere; }
+@media (max-width: 1024px) {
+  .arena-banner { min-height: 140px; padding: 22px 24px; }
+  :root:root:root .arena-banner h1 { font-size: 28px; }
+  .arena-play { grid-template-columns: minmax(0, 1fr); }
 }
-
-/* Phone: same tinted tile as the Mini game cards. */
 @media (max-width: 600px) {
-  :root:root:root .learner-root .arena-page .arena-game-tile { background: var(--primary-soft); border-radius: 14px; }
-  .arena-podium .rank-badge--large { --medal: 32px; }
-  .arena-podium__step--1 .rank-badge--large { --medal: 40px; }
-}
-
-/* Mini game › 4. Đấu trường (owner 19/11): one card in the Mini game page. */
-.arena-section-card { display: grid; gap: 10px; }
-.arena-section-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.arena-section-head > h2 { margin: 0; flex: 1 1 auto; min-width: 0; }
-.arena-section-icon { flex: none; display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--primary-soft); color: var(--primary-dark); }
-.arena-section-card.is-locked .arena-section-icon { background: var(--line); color: var(--muted); }
-.arena-section-card.is-locked > p { margin: 0; }
-:root:root .arena-board-link { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--primary-dark); font-weight: 600; font-size: 14px; text-decoration: none; white-space: nowrap; }
-:root:root .arena-board-link:hover { text-decoration: underline; text-underline-offset: 3px; }
-.arena-section-lead { margin: 0; }
-.arena-start-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.arena-start-row > select { flex: 1 1 180px; min-width: 0; max-width: 280px; }
-:root:root .arena-start-button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.arena-invite-inline { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2, var(--primary-soft)); }
-.arena-invite-inline__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
-.arena-invite-inline__actions > .small { margin-right: auto; }
-.arena-subhead { margin: 4px 0 0; font-size: 15px; }
-
-/* Leaderboard rows: rank · name · score · Mời, with the invite picker opening under the row. */
-:root:root .arena-rank-row { grid-template-columns: 32px minmax(0, 1fr) auto 64px; align-items: center; column-gap: 10px; }
-.arena-rank-row__invite { justify-self: end; }
-.arena-rank-invite { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0 4px 42px; }
-.arena-rank-invite > select { min-width: 0; max-width: 220px; }
-.arena-rank-row.is-open { background: var(--primary-soft); border-radius: 8px; }
-
-@media (max-width: 600px) {
-  .arena-section-head { gap: 8px; }
-  .arena-section-icon { width: 30px; height: 30px; }
-  :root:root .arena-board-link { font-size: 13px; }
-  .arena-start-row > select { flex-basis: 100%; max-width: none; }
-  .arena-start-row > .arena-start-button { flex: 1 1 0; justify-content: center; }
-  :root:root .arena-rank-row { grid-template-columns: 28px minmax(0, 1fr) auto 52px; column-gap: 6px; }
-  .arena-rank-invite { padding-left: 0; }
+  .arena-page { gap: 10px; }
+  :root:root .arena-entry { min-height: 72px; padding: 12px 14px; gap: 10px; border-radius: 16px; }
+  .arena-entry__icon { width: 36px; height: 36px; }
+  .arena-entry__text b { font-size: 17px; }
+  .arena-entry__text small { font-size: 12px; }
+  .arena-banner { min-height: 0; padding: 16px; border-radius: 18px; }
+  :root:root:root .arena-banner h1 { font-size: 22px; }
+  .arena-banner p, .arena-banner__eyebrow { font-size: 13px; }
+  .arena-panel { padding: 14px; gap: 10px; border-radius: 16px; }
+  .arena-game-picks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  :root:root:root .arena-game-pick { min-height: 40px; padding: 0 10px; gap: 8px; font-size: 14px; }
+  .arena-list__icon { width: 34px; height: 34px; }
+  .arena-list__row { min-height: 48px; padding: 2px; }
+  .arena-list__text b { font-size: 14px; }
+  .arena-list__text small { font-size: 12px; }
+  :root:root:root:root .arena-list__row .arena-row-action { height: 30px; min-height: 30px !important; max-height: 30px; padding: 0 12px !important; font-size: 13px !important; }
+  :root:root .arena-submit { justify-self: stretch; }
+  .dialog.arena-dialog > .row.between:first-child { margin: 0 -16px 8px; padding: 10px 16px 8px; }
 }

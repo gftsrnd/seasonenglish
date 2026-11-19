@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ArenaHome, ArenaLeaderboard as Board, ArenaMatch } from "../../../api/arena.js";
 import { ModalProvider } from "../../shared/ModalProvider.js";
 import { ArenaSeasonSetting } from "../../manager/ArenaSeasonSetting.js";
-import { ArenaSection, myMatchRows } from "./ArenaHub.js";
+import { ArenaEntryCard, myMatchRows } from "./ArenaHub.js";
 import { ArenaLeaderboard } from "./ArenaLeaderboard.js";
 import { ArenaMatchScreen } from "./ArenaMatchScreen.js";
 import { ArenaResultCard } from "./ArenaResultCard.js";
@@ -93,123 +93,87 @@ const board: Board = {
   ]
 };
 
-describe("arena leaderboard screen", () => {
+describe("Đấu trường page", () => {
   const client = (overrides: Partial<Record<string, unknown>> = {}) => ({
-    home: vi.fn().mockResolvedValue(home()), leaderboard: vi.fn().mockResolvedValue(board), inviteFriendly: vi.fn().mockResolvedValue(match()),
+    home: vi.fn().mockResolvedValue({ ...home({ active: [match()], done: [settled("win", 50), match({ id: "x", status: "cancelled" })] }), rank: { position: 4, of: 5 }, set: { topic: "project change", words: 12, kind: "personal" } }),
+    leaderboard: vi.fn().mockImplementation(({ game }: { game?: string }) => Promise.resolve({ ...board, game: game ?? "total" })),
+    challenges: vi.fn().mockResolvedValue({ challenges: [{ id: "c1", game: "sort", setKind: "personal", setTopic: "budget", acceptDeadline: future, createdAt: future }] }),
+    postChallenge: vi.fn().mockResolvedValue(match({ status: "open" })),
+    acceptChallenge: vi.fn().mockResolvedValue(match()),
+    inviteFriendly: vi.fn().mockResolvedValue(match()), answerFriendly: vi.fn(),
+    cancel: vi.fn().mockResolvedValue(match({ status: "cancelled" })), forfeit: vi.fn(),
     ...overrides
   });
+  const page = (api: ReturnType<typeof client>, navigate = vi.fn(), notify = vi.fn()) =>
+    render(<ModalProvider><ArenaLeaderboard navigate={navigate} notify={notify} learnerId="me" client={api as never} /></ModalProvider>);
 
-  it("titles Xếp hạng B1 with the rules ⓘ, links back to Mini game and never shows Hạng x/y", async () => {
-    render(<ArenaLeaderboard navigate={vi.fn()} notify={vi.fn()} learnerId="me" client={client() as never} />);
-    expect(await screen.findByRole("heading", { level: 1, name: /Xếp hạng B1/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Về Mini game/ })).toHaveAttribute("href", "/games");
+  it("shows the season banner, the rules ⓘ, the back link and the two tabs", async () => {
+    page(client());
+    expect(await screen.findByRole("heading", { level: 1, name: /Đấu trường B1/ })).toBeInTheDocument();
+    expect(screen.getByText(/6\.000 điểm XH tổng · Hạng 4\/5/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Luật đấu trường" })).toBeInTheDocument();
-    await screen.findByText("An");
-    expect(document.body.textContent).not.toMatch(/Hạng\s*\d+\s*\/\s*\d+/);
+    expect(screen.getByRole("link", { name: /Về Mini game/ })).toHaveAttribute("href", "/games");
+    expect(screen.getByRole("tab", { name: "Đấu" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Bảng xếp hạng" })).toBeInTheDocument();
   });
 
-  it("gives ranks 1–3 medals, 4+ plain numbers, my row highlighted without Mời", async () => {
-    render(<ArenaLeaderboard navigate={vi.fn()} notify={vi.fn()} learnerId="me" client={client() as never} />);
-    await screen.findByText("An");
-    expect(screen.getByRole("img", { name: "Hạng 1 · huy chương vàng" })).toBeInTheDocument();
-    expect(document.querySelectorAll(".rank-badge--medal")).toHaveLength(3);
-    const four = document.querySelector('[data-rank="4"]') as HTMLElement;
-    expect(four.querySelector(".rank-badge--plain")).toHaveTextContent("4");
-    expect(four).toHaveClass("is-me");
-    expect(within(four).queryByRole("button", { name: /Mời/ })).toBeNull();
-  });
-
-  it("shows one line and no medals while everyone is still on the starting score", async () => {
-    const tied: Board = { ...board, entries: board.entries.slice(0, 3).map((entry) => ({ ...entry, rank: 1, rating: 6_000 })) };
-    render(<ArenaLeaderboard navigate={vi.fn()} notify={vi.fn()} learnerId="me" client={client({ leaderboard: vi.fn().mockResolvedValue(tied) }) as never} />);
-    expect(await screen.findByText(/Chưa có trận nào có kết quả\. 3 bạn/)).toBeInTheDocument();
-    expect(document.querySelectorAll(".rank-badge--medal")).toHaveLength(0);
-  });
-
-  it("invites a player from their row (game picked inline, no popup) and filters by game", async () => {
+  it("posts a ranked challenge with the set in use after confirming, and hides cancelled matches", async () => {
     const api = client();
-    const notify = vi.fn();
-    render(<ArenaLeaderboard navigate={vi.fn()} notify={notify} learnerId="me" client={api as never} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Mời Bình giao hữu" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.change(screen.getByLabelText("Trò giao hữu"), { target: { value: "sort" } });
-    fireEvent.click(screen.getByRole("button", { name: "Gửi lời mời" }));
-    await waitFor(() => expect(api.inviteFriendly).toHaveBeenCalledWith(expect.objectContaining({ opponentId: "b", game: "sort" })));
-    expect(notify).toHaveBeenCalledWith("Đã mời Bình giao hữu Phân loại từ.");
-    fireEvent.click(screen.getByRole("button", { name: "Ô chữ" }));
-    await waitFor(() => expect(api.leaderboard).toHaveBeenCalledWith({ game: "crossword" }));
-  });
-});
-
-describe("Mini game › 4. Đấu trường", () => {
-  const client = (overrides: Partial<Record<string, unknown>> = {}) => ({
-    home: vi.fn().mockResolvedValue(home({ active: [match()], done: [settled("win", 50), match({ id: "x", status: "cancelled" })] })),
-    leaderboard: vi.fn().mockResolvedValue(board), answerFriendly: vi.fn(), inviteFriendly: vi.fn().mockResolvedValue(match()),
-    quickMatch: vi.fn(), cancel: vi.fn().mockResolvedValue(match({ status: "cancelled" })), forfeit: vi.fn(),
-    ...overrides
-  });
-  const section = (api: ReturnType<typeof client>, navigate = vi.fn(), level: "A2" | "B1" = "B1") =>
-    render(<ModalProvider><ArenaSection level={level} setTopic="project change" hasWords learnerId="me" navigate={navigate} client={api as never} /></ModalProvider>);
-
-  it("below B1 only says it opens from B1", () => {
-    const api = client();
-    section(api, vi.fn(), "A2");
-    expect(screen.getByText("Mở từ B1. Bạn đang ở mức A2.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Đấu xếp hạng/ })).toBeNull();
-    expect(api.home).not.toHaveBeenCalled();
-  });
-
-  it("names the word set of section 2, links the leaderboard and hides cancelled matches", async () => {
-    section(client());
-    expect(await screen.findByText(/Tới lượt bạn · \d+ giờ/)).toBeInTheDocument();
-    expect(screen.getByText("project change")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Bảng xếp hạng/ })).toHaveAttribute("href", "/arena");
+    page(api);
+    expect(await screen.findByText("project change · 12 từ")).toBeInTheDocument();
     expect(screen.queryByText("Đã huỷ")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Xem kết quả/ }));
-    expect(await screen.findByRole("dialog", { name: "Kết quả trận" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: /Phân loại từ/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Đăng thách đấu" }));
+    expect(await screen.findByRole("dialog", { name: "Đăng thách đấu Phân loại từ?" })).toBeInTheDocument();
+    expect(api.postChallenge).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Đăng" }));
+    await waitFor(() => expect(api.postChallenge).toHaveBeenCalledWith(expect.objectContaining({ game: "sort" })));
   });
 
-  it("asks first, then plays at once when a challenge was waiting", async () => {
+  it("accepts an open challenge after confirming and opens the match", async () => {
     const navigate = vi.fn();
-    const api = client({ quickMatch: vi.fn().mockResolvedValue({ joined: true, match: match() }) });
-    section(api, navigate);
-    fireEvent.change(await screen.findByLabelText("Chọn trò để đấu"), { target: { value: "typing" } });
-    fireEvent.click(screen.getByRole("button", { name: /Đấu xếp hạng/ }));
-    expect(await screen.findByRole("dialog", { name: "Đấu xếp hạng Đua gõ từ?" })).toBeInTheDocument();
-    expect(api.quickMatch).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Đấu" }));
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/arena/match/${ID}`));
-    expect(api.quickMatch).toHaveBeenCalledWith(expect.objectContaining({ game: "typing" }));
+    const api = client();
+    page(api, navigate);
+    expect(await screen.findByText(/budget · còn \d+ giờ/)).toBeInTheDocument();
+    const row = screen.getByText(/budget · còn/).closest("li") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Nhận" }));
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Nhận thách đấu Phân loại từ?" })).getByRole("button", { name: "Nhận" }));
+    await waitFor(() => expect(api.acceptChallenge).toHaveBeenCalledWith("c1"));
+    expect(navigate).toHaveBeenCalledWith(`/arena/match/${ID}`);
   });
 
-  it("posts a challenge and stays on the page (no waiting screen)", async () => {
-    const navigate = vi.fn();
-    const api = client({ quickMatch: vi.fn().mockResolvedValue({ joined: false, match: match({ status: "open" }) }) });
-    section(api, navigate);
-    fireEvent.click(await screen.findByRole("button", { name: /Đấu xếp hạng/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Đấu" }));
-    await waitFor(() => expect(api.home).toHaveBeenCalledTimes(2));
-    expect(navigate).not.toHaveBeenCalled();
-  });
-
-  it("cancels my unanswered challenge after confirming and reloads the list", async () => {
-    const api = client({ home: vi.fn().mockResolvedValue(home({ open: [match({ status: "open", opponent: null })] })) });
-    section(api);
+  it("cancels my unanswered challenge after confirming", async () => {
+    const api = client({ home: vi.fn().mockResolvedValue({ ...home({ open: [match({ status: "open", opponent: null })] }), set: { topic: "t", words: 12, kind: "personal" } }) });
+    page(api);
     fireEvent.click(await screen.findByRole("button", { name: "Huỷ" }));
     fireEvent.click(await screen.findByRole("button", { name: "Huỷ thách đấu" }));
     await waitFor(() => expect(api.cancel).toHaveBeenCalledWith(ID));
-    await waitFor(() => expect(api.home).toHaveBeenCalledTimes(2));
   });
 
-  it("invites a friend from a name search inside the card", async () => {
+  it("locks posting at 3 open matches", async () => {
+    page(client({ home: vi.fn().mockResolvedValue({ ...home(), openRanked: 3, set: { topic: "t", words: 12, kind: "personal" } }) }));
+    expect(await screen.findByRole("button", { name: "Đăng thách đấu" })).toBeDisabled();
+    expect(screen.getByText(/Đã đủ 3 trận đang mở/)).toBeInTheDocument();
+  });
+
+  it("invites a friend by picking a person in the Giao hữu mode", async () => {
     const api = client();
-    section(api);
-    fireEvent.click(await screen.findByRole("button", { name: /Mời giao hữu/ }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.change(screen.getByLabelText("Tìm bạn học"), { target: { value: "bì" } });
-    fireEvent.click(await screen.findByRole("option", { name: /Bình/ }));
+    page(api);
+    fireEvent.click(await screen.findByRole("tab", { name: "Giao hữu" }));
+    const select = await screen.findByLabelText("Người nhận");
+    await waitFor(() => expect(within(select).getAllByRole("option").length).toBeGreaterThan(1));
+    fireEvent.change(select, { target: { value: "b" } });
     fireEvent.click(screen.getByRole("button", { name: "Gửi lời mời" }));
     await waitFor(() => expect(api.inviteFriendly).toHaveBeenCalledWith(expect.objectContaining({ opponentId: "b", game: "scramble" })));
+  });
+
+  it("shows the leaderboard table with the six games, my row and 'Bạn đang hạng'", async () => {
+    page(client());
+    fireEvent.click(await screen.findByRole("tab", { name: "Bảng xếp hạng" }));
+    expect(await screen.findByRole("columnheader", { name: "Season catch" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Tổng" })).toBeInTheDocument();
+    expect(screen.getByText("Bạn đang hạng 4/5")).toBeInTheDocument();
+    expect(document.querySelector("tr.is-me")).toHaveTextContent("Bạn");
   });
 
   it("keeps Trận của bạn to three rows, invites and my turn first, results only when settled", () => {
@@ -218,6 +182,17 @@ describe("Mini game › 4. Đấu trường", () => {
       active: [match({ id: "t" })], done: [match({ id: "c", status: "cancelled" }), settled("win", 50)]
     }));
     expect(rows.map((row) => row.id)).toEqual(["i", "t", "o"]);
+  });
+});
+
+describe("Mini game › Đấu trường card", () => {
+  it("opens /arena from B1 and only says it opens from B1 below", async () => {
+    const { unmount } = render(<ArenaEntryCard level="B1" navigate={vi.fn()} />);
+    expect(screen.getByRole("link", { name: "Vào Đấu trường B1" })).toHaveAttribute("href", "/arena");
+    unmount();
+    render(<ArenaEntryCard level="A2" navigate={vi.fn()} />);
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByText("Mở từ B1. Bạn đang ở mức A2.")).toBeInTheDocument();
   });
 });
 
