@@ -462,8 +462,7 @@
   :root:root:root .manager-root .manager-monthly-report .rhead .eyebrow { display: block; font-size: 11px; margin: 0; }
   :root:root:root .manager-root .manager-monthly-report-title h2 { font-size: 18px; line-height: 1.25; white-space: normal; overflow: visible; text-overflow: clip; margin: 2px 0; }
   :root:root:root .manager-root .manager-monthly-report-title .meta { font-size: 12.5px; white-space: normal; overflow: visible; }
-  /* Owner 19/11: PDF / copy / download sit on the right. */
-  :root:root:root .manager-root .manager-monthly-report-actions { justify-content: flex-end; }
+  :root:root:root .manager-root .manager-monthly-report-actions { justify-content: flex-start; }
 
   /* Khảo sát: month, Xem tháng and reload on one centred row, same height. */
   :root:root:root .manager-root .monthly-survey-month-filter { display: grid !important; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-rows: auto 34px; align-items: center; column-gap: 8px; row-gap: 2px; }
