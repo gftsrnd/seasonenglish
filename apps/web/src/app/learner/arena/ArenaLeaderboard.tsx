@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CefrLevel, GameKey } from "@e4s/contracts";
-import { ChevronRight, Trophy, Users } from "lucide-react";
+import { ChevronRight, Swords, Trophy, Users } from "lucide-react";
+import { currentSeasonVisual } from "../../games/season-visual.js";
+import { ProductArt } from "../../shared/media/ProductArt.js";
 import { arenaApiClient, type ArenaApiClient, type ArenaBoardGame, type ArenaHome, type ArenaLeaderboard as Board, type ArenaMatch } from "../../../api/arena.js";
 import { InfoTip } from "../../shared/CompactUi.js";
 import { Pager } from "../../shared/Pager.js";
@@ -90,13 +92,29 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
   const visible = entries.slice((current - 1) * size, current * size);
   const mine = (entry: Board["entries"][number]) => learnerId ? entry.learnerId === learnerId : Boolean(board?.me && entry.rank === board.me.rank && entry.rating === board.me.rating);
 
+  const visual = currentSeasonVisual();
+  const daysLeft = home.season ? Math.max(0, Math.ceil((Date.parse(`${home.season.endsOn}T00:00:00+07:00`) - Date.now()) / 86_400_000)) : null;
   return <div className="app-learner-page arena-page arena-board-page">
-    {title(home.level ?? "")}
+    <section className="arena-hero" aria-labelledby="arena-hero-title">
+      <div className="arena-hero__text">
+        <AppLink className="arena-hero__back" href="/games" navigate={navigate}>Mini game</AppLink>
+        <h1 id="arena-hero-title" className="info-title"><span className="info-title-text">Đấu trường {home.level ?? ""}</span><InfoTip label="Luật đấu trường" text={<ol className="arena-rules">{ARENA_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ol>} /></h1>
+        <p className="arena-hero__lead">Thắng bạn cùng cấp, leo bảng xếp hạng mùa này.</p>
+        <div className="arena-hero__stats">
+          <span className="arena-stat"><strong>{numberFormat.format(home.total)}</strong><small>Tổng điểm</small></span>
+          <span className="arena-stat"><strong>{home.openRanked}/{home.maxOpenRanked}</strong><small>Trận đang mở</small></span>
+          {daysLeft !== null ? <span className="arena-stat"><strong>{daysLeft}</strong><small>Ngày còn lại</small></span> : null}
+        </div>
+      </div>
+      <ProductArt id={visual.heroArt} className="arena-hero__art" decorative />
+    </section>
 
     <section className="card arena-section" aria-labelledby="arena-pick-title">
       <h2 id="arena-pick-title">Chọn trò để đấu</h2>
-      <div className="arena-pick-grid">{ARENA_GAMES.map((key) => <button key={key} type="button" className="btn arena-pick" disabled={Boolean(again.busyGame)} aria-busy={again.busyGame === key || undefined} aria-label={`Đấu ${ARENA_GAME_NAMES[key]}`} onClick={() => void again.start(key)}>
-        <ArenaGameIcon game={key} /><span>{again.busyGame === key ? "Đang vào…" : ARENA_GAME_NAMES[key]}</span>
+      <div className="arena-pick-grid">{ARENA_GAMES.map((key) => <button key={key} type="button" className={`arena-pick game-${key}`} disabled={Boolean(again.busyGame)} aria-busy={again.busyGame === key || undefined} aria-label={`Đấu ${ARENA_GAME_NAMES[key]}`} onClick={() => void again.start(key)}>
+        <span className="game-icon arena-pick__icon" aria-hidden="true"><ArenaGameIcon game={key} size={22} /></span>
+        <span className="arena-pick__text"><b>{ARENA_GAME_NAMES[key]}</b><small>{numberFormat.format(home.ratings[key] ?? 1000)} điểm</small></span>
+        <span className="arena-pick__cta" aria-hidden="true"><Swords size={14} /><span className="arena-pick__cta-label">{again.busyGame === key ? "…" : "Đấu"}</span></span>
       </button>)}</div>
     </section>
 
@@ -126,7 +144,12 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
       <div className="chips" role="group" aria-label="Lọc theo trò">
         {(["total", ...ARENA_GAMES] as ArenaBoardGame[]).map((key) => <button key={key} type="button" className={`chip arena-filter${game === key ? " is-active" : ""}`} aria-pressed={game === key} onClick={() => setGame(key)}>{key === "total" ? "Tổng" : ARENA_GAME_NAMES[key]}</button>)}
       </div>
-      {!board ? <p className="small muted" aria-live="polite">Đang tải…</p> : entries.length ? <ol className="arena-list arena-ranks">{visible.map((entry) => <li key={entry.learnerId} className={`arena-list__row arena-rank-row${mine(entry) ? " is-me" : ""}`} aria-current={mine(entry) || undefined} data-rank={entry.rank}>
+      {board && current === 1 && entries.length >= 3 ? <ol className="arena-podium" aria-label="Ba hạng đầu">{[entries[1]!, entries[0]!, entries[2]!].map((entry, index) => <li key={entry.learnerId} className={`arena-podium__step arena-podium__step--${[2, 1, 3][index]}${mine(entry) ? " is-me" : ""}`}>
+        <RankBadge rank={entry.rank} />
+        <b className="arena-podium__name">{entry.displayName}{mine(entry) ? <small> (bạn)</small> : null}</b>
+        <span className="arena-podium__rating">{numberFormat.format(entry.rating)}</span>
+      </li>)}</ol> : null}
+      {!board ? <p className="small muted" aria-live="polite">Đang tải…</p> : entries.length ? <ol className="arena-list arena-ranks">{(current === 1 && entries.length >= 3 ? visible.slice(3) : visible).map((entry) => <li key={entry.learnerId} className={`arena-list__row arena-rank-row${mine(entry) ? " is-me" : ""}`} aria-current={mine(entry) || undefined} data-rank={entry.rank}>
         <RankBadge rank={entry.rank} />
         <span className="arena-rank-row__name">{entry.displayName}{mine(entry) ? <small className="muted"> (bạn)</small> : null}</span>
         <b className="arena-rank-row__rating">{numberFormat.format(entry.rating)}</b>

@@ -72,10 +72,53 @@
 a.arena-entry-card__link:hover h2 { text-decoration: underline; text-underline-offset: 3px; }
 .arena-entry-card.is-locked .arena-entry-card__icon { background: var(--line); color: var(--muted); }
 
-/* Arena page: "Chọn trò để đấu" – six equal buttons, 3 per row (2 on phone). */
-.arena-pick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-:root:root .btn.arena-pick { display: flex; align-items: center; justify-content: flex-start; gap: 8px; min-width: 0; min-height: 44px; padding: 0 12px; white-space: nowrap; }
-.arena-pick > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Arena hero: season-coloured banner with the season mascot, the title + rules ⓘ and three stats. */
+.arena-hero { position: relative; display: flex; align-items: center; gap: 16px; min-height: 180px; padding: 22px 24px; border-radius: 22px; overflow: hidden; color: var(--primary-ink);
+  background: radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--primary) 70%, white) 0%, var(--primary) 45%, var(--primary-dark) 100%); box-shadow: 0 10px 28px var(--primary-glow); }
+.arena-hero::after { content: ""; position: absolute; inset: auto -40px -60px auto; width: 260px; height: 260px; border-radius: 50%; background: color-mix(in srgb, white 14%, transparent); pointer-events: none; }
+.arena-hero__text { position: relative; z-index: 1; display: grid; gap: 6px; flex: 1 1 auto; min-width: 0; }
+:root:root .arena-hero__back { justify-self: start; color: inherit; opacity: .85; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; text-decoration: none; }
+:root:root .arena-hero h1 { margin: 0; color: inherit; font-size: 30px; line-height: 1.15; }
+:root:root .arena-hero .info-tip-button, :root:root .arena-hero .info-tip svg { color: inherit; }
+.arena-hero__lead { margin: 0; opacity: .92; }
+.arena-hero__stats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.arena-stat { display: grid; min-width: 92px; padding: 8px 12px; border-radius: 14px; background: color-mix(in srgb, white 18%, transparent); border: 1px solid color-mix(in srgb, white 28%, transparent); }
+.arena-stat strong { font-size: 20px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+:root:root:root .arena-stat small { font-size: 12px; color: inherit; opacity: .9; }
+:root:root:root .arena-hero .info-title, :root:root:root .arena-hero .info-title * { color: inherit; }
+.arena-hero__art { position: relative; z-index: 1; flex: none; width: 150px; height: 150px; object-fit: contain; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .18)); }
+
+/* "Chọn trò để đấu": six game cards (the Mini game tile look) with the per-game score and a "Đấu" pill. */
+.arena-pick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+:root:root:root .arena-pick { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; min-width: 0; min-height: 72px; height: auto; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--tile-3); color: var(--text); font: inherit; text-align: left; cursor: pointer; box-shadow: none; transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+:root:root:root .arena-pick:nth-child(even) { background: var(--tile-2); }
+:root:root:root .arena-pick:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--primary-line); box-shadow: 0 8px 18px var(--primary-glow); }
+:root:root:root .arena-pick:disabled { cursor: progress; opacity: .7; }
+.arena-pick__icon { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--surface); }
+.arena-pick__icon .arena-game-icon { color: var(--primary-dark); }
+.arena-pick__text { display: grid; min-width: 0; }
+.arena-pick__text b { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arena-pick__text small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.arena-pick__cta { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 12px; border-radius: 999px; background: var(--primary); color: var(--primary-ink); font-size: 13px; font-weight: 700; white-space: nowrap; }
+
+/* Podium: ranks 1–3 as three raised steps (2 · 1 · 3), the rest stay in the list below. */
+.arena-podium { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 10px; }
+.arena-podium__step { display: grid; justify-items: center; gap: 4px; min-width: 0; padding: 14px 8px 12px; border-radius: 16px 16px 10px 10px; background: var(--tile-3); border: 1px solid var(--line); text-align: center; }
+.arena-podium__step--1 { padding-top: 22px; padding-bottom: 22px; background: color-mix(in srgb, var(--primary) 16%, white); border-color: var(--primary-line); }
+.arena-podium__step--3 { padding-bottom: 8px; }
+.arena-podium__step.is-me { outline: 2px solid var(--primary); outline-offset: -2px; }
+.arena-podium .rank-badge { transform: scale(1.5); margin: 6px 0 8px; }
+.arena-podium__step--1 .rank-badge { transform: scale(1.9); margin: 10px 0 12px; }
+.arena-podium__name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.arena-podium__name small { color: var(--muted); font-weight: 400; }
+.arena-podium__rating { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--primary-dark); }
+
+@media (max-width: 1024px) {
+  .arena-hero { min-height: 150px; padding: 18px 20px; }
+  .arena-hero__art { width: 120px; height: 120px; }
+  :root:root .arena-hero h1 { font-size: 24px; }
+  .arena-pick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 @media (max-width: 600px) {
   .arena-page { gap: 10px; }
@@ -86,8 +129,27 @@ a.arena-entry-card__link:hover h2 { text-decoration: underline; text-underline-o
   .dialog.arena-dialog > .row.between:first-child { margin: 0 -16px 8px; padding: 10px 16px 8px; }
   .arena-entry-card { padding-block: 10px; }
   .arena-entry-card__icon { width: 34px; height: 34px; border-radius: 10px; }
-  .arena-pick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-  :root:root:root .btn.arena-pick { min-height: 38px; padding: 0 10px; font-size: 13px; }
+  .arena-hero { gap: 8px; min-height: 0; padding: 14px 14px 12px; border-radius: 18px; }
+  .arena-hero__art { position: absolute; right: -6px; top: 6px; width: 84px; height: 84px; opacity: .95; }
+  .arena-hero__text { gap: 4px; }
+  :root:root .arena-hero h1 { font-size: 20px; padding-right: 72px; }
+  .arena-hero__lead { font-size: 13px; padding-right: 72px; }
+  .arena-hero__stats { gap: 6px; flex-wrap: nowrap; }
+  .arena-stat { min-width: 0; flex: 1 1 0; padding: 6px 8px; border-radius: 12px; }
+  .arena-stat strong { font-size: 16px; }
+  .arena-stat small { font-size: 11px; white-space: nowrap; }
+  .arena-pick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  :root:root:root .arena-pick { gap: 8px; min-height: 0; padding: 10px 8px 10px 10px; border-radius: 14px; }
+  .arena-pick__icon { width: 32px; height: 32px; border-radius: 10px; }
+  .arena-pick__text b { font-size: 14px; }
+  .arena-pick__text small { font-size: 12px; }
+  :root:root:root .arena-pick { grid-template-columns: auto minmax(0, 1fr); }
+  .arena-pick__cta { display: none; }
+  .arena-podium { gap: 6px; }
+  .arena-podium__step { padding: 10px 4px 8px; }
+  .arena-podium__step--1 { padding-top: 14px; padding-bottom: 14px; }
+  .arena-podium__name { font-size: 12px; }
+  .arena-podium__rating { font-size: 13px; }
 }
 /* List rows: the tappable text starts flush left in every row. */
 :root:root:root .arena-page .arena-list__open { padding-left: 0 !important; padding-right: 0 !important; }
