@@ -45,8 +45,10 @@ export function ArenaResultCard({ match, onAgain, againBusy = false, link }: {
 
   const side = (who: "me" | "them") => {
     const me = who === "me";
-    return <div className={`arena-result__side${winner(who) ? " is-winner" : ""}`}>
-      {winner(who) ? <span className="arena-result__crown">Thắng</span> : null}
+    // Owner 19/11: every side gets a clear border and badge – Thắng green, Thua red, Hoà amber on both.
+    const tag = !result ? null : result.outcome === "draw" ? "draw" : winner(who) ? "win" : "lose";
+    return <div className={`arena-result__side${tag ? ` is-${tag}` : ""}${tag === "win" ? " is-winner" : ""}`}>
+      {tag ? <span className={`arena-result__crown is-${tag}`}>{tag === "win" ? "Thắng" : tag === "lose" ? "Thua" : "Hoà"}</span> : null}
       <span className={`arena-result__avatar${me ? " is-me" : ""}`} aria-hidden="true">{me || result ? <AccountAvatar avatar={me ? match.myAvatar : match.opponent?.avatar} name={me ? "Bạn" : opponent} size={52} /> : "?"}</span>
       <b>{me ? "Bạn" : result ? opponent : "Đối thủ"}</b>
       <strong className="arena-result__score">{me ? match.me.score ?? 0 : result ? match.them.score ?? 0 : "–"}</strong>

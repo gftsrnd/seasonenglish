@@ -31,3 +31,4 @@
 .rules-points > section:first-child { padding-left: 0; }
 .rules-points > section + section { border-left: 1px solid color-mix(in srgb, var(--text) 22%, transparent); }
 @media (max-width: 700px) { .rules-points > section { padding: 0; } .rules-points > section + section { border-left: 0; } }
+.rules-points dd .is-plus { color: #1f7a45; }

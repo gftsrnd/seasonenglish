@@ -69,7 +69,7 @@ export function matchStatusLine(match: ArenaMatch, now = Date.now()): string {
     : `Tới lượt bạn · ${hoursLeft(match.playDeadline, now)} giờ`;
   if (match.status === "settled" && match.result) {
     const word = match.result.outcome === "win" ? "Thắng" : match.result.outcome === "lose" ? "Thua" : "Hoà";
-    const change = match.result.rating ? ` · ${signed(match.result.rating.change)}` : "";
+    const change = match.result.rating ? ` · ${signed(match.result.rating.change)} điểm` : "";
     return `${word} ${match.me.score ?? 0}–${match.them.score ?? 0}${change}`;
   }
   if (match.status === "declined") return "Đã từ chối";
