@@ -80,6 +80,7 @@
 .arena-set-edit { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: color-mix(in srgb, var(--primary-soft) 55%, var(--surface)); }
 .arena-set-form { display: flex; gap: 8px; }
 .arena-set-form input { flex: 1 1 auto; min-width: 0; }
+:root:root .arena-set-form > button { flex: none; white-space: nowrap; }
 .arena-set-edit > .btn { justify-self: start; }
 .arena-set-edit > p { margin: 0; }
 .arena-word-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
@@ -107,9 +108,9 @@
 .arena-table tr.is-me td { background: color-mix(in srgb, var(--primary-soft) 70%, var(--surface)); }
 .arena-table tr.is-me td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
 .arena-rank { display: inline-grid; place-items: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: 8px; font-size: 13px; background: color-mix(in srgb, var(--line) 55%, var(--surface)); font-weight: 700; }
-.arena-rank.is-gold { background: linear-gradient(135deg, #FFE58A, #F2BD2C); color: #5C3D00; box-shadow: inset 0 0 0 1px #D9A21B; }
-.arena-rank.is-silver { background: linear-gradient(135deg, #F4F6F8, #C5CCD4); color: #3E4752; box-shadow: inset 0 0 0 1px #A7B0BA; }
-.arena-rank.is-bronze { background: linear-gradient(135deg, #F6CBA8, #D58D58); color: #4F2A10; box-shadow: inset 0 0 0 1px #B8733F; }
+.arena-rank.is-gold { background: repeating-linear-gradient(115deg, rgba(255, 255, 255, .18) 0 1px, transparent 1px 3px), linear-gradient(145deg, #fff3b0 0%, #f2c13a 38%, #c98f12 62%, #f6d466 100%); color: #5a3b00; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), inset 0 -2px 0 rgba(0, 0, 0, .18), 0 1px 2px rgba(0, 0, 0, .25); text-shadow: 0 1px 0 rgba(255, 255, 255, .55); font-weight: 800; }
+.arena-rank.is-silver { background: repeating-linear-gradient(115deg, rgba(255, 255, 255, .22) 0 1px, transparent 1px 3px), linear-gradient(145deg, #ffffff 0%, #c9d0d8 40%, #8e98a5 62%, #e3e8ee 100%); color: #2f3740; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8), inset 0 -2px 0 rgba(0, 0, 0, .18), 0 1px 2px rgba(0, 0, 0, .25); text-shadow: 0 1px 0 rgba(255, 255, 255, .6); font-weight: 800; }
+.arena-rank.is-bronze { background: repeating-linear-gradient(115deg, rgba(255, 255, 255, .16) 0 1px, transparent 1px 3px), linear-gradient(145deg, #ffd9b8 0%, #d98a4e 40%, #9c5426 62%, #e6a675 100%); color: #3d1d06; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), inset 0 -2px 0 rgba(0, 0, 0, .2), 0 1px 2px rgba(0, 0, 0, .25); text-shadow: 0 1px 0 rgba(255, 255, 255, .45); font-weight: 800; }
 .arena-board__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; }
 .arena-board__foot b { color: var(--primary-dark); font-size: 14px; }
 .arena-board__foot .small { display: inline-flex; align-items: center; gap: 4px; }
