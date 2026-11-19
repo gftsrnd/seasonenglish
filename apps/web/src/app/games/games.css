@@ -1730,6 +1730,7 @@ body:has(.typing-scene .virtual-keyboard) > #root > .app-scroll-jump { display: 
 
 .app-learner-page.game-page .game-tutorial-meta > span > svg { flex: none; }
 .app-learner-page.game-page .game-tutorial-meta b { white-space: nowrap; }
+:root:root:root .game-tutorial-meta .game-scoring-line b { font-weight: 800 !important; color: var(--text); }
 
 .app-learner-page.game-page .game-tutorial-actions {
   gap: 10px;

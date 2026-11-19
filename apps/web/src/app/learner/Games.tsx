@@ -107,6 +107,11 @@ export function gameScoringLineFor(key: GameKey, words: readonly GameWord[]): st
 }
 export const CATCH_LIVES_LINE = "Hứng sai hoặc để rơi: mất 1 mạng.";
 
+/** Bolds the point values of the "Điểm" line: +9, +14, +5, the 0 after "Sai:" and "100". */
+function boldPoints(line: string) {
+  return line.split(/(\+\d+|(?<=Sai: )0|(?<=Tối đa )100)/u).map((part, index) => index % 2 ? <b key={index}>{part}</b> : part);
+}
+
 export function getGameRoundSummary(descriptor: Pick<GameDescriptor, "key" | "goal" | "scoring">, words: readonly GameWord[]) {
   // Server descriptors hard-code the largest round size ("10 từ", "8 từ",
   // "10 lượt"); the real round depends on the word set (HUD "Từ 1/8"), so the
@@ -249,7 +254,7 @@ export function LearnerGame({ descriptor, wordSet, result, actions, duel }: { de
               const StepIcon = stepVisual.Icon;
               return <li key={line}><span className="game-tutorial-step-icon" data-step-kind={stepVisual.kind}><StepIcon size={22} strokeWidth={2.2} aria-hidden="true" /></span><span>{line}</span></li>;
             })}</ol>
-            <div className="game-tutorial-meta"><span><Trophy size={18} aria-hidden="true" /><span><b>Điểm</b> · {roundSummary.scoring}</span></span><span><Layers3 size={18} aria-hidden="true" /><span><b>Bộ từ</b> · {wordSet.words.length} từ</span></span></div>
+            <div className="game-tutorial-meta"><span><Trophy size={18} aria-hidden="true" /><span className="game-scoring-line"><b>Điểm</b> · {boldPoints(roundSummary.scoring)}</span></span><span><Layers3 size={18} aria-hidden="true" /><span><b>Bộ từ</b> · {wordSet.words.length} từ</span></span></div>
             <div className="row game-tutorial-actions">
               <button className="btn-primary btn-lg" type="button" disabled={examplesLoading} aria-busy={examplesLoading || undefined} onClick={() => { setStarted(true); }}><Play className="game-control-icon" size={19} aria-hidden="true" />{examplesLoading ? "Đang chuẩn bị câu ví dụ…" : "Bắt đầu chơi"}</button>
               <AppLink className="btn" href={backHref} navigate={actions.navigate}><ArrowLeft className="game-control-icon" size={18} aria-hidden="true" />Quay lại</AppLink>
