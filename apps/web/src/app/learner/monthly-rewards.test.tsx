@@ -33,9 +33,13 @@ describe("profile 'Cách tính điểm'", () => {
   it("lists exactly the monthly point rules and no secret-word points", () => {
     render(<LearnerProfile view={view} actions={actions} />);
     const rules = screen.getByTestId("reward-point-rules");
-    // Grouped plain lines "Việc · +điểm", the condition in the same sentence (18/11 #8, arena line included).
+    // Grouped rows: action (condition in small grey under it) and the points as a pill (owner 19/11, easier to read).
     expect(within(rules).getAllByRole("heading").map((item) => item.textContent)).toEqual(["Học bài", "Luyện tập", "Bài thi"]);
-    const items = within(rules).getAllByRole("listitem").map((item) => item.textContent);
+    const items = [...rules.querySelectorAll("dl > div")].map((row) => {
+      const term = row.querySelector("dt")!; const condition = term.querySelector("small")?.textContent;
+      const label = [...term.childNodes].filter((node) => node.nodeType === 3).map((node) => node.textContent).join("");
+      return `${label} · ${row.querySelector("dd")!.textContent}${condition ? `, ${condition}` : ""}`;
+    });
     expect(items).toEqual([
       "Bài học mới (lần đầu) · +10",
       "Mỗi phần bài học làm đúng · +5, mỗi lần làm lại bớt 1, ít nhất +1",
@@ -183,7 +187,7 @@ describe("manager reward simulator", () => {
     expect(screen.getByRole("button", { name: "Điểm thi tháng", hidden: true })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Chuỗi 3 ngày|Chuỗi 5 ngày/, hidden: true })).not.toBeInTheDocument();
     const rules = screen.getByTestId("reward-point-rules");
-    expect(rules).toHaveTextContent("Bài Ôn tuần (thứ Sáu) · +15");
+    expect(rules).toHaveTextContent("Bài Ôn tuần (thứ Sáu)+15");
     expect(rules).toHaveTextContent("Ván đấu trường đạt từ 50/100");
     expect(rules).toHaveTextContent("Mini game đạt từ 50/100");
     expect(rules).not.toHaveTextContent(/bí mật/);

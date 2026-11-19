@@ -301,3 +301,7 @@
 :root:root:root:root .dialog.arena-dialog > .row.between:first-child { margin: 0 0 8px !important; padding: 14px 20px 10px !important; }
 :root:root:root:root .dialog.arena-dialog .card.arena-result { width: 100%; margin: 0; padding: 0 0 18px !important; border: 0; border-radius: 0; box-shadow: none; }
 @media (min-width: 601px) { :root:root:root:root:root .modal-backdrop > .dialog.arena-dialog { width: min(520px, calc(100vw - 48px)) !important; max-width: 520px !important; } }
+/* Arena rules (owner 19/11): strength table + other rules; one line with ▼ on desktop, ⓘ on phone/tablet. */
+.arena-rules { display: grid; gap: 14px; }
+.arena-rules .rules-points dd .is-minus { color: #b3261e; }
+.arena-rules-line { margin-top: 14px; }

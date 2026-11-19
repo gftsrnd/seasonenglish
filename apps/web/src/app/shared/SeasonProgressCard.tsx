@@ -5,6 +5,7 @@ import type { LearnerProgressView } from "@e4s/contracts";
 import { REWARD_SEASONS, type RewardSeasonLevel } from "@e4s/domain/engagement";
 import { Modal, Progress } from "../learner/ui.js";
 import { REWARD_SEASON_ICONS } from "./reward-badge-icons.js";
+import { RulesDisclosure } from "./RulesDisclosure.js";
 import { RewardBadgeArtwork } from "./RewardBadgeArtwork.js";
 import "./season-progress-card.css";
 import "./reward-point-rules.css";
@@ -39,10 +40,10 @@ export const REWARD_POINT_RULES: ReadonlyArray<readonly [label: string, points: 
 
 /** The point rules: one plain line per action, grouped. */
 function RewardPointRules({ className }: { className?: string }) {
-  return <div className={`reward-point-rules${className ? ` ${className}` : ""}`} data-testid="reward-point-rules">
+  return <div className={`rules-points reward-point-rules${className ? ` ${className}` : ""}`} data-testid="reward-point-rules">
     {REWARD_POINT_GROUPS.map((group) => <section key={group.title} className="reward-point-group">
       <h4>{group.title}</h4>
-      <ul>{group.rules.map(([label, points, condition]) => <li key={label}>{label} · <b>{points}</b>{condition ? `, ${condition}` : ""}</li>)}</ul>
+      <dl>{group.rules.map(([label, points, condition]) => <div key={label}><dt>{label}{condition ? <small>{condition}</small> : null}</dt><dd>{points}</dd></div>)}</dl>
     </section>)}
   </div>;
 }
@@ -55,7 +56,7 @@ function RewardRulesDialog({ onClose }: { onClose: () => void }) {
       <button type="button" role="tab" aria-selected={tab === "points"} onClick={() => setTab("points")}>Cách tính điểm</button>
       <button type="button" role="tab" aria-selected={tab === "season"} onClick={() => setTab("season")}>Lên Season</button>
     </div>
-    {tab === "points" ? <RewardPointRules /> : <ul className="reward-season-list" data-testid="reward-season-rules">{REWARD_SEASON_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ul>}
+    {tab === "points" ? <RewardPointRules /> : <ul className="reward-season-list rules-list" data-testid="reward-season-rules">{REWARD_SEASON_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ul>}
   </Modal>;
 }
 
@@ -168,11 +169,10 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
     {rulesOpen ? <RewardRulesDialog onClose={() => setRulesOpen(false)} /> : null}
     <div className="profile-season-actions"><button type="button" className="btn btn-sm" aria-controls={levelsId} aria-expanded={showAllBadges} onClick={() => setShowAllBadges((value) => !value)}>{showAllBadges ? "Thu gọn huy hiệu" : "Xem tất cả huy hiệu"}</button>
     {certificateAction}</div>
-    {compact ? null : <details style={{ marginTop: 10 }}><summary className="small" style={{ fontWeight: 800, cursor: "pointer" }}>Cách tính điểm và lên Season</summary>
-      <RewardPointRules className="small" />
-      <b className="small reward-season-rules-title">Lên Season</b>
-      <ul className="small" data-testid="reward-season-rules" style={{ margin: "6px 0 0", paddingLeft: 20 }}>{REWARD_SEASON_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ul>
-    </details>}
+    {compact ? null : <RulesDisclosure title="Cách tính điểm và lên Season">
+      <RewardPointRules />
+      <section><h4>Lên Season</h4><ul className="rules-list" data-testid="reward-season-rules">{REWARD_SEASON_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ul></section>
+    </RulesDisclosure>}
   </section>;
 }
 

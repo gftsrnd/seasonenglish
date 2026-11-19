@@ -8,6 +8,7 @@ import { Pager } from "../../shared/Pager.js";
 import { useMediaQuery } from "../../shared/useMediaQuery.js";
 import { AppLink, Modal, Notice } from "../ui.js";
 import { InfoTitle, useUiTier } from "../../shared/CompactUi.js";
+import { ArenaRulesBody, ArenaRulesLine } from "./ArenaRules.js";
 
 const ARENA_PAGE_DESCRIPTION = "Thách đấu bạn cùng cấp bằng bộ từ đang học và leo bảng xếp hạng mùa.";
 import { ArenaGameIcon } from "./ArenaGameIcon.js";
@@ -160,8 +161,8 @@ function ArenaPlayTab({ home, client, setClient, learnerId, navigate, notify, re
       </div>
     </section>
 
-    <section className="card games-section-card arena-panel" aria-labelledby="arena-mine-title">
-      <div className="arena-panel__head"><h2 id="arena-mine-title">Trận của bạn</h2><span className="badge arena-open-badge">{home.openRanked}/{home.maxOpenRanked} đang mở</span></div>
+    <section className="card games-section-card arena-panel" aria-label="Trận của bạn">
+      <div className="arena-panel__head"><InfoTitle as="h2" className="arena-mine-title" title="Trận của bạn" tip={<ArenaRulesBody />} label="Cách tính điểm xếp hạng" /><span className="badge arena-open-badge">{home.openRanked}/{home.maxOpenRanked} đang mở</span></div>
       {rows.length ? <ul className="arena-list">{rows.map((match) => {
         const rowBusy = busy === match.id;
         const text = <><span className="arena-list__icon"><ArenaGameIcon game={match.game} /></span><span className="arena-list__text"><b>{ARENA_GAME_NAMES[match.game]}{match.mode === "friendly" ? <Users className="arena-mode-icon" size={12} role="img" aria-label="Giao hữu" /> : null}</b><small>{match.setTopic} · {matchStatusLabel(match)}{matchDeadline(match) ? <> · <ArenaCountdown until={matchDeadline(match)} /></> : null}</small></span></>;
@@ -190,6 +191,7 @@ function ArenaPlayTab({ home, client, setClient, learnerId, navigate, notify, re
         </div>
         {wordsFor === challenge.id ? <ArenaWords matchId={challenge.id} client={client} /> : null}
       </li>)}</ul> : <p className="arena-empty"><Inbox size={18} aria-hidden="true" />Chưa có thách đấu nào để nhận.</p>}
+      <ArenaRulesLine />
     </section>
 
     {result ? <Modal className="arena-dialog" title="Kết quả trận" onClose={() => setResult(null)} dismissOnBackdrop>
