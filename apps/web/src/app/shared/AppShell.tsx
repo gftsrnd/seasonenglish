@@ -92,7 +92,7 @@ const nav: Record<ShellRole, readonly NavItem[]> = {
     { to: "/home", icon: icons.home, label: "Trang chủ" },
     { to: "/coach", icon: icons.chat, label: "Luyện với Season", mobileLabel: "Season" },
     { to: "/monthly", icon: icons.cal, label: "Bài tháng" },
-    { to: "/games", icon: icons.game, label: "Game từ vựng" },
+    { to: "/games", icon: icons.game, label: "Game từ vựng", mobileLabel: "Game" },
     { to: "/profile", icon: icons.user, label: "Tiến độ & hồ sơ", mobileLabel: "Hồ sơ" }
   ],
   operator: [
