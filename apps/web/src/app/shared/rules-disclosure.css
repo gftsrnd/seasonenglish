@@ -33,8 +33,6 @@
 .rules-points > section + section { border-left: 1px solid color-mix(in srgb, var(--text) 22%, transparent); }
 @media (max-width: 700px) { .rules-points > section { padding: 0; } .rules-points > section + section { border-left: 0; } }
 .rules-points dd .is-plus { color: #1f7a45; }
-/* The rules button matches ⓘ exactly (owner 19/11): the same 24px tap area and a ~14px drawn circle
-   in the same grey, with a small book inside instead of the "i". */
-:root:root:root:root:root:root .rules-icon-button { display: inline-grid; place-items: center; flex: none; box-sizing: border-box; vertical-align: middle; width: 24px !important; min-width: 24px !important; max-width: 24px; height: 24px !important; min-height: 24px !important; max-height: 24px; margin: -6px 0 -4px 2px; padding: 0 !important; border: 0; border-radius: 999px; background: transparent; box-shadow: none; color: var(--muted); cursor: pointer; }
-.rules-icon-button:hover { color: var(--primary-dark, var(--primary)); background: var(--surface-3, rgb(0 0 0 / 5%)); }
+/* The rules button reuses ⓘ's wrapper and button (info-tip / info-tip-button), so only the drawing differs:
+   a circle the size of the ⓘ glyph (15px box, ~13.5px ring) with a small book inside. */
 .rules-icon-button__ring { display: grid; place-items: center; width: 13.5px; height: 13.5px; box-sizing: border-box; border: 1.3px solid currentColor; border-radius: 50%; }

@@ -2162,8 +2162,8 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
 /* Exam "Rời bài thi?" guard dialog: icon and title on one line, like the violation dialog. */
 .learner-root .assessment-leave-dialog h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
 .learner-root .assessment-leave-dialog h2 svg { flex: none; color: var(--warn, #b45309); }
-/* Trial month progress: two metrics share the row. */
-.learner-root .home-page .monthly-home-metrics[data-trial] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+/* Owner 19/11: the trial month has the same four boxes as other months – one row of four (phones keep their own rule). */
+@media (min-width: 601px) { .learner-root .home-page .monthly-home-metrics[data-trial] { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; } }
 /* "Đã hoàn thành khóa E4S" card: same title and button size as the other profile cards (Hỗ trợ học tập, Hồ sơ cá nhân). */
 .learner-root .profile-page .profile-completion-heading h2 { margin: 0; font-size: 1.05rem; }
 .learner-root .profile-page .profile-completion-heading p { margin: 2px 0 0; }

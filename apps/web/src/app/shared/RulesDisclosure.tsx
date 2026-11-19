@@ -18,5 +18,6 @@ export function RulesDisclosure({ title, children, className, testId }: { title:
  * ⓘ stays for short notes. Same size and colour as ⓘ; the label is the tooltip and the accessible name.
  */
 export function RulesIconButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return <button type="button" className="rules-icon-button" aria-label={`Luật: ${label}`} title="Luật" aria-haspopup="dialog" onClick={onClick}><span className="rules-icon-button__ring" aria-hidden="true"><Book size={8} strokeWidth={2.6} /></span></button>;
+  // Same wrapper and button classes as ⓘ (owner 19/11): identical size, alignment and no line break before it.
+  return <span className="info-tip rules-tip"><button type="button" className="info-tip-button rules-icon-button" aria-label={`Luật: ${label}`} title="Luật" aria-haspopup="dialog" onClick={onClick}><span className="rules-icon-button__ring" aria-hidden="true"><Book size={8} strokeWidth={2.6} /></span></button></span>;
 }
