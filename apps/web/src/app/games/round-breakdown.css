@@ -1,0 +1,18 @@
+/* Result card: why the round is not 100 – one box per question, legend, one line. Combo gold and wrong red are fixed colours (the theme danger token maps to the primary colour). */
+.round-breakdown { grid-column: 1 / -1; display: grid; gap: 6px; width: 100%; min-width: 0; text-align: left; }
+.round-breakdown__strip { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(26px, 1fr)); gap: 4px; }
+.round-breakdown__cell { display: grid; place-items: center; height: 26px; border-radius: 6px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.round-breakdown__cell.is-first, .round-breakdown__dot.is-first { background: var(--primary); color: var(--primary-ink); }
+.round-breakdown__cell.is-combo, .round-breakdown__dot.is-combo { background: #F5C842; color: #5C3D00; }
+.round-breakdown__cell.is-assisted, .round-breakdown__dot.is-assisted { background: #E4E2DC; color: #55534E; box-shadow: inset 0 0 0 1px #C9C6BE; }
+.round-breakdown__cell.is-wrong, .round-breakdown__dot.is-wrong { background: #F6D0CB; color: #8A2318; }
+.round-breakdown__legend { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); }
+.round-breakdown__legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.round-breakdown__dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.round-breakdown__why { margin: 0; font-size: 13px; color: var(--text); }
+@media (max-width: 600px) {
+  .round-breakdown__strip { grid-template-columns: repeat(auto-fill, minmax(22px, 1fr)); gap: 3px; }
+  .round-breakdown__cell { height: 22px; font-size: 11px; }
+  .round-breakdown__legend { font-size: 11px; }
+  .round-breakdown__why { font-size: 12px; }
+}

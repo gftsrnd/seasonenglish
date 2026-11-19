@@ -278,7 +278,7 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
           })}
         </div>)}
       </div>
-      <div className="crossword-actions"><button className="btn-primary" type="button" onClick={() => void check()} disabled={busy}>Kiểm tra</button><button className="btn-sm" type="button" onClick={hint} disabled={busy || !activeEntry} title={activeEntry ? `Gợi ý cho từ ${activeEntry.number} · từ này chỉ còn +5.` : "Chọn một từ trước khi dùng gợi ý."}>Gợi ý 1 chữ</button><span className="crossword-actions-note">{activeEntry ? `Gợi ý cho từ ${activeEntry.number} · từ này chỉ còn +5.` : "Chọn một từ trước khi dùng gợi ý."}</span></div>
+      <div className="crossword-actions"><button className="btn-primary" type="button" onClick={() => void check()} disabled={busy}>Kiểm tra</button><button className="btn-sm" type="button" onClick={hint} disabled={busy || !activeEntry} title={activeEntry ? `Gợi ý cho từ ${activeEntry.number} · từ này chỉ còn nửa phần.` : "Chọn một từ trước khi dùng gợi ý."}>Gợi ý 1 chữ</button><span className="crossword-actions-note">{activeEntry ? `Gợi ý cho từ ${activeEntry.number} · từ này chỉ còn nửa phần.` : "Chọn một từ trước khi dùng gợi ý."}</span></div>
       {(() => { const clueLists = <div className="crossword-clues">
         {([
           { direction: "across", label: "Ngang", Icon: ArrowRight },

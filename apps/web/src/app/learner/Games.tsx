@@ -12,6 +12,7 @@ import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { ActionLabel, InfoTitle, useCompactUi } from "../shared/CompactUi.js";
 import { Pager, usePaged } from "../shared/Pager.js";
 import { ArenaSection } from "./arena/ArenaHub.js";
+import { GAME_SCORING_RULE, RoundBreakdown, roundOutcomes } from "../games/RoundBreakdown.js";
 
 type GameIdentity = Pick<GameDescriptor, "key" | "icon" | "name" | "description"> & { iconElement: ReactNode };
 
@@ -28,32 +29,32 @@ const compactTutorial: Record<GameKey, string[]> = {
   // Three steps per game, matching the current gameplay and the shared 0–100 round score (arena phase 1).
   scramble: [
     "Đọc gợi ý, bấm hoặc gõ các chữ theo đúng thứ tự.",
-    "Sai lần đầu được thử lại (+5); sai 2 lần thì sang từ mới.",
-    "Gợi ý mở một chữ; từ đó còn +5."
+    "Sai lần đầu được thử lại (nửa phần); sai 2 lần thì sang từ mới.",
+    "Gợi ý mở một chữ; từ đó còn nửa phần."
   ],
   crossword: [
     "Chọn một từ Ngang hoặc Dọc và đọc gợi ý.",
-    "Gõ chữ vào ô rồi bấm Kiểm tra; điền sai rồi sửa còn +5.",
-    "Gợi ý mở một chữ của từ đang chọn; từ đó còn +5."
+    "Gõ chữ vào ô rồi bấm Kiểm tra; điền sai rồi sửa còn nửa phần.",
+    "Gợi ý mở một chữ của từ đang chọn; từ đó còn nửa phần."
   ],
   eggs: [
     "Đọc gợi ý, kéo rổ hoặc bấm ← → để hứng từ khớp.",
-    "Hứng đúng liên tiếp từ lượt 3 được +15.",
+    "Hứng đúng liên tiếp từ lượt 3: mỗi lượt được gấp rưỡi.",
     "Hứng sai hoặc để rơi: 0 điểm, mất 1 mạng. Hết 3 mạng là hết ván."
   ],
   mario: [
     "Chạy, nhảy và chạm hộp quà để mở câu hỏi của cổng.",
     "Trả lời sai: 0 điểm, mất 1 mạng, cổng vẫn mở.",
-    "Gặp boss: trả lời trước khi hết giờ (sai rồi đúng +5). Chạm cờ để xong."
+    "Gặp boss: trả lời trước khi hết giờ (sai rồi đúng được nửa phần). Chạm cờ để xong."
   ],
   sort: [
     "Đọc từ trong câu ví dụ: cách dùng quyết định từ loại.",
     "Bấm nhóm đúng. Chọn sai: 0 điểm và hiện đáp án.",
-    "Đúng liên tiếp từ từ thứ 3 được +15."
+    "Đúng liên tiếp từ từ thứ 3: mỗi từ được gấp rưỡi."
   ],
   typing: [
     "Đọc nghĩa, định nghĩa hoặc bấm nghe phát âm.",
-    "Gõ đủ từ trước khi thanh thời gian cạn; gõ sai được thử lại (+5).",
+    "Gõ đủ từ trước khi thanh thời gian cạn; gõ sai được thử lại (nửa phần).",
     "Hết giờ: 0 điểm và sang từ mới."
   ]
 };
@@ -100,7 +101,7 @@ export function getGameAvailability(key: GameKey, words: readonly GameWord[]): G
 }
 
 /** The shared "Điểm" line of all six tutorials (RULE A.3); Season catch adds its lives rule. */
-export const GAME_SCORING_LINE = "Đúng ngay +10, từ câu thứ 3 liên tiếp +15; gợi ý hoặc thử lại +5; sai 0. Điểm ván tối đa 100.";
+export const GAME_SCORING_LINE = GAME_SCORING_RULE;
 export const CATCH_LIVES_LINE = "Hứng sai hoặc để rơi: mất 1 mạng.";
 
 export function getGameRoundSummary(descriptor: Pick<GameDescriptor, "key" | "goal" | "scoring">, words: readonly GameWord[]) {
@@ -255,7 +256,7 @@ export function LearnerGame({ descriptor, wordSet, result, actions, duel }: { de
     </div>;
   }
   const exitHref = duel ? "/arena" : "/games";
-  return <div ref={pageRef} className={`app-learner-page game-page${compactUi ? " game-page--compact" : ""}`}><header className="row between game-running-header"><div><div className="eyebrow game-running-title"><span className="game-title-icon" aria-hidden="true">{visualIdentity?.iconElement}</span><span>{descriptor.name}</span></div><h1>{wordSet.topic}</h1></div><div id="gm-best" className="badge">{descriptor.best ? `Kỷ lục: ${descriptor.best.score}/${descriptor.best.maxScore}` : "Chưa có kỷ lục"}</div>{compactUi && !submitted ? <GameExitLink href={exitHref} navigate={actions.navigate} /> : null}</header><section id="gm-board" className="game-board">{submitted ? <section className={`card game-result ${submitError ? "is-error" : result ? "is-complete" : "is-pending"}`} aria-live="polite">{submitError ? <><div className="game-result__icon" aria-hidden="true">!</div><div><div className="eyebrow">Kết quả chưa được lưu</div><h2>Gửi lại lượt chơi</h2></div><Notice tone="danger">{submitError}</Notice><div className="game-result__actions"><button className="btn-primary" type="button" disabled={submitting || !pendingInput} onClick={() => pendingInput ? void finish(pendingInput) : undefined}>{submitting ? "Đang gửi lại…" : "Thử gửi lại"}</button><AppLink className="btn" href={duel ? "/arena" : "/games"} navigate={actions.navigate}>{duel ? "Bỏ lượt này" : "Chọn trò khác"}</AppLink></div></> : result ? <><div className="game-result__icon" aria-hidden="true"><Trophy size={32} strokeWidth={1.8} /></div><div className="game-result__copy"><div className="eyebrow">Hoàn thành lượt chơi</div><h2>Điểm của bạn</h2><p>Điểm đã được ghi vào tiến độ của bạn.</p></div><div className="game-result__score"><strong>{result.score}</strong><span>trên {result.maxScore} điểm</span></div><div className="game-result__actions">{!duel ? <button className="btn-primary" type="button" onClick={() => { actions.resetGameResult(); setSubmitError(""); setPendingInput(undefined); setSubmitted(false); setStarted(false); setAttempt(nextGameAttemptSeed(attempt)); }}><Play className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" />Chơi lại</button> : null}<AppLink className="btn" href={duel ? "/arena" : "/games"} navigate={actions.navigate}>{duel ? "Về đấu trường" : "Chọn trò khác"}</AppLink></div></> : <><div className="game-result__icon game-result__spinner" aria-hidden="true" /><div><div className="eyebrow">Đang hoàn tất</div><h2>Đang ghi kết quả…</h2></div></>}</section> : <GameEngine game={descriptor.key} wordSet={playSet} attempt={attempt} finish={finish} />}</section>{!submitted && !compactUi ? <AppLink className="btn btn-danger" href={exitHref} navigate={actions.navigate}>Thoát</AppLink> : null}</div>;
+  return <div ref={pageRef} className={`app-learner-page game-page${compactUi ? " game-page--compact" : ""}`}><header className="row between game-running-header"><div><div className="eyebrow game-running-title"><span className="game-title-icon" aria-hidden="true">{visualIdentity?.iconElement}</span><span>{descriptor.name}</span></div><h1>{wordSet.topic}</h1></div><div id="gm-best" className="badge">{descriptor.best ? `Kỷ lục: ${descriptor.best.score}/${descriptor.best.maxScore}` : "Chưa có kỷ lục"}</div>{compactUi && !submitted ? <GameExitLink href={exitHref} navigate={actions.navigate} /> : null}</header><section id="gm-board" className="game-board">{submitted ? <section className={`card game-result ${submitError ? "is-error" : result ? "is-complete" : "is-pending"}`} aria-live="polite">{submitError ? <><div className="game-result__icon" aria-hidden="true">!</div><div><div className="eyebrow">Kết quả chưa được lưu</div><h2>Gửi lại lượt chơi</h2></div><Notice tone="danger">{submitError}</Notice><div className="game-result__actions"><button className="btn-primary" type="button" disabled={submitting || !pendingInput} onClick={() => pendingInput ? void finish(pendingInput) : undefined}>{submitting ? "Đang gửi lại…" : "Thử gửi lại"}</button><AppLink className="btn" href={duel ? "/arena" : "/games"} navigate={actions.navigate}>{duel ? "Bỏ lượt này" : "Chọn trò khác"}</AppLink></div></> : result ? <><div className="game-result__icon" aria-hidden="true"><Trophy size={32} strokeWidth={1.8} /></div><div className="game-result__copy"><div className="eyebrow">Hoàn thành lượt chơi</div><h2>Điểm của bạn</h2><p>Điểm đã được ghi vào tiến độ của bạn.</p></div><div className="game-result__score"><strong>{result.score}</strong><span>trên {result.maxScore} điểm</span></div>{pendingInput ? <RoundBreakdown outcomes={roundOutcomes(descriptor.key, playSet.words, pendingInput, { attemptSeed: attempt })} /> : null}<div className="game-result__actions">{!duel ? <button className="btn-primary" type="button" onClick={() => { actions.resetGameResult(); setSubmitError(""); setPendingInput(undefined); setSubmitted(false); setStarted(false); setAttempt(nextGameAttemptSeed(attempt)); }}><Play className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" />Chơi lại</button> : null}<AppLink className="btn" href={duel ? "/arena" : "/games"} navigate={actions.navigate}>{duel ? "Về đấu trường" : "Chọn trò khác"}</AppLink></div></> : <><div className="game-result__icon game-result__spinner" aria-hidden="true" /><div><div className="eyebrow">Đang hoàn tất</div><h2>Đang ghi kết quả…</h2></div></>}</section> : <GameEngine game={descriptor.key} wordSet={playSet} attempt={attempt} finish={finish} />}</section>{!submitted && !compactUi ? <AppLink className="btn btn-danger" href={exitHref} navigate={actions.navigate}>Thoát</AppLink> : null}</div>;
 }
 
 /** Phones/tablets: the one exit control of every game screen — a compact red "Thoát" at the right of the header. */

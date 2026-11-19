@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Bell, Swords, Trophy } from "lucide-react";
+import type { RoundUnitOutcome } from "@e4s/domain/engagement";
 import type { ArenaMatch } from "../../../api/arena.js";
+import { RoundBreakdown } from "../../games/RoundBreakdown.js";
 import { ARENA_GAME_NAMES, bandLabel, outcomeTitle, shortReason, signed } from "./arena-text.js";
 
 /**
@@ -9,8 +11,10 @@ import { ARENA_GAME_NAMES, bandLabel, outcomeTitle, shortReason, signed } from "
  * second line ≤ 40 characters ("Đối thủ mạnh hơn · lần gặp 1"). Actions: ONE primary "Đấu tiếp"
  * plus an optional text link ("Về bảng xếp hạng").
  */
-export function ArenaResultCard({ match, onAgain, againBusy = false, link }: {
+export function ArenaResultCard({ match, onAgain, againBusy = false, link, outcomes }: {
   match: ArenaMatch;
+  /** Per-question outcomes of the round the learner just played (shown right after play only). */
+  outcomes?: readonly RoundUnitOutcome[] | null | undefined;
   onAgain?: (() => void) | undefined;
   againBusy?: boolean;
   link?: ReactNode;
@@ -35,6 +39,7 @@ export function ArenaResultCard({ match, onAgain, againBusy = false, link }: {
       </> : <h2>Trận đã đóng</h2>}
     </div>
     {result || waiting ? <div className="game-result__score"><strong>{match.me.score ?? 0}</strong><span>điểm của bạn</span></div> : null}
+    {outcomes?.length && (result || waiting) ? <RoundBreakdown outcomes={outcomes} /> : null}
     {onAgain || link ? <div className="game-result__actions">
       {onAgain ? <button className="btn-primary" type="button" disabled={againBusy} aria-busy={againBusy || undefined} onClick={onAgain}><Swords className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" />{againBusy ? "Đang tìm…" : "Đấu tiếp"}</button> : null}
       {link}

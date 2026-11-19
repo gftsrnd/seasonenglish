@@ -7,6 +7,8 @@ import { GameEngine } from "../Games.js";
 import { AppLink, Notice } from "../ui.js";
 import { ArenaGameIcon } from "./ArenaGameIcon.js";
 import { ArenaResultCard } from "./ArenaResultCard.js";
+import { roundOutcomes } from "../../games/RoundBreakdown.js";
+import type { RoundUnitOutcome } from "@e4s/domain/engagement";
 import { ARENA_GAME_NAMES, hoursLeft, isInviteForMe, matchStatusLine } from "./arena-text.js";
 import { arenaErrorMessage, useArenaQuickMatch } from "./useArenaQuickMatch.js";
 import "./arena.css";
@@ -27,6 +29,7 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
   const modal = useModal();
   const [match, setMatch] = useState<ArenaMatch | null>(null);
   const [round, setRound] = useState<ArenaRound | null>(null);
+  const [outcomes, setOutcomes] = useState<RoundUnitOutcome[] | null>(null);
   const [loadError, setLoadError] = useState("");
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -56,6 +59,7 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
     setBusy(true);
     try {
       const saved = await client.submit(matchId, { ...input, requestId: entry.requestId });
+      if (round) setOutcomes(roundOutcomes(round.match.game, round.wordSet.words, input, { unitIds: round.unitIds }));
       pending.current = null;
       setRound(null);
       setMatch(saved.match);
@@ -100,14 +104,15 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
           : busy && pending.current
             ? <section className="card game-result is-pending" aria-live="polite"><div className="game-result__icon game-result__spinner" aria-hidden="true" /><div><div className="eyebrow">Đang hoàn tất</div><h2>Đang ghi kết quả…</h2></div></section>
             : <GameEngine game={match.game} wordSet={round.wordSet} attempt={round.attemptSeed} finish={submit} />)
-        : <ArenaMatchState match={match} busy={busy} onStart={start} onAnswer={answer} again={again} link={boardLink} />}
+        : <ArenaMatchState match={match} busy={busy} onStart={start} onAnswer={answer} again={again} link={boardLink} outcomes={outcomes} />}
     </section>
   </div>;
 }
 
 /** Non-playing states of the match screen: one action at most, plus the text link back to the board. */
-function ArenaMatchState({ match, busy, onStart, onAnswer, again, link }: {
+function ArenaMatchState({ match, busy, onStart, onAnswer, again, link, outcomes }: {
   match: ArenaMatch;
+  outcomes: RoundUnitOutcome[] | null;
   busy: boolean;
   onStart: () => void;
   onAnswer: (value: "accept" | "decline") => void;
@@ -140,7 +145,7 @@ function ArenaMatchState({ match, busy, onStart, onAnswer, again, link }: {
     </section>;
   }
   if (match.status === "accepted" || match.status === "settled") {
-    return <ArenaResultCard match={match} againBusy={again.busyGame === match.game} onAgain={() => void again.start(match.game)} link={link} />;
+    return <ArenaResultCard match={match} outcomes={outcomes} againBusy={again.busyGame === match.game} onAgain={() => void again.start(match.game)} link={link} />;
   }
   return <section className="card arena-state" data-arena-state="closed"><h2>{matchStatusLine(match)}</h2>{link}</section>;
 }
