@@ -94,7 +94,7 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
       </div>
       {playing
         ? <button className="btn btn-sm btn-danger game-exit-link" type="button" disabled={busy} onClick={() => void exit()}><LogOut size={15} strokeWidth={2.2} aria-hidden="true" />Thoát</button>
-        : <span data-arena-guide-host />}
+        : <AppLink className="btn btn-sm btn-danger game-exit-link" href="/arena" navigate={navigate}><LogOut size={15} strokeWidth={2.2} aria-hidden="true" />Thoát</AppLink>}
     </header>
     <section id="gm-board" className="game-board">
       {playing && round
@@ -140,7 +140,7 @@ function ArenaMatchState({ match, busy, onStart, onAnswer, again, link, client }
     return <ArenaReady match={match} busy={busy} onStart={onStart} link={link} wordsClient={client.words ? client as Pick<ArenaApiClient, "words"> : undefined} />;
   }
   if (match.status === "accepted" || match.status === "settled") {
-    return <ArenaResultCard match={match} againBusy={again.busyGame === match.game} onAgain={() => void again.start(match.game)} link={link} />;
+    return <ArenaResultCard match={match} againBusy={again.busyGame === match.game} onAgain={() => void again.start(match.game)} />;
   }
   return <section className="card arena-state" data-arena-state="closed"><h2>{matchStatusLine(match)}</h2>{link}</section>;
 }
@@ -185,7 +185,6 @@ function ArenaReady({ match, busy, onStart, link, wordsClient }: {
       <ArenaWords matchId={match.id} client={wordsClient} />
     </div> : null}
     <footer className="arena-ready__actions">
-      {link}
       <button className="btn-primary" type="button" disabled={busy || expired} aria-busy={busy || undefined} onClick={onStart}>
         <Play className="game-control-icon" size={16} aria-hidden="true" />{match.me.started ? "Chơi tiếp" : "Bắt đầu"}
       </button>

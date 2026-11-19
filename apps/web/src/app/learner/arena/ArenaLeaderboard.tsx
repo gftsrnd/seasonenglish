@@ -58,7 +58,7 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
       <div className="eyebrow">Đấu trường {home.level}{seasonLine}</div>
       <h1>Đấu trường từ vựng</h1>
       <p className="muted">{numberFormat.format(home.total)} điểm XH tổng · {rankLine}</p>
-    </div><div className="arena-page-actions">{back}<span data-arena-guide-host /></div></header>
+    </div>{back}</header>
     <nav className="request-tabs arena-tabs" aria-label="Đấu trường">
       {(["play", "board"] as Tab[]).map((key) => <a key={key} href={key === "board" ? "/arena?tab=board" : "/arena"} role="tab" aria-selected={tab === key} aria-current={tab === key ? "page" : undefined} onClick={(event) => { event.preventDefault(); setTab(key); }}><span>{TAB_TITLES[key]}</span></a>)}
     </nav>

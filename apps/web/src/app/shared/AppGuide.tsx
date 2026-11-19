@@ -417,24 +417,21 @@ export function AppGuide({ role, pathname, compact, onOpenChange, autoOpen = AUT
     };
   }, [activeTarget]);
 
-  const isArena = role === "learner" && (path === "/arena" || path.startsWith("/arena/"));
-  const arenaGuideHost = isArena && !popup ? document.querySelector<HTMLElement>("[data-arena-guide-host]") : null;
-  const helpHost = popup ? popupGuideHost(popup) : arenaGuideHost;
+  const helpHost = popup ? popupGuideHost(popup) : null;
   useLayoutEffect(() => {
-    if (!helpHost || helpHost === popup || helpHost === arenaGuideHost || !definitions || !steps.length) return;
+    if (!helpHost || helpHost === popup || !definitions || !steps.length) return;
     const isHeader = helpHost.matches("header, .assessment-bank-header, .operator-level-form-dialog-header") || Boolean(helpHost.querySelector(":scope > h2, :scope > h3, :scope > .operator-level-form-dialog-title"));
     const name = isHeader ? "app-guide-help-header" : "app-guide-help-actions";
     const existed = helpHost.classList.contains(name);
     helpHost.classList.add(name);
     return () => { if (!existed) helpHost.classList.remove(name); };
-  }, [helpHost, popup, arenaGuideHost, definitions, steps.length]);
+  }, [helpHost, popup, definitions, steps.length]);
   if (!definitions || !steps.length) return null;
 
-  const guideTitle = arenaGuideHost ? "Hướng dẫn Đấu trường" : "Hướng dẫn sử dụng";
-  const helpButton = <button ref={trigger} className={arenaGuideHost ? "btn btn-sm arena-guide-button" : `btn-sm ${popup ? "app-guide-popup-trigger" : "btn-ghost"} app-guide-trigger`} type="button"
-      aria-label={guideTitle} aria-haspopup="dialog" disabled={inboxOpen}
+  const helpButton = <button ref={trigger} className={`btn-sm ${popup ? "app-guide-popup-trigger" : "btn-ghost"} app-guide-trigger`} type="button"
+      aria-label="Hướng dẫn sử dụng" title="Hướng dẫn sử dụng" aria-haspopup="dialog" disabled={inboxOpen}
       aria-expanded={isOpen} aria-controls={isOpen ? dialogId : undefined} onClick={open}>
-      {arenaGuideHost ? guideTitle : <CircleHelp size={18} strokeWidth={1.7} aria-hidden="true" />}
+      <CircleHelp size={18} strokeWidth={1.7} aria-hidden="true" />
     </button>;
   return <>
     {helpHost ? createPortal(helpButton, helpHost) : helpButton}
@@ -444,7 +441,7 @@ export function AppGuide({ role, pathname, compact, onOpenChange, autoOpen = AUT
       <section id={dialogId} role="dialog" aria-labelledby={`${dialogId}-label`} className="app-guide-panel"
         data-compact={compact || undefined} data-popup={Boolean(popup) || undefined} data-place={placeTop ? "top" : undefined}>
         <div className="app-guide-header">
-          <span id={`${dialogId}-label`} className="app-guide-title">{guideTitle}</span>
+          <span id={`${dialogId}-label`} className="app-guide-title">Hướng dẫn sử dụng</span>
           <div className="app-guide-header-controls">
             {steps.length > 0 && <span className="app-guide-count" aria-label={`Bước ${index + 1} trên ${steps.length}`}>{index + 1} / {steps.length}</span>}
             <button ref={closeButton} className="btn-sm btn-ghost app-guide-close" type="button" aria-label="Đóng hướng dẫn" onClick={close}>

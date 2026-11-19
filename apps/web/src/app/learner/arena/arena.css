@@ -8,7 +8,6 @@
 .arena-page > * { min-width: 0; margin-top: 0; margin-bottom: 0; }
 .arena-page .page-title { margin-bottom: 0; }
 .arena-page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.arena-guide-button { white-space: nowrap; }
 .arena-game-icon { flex: none; color: var(--muted); }
 :root:root .arena-back-button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 :root:root .arena-back-link { display: inline-flex; align-items: center; gap: 6px; justify-self: start; color: var(--text); font-weight: 600; text-decoration: none; }
