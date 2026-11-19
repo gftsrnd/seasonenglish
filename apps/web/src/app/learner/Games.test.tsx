@@ -70,9 +70,9 @@ describe("app games affordances", () => {
 
     const page = screen.getByRole("heading", { name: "Game từ vựng" }).closest(".games-page");
     expect(page).toHaveClass("games-page");
-    const sections = Array.from((page as HTMLElement).querySelectorAll<HTMLElement>(".games-section-card:not(.arena-entry-card)"));
+    const sections = Array.from((page as HTMLElement).querySelectorAll<HTMLElement>(".games-section-card:not(.arena-section-card)"));
     expect(sections).toHaveLength(3);
-    expect((page as HTMLElement).lastElementChild).toHaveClass("arena-entry-card");
+    expect((page as HTMLElement).lastElementChild).toHaveClass("arena-section-card");
     for (const section of sections) expect(section).toHaveClass("games-section-card");
     const topicSection = sections[0]!;
     const wordSetSection = sections[1]!;
@@ -195,7 +195,8 @@ describe("app games affordances", () => {
     renderGames(<LearnerGames view={{ ...view, cefr: "B1", arena: { ...view.arena, eligible: true, points: 12 } }} actions={actions} />);
 
     expect(screen.queryByText("Đấu trường nội bộ")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Vào đấu trường" })).toHaveAttribute("href", "/arena");
+    expect(screen.getByRole("heading", { name: /Đấu trường/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Bảng xếp hạng/ })).toHaveAttribute("href", "/arena");
     expect(screen.queryByRole("button", { name: /^Đấu / })).not.toBeInTheDocument();
   });
 

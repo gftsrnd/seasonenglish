@@ -157,3 +157,38 @@ a.arena-entry-card__link:hover h2 { text-decoration: underline; text-underline-o
   .arena-podium .rank-badge--large { --medal: 32px; }
   .arena-podium__step--1 .rank-badge--large { --medal: 40px; }
 }
+
+/* Mini game › 4. Đấu trường (owner 19/11): one card in the Mini game page. */
+.arena-section-card { display: grid; gap: 10px; }
+.arena-section-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.arena-section-head > h2 { margin: 0; flex: 1 1 auto; min-width: 0; }
+.arena-section-icon { flex: none; display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--primary-soft); color: var(--primary-dark); }
+.arena-section-card.is-locked .arena-section-icon { background: var(--line); color: var(--muted); }
+.arena-section-card.is-locked > p { margin: 0; }
+:root:root .arena-board-link { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--primary-dark); font-weight: 600; font-size: 14px; text-decoration: none; white-space: nowrap; }
+:root:root .arena-board-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.arena-section-lead { margin: 0; }
+.arena-start-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.arena-start-row > select { flex: 1 1 180px; min-width: 0; max-width: 280px; }
+:root:root .arena-start-button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.arena-invite-inline { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2, var(--primary-soft)); }
+.arena-invite-inline__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.arena-invite-inline__actions > .small { margin-right: auto; }
+.arena-subhead { margin: 4px 0 0; font-size: 15px; }
+
+/* Leaderboard rows: rank · name · score · Mời, with the invite picker opening under the row. */
+:root:root .arena-rank-row { grid-template-columns: 32px minmax(0, 1fr) auto 64px; align-items: center; column-gap: 10px; }
+.arena-rank-row__invite { justify-self: end; }
+.arena-rank-invite { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0 4px 42px; }
+.arena-rank-invite > select { min-width: 0; max-width: 220px; }
+.arena-rank-row.is-open { background: var(--primary-soft); border-radius: 8px; }
+
+@media (max-width: 600px) {
+  .arena-section-head { gap: 8px; }
+  .arena-section-icon { width: 30px; height: 30px; }
+  :root:root .arena-board-link { font-size: 13px; }
+  .arena-start-row > select { flex-basis: 100%; max-width: none; }
+  .arena-start-row > .arena-start-button { flex: 1 1 0; justify-content: center; }
+  :root:root .arena-rank-row { grid-template-columns: 28px minmax(0, 1fr) auto 52px; column-gap: 6px; }
+  .arena-rank-invite { padding-left: 0; }
+}

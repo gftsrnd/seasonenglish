@@ -11,7 +11,7 @@ import { useModal } from "../shared/ModalProvider.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { ActionLabel, InfoTitle, useCompactUi } from "../shared/CompactUi.js";
 import { Pager, usePaged } from "../shared/Pager.js";
-import { ArenaEntryCard } from "./arena/ArenaHub.js";
+import { ArenaSection } from "./arena/ArenaHub.js";
 
 type GameIdentity = Pick<GameDescriptor, "key" | "icon" | "name" | "description"> & { iconElement: ReactNode };
 
@@ -164,7 +164,7 @@ export function LearnerGames({ view, actions }: { view: GameHubView; actions: Le
       </details>
       {gamePicker}
     </> : <>{topicPanel}{wordPanel}{gamePicker}</>}
-    <ArenaEntryCard level={view.cefr} navigate={actions.navigate} />
+    <ArenaSection level={view.cefr} setTopic={view.wordSet?.topic ?? null} hasWords={Boolean(view.wordSet?.words.length)} compact={compact} navigate={actions.navigate} />
   </div>;
 }
 

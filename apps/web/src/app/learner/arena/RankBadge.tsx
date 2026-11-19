@@ -9,8 +9,8 @@ const MEDALS: Record<1 | 2 | 3, { file: string; label: string }> = {
  * public/arena, number included) hanging from a two-strap ribbon drawn in CSS with the season theme
  * colours (--primary / --primary-dark), so it fits all 7 themes. Ranks 4+ stay plain numbers.
  */
-export function RankBadge({ rank, size = "normal" }: { rank: number; size?: "normal" | "large" }) {
-  if (rank !== 1 && rank !== 2 && rank !== 3) return <span className="rank-badge rank-badge--plain" aria-label={`Hạng ${rank}`}>{rank}</span>;
+export function RankBadge({ rank, size = "normal", label }: { rank: number; size?: "normal" | "large"; label?: number }) {
+  if (rank !== 1 && rank !== 2 && rank !== 3) return <span className="rank-badge rank-badge--plain" aria-label={`Hạng ${label ?? rank}`}>{label ?? rank}</span>;
   const medal = MEDALS[rank];
   return <span className={`rank-badge rank-badge--medal rank-badge--${rank} rank-badge--${size}`} data-rank={rank} role="img" aria-label={medal.label}>
     <span className="rank-badge__ribbon" aria-hidden="true"><i /><i /></span>
