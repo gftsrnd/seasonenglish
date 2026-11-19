@@ -2191,3 +2191,6 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
 
 /* Owner 19/11: on tablets the three support cards were too narrow (titles broke mid-word) – one per row. */
 @media (max-width: 1100px) { .learner-root .learner-support-shortcuts { grid-template-columns: minmax(0, 1fr); } }
+/* Home lesson card: the minutes / day / lesson line wraps beside "Học ngay" instead of running under it. */
+.learner-root .home-lesson-meta { flex: 1 1 auto; min-width: 0; }
+.learner-root .home-lesson-meta > span { white-space: normal; overflow-wrap: anywhere; }
