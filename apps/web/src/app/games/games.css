@@ -419,7 +419,7 @@
 .crossword-cell {
   display: grid;
   container-type: inline-size;
-  grid-template-rows: 40% minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
@@ -447,9 +447,10 @@
 }
 
 .crossword-cell-number {
-  align-self: center;
-  justify-self: start;
-  margin-inline-start: 1px;
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  z-index: 1;
   color: var(--muted);
   font-size: min(.6rem, 40cqi);
   line-height: 1;
@@ -464,7 +465,7 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  grid-row: 2;
+  grid-row: 1;
   padding: 0;
   font-size: min(1rem, 58cqi);
   line-height: 1;
@@ -472,6 +473,11 @@
   text-transform: uppercase;
   font-weight: 600;
 }
+
+/* The cell shows the active state (border + glow); the input inside never draws its own frame. */
+:root:root:root .crossword-cell > input,
+:root:root:root .crossword-cell > input:focus,
+:root:root:root .crossword-cell > input:focus-visible { border: 0 !important; outline: none !important; box-shadow: none !important; background: transparent !important; height: 100% !important; min-height: 0 !important; }
 
 .crossword-actions span {
   max-width: 100%;

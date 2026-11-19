@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  roundPointValues,
+  roundShownPoints,
   arenaEligible,
   buildCrosswordLayout,
   decideDuel,
@@ -26,10 +28,20 @@ describe("engagement policy", () => {
   describe("shared round score (RULE A.3/A.4)", () => {
     const outcomes = (...values: RoundUnitOutcome[]) => values;
 
-    it("scores the rule's 8-unit example as 85/110 = 77", () => {
+    it("scores the rule's 8-unit example as the shown points added up: 9+9+14+14+0+9+9+14 = 78", () => {
       const answers = outcomes("first_try", "first_try", "first_try", "first_try", "wrong", "first_try", "first_try", "first_try");
-      expect(scoreRound(8, answers)).toEqual({ raw: 85, rawMax: 110, score: 77 });
-      expect(scoreRound(Array.from({ length: 8 }), answers).score).toBe(77);
+      expect(roundPointValues(8)).toEqual({ first: 9, streak: 14, assisted: 5 });
+      expect(roundShownPoints(8, answers)).toEqual([9, 9, 14, 14, 0, 9, 9, 14]);
+      expect(scoreRound(8, answers)).toEqual({ raw: 85, rawMax: 110, score: 78 });
+      expect(scoreRound(Array.from({ length: 8 }), answers).score).toBe(78);
+    });
+
+    it("gives exactly 100 only to a round right first time throughout (rounded sums are 99–102)", () => {
+      for (const count of [5, 7, 8, 9, 10, 11, 12]) {
+        expect(scoreRound(count, Array.from({ length: count }, () => "first_try" as const)).score).toBe(100);
+        const oneAssisted = Array.from({ length: count }, (_, index) => index === count - 1 ? "assisted" as const : "first_try" as const);
+        expect(scoreRound(count, oneAssisted).score).toBeLessThan(100);
+      }
     });
 
     it("uses 10 as the denominator when only one unit is assigned", () => {

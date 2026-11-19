@@ -394,14 +394,14 @@ describe("learner game visual and interaction regressions", () => {
       expect(screen.queryByText(/^Đúng/)).not.toBeInTheDocument();
       fireEvent.keyDown(window, { key: first.slice(-1).toUpperCase() });
       expect(screen.getByText(`Đúng · ${first}`)).toBeInTheDocument();
-      expect(container.querySelector('[data-hud="raw"]')).toHaveTextContent("Điểm 10");
+      expect(container.querySelector('[data-hud="raw"]')).toHaveTextContent("Điểm 50");
       act(() => { vi.advanceTimersByTime(500); });
       expect(screen.getByRole("heading", { name: "Từ 2/2" })).toBeInTheDocument();
       expect(container.querySelector('[data-hud="combo"]')).toHaveTextContent("Combo 1");
       for (const key of second) fireEvent.keyDown(window, { key });
       act(() => { vi.advanceTimersByTime(500); });
-      // No x1–x5 multiplier any more: two first tries are +10, +10 and no combo field is sent.
-      expect(container.querySelector('[data-hud="raw"]')).toHaveTextContent("Điểm 20");
+      // Two first tries on a 2-question round: 50 + 50 = 100 (shown points), no combo field is sent.
+      expect(container.querySelector('[data-hud="raw"]')).toHaveTextContent("Điểm 100");
       const answers = onFinish.mock.calls[0]![0].answers as Array<Record<string, unknown>>;
       expect(answers).toEqual([
         expect.objectContaining({ wordId: first, answer: first, attempts: 1 }),

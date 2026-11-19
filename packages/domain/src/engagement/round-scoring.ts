@@ -7,6 +7,11 @@
  *
  * The denominator depends only on N, the number of units assigned when the round was
  * created, so ending early (lives lost, time up) never shrinks it.
+ *
+ * Shown points (owner, 19/11): each question is worth its raw value on the 100 scale, rounded
+ * to a whole number (8 questions: +9 / +14 / +5). The round score is the sum of those shown
+ * points, so the HUD, the tutorial line and the result always add up. A round that is right
+ * first time throughout is exactly 100 (rounding would give 99–102; only a perfect round can).
  */
 export const GAME_RULES_VERSION = 2;
 
@@ -49,11 +54,29 @@ export function roundStreak(answers: readonly RoundUnitOutcome[]): number {
   return streak;
 }
 
+/** A raw unit value on the 100 scale, rounded half-up in integers (no float drift at .5). */
+function shown(rawPoints: number, rawMax: number): number {
+  return rawMax > 0 ? Math.floor((200 * rawPoints + rawMax) / (2 * rawMax)) : 0;
+}
+
+/** The whole-number points shown for one question of an N-question round: right first time, in a streak, assisted. */
+export function roundPointValues(units: number): { first: number; streak: number; assisted: number } {
+  const rawMax = roundRawMax(units);
+  return { first: shown(10, rawMax), streak: shown(15, rawMax), assisted: shown(5, rawMax) };
+}
+
+/** Shown points per question in play order; their sum is the round score. */
+export function roundShownPoints(unitCount: number, answers: readonly RoundUnitOutcome[]): number[] {
+  const rawMax = roundRawMax(unitCount);
+  return roundUnitPoints(unitCount, answers).map((value) => shown(value, rawMax));
+}
+
 export function scoreRound(units: readonly unknown[] | number, answers: readonly RoundUnitOutcome[]): RoundScore {
   const count = typeof units === "number" ? Math.max(0, Math.trunc(units)) : units.length;
   const rawMax = roundRawMax(count);
   const raw = roundUnitPoints(count, answers).reduce((sum, value) => sum + value, 0);
-  // Integer half-up rounding: floor((200·raw + rawMax) / (2·rawMax)) avoids float drift at .5.
-  const score = rawMax > 0 ? Math.min(100, Math.floor((200 * raw + rawMax) / (2 * rawMax))) : 0;
+  const perfect = count > 0 && Array.from({ length: count }, (_, index) => answers[index]).every((outcome) => outcome === "first_try");
+  const sum = roundShownPoints(count, answers).reduce((total, value) => total + value, 0);
+  const score = rawMax > 0 ? (perfect ? 100 : Math.min(100, sum)) : 0;
   return { raw, rawMax, score };
 }

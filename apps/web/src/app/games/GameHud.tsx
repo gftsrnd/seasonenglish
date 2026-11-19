@@ -39,17 +39,17 @@ export function useGameClock(): GameClock {
   }, []);
 }
 
-/** Live raw points and combo with the same rule the server scores with. */
+/** Live round score (the shown whole-number points added up) and combo, with the same rule the server scores with. */
 export function useRoundTally(game: GameKey, units: readonly GameWord[], answers: readonly GameAnswerInput[], events?: readonly GameEvidenceEventInput[]) {
   return useMemo(() => {
     const scored = scoreGameRound(game, units, answers.filter(Boolean), { units, events });
-    return { raw: scored.raw, combo: roundStreak(scored.outcomes.filter((outcome) => outcome !== "unanswered")) };
+    return { raw: scored.score, combo: roundStreak(scored.outcomes.filter((outcome) => outcome !== "unanswered")) };
   }, [answers, events, game, units]);
 }
 
-/** Raw points a new answer adds to the round (for the "+10" feedback). */
+/** Shown points a new answer adds to the round score (for the "+9" feedback). */
 export function roundGain(game: GameKey, units: readonly GameWord[], before: readonly GameAnswerInput[], after: readonly GameAnswerInput[], events?: readonly GameEvidenceEventInput[]) {
-  return scoreGameRound(game, units, after, { units, events }).raw - scoreGameRound(game, units, before, { units, events }).raw;
+  return scoreGameRound(game, units, after, { units, events }).score - scoreGameRound(game, units, before, { units, events }).score;
 }
 
 function clockText(ms: number) {

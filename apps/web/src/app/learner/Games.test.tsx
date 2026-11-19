@@ -240,7 +240,7 @@ describe("app games affordances", () => {
     expect(onFinish).not.toHaveBeenCalled();
   });
 
-  it("scores Word sort with the shared streak (+10, +10, then +15) and sends no own combo", async () => {
+  it("scores Word sort with the shared streak (9, 9, then 14 a question on 8) and sends no own combo", async () => {
     vi.useFakeTimers();
     const onFinish = vi.fn();
     const words = Array.from({ length: 8 }, (_, index) => ({ id: `noun-${index}`, english: `noun${index}`, vietnamese: `danh từ ${index}`, definition: "a thing", partOfSpeech: "noun" }));
@@ -255,7 +255,7 @@ describe("app games affordances", () => {
     const answers = (onFinish.mock.calls[0]![0] as { answers: Array<{ combo?: number; attempts?: number }> }).answers;
     expect(answers.map((answer) => answer.combo)).toEqual(Array(8).fill(undefined));
     expect(answers.every((answer) => answer.attempts === 1)).toBe(true);
-    expect(document.querySelector('[data-hud="raw"]')).toHaveTextContent("Điểm 110");
+    expect(document.querySelector('[data-hud="raw"]')).toHaveTextContent("Điểm 100");
     expect(document.querySelector('[data-hud="combo"]')).toHaveTextContent("Combo 8");
   });
 
@@ -325,7 +325,7 @@ describe("app games affordances", () => {
 
     fireEvent.click(tileFor("a"));
     fireEvent.click(tileFor("t"));
-    expect(screen.getByText("Đúng · cat +5")).toBeInTheDocument();
+    expect(screen.getByText("Đúng · cat +50")).toBeInTheDocument();
     await act(async () => { await vi.advanceTimersByTimeAsync(1_200); });
     const answers = (onFinish.mock.calls[0]![0] as { answers: Array<{ answer: string; usedHint?: boolean }> }).answers;
     expect(answers).toEqual([expect.objectContaining({ answer: "cat", usedHint: true, attempts: 1 })]);
