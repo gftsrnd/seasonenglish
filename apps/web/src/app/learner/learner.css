@@ -2205,3 +2205,6 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
   :root:root:root:root .learner-root .bdg-chip { gap: 4px; padding-inline: 8px; }
   :root:root:root:root .learner-root .bdg-chip > b { white-space: nowrap; font-size: 13px; }
 }
+/* Audit 19/11: the avatar popup gets the usual × at the top right. */
+.avatar-dialog-preview { position: relative; }
+.avatar-dialog-close { margin-left: auto; align-self: flex-start; }

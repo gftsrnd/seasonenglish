@@ -179,3 +179,7 @@
 @media (min-width: 601px) {
   :root:root:root:root #modal > form.dialog { width: min(480px, calc(100vw - 48px)) !important; max-width: 480px !important; }
 }
+
+/* Audit 19/11: popups stay within 80% of the screen height and scroll inside (staff learner profile, test preview). */
+:root:root:root .modal-backdrop > .dialog.manager-learner-profile-dialog,
+:root:root:root .modal-backdrop > .dialog.operator-assessment-preview-dialog { max-height: 80dvh !important; overflow-y: auto; }

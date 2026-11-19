@@ -1,3 +1,4 @@
+import { ModalCloseButton } from "../shared/CompactUi.js";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { AVATAR_CHARACTERS } from "@e4s/contracts";
 import type { AssessmentPlacementRetakeRequestView, LearnerAvatarData, RewardView, SurveyView } from "@e4s/contracts";
@@ -209,7 +210,7 @@ export function AvatarDialog({ initial, name = "Avatar xem trước", onClose, o
     }
   };
   return <div className="modal-backdrop avatar-dialog-backdrop"><section ref={dialogRef} className="dialog avatar-dialog" role="dialog" tabIndex={-1} aria-modal="true" aria-labelledby="avatar-dialog-title" aria-busy={saving || undefined} onKeyDown={handleDialogKeyDown}>
-    <header className="avatar-dialog-preview"><AccountAvatar avatar={avatar} name={name} size={48} /><div><h2 id="avatar-dialog-title">Avatar của bạn</h2><p>{name}</p></div></header>
+    <header className="avatar-dialog-preview"><AccountAvatar avatar={avatar} name={name} size={48} /><div><h2 id="avatar-dialog-title">Avatar của bạn</h2><p>{name}</p></div><span className="avatar-dialog-close"><ModalCloseButton iconOnly label="Đóng" disabled={saving} onClick={onClose} /></span></header>
     <div className="avatar-dialog-options">
       <fieldset disabled={saving}>
         <legend>Nhân vật Season English</legend>

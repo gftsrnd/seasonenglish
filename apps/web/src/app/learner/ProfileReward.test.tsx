@@ -233,7 +233,8 @@ describe("app profile avatar dialog affordances", () => {
     const trigger = screen.getAllByRole("button", { name: "Đổi avatar" })[0]!;
     await user.click(trigger);
     const dialog = screen.getByRole("dialog", { name: "Avatar của bạn" });
-    const first = within(dialog).getByRole("button", { name: "Thỏ hồng" });
+    // The × in the header is now the first stop (audit 19/11).
+    const first = within(dialog).getByRole("button", { name: "Đóng" });
     const save = within(dialog).getByRole("button", { name: "Lưu avatar" });
 
     save.focus();
