@@ -116,7 +116,7 @@ describe("Đấu trường page", () => {
     expect(await screen.findByText(/Đấu trường B1/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "Đấu trường từ vựng" })).toBeInTheDocument();
     expect(screen.getByText(/6\.000 điểm XH tổng · Hạng 4\/5/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Về Mini game/ })).toHaveAttribute("href", "/games");
+    expect(screen.getByRole("link", { name: /Về Game từ vựng/ })).toHaveAttribute("href", "/games");
     fireEvent.click(screen.getByRole("tab", { name: "Bảng xếp hạng" }));
     expect(screen.getByRole("heading", { level: 1, name: "Đấu trường từ vựng" })).toBeInTheDocument();
     expect(screen.getAllByRole("combobox").map((item) => item.getAttribute("aria-label"))).toEqual(["Cấp", "Trò", "Mùa"]);

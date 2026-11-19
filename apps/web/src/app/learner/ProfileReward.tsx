@@ -67,7 +67,7 @@ export function LearnerProfile({ view, actions, courseCompleted = false }: { vie
   const goals = labels(view.learner.profile.goals, GOALS);
   const detail = level ? `Trình độ ${level} – ${CEFR_LABELS[level]}${goals ? ` · ${goals}.` : ""}` : "Chưa duyệt trình độ";
   return <div className="app-learner-page profile-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}>
-    <PageTitle title="Tiến độ & hồ sơ" detail={detail} aside={level ? <span className={`badge lvl lvl-${level}`}>{level}</span> : null} />
+    <PageTitle title="Tiến độ & hồ sơ" detail={level ? `Xem trình độ ${level}, mục tiêu và tiến độ học của bạn.` : "Xem mục tiêu và tiến độ học của bạn."} aside={level ? <span className={`badge lvl lvl-${level}`}>{level}</span> : null} />
     <section className="card learner-summary-card learner-summary-card--profile profile-identity-card" aria-label={`Hồ sơ của ${view.learner.displayName}`}>
       <div className="profile-identity-header">
         <button ref={avatarReturnRef} className="btn-ghost profile-avatar-button" type="button" aria-label="Đổi avatar" onClick={openAvatar}><AccountAvatar avatar={view.learner.profile.avatar} name={view.learner.displayName} /></button>

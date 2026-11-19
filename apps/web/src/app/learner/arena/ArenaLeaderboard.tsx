@@ -45,7 +45,7 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
   }, [client]);
   useEffect(() => { void load(); }, [load]);
 
-  const back = <AppLink className="btn arena-back-button" href="/games" navigate={navigate}><ArrowLeft size={16} aria-hidden="true" />Về Mini game</AppLink>;
+  const back = <AppLink className="btn arena-back-button" href="/games" navigate={navigate}><ArrowLeft size={16} aria-hidden="true" />Về Game từ vựng</AppLink>;
   const simpleHeader = <header className="page-title arena-page-title"><div><h1>Đấu trường từ vựng</h1></div>{back}</header>;
   if (error && !home) return <div className="app-learner-page arena-page">{simpleHeader}<Notice tone="danger">{error}</Notice></div>;
   if (!home) return <div className="app-learner-page arena-page">{simpleHeader}<section className="card" aria-live="polite">Đang tải đấu trường…</section></div>;

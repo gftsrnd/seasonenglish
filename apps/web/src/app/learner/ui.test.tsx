@@ -78,8 +78,8 @@ describe("learner app UI primitives", () => {
     const navigate = vi.fn();
     render(<LearnerController path="/games" contracts={{}} callbacks={{ navigate } as never} />);
 
-    expect(screen.getByRole("heading", { name: "Mini game chưa mở" })).toBeInTheDocument();
-    expect(screen.getByText(/có bài học trong lộ trình tháng đã được phát hành/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Game từ vựng" })).toBeInTheDocument();
+    expect(screen.getByText("Game từ vựng sẽ mở khi có bài học tháng đã được phát hành.")).toBeInTheDocument();
     expect(screen.queryByText("Chưa thể mở trang")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Về trang chủ học" })).toHaveAttribute("href", "/home");
   });

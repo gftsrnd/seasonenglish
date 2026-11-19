@@ -135,7 +135,7 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
   const defaultPanel = availablePanels[0]?.id;
 
   return <div className="settings-page" data-settings-role={role} data-compact={compact || undefined}>
-    <div className="page-title"><h1>Cài đặt</h1></div>
+    <div className="page-title"><div><h1>Cài đặt</h1><p className="muted">{role === "manager" ? "Thiết lập lịch học, nhắc học, mùa xếp hạng, giao diện và người dùng." : "Chỉnh giao diện, nhạc nền, học theo tháng và người dùng."}</p></div></div>
     {availablePanels.map(panel => {
       const expanded = openPanels[panel.id] ?? (panel.id === defaultPanel);
       const contentId = `setting-${panel.id}`;

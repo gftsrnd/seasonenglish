@@ -333,7 +333,7 @@ export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actio
         : exam?.requirement || (eligibility?.entryClosed ? null : eligibility?.formPublished ? "Chờ đến giờ mở đề." : "Đề đang được chuẩn bị cho trình độ của bạn.");
 
   return <div className="app-learner-page monthly-assessment-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
-    <PageTitle {...(monthLabel ? { eyebrow: `Tháng ${formatMonth(monthLabel)}` } : {})} title="Bài thi tháng" detail={month?.themeTitle} />
+    <PageTitle title="Bài thi tháng" detail={`Làm bài thi tiếng Anh${monthLabel ? ` tháng ${formatMonth(monthLabel)}` : ""}${view.learner.cefr ? ` ở cấp ${view.learner.cefr}` : ""}.`} />
     <section className="monthly-assessment-landing" aria-label="Bài thi tháng">
       {view.monthlyUncounted ? <div className="monthly-assessment-form-state">
         <p>Tháng học thử không có bài thi.</p>

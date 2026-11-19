@@ -250,7 +250,7 @@ describe("app coach and weekly practice speech input", () => {
     const { rerender } = render(<LearnerCoach view={{ ...coach, monthly: { label: "Tháng 2026-11", turns: 1, target: 100 } }} actions={callback} />);
 
     expect(screen.getByRole("heading", { name: "Luyện với Season" })).toBeInTheDocument();
-    expect(screen.getByText("Tháng 2026-11 · A2")).toBeInTheDocument();
+    expect(screen.getByText("Season AI Coach luyện tiếng Anh cùng bạn theo nội dung tháng.")).toBeInTheDocument();
     expect(screen.getByText("Hôm nay 0/30")).toBeInTheDocument();
     expect(screen.getByText("Tháng 1/100")).toBeInTheDocument();
     expect(screen.getByText("Giới hạn chat và tiến độ tháng")).toBeInTheDocument();

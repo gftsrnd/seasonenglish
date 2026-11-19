@@ -405,7 +405,7 @@
   :root:root:root .learner-root .profile-form .opt > span { font-size: 13px; line-height: 1.25; }
   :root:root:root .learner-root .profile-form .profile-edit-usage > div > p.small { margin: 8px 0 4px; font-size: 13px; font-weight: 600; }
   :root:root:root .learner-root .bao-row:has(.learner-mascot--onboard) .bubble { display: none !important; }
-  :root:root:root .learner-root .bao-row .learner-mascot--onboard { width: 44px !important; height: 44px !important; }
+  :root:root:root .learner-root .bao-row .learner-mascot--onboard { width: 64px !important; height: 64px !important; }
   :root:root:root .learner-root .bao-row:has(.learner-mascot--onboard) { margin-bottom: 8px !important; align-items: center !important; }
 }
 @media (max-width: 360px) {
@@ -504,7 +504,7 @@
   :root:root:root .learner-root .lesson-page :is(.vocabulary-card-phrase-list .vocabulary-card-sound, .vocabulary-card-relations .chip) { height: 28px; min-height: 28px !important; padding: 0 6px !important; gap: 2px; font-size: 12.5px !important; letter-spacing: -.01em; }
   :root:root:root .learner-root .lesson-page :is(.vocabulary-card-phrase-list .vocabulary-card-sound, .vocabulary-card-relations .chip) svg { width: 11px; height: 11px; }
   /* #11 mascot not tiny on phones. */
-  :root:root:root .learner-root .bao-row .learner-mascot--onboard { width: 64px !important; height: 64px !important; }
+  :root:root:root .learner-root .bao-row .learner-mascot--onboard { width: 96px !important; height: 96px !important; }
 }
 @media (max-width: 1024px) {
   /* A chip with a meaning icon keeps room for the icon, so "= record" is never covered by it. */
