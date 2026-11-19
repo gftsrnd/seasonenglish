@@ -312,3 +312,7 @@
 @media (min-width: 601px) {
   :root:root:root:root:root .arena-page .arena-match-header > .game-exit-link { height: 32px; min-height: 32px !important; max-height: 32px; padding: 0 12px !important; font-size: 13px !important; line-height: 1; border-radius: 9px; }
 }
+/* Owner 19/11: on tablets a shared popup rule pulled the header 20px past each edge (title and × spilled out). */
+:root:root:root:root:root:root:root .modal-backdrop > .dialog.arena-dialog > .row.between:first-child { margin: 0 0 8px !important; padding: 12px 16px 10px !important; width: auto !important; box-sizing: border-box; }
+/* The outcome banner in the popup is a rounded box with even side margins, like the card top on the match page. */
+:root:root:root:root .dialog.arena-dialog .arena-result__banner { margin: 0 16px; border-radius: 14px; }
