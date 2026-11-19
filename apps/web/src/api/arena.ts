@@ -61,6 +61,7 @@ export interface ArenaLeaderboard {
   level: CefrLevel;
   game: ArenaBoardGame;
   season: ArenaSeason | null;
+  seasons?: ArenaSeason[];
   entries: Array<{ rank: number; learnerId: string; displayName: string; rating: number }>;
   me: { rank: number; of: number; rating: number } | null;
 }
@@ -85,7 +86,7 @@ export interface ArenaApiClient {
   submit(id: string, input: GameFinishInput & { requestId: string }): Promise<{ match: ArenaMatch; result: { score: number; correct: number; total: number } }>;
   forfeit(id: string): Promise<ArenaMatch>;
   cancel(id: string): Promise<ArenaMatch>;
-  leaderboard(input: { game?: ArenaBoardGame; level?: CefrLevel }): Promise<ArenaLeaderboard>;
+  leaderboard(input: { game?: ArenaBoardGame; level?: CefrLevel; season?: string }): Promise<ArenaLeaderboard>;
   inviteFriendly(input: { requestId: string; opponentId: string; game: GameKey }): Promise<ArenaMatch>;
   answerFriendly(id: string, answer: "accept" | "decline"): Promise<ArenaMatch>;
   seasonSetting(): Promise<ArenaSeasonSetting>;
@@ -108,10 +109,11 @@ export const arenaApiClient: ArenaApiClient = {
   })),
   forfeit: (id) => request(`/api/v1/arena/matches/${encodeURIComponent(id)}/forfeit`, post()),
   cancel: (id) => request(`/api/v1/arena/matches/${encodeURIComponent(id)}/cancel`, post()),
-  leaderboard: ({ game, level }) => {
+  leaderboard: ({ game, level, season }) => {
     const query = new URLSearchParams();
     if (game) query.set("game", game);
     if (level) query.set("level", level);
+    if (season) query.set("season", season);
     const suffix = query.toString();
     return request(`/api/v1/arena/leaderboard${suffix ? `?${suffix}` : ""}`);
   },

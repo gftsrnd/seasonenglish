@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Bell, Swords } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Bell, Equal, Handshake, Swords, Trophy, User } from "lucide-react";
 import type { ArenaMatch } from "../../../api/arena.js";
 import { ARENA_GAME_NAMES, bandLabel, outcomeTitle, shortReason, signed } from "./arena-text.js";
 
@@ -22,15 +22,14 @@ function reasonSentence(match: ArenaMatch): string {
   if (!result) return "";
   const special = shortReason(match);
   if (special) return `${special}.`;
-  if (result.outcome === "draw") return "Hai bên bằng điểm.";
+  if (result.outcome === "draw") return "Hai bên bằng điểm và bằng thời gian.";
   return result.outcome === "win" ? "Điểm ván của bạn cao hơn." : "Điểm ván của đối thủ cao hơn.";
 }
 
 /**
- * Kết quả trận (owner reference 19/11): a side-by-side comparison – title (Bạn thắng! / Bạn thua /
- * Hoà), "game · mode · set", Bạn VS đối thủ with the two scores, one reason line, then the XH box
- * (+N điểm xếp hạng with the rating change, or "Giao hữu không tính điểm xếp hạng").
- * Waiting: only my score and "Chờ đối thủ". Actions: one primary "Đấu tiếp" plus an optional link.
+ * Kết quả trận (owner reference 19/11): an outcome banner (win in the season colour, lose neutral,
+ * draw amber), Bạn VS đối thủ side by side with the winner marked, one reason line, then the XH
+ * box with the change and before → after. Waiting: my score and "Chờ đối thủ".
  */
 export function ArenaResultCard({ match, onAgain, againBusy = false, link }: {
   match: ArenaMatch;
@@ -44,35 +43,41 @@ export function ArenaResultCard({ match, onAgain, againBusy = false, link }: {
   const mode = match.mode === "ranked" ? "Xếp hạng" : "Giao hữu";
   const opponent = match.opponent?.displayName ?? "Đối thủ";
   const rating = match.mode === "ranked" ? result?.rating ?? null : null;
-  const winner = (side: "me" | "them") => result && result.outcome !== "draw" && ((side === "me") === (result.outcome === "win"));
+  const winner = (side: "me" | "them") => Boolean(result && result.outcome !== "draw" && ((side === "me") === (result.outcome === "win")));
+  const Icon = state === "win" ? Trophy : state === "lose" ? Swords : state === "draw" ? Handshake : Bell;
+  const Delta = !rating ? null : rating.change > 0 ? ArrowUpRight : rating.change < 0 ? ArrowDownRight : Equal;
+
+  const side = (who: "me" | "them") => {
+    const me = who === "me";
+    return <div className={`arena-result__side${winner(who) ? " is-winner" : ""}`}>
+      {winner(who) ? <span className="arena-result__crown">Thắng</span> : null}
+      <span className={`arena-result__avatar${me ? " is-me" : ""}`} aria-hidden="true">{me ? <User size={24} /> : result ? initials(opponent) : "?"}</span>
+      <b>{me ? "Bạn" : result ? opponent : "Đối thủ"}</b>
+      <strong className="arena-result__score">{me ? match.me.score ?? 0 : result ? match.them.score ?? 0 : "–"}</strong>
+      <small>{me ? (clock(match.me.gameplayMs) ? `điểm ván · ${clock(match.me.gameplayMs)}` : "điểm ván") : result ? "điểm ván" : "chưa chơi"}</small>
+    </div>;
+  };
 
   return <section className={`card arena-result is-${state}`} data-arena-result={state} aria-live="polite">
-    <header className="arena-result__head">
-      <h2>{result ? outcomeTitle(result.outcome) : waiting ? "Chờ đối thủ" : "Trận đã đóng"}</h2>
-      <p className="small muted">{ARENA_GAME_NAMES[match.game]} · {mode} · {match.setTopic}</p>
+    <header className="arena-result__banner">
+      <span className="arena-result__badge" aria-hidden="true"><Icon size={26} strokeWidth={2} /></span>
+      <span className="arena-result__title">
+        <h2>{result ? outcomeTitle(result.outcome) : waiting ? "Chờ đối thủ" : "Trận đã đóng"}</h2>
+        <small>{ARENA_GAME_NAMES[match.game]} · {mode} · {match.setTopic}</small>
+      </span>
     </header>
 
     {result || waiting ? <div className="arena-result__versus">
-      <div className={`arena-result__side${winner("me") ? " is-winner" : ""}`}>
-        <span className="arena-result__avatar is-me" aria-hidden="true">Bạn</span>
-        <b>Bạn</b>
-        <strong className="arena-result__score">{match.me.score ?? 0}</strong>
-        {clock(match.me.gameplayMs) ? <small>{clock(match.me.gameplayMs)}</small> : null}
-      </div>
+      {side("me")}
       <span className="arena-result__vs" aria-hidden="true">VS</span>
-      <div className={`arena-result__side${winner("them") ? " is-winner" : ""}`}>
-        <span className="arena-result__avatar" aria-hidden="true">{result ? initials(opponent) : "?"}</span>
-        <b>{result ? opponent : "Đối thủ"}</b>
-        <strong className="arena-result__score">{result ? match.them.score ?? 0 : "–"}</strong>
-        {!result ? <small>Chưa chơi</small> : null}
-      </div>
+      {side("them")}
     </div> : null}
 
-    {result ? <p className="arena-result__reason" data-arena-xh>{reasonSentence(match)}</p> : waiting ? <p className="arena-result__reason"><Bell size={15} aria-hidden="true" /> Kết quả sẽ báo ở chuông.</p> : null}
+    {result ? <p className="arena-result__reason">{reasonSentence(match)}</p> : waiting ? <p className="arena-result__reason"><Bell size={15} aria-hidden="true" /> Kết quả sẽ báo ở chuông.</p> : null}
 
-    {result ? <div className="arena-result__xh">
-      {rating
-        ? <><b data-arena-chip>{signed(rating.change)} điểm xếp hạng</b>
+    {result ? <div className={`arena-result__xh${rating ? rating.change > 0 ? " is-up" : rating.change < 0 ? " is-down" : " is-even" : " is-friendly"}`}>
+      {rating && Delta
+        ? <><span className="arena-result__delta"><Delta size={20} aria-hidden="true" /><b data-arena-chip>{signed(rating.change)} điểm xếp hạng</b></span>
           <span className="small muted">{numberFormat.format(rating.before)} → {numberFormat.format(rating.after)} · {[bandLabel(rating.base, result.outcome), rating.meetingIndex ? `lần gặp ${rating.meetingIndex}` : "", rating.decayPercent !== null && rating.decayPercent < 100 ? `tính ${rating.decayPercent}%` : ""].filter(Boolean).join(" · ")}</span></>
         : <b>Giao hữu không tính điểm xếp hạng</b>}
     </div> : null}

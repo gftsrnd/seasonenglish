@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { GameFinishInput } from "@e4s/contracts";
-import { LogOut, Play } from "lucide-react";
+import { Clock3, LogOut, Play } from "lucide-react";
 import { arenaApiClient, type ArenaApiClient, type ArenaMatch, type ArenaRound } from "../../../api/arena.js";
 import { useModal } from "../../shared/ModalProvider.js";
 import { GameEngine } from "../Games.js";
 import { AppLink, Notice } from "../ui.js";
 import { ArenaGameIcon } from "./ArenaGameIcon.js";
+import { useArenaSceneStyle } from "./ArenaHub.js";
 import { ArenaResultCard } from "./ArenaResultCard.js";
 import { ArenaWords } from "./ArenaWords.js";
 import { ARENA_GAME_NAMES, hoursLeft, isInviteForMe, matchStatusLine } from "./arena-text.js";
@@ -48,7 +49,7 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
   const start = () => run(async () => { const next = await client.start(matchId); setRound(next); setMatch(next.match); }, "Chưa mở được ván đấu.");
   const answer = (value: "accept" | "decline") => run(async () => {
     const next = await client.answerFriendly(matchId, value);
-    if (value === "decline") navigate("/games"); else setMatch(next);
+    if (value === "decline") navigate("/arena"); else setMatch(next);
   }, "Không trả lời được lời mời.");
   const submit = async (input: GameFinishInput) => {
     const entry = pending.current?.input === input ? pending.current : { input, requestId: crypto.randomUUID() };
@@ -67,7 +68,7 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
     }
   };
   const exit = async () => {
-    if (!round) { navigate("/games"); return; }
+    if (!round) return;
     const leave = await modal.confirm({
       title: "Thoát trận?", message: "Thoát sẽ tính thua.", confirmLabel: "Thoát và chịu thua", cancelLabel: "Tiếp tục chơi", tone: "danger", countdownSeconds: 0
     });
@@ -82,17 +83,18 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
   const name = ARENA_GAME_NAMES[match.game];
   const modeLine = match.mode === "ranked" ? "Xếp hạng · đối thủ ẩn" : `Giao hữu · ${match.opponent?.displayName ?? ""}`;
   const playing = Boolean(round) && match.status === "accepted" && !match.me.played;
+  const preparing = !round && match.status === "accepted" && !match.me.played;
 
-  return <div className={`app-learner-page game-page arena-page${playing ? "" : " arena-page--narrow"}`} data-arena-match={match.id}>
+  return <div className={`app-learner-page game-page arena-page${preparing ? " arena-page--ready" : playing ? "" : " arena-page--narrow"}`} data-arena-match={match.id}>
     <header className="row between game-running-header arena-match-header">
       <div className="arena-match-header__text">
         <div className="eyebrow game-running-title"><span className="game-title-icon" aria-hidden="true"><ArenaGameIcon game={match.game} size={18} /></span><span>{name}</span></div>
         <h1>{match.setTopic}</h1>
         <p className="small muted arena-mode-line" data-arena-mode-line>{modeLine}</p>
       </div>
-      {match.status === "accepted" && !match.me.played
+      {playing
         ? <button className="btn btn-sm btn-danger game-exit-link" type="button" disabled={busy} onClick={() => void exit()}><LogOut size={15} strokeWidth={2.2} aria-hidden="true" />Thoát</button>
-        : null}
+        : <span data-arena-guide-host />}
     </header>
     <section id="gm-board" className="game-board">
       {playing && round
@@ -135,15 +137,58 @@ function ArenaMatchState({ match, busy, onStart, onAnswer, again, link, client }
     </section>;
   }
   if (match.status === "accepted" && !match.me.played) {
-    return <section className="card arena-state" data-arena-state="ready">
-      <h2>{match.me.started ? "Chơi tiếp ván đấu" : "Sẵn sàng đấu"}</h2>
-      <p className="small muted">Còn {hoursLeft(match.playDeadline)} giờ</p>
-      <div className="row arena-actions"><button className="btn-primary" type="button" disabled={busy} aria-busy={busy || undefined} onClick={onStart}><Play className="game-control-icon" size={16} aria-hidden="true" />{match.me.started ? "Chơi tiếp" : "Bắt đầu"}</button></div>
-      {client.words ? <><h3 className="arena-words-title">Từ trong ván – ôn trước khi chơi</h3><ArenaWords matchId={match.id} client={client as Pick<ArenaApiClient, "words">} /></> : null}
-    </section>;
+    return <ArenaReady match={match} busy={busy} onStart={onStart} link={link} wordsClient={client.words ? client as Pick<ArenaApiClient, "words"> : undefined} />;
   }
   if (match.status === "accepted" || match.status === "settled") {
     return <ArenaResultCard match={match} againBusy={again.busyGame === match.game} onAgain={() => void again.start(match.game)} link={link} />;
   }
   return <section className="card arena-state" data-arena-state="closed"><h2>{matchStatusLine(match)}</h2>{link}</section>;
+}
+
+function ArenaReady({ match, busy, onStart, link, wordsClient }: {
+  match: ArenaMatch;
+  busy: boolean;
+  onStart: () => void;
+  link: ReactNode;
+  wordsClient: Pick<ArenaApiClient, "words"> | undefined;
+}) {
+  const scene = useArenaSceneStyle();
+  const deadline = match.playDeadline ? Date.parse(match.playDeadline) : NaN;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!Number.isFinite(deadline) || deadline <= Date.now()) return;
+    const tick = window.setInterval(() => {
+      const time = Date.now();
+      setNow(time);
+      if (time >= deadline) window.clearInterval(tick);
+    }, 1000);
+    return () => window.clearInterval(tick);
+  }, [deadline]);
+  const seconds = Number.isFinite(deadline) ? Math.max(0, Math.ceil((deadline - now) / 1000)) : null;
+  const expired = seconds === 0;
+  const clock = seconds === null ? null : [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
+    .map((part) => String(part).padStart(2, "0")).join(":");
+
+  return <section className="card arena-state arena-ready" data-arena-state="ready">
+    <div className="arena-ready__banner">
+      <span className="arena-ready__scene" style={scene} aria-hidden="true" />
+      <div className="arena-ready__copy">
+        <h2>{match.me.started ? "Chơi tiếp ván đấu" : "Sẵn sàng đấu"}</h2>
+        {clock ? <div className="arena-match-countdown" role="timer" aria-label="Thời gian còn lại">
+          <Clock3 size={17} aria-hidden="true" /><span>Còn</span><strong>{clock}</strong>
+        </div> : null}
+        {expired ? <p role="status">Đã hết thời gian hoàn thành lượt.</p> : null}
+      </div>
+    </div>
+    {wordsClient ? <div className="arena-ready__words">
+      <h3 className="arena-words-title">Ôn từ trước khi chơi</h3>
+      <ArenaWords matchId={match.id} client={wordsClient} />
+    </div> : null}
+    <footer className="arena-ready__actions">
+      {link}
+      <button className="btn-primary" type="button" disabled={busy || expired} aria-busy={busy || undefined} onClick={onStart}>
+        <Play className="game-control-icon" size={16} aria-hidden="true" />{match.me.started ? "Chơi tiếp" : "Bắt đầu"}
+      </button>
+    </footer>
+  </section>;
 }

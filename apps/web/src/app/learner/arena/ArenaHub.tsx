@@ -36,13 +36,13 @@ export function ArenaEntryCard({ level, navigate }: { level: CefrLevel | null | 
   const body = <>
     <span className="arena-entry__icon" aria-hidden="true">{open ? <Swords size={22} strokeWidth={2} /> : <Lock size={20} strokeWidth={2} />}</span>
     <span className="arena-entry__text">
-      <b>Đấu trường{open && level ? ` ${level}` : ""}</b>
+      <b>Đấu trường từ vựng</b>
       <small>{open ? "Thách đấu và bảng xếp hạng" : `Mở từ B1. Bạn đang ở mức ${level ?? "—"}.`}</small>
     </span>
     <span className="arena-entry__scene" style={scene} aria-hidden="true" />
     {open ? <ChevronRight className="arena-entry__chevron" size={20} aria-hidden="true" /> : null}
   </>;
   return open
-    ? <AppLink className="arena-entry" href="/arena" navigate={navigate} ariaLabel={`Vào Đấu trường ${level ?? ""}`.trim()}>{body}</AppLink>
+    ? <AppLink className="arena-entry" href="/arena" navigate={navigate} ariaLabel={`Vào Đấu trường từ vựng ${level ?? ""}`.trim()}>{body}</AppLink>
     : <div className="arena-entry is-locked" role="note">{body}</div>;
 }

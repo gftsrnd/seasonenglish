@@ -195,7 +195,7 @@ describe("app games affordances", () => {
     renderGames(<LearnerGames view={{ ...view, cefr: "B1", arena: { ...view.arena, eligible: true, points: 12 } }} actions={actions} />);
 
     expect(screen.queryByText("Đấu trường nội bộ")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Vào Đấu trường B1" })).toHaveAttribute("href", "/arena");
+    expect(screen.getByRole("link", { name: "Vào Đấu trường từ vựng B1" })).toHaveAttribute("href", "/arena");
     expect(screen.queryByRole("button", { name: /^Đấu / })).not.toBeInTheDocument();
   });
 

@@ -81,9 +81,10 @@ const learnerSteps: Record<string, readonly GuideStep[]> = {
     ['[aria-labelledby="arena-start-title"]', "Đăng thách đấu", "Chọn trò rồi bấm **Đăng thách đấu**. Tối đa **3 trận** xếp hạng đang mở."],
     ['[aria-labelledby="arena-mine-title"]', "Trận của bạn", "Bấm **Chơi** khi tới lượt. Chưa ai nhận thì **Huỷ** được; bỏ trận sẽ tính thua."],
     ["#arena-open-title", "Thách đấu đang mở", "Xem từ để ôn trước rồi **Nhận**. Đã nhận phải chơi trong **24 giờ**."],
-    [".arena-board", "Bảng xếp hạng", "Mỗi trò bắt đầu **1.000 điểm**. Bằng điểm, ai đạt trước xếp trên."],
+    [".arena-board", "Bảng xếp hạng", "Chọn **Cấp, Trò và Mùa** để xem bảng. Bằng điểm thì ai đạt trước xếp trên."],
   ],
   "/arena/*": [
+    [".arena-match-countdown", "Thời gian còn lại", "Đồng hồ đếm tới hạn hoàn thành của trận. Quay về Đấu trường trước khi chơi không làm mất lượt."],
     ['.arena-state[data-arena-state="ready"]', "Sẵn sàng đấu", "Ôn các từ bên dưới rồi bấm **Bắt đầu**. Thoát giữa ván tính thua."],
     [".arena-result", "Kết quả trận", "So **điểm ván** hai bên; bằng điểm thì ai nhanh hơn thắng. Ô dưới là điểm xếp hạng được cộng hoặc trừ."],
   ],

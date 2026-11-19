@@ -481,6 +481,7 @@ export class ArenaRepository {
 
   async leaderboard(learnerId: string, input: { level?: CefrLevel | undefined; game?: GameKey | "total" | undefined; seasonId?: string | undefined }): Promise<{
     level: CefrLevel; game: GameKey | "total"; season: ArenaSeasonView | null;
+    seasons?: ArenaSeasonView[];
     entries: Array<{ rank: number; learnerId: string; displayName: string; rating: number }>;
     me: { rank: number; of: number; rating: number } | null;
   }> {
@@ -500,7 +501,11 @@ export class ArenaRepository {
     }
     const entries = season ? await this.board(context.organizationId, level, season.id, game, season.id === current?.id) : [];
     const own = entries.find((entry) => entry.learnerId === learnerId);
-    return { level, game, season, entries, me: own ? { rank: own.rank, of: entries.length, rating: own.rating } : null };
+    const seasons = game !== "total" ? undefined : await this.pool.query<{ id: string; starts_on: string; ends_on: string }>(
+      "select id, starts_on::text, ends_on::text from arena_seasons where organization_id = $1 and status = 'closed' order by starts_on desc",
+      [context.organizationId]);
+    return { level, game, season, entries, me: own ? { rank: own.rank, of: entries.length, rating: own.rating } : null,
+      ...(seasons ? { seasons: seasons.rows.map((row) => ({ id: row.id, startsOn: row.starts_on, endsOn: row.ends_on, status: "closed" as const })) } : {}) };
   }
 
   // ---------------------------------------------------------------- manager season setting

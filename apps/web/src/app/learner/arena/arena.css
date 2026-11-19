@@ -7,7 +7,8 @@
 .arena-page { display: grid; gap: 14px; align-content: start; }
 .arena-page > * { min-width: 0; margin-top: 0; margin-bottom: 0; }
 .arena-page .page-title { margin-bottom: 0; }
-.arena-rules { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.arena-page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.arena-guide-button { white-space: nowrap; }
 .arena-game-icon { flex: none; color: var(--muted); }
 :root:root .arena-back-button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 :root:root .arena-back-link { display: inline-flex; align-items: center; gap: 6px; justify-self: start; color: var(--text); font-weight: 600; text-decoration: none; }
@@ -31,10 +32,6 @@
 :root:root:root:root .arena-list__row .arena-row-action { flex: none; display: inline-flex; align-items: center; justify-content: center; align-self: center; height: 34px; min-height: 34px !important; max-height: 34px; min-width: 0; padding: 0 16px !important; font-size: 14px !important; line-height: 1; border-radius: 10px; white-space: nowrap; text-decoration: none; }
 .arena-empty { display: flex; align-items: center; gap: 10px; margin: 0; padding: 14px 16px; border-radius: 12px; background: color-mix(in srgb, var(--line) 45%, var(--surface)); color: var(--muted); }
 .arena-confirm-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; text-align: left; }
-
-/* Filter chips: the app's .chip, the active one in the theme colour. */
-:root:root .chip.arena-filter { border: 0; box-shadow: none; min-height: 32px; cursor: pointer; }
-:root:root .chip.arena-filter.is-active { background: var(--primary); color: var(--primary-ink); font-weight: 600; }
 
 /* Mini game › last card: season colours + scenery on the right, no character. */
 :root:root .arena-entry { position: relative; display: flex; align-items: center; gap: 14px; min-height: 92px; padding: 18px 22px; overflow: hidden; border-radius: 20px; color: var(--primary-ink); text-decoration: none; background: linear-gradient(100deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 72%, white) 78%); box-shadow: 0 8px 22px var(--primary-glow); }
@@ -96,19 +93,21 @@
 .arena-list__row { flex-wrap: wrap; }
 .arena-list__line { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; }
 
-/* Bảng xếp hạng: chips + level on one row, a table with the six games and the total. */
-.arena-board__filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
-.arena-board__filters .chips { flex: 1 1 auto; }
-:root:root .arena-board__level { flex: none; width: auto; min-width: 84px; }
+.arena-board__filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.arena-board__filter { display: flex; align-items: center; gap: 4px; min-width: 0; min-height: 44px; padding-inline: 12px 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.arena-board__filter > span { flex: none; color: var(--muted); font-size: 13px; }
+.arena-board__filter:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
+:root:root .arena-board__filter > select { flex: 1; min-width: 0; width: 100%; border: 0; border-radius: 8px; box-shadow: none; background-color: transparent; font-weight: 600; }
 .arena-table-wrap { overflow-x: auto; }
 .arena-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-.arena-table th { padding: 10px 12px; font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--muted); text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
-.arena-table th:nth-child(-n+2) { text-align: left; }
-.arena-table td { padding: 10px 12px; font-size: 14px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
-.arena-table td:nth-child(-n+2) { text-align: left; }
+.arena-table :is(th, td) { padding: 10px 12px; text-align: center; vertical-align: middle; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.arena-table :is(th, td):nth-child(2) { text-align: left; }
+.arena-table th { font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--muted); }
+.arena-table td { font-size: 14px; line-height: 1.4; }
 .arena-table th.is-sorted { color: var(--text); font-weight: 600; }
+.arena-table td.is-sorted { color: var(--primary-dark); font-weight: 700; }
 .arena-table__name { font-weight: 500; }
-:root:root .arena-table td.arena-table__total { color: var(--primary-dark); font-weight: 700; font-size: 14px; }
+:root:root .arena-table td .arena-rank { vertical-align: middle; }
 .arena-table tr.is-me td { background: color-mix(in srgb, var(--primary-soft) 70%, var(--surface)); }
 .arena-table tr.is-me td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
 .arena-rank { display: inline-grid; place-items: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: 8px; font-size: 13px; background: color-mix(in srgb, var(--line) 55%, var(--surface)); font-weight: 700; }
@@ -150,11 +149,31 @@
 .arena-page .game-board > .arena-state,
 .arena-page .game-board > .arena-result { width: 100%; max-width: 560px; justify-self: center; margin-inline: auto; }
 :root:root:root .app-learner-page.arena-page--narrow { max-width: 560px !important; margin-inline: auto !important; }
+:root:root:root .app-learner-page.arena-page--ready { max-width: 1060px !important; margin-inline: auto !important; }
+:root:root .arena-page--ready #gm-board { margin-top: 0; }
+:root:root .arena-page--ready .game-board > .arena-ready { max-width: none; padding: 0; overflow: hidden; gap: 0; justify-items: stretch; }
+.arena-ready__banner { position: relative; isolation: isolate; overflow: hidden; min-height: 138px; padding: 22px 26px; display: flex; align-items: center; background: var(--primary-dark); color: var(--primary-ink); }
+.arena-ready__scene { position: absolute; z-index: -1; inset: 0 0 0 36%; background-position: center; background-size: cover; mask-image: linear-gradient(to right, transparent, black 60%); opacity: .8; }
+.arena-ready__copy { z-index: 1; display: grid; justify-items: start; gap: 8px; }
+:root:root .arena-ready__copy h2, :root:root .arena-ready__copy p { color: var(--primary-ink); }
+.arena-match-countdown { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid color-mix(in srgb, var(--primary-ink) 35%, transparent); border-radius: 9px; background: var(--primary-dark); color: var(--primary-ink); font-variant-numeric: tabular-nums; }
+.arena-match-countdown strong { font-size: 18px; }
+.arena-ready__words { display: grid; gap: 5px; padding: 17px 24px 12px; }
+.arena-ready .arena-word-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.arena-ready .arena-word-chips li { border-radius: 10px; }
+.arena-ready__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 12px; padding: 14px 24px; border-top: 1px solid var(--line); }
+:root:root .arena-ready__actions .arena-text-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; text-decoration: none; font-weight: 600; }
+:root:root .arena-ready__actions .arena-text-link:hover { text-decoration: underline; }
 
 @media (max-width: 1024px) {
   .arena-game-picks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
+  .arena-board__filters { grid-template-columns: 1fr; gap: 6px; }
+  .arena-ready__banner { min-height: 126px; padding: 14px 16px; }
+  .arena-ready__words { padding-inline: 14px; }
+  .arena-ready .arena-word-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .arena-ready__actions { justify-content: space-between; padding-inline: 14px; }
   .arena-page { gap: 10px; }
   :root:root .arena-entry { min-height: 72px; padding: 12px 14px; gap: 10px; border-radius: 16px; }
   .arena-entry__icon { width: 36px; height: 36px; }
@@ -177,28 +196,57 @@
   .dialog.arena-dialog > .row.between:first-child { margin: 0 -16px 8px; padding: 10px 16px 8px; }
 }
 
-/* Kết quả trận: side-by-side comparison, then the XH box. */
-.arena-result { display: grid; gap: 14px; justify-items: center; text-align: center; padding: 22px; border-radius: 18px; }
-.arena-result__head { display: grid; gap: 4px; }
-:root:root:root .arena-result__head h2 { margin: 0; font-size: 26px; color: var(--primary-dark); }
-.arena-result.is-lose .arena-result__head h2 { color: var(--text); }
-.arena-result__head p { margin: 0; }
-.arena-result__versus { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; width: 100%; max-width: 460px; }
-.arena-result__side { display: grid; justify-items: center; gap: 4px; min-width: 0; padding: 12px 8px; border-radius: 14px; }
-.arena-result__side.is-winner { background: color-mix(in srgb, var(--primary-soft) 70%, var(--surface)); box-shadow: inset 0 0 0 1px var(--primary-line); }
+
+
+/* Kết quả trận: outcome banner, the two sides compared, then the XH box (win/lose/draw tinted). */
+:root:root .arena-result { display: grid; gap: 16px; justify-items: stretch; text-align: center; padding: 0 0 20px; overflow: hidden; border-radius: 20px; }
+.arena-result__banner { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 20px 22px; color: var(--primary-ink); background: linear-gradient(100deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 70%, white) 100%); }
+.arena-result.is-lose .arena-result__banner { color: #2f3a37; background: linear-gradient(100deg, #d9dedb 0%, #eef1ef 100%); }
+.arena-result.is-draw .arena-result__banner { color: #5C3D00; background: linear-gradient(100deg, #F2C94C 0%, #FBE7A6 100%); }
+.arena-result.is-waiting .arena-result__banner, .arena-result.is-closed .arena-result__banner { color: var(--text); background: color-mix(in srgb, var(--primary-soft) 70%, var(--surface)); }
+.arena-result__badge { flex: none; display: inline-grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: #fff; color: var(--primary-dark); box-shadow: 0 4px 14px rgba(0, 0, 0, .12); }
+.arena-result.is-lose .arena-result__badge { color: #56625e; }
+.arena-result.is-draw .arena-result__badge { color: #8a6100; }
+.arena-result__title { display: grid; gap: 2px; text-align: left; }
+:root:root:root .arena-result__title h2 { margin: 0; color: inherit; font-size: 26px; line-height: 1.15; }
+.arena-result__title small { color: inherit; opacity: .88; font-size: 13px; }
+.arena-result__versus { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: stretch; gap: 12px; width: 100%; max-width: 480px; justify-self: center; padding: 0 16px; box-sizing: border-box; }
+.arena-result__side { position: relative; display: grid; justify-items: center; align-content: start; gap: 4px; min-width: 0; padding: 18px 10px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.arena-result__side.is-winner { border-color: var(--primary); box-shadow: 0 6px 16px var(--primary-glow); background: color-mix(in srgb, var(--primary-soft) 55%, var(--surface)); }
+.arena-result__crown { position: absolute; top: -11px; left: 50%; transform: translateX(-50%); padding: 2px 10px; border-radius: 999px; background: var(--primary); color: var(--primary-ink); font-size: 12px; font-weight: 700; white-space: nowrap; }
 .arena-result__side b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.arena-result__side small { color: var(--muted); }
-.arena-result__avatar { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: color-mix(in srgb, var(--line) 60%, var(--surface)); color: var(--text); font-weight: 700; font-size: 16px; }
-.arena-result__avatar.is-me { background: var(--primary); color: var(--primary-ink); font-size: 14px; }
-:root:root .arena-result__score { font-size: 44px; line-height: 1; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
-.arena-result__vs { color: var(--muted); font-weight: 700; font-size: 14px; }
-.arena-result__reason { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); }
-.arena-result__xh { display: grid; gap: 4px; width: 100%; max-width: 460px; padding: 12px 16px; border-radius: 12px; background: color-mix(in srgb, var(--primary-soft) 60%, var(--surface)); }
-.arena-result__xh b { color: var(--primary-dark); font-size: 16px; }
-.arena-result__actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; }
+.arena-result__side small { color: var(--muted); font-size: 12px; }
+.arena-result__avatar { display: inline-grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: color-mix(in srgb, var(--line) 60%, var(--surface)); color: var(--text); font-weight: 700; font-size: 16px; }
+.arena-result__avatar.is-me { background: var(--primary); color: var(--primary-ink); }
+:root:root .arena-result__score { margin-top: 4px; font-size: 46px; line-height: 1; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.arena-result__side.is-winner .arena-result__score { color: var(--primary-dark); }
+.arena-result__vs { align-self: center; display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: color-mix(in srgb, var(--line) 50%, var(--surface)); color: var(--muted); font-weight: 800; font-size: 12px; }
+.arena-result__reason { display: inline-flex; align-items: center; justify-content: center; gap: 6px; margin: 0; padding: 0 16px; color: var(--muted); }
+.arena-result__xh { display: grid; gap: 4px; justify-self: center; width: calc(100% - 32px); max-width: 480px; box-sizing: border-box; padding: 12px 16px; border-radius: 14px; background: color-mix(in srgb, var(--primary-soft) 60%, var(--surface)); }
+.arena-result__delta { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 17px; }
+.arena-result__xh.is-up .arena-result__delta { color: #1f7a45; }
+.arena-result__xh.is-down { background: #fbecea; }
+.arena-result__xh.is-down .arena-result__delta { color: #b3261e; }
+.arena-result__xh.is-even .arena-result__delta { color: #8a6100; }
+.arena-result__xh.is-friendly b { color: var(--primary-dark); }
+.arena-result__actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; padding: 0 16px; }
+
+/* Leaderboard: filters carry their meaning inside the select; the pager sits in the middle. */
+:root:root .arena-board__filters > select.arena-board__filter { display: block; width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background-color: var(--surface); font-weight: 600; }
+.arena-board__pager { display: flex; justify-content: center; }
+.arena-board__pager > * { margin-inline: auto; }
+
+/* Live countdown inside row status lines. */
+.arena-countdown { font-variant-numeric: tabular-nums; }
+.arena-countdown b { color: var(--primary-dark); font-weight: 700; }
+.arena-countdown.is-over { color: #b3261e; font-weight: 600; }
+
 @media (max-width: 600px) {
-  .arena-result { padding: 16px 12px; gap: 10px; }
-  :root:root:root .arena-result__head h2 { font-size: 22px; }
-  .arena-result__avatar { width: 44px; height: 44px; }
+  .arena-result__banner { padding: 14px; gap: 10px; }
+  .arena-result__badge { width: 42px; height: 42px; }
+  :root:root:root .arena-result__title h2 { font-size: 21px; }
+  .arena-result__versus { gap: 8px; padding: 0 10px; }
+  .arena-result__avatar { width: 40px; height: 40px; }
   :root:root .arena-result__score { font-size: 36px; }
+  .arena-board__filters { grid-template-columns: minmax(0, 1fr); }
 }

@@ -46,6 +46,21 @@ export function outcomeTitle(outcome: "win" | "lose" | "draw"): string {
 }
 
 /** One short status line (≤ ~30 characters) per "Trận của bạn" row; the mode is an icon on line 1. */
+/** The deadline a live row counts down to: accept for open/invited, play for accepted; none otherwise. */
+export function matchDeadline(match: ArenaMatch): string | null {
+  if (match.status === "open" || match.status === "invited") return match.acceptDeadline;
+  if (match.status === "accepted") return match.playDeadline;
+  return null;
+}
+
+/** The status words of a row without the time left (the live countdown follows it). */
+export function matchStatusLabel(match: ArenaMatch): string {
+  if (isInviteForMe(match)) return `${match.opponent?.displayName ?? "Bạn học"} mời bạn`;
+  if (match.status === "open" || match.status === "invited") return "Chờ người nhận";
+  if (match.status === "accepted") return match.me.played ? "Chờ đối thủ" : "Tới lượt bạn";
+  return matchStatusLine(match);
+}
+
 export function matchStatusLine(match: ArenaMatch, now = Date.now()): string {
   if (isInviteForMe(match)) return `${match.opponent?.displayName ?? "Bạn học"} mời bạn`;
   if (match.status === "open" || match.status === "invited") return `Chờ người nhận · ${hoursLeft(match.acceptDeadline, now)} giờ`;

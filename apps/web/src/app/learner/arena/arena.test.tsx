@@ -111,14 +111,15 @@ describe("Đấu trường page", () => {
   const page = (api: ReturnType<typeof client>, navigate = vi.fn(), notify = vi.fn(), setClient = sets()) =>
     render(<ModalProvider><ArenaLeaderboard navigate={navigate} notify={notify} learnerId="me" client={api as never} setClient={setClient as never} /></ModalProvider>);
 
-  it("has a Mini game style title that follows the tab, the rules ⓘ and the back link", async () => {
+  it("has a stable arena title and a back link to Mini game", async () => {
     page(client());
-    expect(await screen.findByRole("heading", { level: 1, name: /Thi đấu/ })).toBeInTheDocument();
-    expect(screen.getByText(/Đấu trường B1/)).toBeInTheDocument();
+    expect(await screen.findByText(/Đấu trường B1/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Đấu trường từ vựng" })).toBeInTheDocument();
     expect(screen.getByText(/6\.000 điểm XH tổng · Hạng 4\/5/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Về Mini game/ })).toHaveAttribute("href", "/games");
     fireEvent.click(screen.getByRole("tab", { name: "Bảng xếp hạng" }));
-    expect(screen.getByRole("heading", { level: 1, name: /Bảng xếp hạng/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Đấu trường từ vựng" })).toBeInTheDocument();
+    expect(screen.getAllByRole("combobox").map((item) => item.getAttribute("aria-label"))).toEqual(["Cấp", "Trò", "Mùa"]);
   });
 
   it("shows the set's words and changes the set right here (also the Mini game set)", async () => {
@@ -139,7 +140,8 @@ describe("Đấu trường page", () => {
   it("lets me see the words of an open challenge before taking it", async () => {
     const api = client();
     page(api);
-    const row = (await screen.findByText(/budget · còn/)).closest("li") as HTMLElement;
+    const row = (await screen.findByText(/^budget ·/)).closest("li") as HTMLElement;
+    expect(within(row).getByRole("timer")).toHaveTextContent(/còn \d\d:\d\d:\d\d/);
     fireEvent.click(within(row).getByRole("button", { name: "Xem từ" }));
     expect(await within(row).findByText("ngân sách", { exact: false })).toBeInTheDocument();
     expect(api.words).toHaveBeenCalledWith("c1");
@@ -162,8 +164,7 @@ describe("Đấu trường page", () => {
     const navigate = vi.fn();
     const api = client();
     page(api, navigate);
-    expect(await screen.findByText(/budget · còn \d+ giờ/)).toBeInTheDocument();
-    const row = screen.getByText(/budget · còn/).closest("li") as HTMLElement;
+    const row = (await screen.findByText(/^budget ·/)).closest("li") as HTMLElement;
     fireEvent.click(within(row).getByRole("button", { name: "Nhận" }));
     fireEvent.click(within(await screen.findByRole("dialog", { name: "Nhận thách đấu Phân loại từ?" })).getByRole("button", { name: "Nhận" }));
     await waitFor(() => expect(api.acceptChallenge).toHaveBeenCalledWith("c1"));
@@ -216,7 +217,7 @@ describe("Đấu trường page", () => {
 describe("Mini game › Đấu trường card", () => {
   it("opens /arena from B1 and only says it opens from B1 below", async () => {
     const { unmount } = render(<ArenaEntryCard level="B1" navigate={vi.fn()} />);
-    expect(screen.getByRole("link", { name: "Vào Đấu trường B1" })).toHaveAttribute("href", "/arena");
+    expect(screen.getByRole("link", { name: "Vào Đấu trường từ vựng B1" })).toHaveAttribute("href", "/arena");
     unmount();
     render(<ArenaEntryCard level="A2" navigate={vi.fn()} />);
     expect(screen.queryByRole("link")).toBeNull();
@@ -227,6 +228,16 @@ describe("Mini game › Đấu trường card", () => {
 describe("arena match screen", () => {
   const round = { match: match({ me: { started: true, played: false, score: null, gameplayMs: null } }), attemptSeed: 0, unitIds: ["w1"],
     wordSet: { id: "set", topic: "Coffee shop", cefr: "B1" as const, source: "custom" as const, words: ["latte", "mocha", "espresso", "barista"].map((english, index) => ({ id: `w${index + 1}`, english, vietnamese: english, definition: english, partOfSpeech: "noun" })) } };
+
+  it("counts down from the match deadline and returns to the arena before play without forfeiting", async () => {
+    const navigate = vi.fn();
+    const api = { match: vi.fn().mockResolvedValue(match({ playDeadline: new Date(Date.now() + 60_000).toISOString() })), forfeit: vi.fn() };
+    render(<ModalProvider><ArenaMatchScreen matchId={ID} navigate={navigate} notify={vi.fn()} client={api as never} /></ModalProvider>);
+    expect(await screen.findByRole("timer", { name: "Thời gian còn lại" })).toHaveTextContent(/00:(01:00|00:59)/);
+    fireEvent.click(screen.getByRole("link", { name: "Về Đấu trường" }));
+    expect(navigate).toHaveBeenCalledWith("/arena");
+    expect(api.forfeit).not.toHaveBeenCalled();
+  });
 
   it("shows the ranked line, resumes a started match and forfeits only after the confirm", async () => {
     const api = {
