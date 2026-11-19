@@ -25,20 +25,39 @@ export function useScrollJump(contained = false) {
     return () => observer.disconnect();
   }, []);
 
+  // Owner 19/11: the arrow follows how far down the page is – under half way it points down,
+  // from half way it points up – instead of waiting for the very top or bottom.
+  const [pastHalf, setPastHalf] = useState(false);
+  useEffect(() => {
+    const scroller = () => {
+      const region = start.current?.parentElement;
+      return contained && region ? region : region && region.scrollHeight > region.clientHeight && /^(auto|scroll|overlay)$/.test(getComputedStyle(region).overflowY) ? region : document.scrollingElement ?? document.documentElement;
+    };
+    const update = () => {
+      const target = scroller();
+      if (!target) return;
+      const room = target.scrollHeight - target.clientHeight;
+      setPastHalf(room > 0 && target.scrollTop / room >= 0.5);
+    };
+    update();
+    document.addEventListener("scroll", update, { capture: true, passive: true });
+    window.addEventListener("resize", update);
+    return () => { document.removeEventListener("scroll", update, { capture: true }); window.removeEventListener("resize", update); };
+  }, [contained]);
+
   const jump = () => {
     const region = start.current?.parentElement;
     const scrollsWithinRegion = region && region.scrollHeight > region.clientHeight
       && /^(auto|scroll|overlay)$/.test(getComputedStyle(region).overflowY);
     const target = contained || scrollsWithinRegion ? region : document.scrollingElement;
     target?.scrollTo({
-      top: edges.top ? target.scrollHeight : 0,
+      top: pastHalf ? 0 : target.scrollHeight,
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth"
     });
   };
 
-  // Every width keeps the up arrow at the end of a long page (owner 19/11: phones lost the way back up).
-  // The button steps past controls under it (dodgeTop) and hides only when no free spot is left.
-  return { start, end, jump, atTop: edges.top, visible: !edges.top || !edges.bottom };
+  // Visible on every width whenever the page is longer than the screen (owner 19/11: it vanished).
+  return { start, end, jump, atTop: !pastHalf, visible: !edges.top || !edges.bottom };
 }
 
 export function ScrollJumpButton({ atTop, onClick, inExam = false, style }: {
@@ -76,9 +95,8 @@ export function ScrollJumpButton({ atTop, onClick, inExam = false, style }: {
   // Phones/tablets (owner 19/11): the button never jumps up the screen – it keeps its corner and
   // fades out while a control is under it. Desktop still steps past controls.
   const compactCorner = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(COMPACT_SCROLL_JUMP_QUERY).matches;
-  const placed: CSSProperties | undefined = inExam || lift === 0 ? style
-    : compactCorner ? { ...style, opacity: 0, pointerEvents: "none" }
-    : { ...style, ...(lift === null ? { visibility: "hidden" } : { transform: `translateY(${lift}px)` }) };
+  // It keeps its corner and never jumps or hides (owner 19/11).
+  const placed: CSSProperties | undefined = style;
   const button = <button
     ref={ref}
     className={`app-scroll-jump no-print${inExam ? " app-scroll-jump--exam" : ""}`}

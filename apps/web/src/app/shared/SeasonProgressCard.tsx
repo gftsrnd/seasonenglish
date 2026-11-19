@@ -5,7 +5,7 @@ import type { LearnerProgressView } from "@e4s/contracts";
 import { REWARD_SEASONS, type RewardSeasonLevel } from "@e4s/domain/engagement";
 import { Modal, Progress } from "../learner/ui.js";
 import { RewardSeasonImage } from "./RewardIcon.js";
-import { RulesDisclosure } from "./RulesDisclosure.js";
+import { RulesDisclosure, RulesIconButton } from "./RulesDisclosure.js";
 import { RewardBadgeArtwork } from "./RewardBadgeArtwork.js";
 import "./season-progress-card.css";
 import "./reward-point-rules.css";
@@ -122,7 +122,7 @@ export function SeasonProgressCard({ view, certificateAction, revealedBadgeLevel
         <b>Thiếu huy hiệu</b> · {missing.map((badge) => badge.label).join(", ")}
       </p>}
     </>}
-    <div className="row between profile-badges-heading" style={{ marginTop: 14 }}>{compact ? <h3 className="info-title" style={{ margin: 0 }}><span className="info-title-text">Huy hiệu theo cấp</span><span className="info-tip"><button type="button" className="info-tip-button" aria-label="Cách tính điểm và lên Season" aria-haspopup="dialog" onClick={() => setRulesOpen(true)}><Info size={15} aria-hidden="true" /></button></span></h3> : <h3 style={{ margin: 0 }}>Huy hiệu theo cấp</h3>}<span className="small muted" style={{ fontWeight: 800 }}>{view.badgeCount}/{view.badgeRoadmap.length} huy hiệu</span></div>
+    <div className="row between profile-badges-heading" style={{ marginTop: 14 }}>{compact ? <h3 className="info-title" style={{ margin: 0 }}><span className="info-title-text">Huy hiệu theo cấp</span><RulesIconButton label="Cách tính điểm và lên Season" onClick={() => setRulesOpen(true)} /></h3> : <h3 style={{ margin: 0 }}>Huy hiệu theo cấp</h3>}<span className="small muted" style={{ fontWeight: 800 }}>{view.badgeCount}/{view.badgeRoadmap.length} huy hiệu</span></div>
     <div id={levelsId} className="profile-season-levels">
       {visibleLevels.map((seasonLevel) => {
         const list = view.badgeRoadmap.filter((badge) => badge.seasonLevel === seasonLevel);

@@ -2189,3 +2189,5 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
 .learner-root .operator-detail-modal > .dialog.course-result-dialog { max-height: 80vh; overflow-y: auto; }
 .learner-root .profile-page .profile-completion-heading > div:first-child { flex: 1 1 auto; min-width: 0; }
 
+/* Owner 19/11: on tablets the three support cards were too narrow (titles broke mid-word) – one per row. */
+@media (max-width: 1100px) { .learner-root .learner-support-shortcuts { grid-template-columns: minmax(0, 1fr); } }

@@ -39,7 +39,7 @@ export function ManagerProgress({ view, monthly, pendingReminderCount, onOpenLea
   const reminderCount = pendingReminderCount ?? approved.filter((learner) => (learner.missedDays ?? 0) >= 2).length;
   const rows = approved.slice().sort((a, b) => risk(b, view.weekStartDate) - risk(a, view.weekStartDate) || a.sessionsThisWeek - b.sessionsThisWeek);
   // Phones page long lists 3 rows at a time (tablets 5); desktop shows all.
-  const rowsPaged = usePaged(rows, { phone: 5, tablet: 8 });
+  const rowsPaged = usePaged(rows);
   const submittedPaged = usePaged(submitted);
   const testingPaged = usePaged(testing);
   const notTestedPaged = usePaged(notTested);
@@ -51,7 +51,7 @@ export function ManagerProgress({ view, monthly, pendingReminderCount, onOpenLea
   ] as const;
   const [waitingTab, setWaitingTab] = useState<(typeof waitingGroups)[number]["id"]>();
   const activeWaiting = waitingGroups.find((group) => group.id === waitingTab && group.items.length) ?? waitingGroups.find((group) => group.items.length);
-  const waitingPaged = usePaged(activeWaiting?.items ?? [], { phone: 4, tablet: 6 });
+  const waitingPaged = usePaged(activeWaiting?.items ?? []);
   return <div className="manager-page manager-progress-page">
     <PageTitle description={compactUi ? <PageDescription text={`Lộ trình tháng hiện tại · ${approved.length} người học đang hoạt động · ${testing.length} đang làm test · ${submitted.length} đã nộp · ${notTested.length} chưa làm test`} /> : <p className="muted">{compact ? "Theo dõi tiến độ học theo tháng." : <>Lộ trình tháng hiện tại · {approved.length} người học đang hoạt động · {testing.length} đang làm test · {submitted.length} đã nộp · {notTested.length} chưa làm test</>}</p>}><h1>Tiến độ nhóm</h1></PageTitle>
     <OperationalCards {...operational} />

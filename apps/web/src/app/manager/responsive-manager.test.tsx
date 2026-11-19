@@ -36,9 +36,9 @@ describe("Manager phone layout", () => {
     phoneViewport();
     const user = userEvent.setup();
     render(<ManagerProgress view={progress} onOpenLearnerProfile={vi.fn()} />);
-    // 7 active learners → 5 on the first phone page, with the shared pager.
-    expect(within(screen.getByRole("table", { name: "Tiến độ người học" })).getAllByRole("article", { name: /^Học viên/u })).toHaveLength(5);
-    expect(screen.getByRole("navigation", { name: "Trang danh sách người học đang học" })).toHaveTextContent("Trang 1/2");
+    // 7 active learners → 2 per phone page (owner 19/11), with the shared pager.
+    expect(within(screen.getByRole("table", { name: "Tiến độ người học" })).getAllByRole("article", { name: /^Học viên/u })).toHaveLength(2);
+    expect(screen.getByRole("navigation", { name: "Trang danh sách người học đang học" })).toHaveTextContent("Trang 1/4");
     // Page actions are icon squares with an accessible name.
     expect(screen.getByRole("button", { name: "Xuất CSV" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Giả lập phần thưởng" })).toBeInTheDocument();
@@ -46,7 +46,7 @@ describe("Manager phone layout", () => {
     const tabs = screen.getByRole("tablist", { name: "Trạng thái bài test đầu vào" });
     expect(within(tabs).getByRole("tab", { name: /Đã nộp/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByText(/đang chờ Người vận hành duyệt mức/)).not.toBeInTheDocument();
-    expect(within(screen.getByRole("tabpanel")).getAllByRole("button", { name: /^Hồ sơ/ })).toHaveLength(4);
+    expect(within(screen.getByRole("tabpanel")).getAllByRole("button", { name: /^Hồ sơ/ })).toHaveLength(2);
     await user.click(within(tabs).getByRole("tab", { name: /Đang làm/ }));
     expect(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Hồ sơ Học viên 30" })).toBeInTheDocument();
   });
@@ -56,7 +56,7 @@ describe("Manager phone layout", () => {
     const history = Array.from({ length: 9 }, (_, index) => ({ reminderId: `r-${index}`, learnerId: `l-${index}`, learnerName: `Học viên ${index}`, recipient: null, missedDays: 3, status: "sent", deliveryStatus: "sent", provider: "base_webhook", createdAt: "2026-11-12T09:00:00.000Z", attemptedAt: null })) as NonNullable<ManagerRemindersView["history"]>;
     render(<ManagerReminders view={{ organizationName: "GFT Demo", inactiveDays: 3, emailConfigured: true, candidates: [], history }} onSend={vi.fn()} onDeleteHistory={vi.fn()} />);
     const list = screen.getByRole("list", { name: "Lịch sử nhắc học" });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(6);
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: /Xem thêm/ })).not.toBeInTheDocument();
     const first = within(list).getAllByRole("listitem")[0]!;
     expect(first.querySelector(".manager-reminder-history-heading .manager-reminder-history-delete")).not.toBeNull();

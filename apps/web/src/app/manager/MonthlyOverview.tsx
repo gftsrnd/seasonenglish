@@ -281,7 +281,7 @@ function MonthlySkillScores({ scores }: { scores: ManagerMonthlyLearnerView["exa
 
 function MonthlyLearnerList({ learners }: { learners: readonly ManagerMonthlyLearnerView[] }) {
   // Paged like every other list on phones/tablets (no "Xem thêm", no scroll box).
-  const paged = usePaged(learners, { phone: 5, tablet: 6 });
+  const paged = usePaged(learners);
   const visibleLearners = paged.visible;
   return <><ul className="manager-monthly-learner-list report-scroll-region" aria-label="Kết quả học tập theo tháng" tabIndex={0}>
     {visibleLearners.map((learner) => <li key={learner.learnerId}>

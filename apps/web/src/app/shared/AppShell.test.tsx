@@ -42,7 +42,14 @@ it("only shows the scroll shortcut when content extends beyond the viewport", ()
     act(() => notify([{ target: edges[0]!, isIntersecting: true }, { target: edges[1]!, isIntersecting: false }]));
     expect(screen.getByRole("button", { name: "Cuộn xuống cuối trang" })).toBeEnabled();
     act(() => notify([{ target: edges[0]!, isIntersecting: false }, { target: edges[1]!, isIntersecting: true }]));
+    // Past half way the arrow points up (owner 19/11).
+    const root = document.documentElement;
+    Object.defineProperty(root, "scrollHeight", { configurable: true, value: 2000 });
+    Object.defineProperty(root, "clientHeight", { configurable: true, value: 800 });
+    Object.defineProperty(root, "scrollTop", { configurable: true, value: 1100 });
+    act(() => { document.dispatchEvent(new Event("scroll")); });
     expect(screen.getByRole("button", { name: "Cuộn lên đầu trang" })).toBeEnabled();
+    Object.defineProperty(root, "scrollTop", { configurable: true, value: 0 });
     act(() => notify([{ target: edges[0]!, isIntersecting: true }]));
     expect(screen.queryByRole("button", { name: "Cuộn xuống cuối trang" })).not.toBeInTheDocument();
   } finally {

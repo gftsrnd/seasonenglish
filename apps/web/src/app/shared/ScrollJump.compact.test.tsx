@@ -23,20 +23,35 @@ function stub(compact: boolean) {
   return { edges, notify: (top: boolean, bottom: boolean) => act(() => notify([{ target: edges[0]!, isIntersecting: top }, { target: edges[1]!, isIntersecting: bottom }])) };
 }
 
-it("on phones and tablets keeps the up arrow at the end of the page (owner 19/11)", () => {
+/** Puts the page at `ratio` of its scrollable height and fires a scroll event. */
+function scrollTo(ratio: number) {
+  const root = document.documentElement;
+  Object.defineProperty(root, "scrollHeight", { configurable: true, value: 2000 });
+  Object.defineProperty(root, "clientHeight", { configurable: true, value: 800 });
+  Object.defineProperty(root, "scrollTop", { configurable: true, value: 1200 * ratio });
+  act(() => { document.dispatchEvent(new Event("scroll")); });
+}
+
+it("points down before half way and up from half way, on phones and tablets (owner 19/11)", () => {
   const page = stub(true);
   render(<Page />);
   page.notify(true, false);
+  scrollTo(0.2);
   expect(screen.getByRole("button", { name: "Cuộn xuống cuối trang" })).toBeInTheDocument();
   page.notify(false, false);
+  scrollTo(0.6);
   expect(screen.getByRole("button", { name: "Cuộn lên đầu trang" })).toBeInTheDocument();
   page.notify(false, true);
+  scrollTo(1);
   expect(screen.getByRole("button", { name: "Cuộn lên đầu trang" })).toBeInTheDocument();
 });
 
-it("on desktop keeps the up arrow at the end of the page", () => {
+it("works the same on desktop", () => {
   const page = stub(false);
   render(<Page />);
   page.notify(false, true);
+  scrollTo(0.9);
   expect(screen.getByRole("button", { name: "Cuộn lên đầu trang" })).toBeInTheDocument();
+  scrollTo(0.1);
+  expect(screen.getByRole("button", { name: "Cuộn xuống cuối trang" })).toBeInTheDocument();
 });

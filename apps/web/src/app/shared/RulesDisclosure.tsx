@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Book } from "lucide-react";
 import "./rules-disclosure.css";
 
 /**
@@ -10,4 +11,12 @@ export function RulesDisclosure({ title, children, className, testId }: { title:
     <summary>{title}</summary>
     <div className="rules-disclosure__body">{children}</div>
   </details>;
+}
+
+/**
+ * Long rules open in a popup from a book inside a circle (owner 19/11, from the reference picture);
+ * ⓘ stays for short notes. Same size and colour as ⓘ; the label is the tooltip and the accessible name.
+ */
+export function RulesIconButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return <button type="button" className="rules-icon-button" aria-label={`Luật: ${label}`} title="Luật" aria-haspopup="dialog" onClick={onClick}><Book size={11} strokeWidth={2.4} aria-hidden="true" /></button>;
 }

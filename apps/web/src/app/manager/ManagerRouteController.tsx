@@ -190,7 +190,7 @@ function LearnerProfileDialog({ view, onClose, onRename }: { view: ManagerLearne
 
 /** Phones/tablets: scores on one line, profile rows paged (no scroll box inside the dialog). */
 function ProfileCompactBody({ scores, rows }: { scores: ManagerLearnerProfileView["assessmentScores"]; rows: Array<[string, string]> }) {
-  const paged = usePaged(rows, { phone: 5, tablet: 7 });
+  const paged = usePaged(rows);
   const score = (value: number | null | undefined) => value == null ? "—" : formatScoreOutOf(value, 100);
   return <>
     <dl className="manager-profile-scores" aria-label="Kết quả đánh giá">
@@ -422,7 +422,7 @@ function SettingsRoute({ role, currentUserId, onSessionRevoked }: ManagerRouteCo
 
 function AccountsPanel({ view, currentUserId, reload, notify, onSessionRevoked }: { onSessionRevoked?: (() => void) | undefined; view: ManagerAccountsView; currentUserId: string; reload: () => Promise<void>; notify: (message: string, tone?: "ok" | "danger") => void }) {
   // Phones page the accounts 3 at a time; row actions sit in a "…" menu.
-  const accountsPaged = usePaged(view.accounts, { phone: 5, tablet: 5 });
+  const accountsPaged = usePaged(view.accounts);
   const phoneAccounts = useMediaQuery("(max-width: 600px)");
   const compactUi = useCompactUi();
   const [openMenuId, setOpenMenuId] = useState<string>();

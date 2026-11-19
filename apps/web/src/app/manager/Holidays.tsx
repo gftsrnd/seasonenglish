@@ -72,7 +72,7 @@ export function ManagerHolidays() {
   };
   const filtered = filterHolidays(holidays ?? [], filter);
   const compact = useCompactUi();
-  const paged = usePaged(filtered, { phone: 5, tablet: 8 });
+  const paged = usePaged(filtered);
   return <div className="manager-page manager-holidays-page">
     <PageTitle><h1>Ngày nghỉ lễ</h1></PageTitle>
     {error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}

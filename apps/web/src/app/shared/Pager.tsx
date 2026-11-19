@@ -2,22 +2,21 @@ import { Fragment, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMediaQuery } from "./useMediaQuery.js";
 
-/** Rows per page on phones. */
-export const PHONE_PAGE_SIZE = 3;
-/** Rows per page on tablets (medium pages: never fewer than 6 rows). */
-export const TABLET_PAGE_SIZE = 7;
-const TABLET_MIN_PAGE_SIZE = 6;
+/** Rows per page on phones (owner 19/11: tables show 2 people per page). */
+export const PHONE_PAGE_SIZE = 2;
+/** Rows per page on tablets (owner 19/11: 5 per page). */
+export const TABLET_PAGE_SIZE = 5;
 
 /**
- * Long lists on phones and tablets are paged (3 rows per page on a phone,
- * 6–8 on a tablet) so the page keeps a fixed height; desktop (> 1024px) always
- * shows every row, exactly as before.
+ * Long lists on phones and tablets are paged (2 rows per page on a phone,
+ * 5 on a tablet by default) so the page keeps a fixed height; desktop (> 1024px)
+ * shows every row unless the caller pages it too.
  */
-export function usePaged<T>(items: readonly T[], { phone = PHONE_PAGE_SIZE, tablet = TABLET_PAGE_SIZE }: { phone?: number; tablet?: number } = {}) {
+export function usePaged<T>(items: readonly T[], { phone = PHONE_PAGE_SIZE, tablet = TABLET_PAGE_SIZE, desktop = Infinity }: { phone?: number; tablet?: number; desktop?: number } = {}) {
   const isPhone = useMediaQuery("(max-width: 600px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const [requested, setPage] = useState(1);
-  const size = isPhone ? phone : isTablet ? Math.max(TABLET_MIN_PAGE_SIZE, tablet) : Infinity;
+  const size = isPhone ? phone : isTablet ? tablet : desktop;
   const pages = Number.isFinite(size) ? Math.max(1, Math.ceil(items.length / size)) : 1;
   const page = Math.min(Math.max(1, requested), pages);
   const offset = pages > 1 ? (page - 1) * size : 0;

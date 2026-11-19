@@ -28,7 +28,6 @@ type ManagerReminderHistoryItem = NonNullable<ManagerRemindersView["history"]>[n
 export function ManagerReminders({ view, sendingKey, notice, noticeTone = "info", onSend, onSendAll, onDismiss, onCopy, onSaveBase, onDeleteHistory }: ManagerRemindersProps) {
   const compact = useMediaQuery("(max-width: 800px)");
   const compactUi = useCompactUi();
-  const [showAllHistory, setShowAllHistory] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [handlingLearnerId, setHandlingLearnerId] = useState<string | null>(null);
   const [sendingAll, setSendingAll] = useState(false);
@@ -42,9 +41,10 @@ export function ManagerReminders({ view, sendingKey, notice, noticeTone = "info"
   const sending = Boolean(sendingKey);
   const history = view.history ?? [];
   // Phones/tablets page the history and the queue instead of "Xem thêm" / inner scroll boxes.
-  const historyPaged = usePaged(history, { phone: 6, tablet: 8 });
-  const candidatesPaged = usePaged(view.candidates, { phone: 3, tablet: 4 });
-  const visibleHistory = compactUi ? historyPaged.visible : showAllHistory ? history : history.slice(0, 6);
+  // Owner 19/11: the history is paged on every width (no more "Xem thêm").
+  const historyPaged = usePaged(history, { desktop: 8 });
+  const candidatesPaged = usePaged(view.candidates);
+  const visibleHistory = historyPaged.visible;
   const runCopy = async (learnerId: string, message: string) => {
     if (handlingLearnerId) return;
     setHandlingLearnerId(learnerId); setLocalStatus("");
@@ -156,8 +156,8 @@ export function ManagerReminders({ view, sendingKey, notice, noticeTone = "info"
           </li>;
         })}
       </ul>
-      {compactUi ? <Pager {...historyPaged} label="lịch sử nhắc" /> : null}
-      {!compactUi && !showAllHistory && history.length > visibleHistory.length ? <button className="btn-sm manager-reminder-history-more" type="button" onClick={() => setShowAllHistory(true)}>Xem thêm {history.length - visibleHistory.length} lượt</button> : null}
+      <Pager {...historyPaged} label="lịch sử nhắc" />
+      
       </> : <div className="table-wrap bounded-scroll-region sticky-table-head manager-reminder-history-scroll" role="region" aria-label="Danh sách lịch sử nhắc" tabIndex={0}><table aria-label="Lịch sử nhắc học"><thead><tr><th>Ngày</th><th>Người học</th><th>Nơi nhận</th><th>Kênh</th><th>Bỏ</th><th>Kết quả</th>{onDeleteHistory ? <th><span className="sr-only">Thao tác</span></th> : null}</tr></thead><tbody>{history.map((item) => <tr key={item.reminderId}><td>{formatReminderDate(item.createdAt)}</td><td>{item.learnerName}</td><td>{item.recipient ?? "—"}</td><td>{providerLabel(item.provider)}</td><td>{item.missedDays === null ? "—" : `${item.missedDays} ngày`}</td><td><Badge tone={statusTone(item.deliveryStatus ?? item.status)}>{statusLabel(item.deliveryStatus ?? item.status, item.provider)}</Badge></td>{onDeleteHistory ? <td className="manager-reminder-history-action">{deleteHistoryButton(item)}</td> : null}</tr>)}</tbody></table></div>}
     </section> : null}
     {confirmation ? <div className="modal-backdrop manager-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setConfirmation(null); }}><section ref={dialogRef} className="dialog manager-reminder-confirm-dialog" role="dialog" aria-modal="true" tabIndex={-1} aria-label={`Xác nhận gửi ${confirmation.kind === "single" && confirmation.channel === "base" ? "Base.vn" : "email"}`}>{compactUi ? <div className="row between manager-dialog-heading"><h2>Xác nhận gửi {confirmation.kind === "single" && confirmation.channel === "base" ? "Base.vn" : "email"}</h2><ModalCloseButton label="Huỷ gửi" onClick={() => setConfirmation(null)} /></div> : <h2>Xác nhận gửi {confirmation.kind === "single" && confirmation.channel === "base" ? "Base.vn" : "email"}</h2>}{confirmation.kind === "all" ? <p>Bạn sắp gửi email nhắc học cho <b>{view.candidates.length} người học</b>. Hãy chắc rằng danh sách và nội dung đã đúng.</p> : <p>Gửi {confirmation.channel === "base" ? "Base.vn" : "email"} nhắc học cho <b>{confirmation.learnerName}</b> ({confirmation.learnerEmail ?? "chưa có nơi nhận"})?{confirmation.channel === "base" ? " Tin sẽ đến cuộc trò chuyện được gắn với incoming webhook đã lưu cho người học này." : ""}</p>}<div className="row manager-reminder-confirm-actions"><button className="btn-sm" type="button" onClick={() => setConfirmation(null)}>Huỷ</button><button className="btn-sm btn-primary" type="button" onClick={() => void confirmSend()}>Xác nhận gửi {confirmation.kind === "single" && confirmation.channel === "base" ? "Base.vn" : "email"}</button></div></section></div> : null}
