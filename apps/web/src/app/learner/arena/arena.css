@@ -273,5 +273,8 @@
   .arena-row-action.is-icon .arena-btn-icon { display: inline-flex; }
   .arena-row-action.is-icon .arena-btn-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .arena-row-actions { gap: 4px; }
+  /* the status line may take 2 lines so the countdown is never cut off */
+  .arena-list__text small { white-space: normal; overflow: visible; display: block; line-height: 1.35; }
+  .arena-countdown { white-space: nowrap; }
   :root:root:root .arena-back-button { min-height: 34px !important; height: 34px; padding: 0 12px !important; font-size: 13px !important; }
 }
