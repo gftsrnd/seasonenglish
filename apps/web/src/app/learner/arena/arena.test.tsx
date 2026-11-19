@@ -113,11 +113,12 @@ describe("Đấu trường page", () => {
 
   it("has a stable arena title and a back link to Mini game", async () => {
     page(client());
-    expect(await screen.findByRole("heading", { level: 1, name: "Đấu trường từ vựng" })).toBeInTheDocument();
-    expect(screen.getByText("Thách đấu bạn cùng cấp bằng bộ từ đang học và leo bảng xếp hạng mùa.")).toBeInTheDocument();
+    // Desktop (the test tier) shows the description line; phone/tablet put it behind an ⓘ.
+    expect(await screen.findByText("Thách đấu bạn cùng cấp bằng bộ từ đang học và leo bảng xếp hạng mùa.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: /^Đấu trường từ vựng/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Về Game từ vựng/ })).toHaveAttribute("href", "/games");
     fireEvent.click(screen.getByRole("tab", { name: "Bảng xếp hạng" }));
-    expect(screen.getByRole("heading", { level: 1, name: "Đấu trường từ vựng" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: /^Đấu trường từ vựng/ })).toBeInTheDocument();
     expect(screen.getAllByRole("combobox").map((item) => item.getAttribute("aria-label"))).toEqual(["Cấp", "Trò", "Mùa"]);
   });
 

@@ -63,12 +63,9 @@
 
 .manager-holiday-list button { flex: none; }
 /* "Nguồn chính thức" sits in a 12 px caption line: give it the page's 44 px touch height. */
-.manager-holiday-description a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding-inline: 2px;
-}
+.manager-holiday-description a { display: inline-flex; align-items: center; padding-inline: 2px; }
+/* Owner 19/11: the 44px touch height only on touch screens; on desktop it left a gap under each holiday. */
+@media (pointer: coarse) { .manager-holiday-description a { min-height: 44px; } }
 .manager-holiday-description small { display: flex; flex-wrap: wrap; align-items: center; column-gap: 4px; }
 .manager-holiday-list time { white-space: nowrap; }
 
@@ -1461,7 +1458,7 @@
 
 .manager-monthly-table :is(th, td) {
   min-width: 0;
-  vertical-align: top;
+  vertical-align: middle;
   overflow-wrap: anywhere;
   white-space: normal;
   padding: 10px 8px;

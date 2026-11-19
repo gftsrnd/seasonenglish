@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { GameFinishInput } from "@e4s/contracts";
-import { Clock3, LogOut, Play } from "lucide-react";
+import { Clock3, LogOut, Play, Send, Users } from "lucide-react";
+import type { LearnerAvatarData } from "@e4s/contracts";
+import { AccountAvatar } from "../../shared/AccountAvatar.js";
+import { ArenaCountdown } from "./ArenaCountdown.js";
 import { arenaApiClient, type ArenaApiClient, type ArenaMatch, type ArenaRound } from "../../../api/arena.js";
 import { useModal } from "../../shared/ModalProvider.js";
 import { GameEngine } from "../Games.js";
 import { AppLink, Notice } from "../ui.js";
+import { InfoTitle, useUiTier } from "../../shared/CompactUi.js";
 import { ArenaGameIcon } from "./ArenaGameIcon.js";
 import { ArenaResultCard } from "./ArenaResultCard.js";
 import { ArenaWords } from "./ArenaWords.js";
-import { ARENA_GAME_NAMES, hoursLeft, isInviteForMe, matchStatusLine } from "./arena-text.js";
+import { ARENA_GAME_NAMES, isInviteForMe, matchStatusLine } from "./arena-text.js";
 import { arenaErrorMessage, useArenaQuickMatch } from "./useArenaQuickMatch.js";
 import "./arena.css";
 
@@ -26,6 +30,7 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
   client?: Client;
 }) {
   const modal = useModal();
+  const compact = useUiTier() !== "desktop";
   const [match, setMatch] = useState<ArenaMatch | null>(null);
   const [round, setRound] = useState<ArenaRound | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -75,7 +80,7 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
     await run(async () => { const next = await client.forfeit(matchId); setRound(null); setMatch(next); }, "Chưa thoát được trận.");
   };
 
-  const boardLink = <AppLink className="arena-text-link" href="/arena" navigate={navigate}>Về Đấu trường</AppLink>;
+  const boardLink = <AppLink className="btn arena-back-button" href="/arena" navigate={navigate}>Về Đấu trường</AppLink>;
   if (loadError) return <div className="app-learner-page game-page arena-page"><Notice tone="warn">{loadError}</Notice>{boardLink}</div>;
   if (!match) return <div className="app-learner-page game-page arena-page"><section className="card" aria-live="polite">Đang tải trận…</section></div>;
 
@@ -88,8 +93,8 @@ export function ArenaMatchScreen({ matchId, navigate, notify, client = arenaApiC
     <header className="row between game-running-header arena-match-header">
       <div className="arena-match-header__text">
         <div className="eyebrow game-running-title"><span className="game-title-icon" aria-hidden="true"><ArenaGameIcon game={match.game} size={18} /></span><span>{name}</span></div>
-        <h1>{match.setTopic}</h1>
-        <p className="small muted arena-mode-line" data-arena-mode-line>{modeLine}</p>
+        <InfoTitle as="h1" title={match.setTopic} tip={modeLine} />
+        {compact ? null : <p className="small muted arena-mode-line" data-arena-mode-line>{modeLine}</p>}
       </div>
       {playing
         ? <button className="btn btn-sm btn-danger game-exit-link" type="button" disabled={busy} onClick={() => void exit()}><LogOut size={15} strokeWidth={2.2} aria-hidden="true" />Thoát</button>
@@ -118,21 +123,36 @@ function ArenaMatchState({ match, busy, onStart, onAnswer, again, link, client }
   link: ReactNode;
 }) {
   if (isInviteForMe(match)) {
-    // Invite details: the one place with Từ chối next to Nhận.
-    return <section className="card arena-state" data-arena-state="invite">
-      <h2>{match.opponent?.displayName ?? "Bạn học"} mời bạn</h2>
-      <p className="small muted">Giao hữu · {hoursLeft(match.acceptDeadline)} giờ để nhận</p>
-      <div className="row arena-actions">
+    // Lời mời giao hữu (owner 19/11): same card family as the result – banner, the two players, the live countdown.
+    const inviter = match.opponent?.displayName ?? "Bạn học";
+    return <section className="card arena-result arena-state is-invite" data-arena-state="invite">
+      <header className="arena-result__banner"><span className="arena-result__badge" aria-hidden="true"><Users size={24} strokeWidth={2} /></span>
+        <span className="arena-result__title"><h2>{inviter} mời bạn</h2><small>{ARENA_GAME_NAMES[match.game]} · Giao hữu · {match.setTopic}</small></span></header>
+      <div className="arena-result__versus arena-state__versus">
+        <StateSide avatar={match.opponent?.avatar} name={inviter} note="Người mời" />
+        <span className="arena-result__vs" aria-hidden="true">VS</span>
+        <StateSide avatar={match.myAvatar} name="Bạn" note="Bạn" me />
+      </div>
+      <p className="arena-result__reason"><Clock3 size={15} aria-hidden="true" /><ArenaCountdown until={match.acceptDeadline} prefix="Còn" />&nbsp;để nhận · giao hữu không tính điểm xếp hạng</p>
+      <div className="arena-result__actions">
         <button className="btn-primary" type="button" disabled={busy} onClick={() => onAnswer("accept")}>Nhận</button>
         <button className="btn" type="button" disabled={busy} onClick={() => onAnswer("decline")}>Từ chối</button>
       </div>
     </section>;
   }
   if (match.status === "open" || match.status === "invited") {
-    return <section className="card arena-state" data-arena-state="posted">
-      <h2>{match.mode === "ranked" ? "Đã đăng thách đấu" : "Đã gửi lời mời"}</h2>
-      <p className="small muted">Chờ người nhận · {hoursLeft(match.acceptDeadline)} giờ</p>
-      {link}
+    // Chờ người nhận (owner 19/11): banner, Bạn VS ?, the live countdown, then back to the arena.
+    const ranked = match.mode === "ranked";
+    return <section className="card arena-result arena-state is-waiting" data-arena-state="posted">
+      <header className="arena-result__banner"><span className="arena-result__badge" aria-hidden="true"><Send size={22} strokeWidth={2} /></span>
+        <span className="arena-result__title"><h2>{ranked ? "Đã đăng thách đấu" : "Đã gửi lời mời"}</h2><small>{ARENA_GAME_NAMES[match.game]} · {ranked ? "Xếp hạng" : "Giao hữu"} · {match.setTopic}</small></span></header>
+      <div className="arena-result__versus arena-state__versus">
+        <StateSide avatar={match.myAvatar} name="Bạn" note="Đã đăng" me />
+        <span className="arena-result__vs" aria-hidden="true">VS</span>
+        <StateSide name={ranked ? "Đối thủ" : match.opponent?.displayName ?? "Đối thủ"} avatar={ranked ? undefined : match.opponent?.avatar} note="Chờ nhận" unknown={ranked} />
+      </div>
+      <p className="arena-result__reason"><Clock3 size={15} aria-hidden="true" /><ArenaCountdown until={match.acceptDeadline} prefix="Còn" />&nbsp;để có người nhận · báo ở chuông</p>
+      <div className="arena-result__actions">{link}</div>
     </section>;
   }
   if (match.status === "accepted" && !match.me.played) {
@@ -183,4 +203,13 @@ function ArenaReady({ match, busy, onStart, link, wordsClient }: {
       </button>
     </div>
   </section>;
+}
+
+/** One player in the invite / waiting cards: avatar (or "?" while a ranked opponent is unknown), name, a short note. */
+function StateSide({ avatar, name, note, me = false, unknown = false }: { avatar?: Partial<LearnerAvatarData> | undefined; name: string; note: string; me?: boolean; unknown?: boolean }) {
+  return <div className="arena-result__side">
+    <span className={`arena-result__avatar${me ? " is-me" : ""}`} aria-hidden="true">{unknown ? "?" : <AccountAvatar avatar={avatar} name={name} size={52} />}</span>
+    <b>{name}</b>
+    <small>{note}</small>
+  </div>;
 }

@@ -1018,3 +1018,7 @@ dd { margin: 0; font-weight: 650; }
   .rubric-row, .certificate-facts { grid-template-columns: 1fr; }
   .certificate { padding: 14px; }
 }
+
+/* Owner 19/11: table rows line up on the row's middle (text, badges and row buttons such as Xóa);
+   lesson matrices keep their own top alignment. */
+table td, .table-wrap table td { vertical-align: middle; }

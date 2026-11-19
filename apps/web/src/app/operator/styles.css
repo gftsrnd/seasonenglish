@@ -4860,3 +4860,7 @@ body > .operator-modal-scope .operator-editor-section textarea.line-field { min-
   :root:root .operator-action-table-wrap { overflow-x: auto; }
   :root:root .operator-action-table-wrap > table.operator-action-table:not(.operator-results-table) { table-layout: auto !important; width: max-content !important; min-width: 100% !important; }
 }
+
+/* Owner 19/11: Đã duyệt – the row buttons sit flush right. */
+.app-operator .operator-action-table td[data-label="Thao tác"] { text-align: right; }
+.app-operator .operator-action-table .operator-approved-actions { display: flex; justify-content: flex-end; flex-wrap: nowrap; gap: 6px; margin-inline-start: auto; }

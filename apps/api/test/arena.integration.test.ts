@@ -205,8 +205,9 @@ describe("arena phase 2: XH, open challenges, friendly invites and the ledger", 
     const typing = await call(l2.cookie, "GET", "/api/v1/arena/leaderboard?game=typing");
     expect(typing.statusCode, typing.body).toBe(200);
     expect(typing.json().entries).toHaveLength(6);
-    expect(typing.json().entries).toEqual(Array.from({ length: 6 }, () => expect.objectContaining({ rank: 1, rating: 1_000 })));
-    expect(typing.json().me).toMatchObject({ rank: 1, rating: 1_000, of: 6 });
+    // No shared ranks (owner 19/11): equal points are ordered by who reached them first, then by name.
+    expect(typing.json().entries).toEqual(Array.from({ length: 6 }, (_, index) => expect.objectContaining({ rank: index + 1, rating: 1_000 })));
+    expect(typing.json().me).toMatchObject({ rank: 2, rating: 1_000, of: 6 });
     // Changing game does not reset the meeting count: a 5th meeting today on sort moves 0.
     const sortMatch = await post(l1, "sort");
     await accept(l2, sortMatch);

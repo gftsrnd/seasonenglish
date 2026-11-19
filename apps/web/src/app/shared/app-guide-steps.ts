@@ -345,11 +345,9 @@ export function guideDefinitions(role: GuideRole, path: string) {
  * Màn tự mở hướng dẫn ở lần đầu vào (mỗi tab một lần, nhớ trong trình duyệt).
  * Trả về khoá của màn đang hiện, hoặc undefined nếu màn không tự mở.
  */
-export function guideAutoOpenKey(role: GuideRole, path: string, scope: ParentNode = document): string | undefined {
-  if (role === "operator" && path === "/op/review") {
-    const tab = scope.querySelector("[data-operator-review-tab]")?.getAttribute("data-operator-review-tab");
-    return tab ? `operator:/op/review:${tab}` : undefined;
-  }
+/** No screen opens its guide by itself (owner 19/11: Phản hồi & yêu cầu popped it on every visit);
+ *  the guide opens only from the "?" button. */
+export function guideAutoOpenKey(_role: GuideRole, _path: string, _scope: ParentNode = document): string | undefined {
   return undefined;
 }
 

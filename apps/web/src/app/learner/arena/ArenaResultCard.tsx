@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, Bell, Equal, Handshake, Swords, Trophy, User } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Bell, Equal, Handshake, Swords, Trophy } from "lucide-react";
+import { AccountAvatar } from "../../shared/AccountAvatar.js";
 import type { ArenaMatch } from "../../../api/arena.js";
 import { ARENA_GAME_NAMES, bandLabel, outcomeTitle, shortReason, signed } from "./arena-text.js";
 
@@ -9,11 +10,6 @@ function clock(ms: number | null | undefined): string {
   if (!ms || ms <= 0) return "";
   const seconds = Math.round(ms / 1000);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/u);
-  return ((parts.at(-1)?.[0] ?? "") + (parts.length > 1 ? parts[0]![0] ?? "" : "")).toUpperCase() || "?";
 }
 
 /** Why the round went this way, in one sentence under the two scores. */
@@ -51,7 +47,7 @@ export function ArenaResultCard({ match, onAgain, againBusy = false, link }: {
     const me = who === "me";
     return <div className={`arena-result__side${winner(who) ? " is-winner" : ""}`}>
       {winner(who) ? <span className="arena-result__crown">Thắng</span> : null}
-      <span className={`arena-result__avatar${me ? " is-me" : ""}`} aria-hidden="true">{me ? <User size={24} /> : result ? initials(opponent) : "?"}</span>
+      <span className={`arena-result__avatar${me ? " is-me" : ""}`} aria-hidden="true">{me || result ? <AccountAvatar avatar={me ? match.myAvatar : match.opponent?.avatar} name={me ? "Bạn" : opponent} size={52} /> : "?"}</span>
       <b>{me ? "Bạn" : result ? opponent : "Đối thủ"}</b>
       <strong className="arena-result__score">{me ? match.me.score ?? 0 : result ? match.them.score ?? 0 : "–"}</strong>
       <small>{me ? (clock(match.me.gameplayMs) ? `điểm ván · ${clock(match.me.gameplayMs)}` : "điểm ván") : result ? "điểm ván" : "chưa chơi"}</small>

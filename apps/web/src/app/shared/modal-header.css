@@ -165,3 +165,17 @@
 /* A title block of several lines (eyebrow + title + status): the action group aligns to its top;
    a one-line title stays centred with the buttons. The group never wraps onto its own line. */
 :root:root:root:root:root:root:root :is(.dialog, [role="dialog"], .monthly-resource-panel) > :is(header:not(.avatar-dialog-preview), .row.between:first-child, .operator-level-form-dialog-header, .assessment-bank-header, .operator-editor-sticky-header, .app-modal-heading, .inbox-heading):has(> :first-child:not(button):not(:is(h1, h2, h3, h4)):not(.operator-editor-heading):not(.row) > :is(h1, h2, h3, h4, p, span, div) + *) { align-items: flex-start !important; }
+
+/* Owner 19/11 (Xem lên cấp preview was broken): the season figure fills the round illustration instead
+   of spilling over the title, and "Mô phỏng" sits as a normal badge with the season badge. */
+:root:root .learner-reward-dialog .modal-illustration { width: 88px; height: 88px; overflow: hidden; background: transparent; }
+:root:root .learner-reward-dialog .modal-illustration .profile-season-figure { width: 88px !important; height: 88px !important; background: var(--reward-season-bg, var(--primary-soft)); }
+:root:root .learner-reward-dialog .modal-illustration .profile-season-figure-emoji { font-size: 40px; line-height: 1; }
+:root:root .learner-reward-dialog .reward-simulation { position: static; }
+:root:root .learner-reward-dialog > .row:first-child > span[aria-hidden="true"]:empty { background: none; border: 0; box-shadow: none; padding: 0; min-width: 0; }
+:root:root .learner-reward-dialog .badge.reward-simulation { color: var(--text); background: var(--surface-2); border: 1px solid var(--line); }
+
+/* Owner 19/11: confirm/prompt popups keep a compact width on tablets too (they were stretched to the full width). */
+@media (min-width: 601px) {
+  :root:root:root:root #modal > form.dialog { width: min(480px, calc(100vw - 48px)) !important; max-width: 480px !important; }
+}

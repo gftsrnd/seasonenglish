@@ -7,6 +7,9 @@ import { useModal } from "../../shared/ModalProvider.js";
 import { Pager } from "../../shared/Pager.js";
 import { useMediaQuery } from "../../shared/useMediaQuery.js";
 import { AppLink, Modal, Notice } from "../ui.js";
+import { InfoTitle, useUiTier } from "../../shared/CompactUi.js";
+
+const ARENA_PAGE_DESCRIPTION = "Thách đấu bạn cùng cấp bằng bộ từ đang học và leo bảng xếp hạng mùa.";
 import { ArenaGameIcon } from "./ArenaGameIcon.js";
 import { myMatchRows } from "./ArenaHub.js";
 import { ArenaResultCard } from "./ArenaResultCard.js";
@@ -45,6 +48,7 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
   }, [client]);
   useEffect(() => { void load(); }, [load]);
 
+  const compact = useUiTier() !== "desktop";
   const back = <AppLink className="btn arena-back-button" href="/games" navigate={navigate}><ArrowLeft size={16} aria-hidden="true" />Về Game từ vựng</AppLink>;
   const simpleHeader = <header className="page-title arena-page-title"><div><h1>Đấu trường từ vựng</h1></div>{back}</header>;
   if (error && !home) return <div className="app-learner-page arena-page">{simpleHeader}<Notice tone="danger">{error}</Notice></div>;
@@ -53,8 +57,9 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
 
   return <div className="app-learner-page arena-page">
     <header className="page-title arena-page-title"><div>
-      <h1>Đấu trường từ vựng</h1>
-      <p className="muted">Thách đấu bạn cùng cấp bằng bộ từ đang học và leo bảng xếp hạng mùa.</p>
+      {/* Phone/tablet rule: the description goes behind an ⓘ beside the title; desktop shows the line. */}
+      <InfoTitle as="h1" title="Đấu trường từ vựng" tip={ARENA_PAGE_DESCRIPTION} />
+      {compact ? null : <p className="muted">{ARENA_PAGE_DESCRIPTION}</p>}
     </div>{back}</header>
     <nav className="request-tabs arena-tabs" aria-label="Đấu trường">
       {(["play", "board"] as Tab[]).map((key) => <a key={key} href={key === "board" ? "/arena?tab=board" : "/arena"} role="tab" aria-selected={tab === key} aria-current={tab === key ? "page" : undefined} onClick={(event) => { event.preventDefault(); setTab(key); }}><span>{TAB_TITLES[key]}</span></a>)}

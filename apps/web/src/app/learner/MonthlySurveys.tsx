@@ -56,19 +56,19 @@ export function LearnerMonthlySurveys({ surveys, month }: { surveys: ReturnType<
       <p>Chưa tải được khảo sát.</p>
       <button type="button" className="btn" onClick={retry}>Thử lại</button>
     </div> : !view ? <p className="card" role="status">Đang tải khảo sát…</p> : <>
-      <section className="card monthly-survey-stack" aria-labelledby="monthly-survey-open">
+      {/* No open survey: the card is hidden (owner 19/11); history below says what was sent. */}
+      {form ? <section className="card monthly-survey-stack" aria-labelledby="monthly-survey-open">
         <div className="monthly-survey-heading">
           <div>
-            {form ? <div className="eyebrow">{surveyMonthLabel(form.month)}</div> : null}
-            <h2 id="monthly-survey-open">{form?.title ?? "Khảo sát đang mở"}</h2>
+            <div className="eyebrow">{surveyMonthLabel(form.month)}</div>
+            <h2 id="monthly-survey-open">{form.title}</h2>
           </div>
-          {available.length > 1 ? <label>Tháng khảo sát <select value={form?.month ?? ""} onChange={event => setSelectedMonth(event.target.value)}>
+          {available.length > 1 ? <label>Tháng khảo sát <select value={form.month} onChange={event => setSelectedMonth(event.target.value)}>
             {available.map(item => <option value={item.form.month} key={item.form.month}>{surveyMonthLabel(item.form.month)}</option>)}
           </select></label> : null}
         </div>
-        {form ? <LearnerSurveyForm key={`${form.month}-${form.revision}`} form={form} onSubmitted={recordSubmission} onConflict={refreshAfterConflict} />
-          : <p className="muted">Hiện không có khảo sát nào cần trả lời.</p>}
-      </section>
+        <LearnerSurveyForm key={`${form.month}-${form.revision}`} form={form} onSubmitted={recordSubmission} onConflict={refreshAfterConflict} />
+      </section> : null}
 
     </>}
   </div>;

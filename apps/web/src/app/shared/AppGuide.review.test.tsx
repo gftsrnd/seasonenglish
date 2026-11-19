@@ -112,24 +112,10 @@ describe("operator review guide (19a)", () => {
     expect(heading()).toBe(titles[1]);
   });
 
-  it("opens by itself the first time each tab is shown, and not again once seen", async () => {
-    const { rerender } = render(<><AppGuide role="operator" pathname="/op/review" compact autoOpen /><Review tab="appeals" /></>);
-    expect(heading()).toBe("Bốn mục của trang");
-    expect(count()).toBe("1 / 6");
-    fireEvent.click(panel().getByRole("button", { name: "Đóng hướng dẫn" }));
-    // Another tab, first time: opens again with that tab's steps.
-    rerender(<><AppGuide role="operator" pathname="/op/review" compact autoOpen /><Review tab="sent" /></>);
-    await act(async () => { await new Promise(requestAnimationFrame); });
-    expect(count()).toBe("1 / 2");
-    fireEvent.click(panel().getByRole("button", { name: "Đóng hướng dẫn" }));
-    // Back to a seen tab: stays closed until "?" is pressed.
-    rerender(<><AppGuide role="operator" pathname="/op/review" compact autoOpen /><Review tab="appeals" /></>);
-    await act(async () => { await new Promise(requestAnimationFrame); });
-    expect(screen.queryByRole("dialog", { name: "Hướng dẫn sử dụng" })).toBeNull();
-    cleanup();
+  it("never opens by itself; only the ? button opens it", async () => {
     render(<><AppGuide role="operator" pathname="/op/review" compact autoOpen /><Review tab="appeals" /></>);
+    await act(async () => { await new Promise(requestAnimationFrame); });
     expect(screen.queryByRole("dialog", { name: "Hướng dẫn sử dụng" })).toBeNull();
-    expect(JSON.parse(window.localStorage.getItem("e4s:guide-seen") ?? "[]")).toEqual(["operator:/op/review:appeals", "operator:/op/review:sent"]);
   });
 
   it("explains Loại and the statuses on the empty appeals list", () => {

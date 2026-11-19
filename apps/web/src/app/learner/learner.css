@@ -2142,6 +2142,11 @@ html:root:is([data-theme="summer"],[data-theme="autumn"],[data-theme="tet"],[dat
 .learner-root .learner-support-shortcut-body > b { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .learner-root .learner-support-shortcut-body .badge { margin: 0; font-size: 11px; }
 .learner-root .learner-support-shortcut-action { grid-column: 2; color: var(--primary-dark, var(--primary)); font-weight: 700; }
+/* Owner 19/11: each card keeps its full description on one line; the links line up across cards. */
+.learner-root .learner-support-shortcut { grid-template-rows: auto 1fr; }
+.learner-root .learner-support-shortcut-action { align-self: end; }
+.learner-root .learner-support-shortcut-body > .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1100px) { .learner-root .learner-support-shortcut-body > .small { white-space: normal; } }
 .learner-root .learner-support-empty { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
 /* #16 Exam rules: group colours on the titles too (desktop boxes) and on the short phone lines. */
 .learner-root .test-page .assessment-rule--required .assessment-rule-title { color: #24622f; }

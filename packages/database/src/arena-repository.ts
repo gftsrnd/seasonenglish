@@ -36,7 +36,9 @@ export interface ArenaMatchView {
   setTopic: string;
   postedByMe: boolean;
   /** Hidden while a ranked challenge is open; known once accepted (and to the inviter of a friendly). */
-  opponent: { id: string; displayName: string; cefr: CefrLevel | null } | null;
+  opponent: { id: string; displayName: string; cefr: CefrLevel | null; avatar?: Record<string, unknown> } | null;
+  /** The learner's own avatar, for the Bạn side of the result card. */
+  myAvatar?: Record<string, unknown>;
   createdAt: string;
   acceptDeadline: string;
   acceptedAt: string | null;
@@ -776,8 +778,11 @@ export class ArenaRepository {
 
   private async views(learnerId: string, rows: MatchRow[]): Promise<ArenaMatchView[]> {
     const others = [...new Set(rows.map((row) => row.poster_id === learnerId ? row.opponent_id : row.poster_id).filter((id): id is string => Boolean(id)))];
-    const names = new Map((await this.pool.query<{ id: string; display_name: string }>(
-      "select id, display_name from users where id = any($1::uuid[])", [others])).rows.map((row) => [row.id, row.display_name]));
+    const people = (await this.pool.query<{ id: string; display_name: string; avatar: Record<string, unknown> | null }>(
+      "select id, display_name, avatar from users where id = any($1::uuid[])", [[...others, learnerId]])).rows;
+    const names = new Map(people.map((row) => [row.id, row.display_name]));
+    // Only a chosen avatar is passed on; the web shows the season character otherwise.
+    const avatars = new Map(people.flatMap((row) => row.avatar && "acc" in row.avatar && "bg" in row.avatar ? [[row.id, row.avatar] as const] : []));
     return rows.map((row) => {
       const side = row.poster_id === learnerId ? "poster" : "opponent";
       const other = side === "poster" ? "opponent" : "poster";
@@ -790,7 +795,8 @@ export class ArenaRepository {
         id: row.id, mode: row.mode, game: row.game_key, cefr: row.cefr, status: row.status, setKind: row.set_kind, setTopic: row.set_topic,
         postedByMe: side === "poster",
         opponent: otherId && (row.mode === "friendly" || row.status !== "open")
-          ? { id: otherId, displayName: names.get(otherId) ?? "", cefr: side === "poster" ? row.opponent_cefr : row.poster_cefr } : null,
+          ? { id: otherId, displayName: names.get(otherId) ?? "", cefr: side === "poster" ? row.opponent_cefr : row.poster_cefr, ...(avatars.has(otherId) ? { avatar: avatars.get(otherId)! } : {}) } : null,
+        ...(avatars.has(learnerId) ? { myAvatar: avatars.get(learnerId)! } : {}),
         createdAt: row.created_at.toISOString(), acceptDeadline: row.accept_deadline.toISOString(),
         acceptedAt: row.accepted_at?.toISOString() ?? null, playDeadline: row.play_deadline?.toISOString() ?? null,
         settledAt: row.settled_at?.toISOString() ?? null, cancelReason: row.cancel_reason,

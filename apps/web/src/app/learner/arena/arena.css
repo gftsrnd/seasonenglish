@@ -278,3 +278,22 @@
   .arena-countdown { white-space: nowrap; }
   :root:root:root .arena-back-button { min-height: 34px !important; height: 34px; padding: 0 12px !important; font-size: 13px !important; }
 }
+
+/* Owner 19/11: the outcome banner covers the whole top of the card at every width (tablet padded it in),
+   and the page head sits close to the card. */
+:root:root:root:root .arena-page .card.arena-result { padding: 0 0 20px !important; }
+:root:root:root .arena-page > #gm-board { margin-top: 0; }
+/* Lose banner is red (owner 19/11), like the down XH box. */
+:root:root .arena-result.is-lose .arena-result__banner { color: #fff; background: linear-gradient(100deg, #c0392b 0%, #e57368 100%); }
+:root:root .arena-result.is-lose .arena-result__badge { color: #b3261e; }
+/* Each side shows the account's own avatar (its chosen character, else the season character). */
+:root:root .arena-result__avatar { overflow: hidden; background: none; }
+:root:root .arena-result__avatar .account-avatar { width: 100% !important; height: 100% !important; min-width: 0 !important; min-height: 0 !important; }
+/* Phone: the score note stays on one line (it stretched the result popup). */
+@media (max-width: 600px) { .arena-result__side small { white-space: nowrap; font-size: 11px; } }
+.arena-state__versus .arena-result__side { padding-block: 14px 12px; }
+:root:root:root:root .dialog.arena-dialog .card.arena-result { padding: 0 0 16px !important; margin: 0 -22px; border: 0; border-radius: 0; }
+.arena-state .arena-result__reason { display: block; text-align: center; line-height: 1.5; }
+.arena-state .arena-result__reason > svg { display: inline-block; vertical-align: -2px; margin-right: 4px; }
+:root:root:root:root .dialog.arena-dialog .card.arena-result { width: calc(100% + 44px); max-width: none; box-sizing: border-box; }
+:root:root .modal-backdrop > .dialog.arena-dialog { overflow-x: hidden; }

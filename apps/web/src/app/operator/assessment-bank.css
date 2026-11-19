@@ -33,3 +33,21 @@
   .assessment-delivery-dialog { padding: 20px; }
   .assessment-delivery-dialog .assessment-bank-header { flex-direction: row; }
 }
+
+/* Owner 19/11: "Chọn cách giao đề" follows the app's common popup – 560px, header row with a divider,
+   plain sections (no grey boxes), options as the usual bordered choice rows. */
+:root:root .assessment-delivery-dialog { width: min(560px, calc(100vw - 32px)); padding: 0 22px 20px; border-radius: 16px; background: var(--surface); }
+:root:root .assessment-delivery-dialog > .assessment-bank-header { position: sticky; top: 0; z-index: 2; align-items: center; margin: 0 -22px 12px; padding: 14px 22px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+:root:root .assessment-delivery-dialog > .assessment-bank-header > h2 { margin: 0; font-size: 1.2rem; }
+:root:root .assessment-delivery-dialog > p:first-of-type { margin: 0; color: var(--muted); font-size: .875rem; }
+:root:root .assessment-delivery-dialog fieldset { gap: 8px; margin: 14px 0 0; padding: 0; border: 0; background: none; }
+:root:root .assessment-delivery-dialog legend { margin-bottom: 8px; padding: 0; font-weight: 700; font-size: .9rem; }
+:root:root .assessment-delivery-dialog fieldset label { align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; }
+:root:root .assessment-delivery-dialog fieldset label:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+:root:root .assessment-delivery-dialog input[type=radio], :root:root .assessment-delivery-dialog input[type=checkbox] { margin: 0; }
+:root:root .assessment-delivery-dialog .assessment-bank-confirm { justify-content: flex-end; margin-top: 18px; }
+
+/* Owner 19/11: test-set row buttons use the app's standard 40px button on tablet/desktop. */
+@media (min-width: 601px) {
+  :root:root .assessment-bank button.assessment-bank-compact-action { --hci-touch-target: 40px; --touch-min: 40px; min-height: 40px; height: 40px; padding: 0 14px; border-radius: 10px; font-size: .9rem; }
+}

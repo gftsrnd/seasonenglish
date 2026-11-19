@@ -1,3 +1,4 @@
+import type { LearnerAvatarData } from "@e4s/contracts";
 import type { CefrLevel, GameFinishInput, GameKey, GameWordSetView } from "@e4s/contracts";
 import { request } from "./runtime.js";
 
@@ -17,7 +18,8 @@ export interface ArenaMatch {
   setKind: ArenaSetKind;
   setTopic: string;
   postedByMe: boolean;
-  opponent: { id: string; displayName: string; cefr: CefrLevel | null } | null;
+  opponent: { id: string; displayName: string; cefr: CefrLevel | null; avatar?: Partial<LearnerAvatarData> } | null;
+  myAvatar?: Partial<LearnerAvatarData>;
   createdAt: string;
   acceptDeadline: string;
   acceptedAt: string | null;
