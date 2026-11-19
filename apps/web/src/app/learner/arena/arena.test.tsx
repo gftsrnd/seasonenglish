@@ -113,10 +113,9 @@ describe("Đấu trường page", () => {
 
   it("has a Mini game style title that follows the tab, the rules ⓘ and the back link", async () => {
     page(client());
-    expect(await screen.findByRole("heading", { level: 1, name: /Giao đấu/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: /Thi đấu/ })).toBeInTheDocument();
     expect(screen.getByText(/Đấu trường B1/)).toBeInTheDocument();
     expect(screen.getByText(/6\.000 điểm XH tổng · Hạng 4\/5/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Luật đấu trường" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Về Mini game/ })).toHaveAttribute("href", "/games");
     fireEvent.click(screen.getByRole("tab", { name: "Bảng xếp hạng" }));
     expect(screen.getByRole("heading", { level: 1, name: /Bảng xếp hạng/ })).toBeInTheDocument();

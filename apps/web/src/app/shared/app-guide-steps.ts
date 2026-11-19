@@ -73,6 +73,19 @@ const learnerSteps: Record<string, readonly GuideStep[]> = {
     ['.games-topic-card:has(a[href="/home"])', "Chưa có bộ từ", "Học phần **từ vựng** của bài tháng trước, rồi quay lại chơi."],
     [".games-word-set-card:has(.word-chip)", "Ôn từ trước khi chơi", "Các từ đang chơi, kèm **nghĩa tiếng Việt**."],
     ['[aria-labelledby="games-picker-title"]:has(a.game-tile)', "Chọn trò chơi", "Bấm một trò **Sẵn sàng chơi**. Trò chưa mở ghi rõ điều kiện còn thiếu."],
+    [".arena-entry", "Đấu trường", "Từ **B1**: thách đấu bạn cùng cấp bằng bộ từ đang chơi và xem bảng xếp hạng mùa."],
+  ],
+  "/arena": [
+    [".arena-tabs", "Hai mục", "**Thi đấu** để đăng và nhận trận. **Bảng xếp hạng** để xem thứ hạng trong mùa."],
+    [".arena-set", "Bộ từ đang dùng", "Thách đấu dùng bộ này. **Xem từ** để ôn, **Đổi bộ** để đổi ngay tại đây."],
+    ['[aria-labelledby="arena-start-title"]', "Đăng thách đấu", "Chọn trò rồi bấm **Đăng thách đấu**. Tối đa **3 trận** xếp hạng đang mở."],
+    ['[aria-labelledby="arena-mine-title"]', "Trận của bạn", "Bấm **Chơi** khi tới lượt. Chưa ai nhận thì **Huỷ** được; bỏ trận sẽ tính thua."],
+    ["#arena-open-title", "Thách đấu đang mở", "Xem từ để ôn trước rồi **Nhận**. Đã nhận phải chơi trong **24 giờ**."],
+    [".arena-board", "Bảng xếp hạng", "Mỗi trò bắt đầu **1.000 điểm**. Bằng điểm, ai đạt trước xếp trên."],
+  ],
+  "/arena/*": [
+    ['.arena-state[data-arena-state="ready"]', "Sẵn sàng đấu", "Ôn các từ bên dưới rồi bấm **Bắt đầu**. Thoát giữa ván tính thua."],
+    [".arena-result", "Kết quả trận", "So **điểm ván** hai bên; bằng điểm thì ai nhanh hơn thắng. Ô dưới là điểm xếp hạng được cộng hoặc trừ."],
   ],
   "/games/*": [
     ["#gm-board:has(.game-tutorial-actions)", "Cách chơi", "Đọc mục tiêu và cách tính điểm, rồi bấm **Bắt đầu chơi**."],

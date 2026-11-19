@@ -3,7 +3,7 @@ import type { CefrLevel, GameHubView, GameKey } from "@e4s/contracts";
 import { ArrowLeft, ChevronDown, ChevronRight, CircleHelp, Inbox, Users } from "lucide-react";
 import { arenaApiClient, type ArenaApiClient, type ArenaBoardGame, type ArenaHome, type ArenaLeaderboard as Board, type ArenaMatch, type ArenaOpenChallenge } from "../../../api/arena.js";
 import { learnerApiClient, type LearnerApiClient } from "../../../api/learner.js";
-import { InfoTip } from "../../shared/CompactUi.js";
+import { InfoTitle } from "../../shared/CompactUi.js";
 import { useModal } from "../../shared/ModalProvider.js";
 import { Pager } from "../../shared/Pager.js";
 import { useMediaQuery } from "../../shared/useMediaQuery.js";
@@ -25,11 +25,11 @@ type Person = { id: string; name: string; level: CefrLevel };
 const numberFormat = new Intl.NumberFormat("vi-VN");
 const dateFormat = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 const LEVELS: CefrLevel[] = ["B1", "B2", "C1"];
-const TAB_TITLES: Record<Tab, string> = { play: "Giao đấu", board: "Bảng xếp hạng" };
+const TAB_TITLES: Record<Tab, string> = { play: "Thi đấu", board: "Bảng xếp hạng" };
 
 /**
  * Đấu trường (`/arena`, owner 19/11): laid out like the Mini game page – back link, page title
- * (eyebrow "Đấu trường B1", the title follows the tab: Giao đấu / Bảng xếp hạng), the app's
+ * (eyebrow "Đấu trường B1", the title follows the tab: Thi đấu / Bảng xếp hạng; rules ⓘ on phone/tablet only), the app's
  * segmented tabs, then cards top to bottom.
  * - Giao đấu: Bộ từ (words shown, change the set right here – it is the Mini game set too),
  *   Đăng thách đấu (Xếp hạng / Giao hữu), Trận của bạn, Thách đấu đang mở (see the words before taking it).
@@ -63,7 +63,7 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
   return <div className="app-learner-page arena-page">
     <header className="page-title arena-page-title"><div>
       <div className="eyebrow">Đấu trường {home.level}{seasonLine}</div>
-      <h1 className="info-title"><span className="info-title-text">{TAB_TITLES[tab]}</span><InfoTip label="Luật đấu trường" text={<ol className="arena-rules">{ARENA_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ol>} /></h1>
+      <InfoTitle as="h1" title={TAB_TITLES[tab]} label="Luật đấu trường" tip={<ol className="arena-rules">{ARENA_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ol>} />
       <p className="muted">{numberFormat.format(home.total)} điểm XH tổng · {rankLine}</p>
     </div>{back}</header>
     <nav className="request-tabs arena-tabs" aria-label="Đấu trường">
