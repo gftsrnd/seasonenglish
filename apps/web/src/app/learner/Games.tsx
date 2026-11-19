@@ -12,7 +12,8 @@ import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { ActionLabel, InfoTitle, useCompactUi } from "../shared/CompactUi.js";
 import { Pager, usePaged } from "../shared/Pager.js";
 import { ArenaSection } from "./arena/ArenaHub.js";
-import { GAME_SCORING_RULE } from "../games/scoring-rule.js";
+import { gameScoringLine } from "../games/scoring-rule.js";
+import { gameRoundWords } from "@e4s/domain/engagement";
 
 type GameIdentity = Pick<GameDescriptor, "key" | "icon" | "name" | "description"> & { iconElement: ReactNode };
 
@@ -29,32 +30,32 @@ const compactTutorial: Record<GameKey, string[]> = {
   // Three steps per game, matching the current gameplay and the shared 0–100 round score (arena phase 1).
   scramble: [
     "Đọc gợi ý, bấm hoặc gõ các chữ theo đúng thứ tự.",
-    "Sai lần đầu được thử lại (nửa phần); sai 2 lần thì sang từ mới.",
-    "Gợi ý mở một chữ; từ đó còn nửa phần."
+    "Sai lần đầu được thử lại; sai 2 lần thì sang từ mới.",
+    "Gợi ý mở một chữ của từ đang xếp."
   ],
   crossword: [
     "Chọn một từ Ngang hoặc Dọc và đọc gợi ý.",
-    "Gõ chữ vào ô rồi bấm Kiểm tra; điền sai rồi sửa còn nửa phần.",
-    "Gợi ý mở một chữ của từ đang chọn; từ đó còn nửa phần."
+    "Gõ chữ vào ô rồi bấm Kiểm tra; điền sai được sửa lại.",
+    "Gợi ý mở một chữ của từ đang chọn."
   ],
   eggs: [
     "Đọc gợi ý, kéo rổ hoặc bấm ← → để hứng từ khớp.",
-    "Hứng đúng liên tiếp từ lượt 3: mỗi lượt được gấp rưỡi.",
+    "Hứng đúng liên tiếp để giữ combo.",
     "Hứng sai hoặc để rơi: 0 điểm, mất 1 mạng. Hết 3 mạng là hết ván."
   ],
   mario: [
     "Chạy, nhảy và chạm hộp quà để mở câu hỏi của cổng.",
     "Trả lời sai: 0 điểm, mất 1 mạng, cổng vẫn mở.",
-    "Gặp boss: trả lời trước khi hết giờ (sai rồi đúng được nửa phần). Chạm cờ để xong."
+    "Gặp boss: trả lời trước khi hết giờ, sai được trả lời lại. Chạm cờ để xong."
   ],
   sort: [
     "Đọc từ trong câu ví dụ: cách dùng quyết định từ loại.",
     "Bấm nhóm đúng. Chọn sai: 0 điểm và hiện đáp án.",
-    "Đúng liên tiếp từ từ thứ 3: mỗi từ được gấp rưỡi."
+    "Đúng liên tiếp để giữ combo."
   ],
   typing: [
     "Đọc nghĩa, định nghĩa hoặc bấm nghe phát âm.",
-    "Gõ đủ từ trước khi thanh thời gian cạn; gõ sai được thử lại (nửa phần).",
+    "Gõ đủ từ trước khi thanh thời gian cạn; gõ sai được thử lại.",
     "Hết giờ: 0 điểm và sang từ mới."
   ]
 };
@@ -100,15 +101,18 @@ export function getGameAvailability(key: GameKey, words: readonly GameWord[]): G
   return { available: true };
 }
 
-/** The shared "Điểm" line of all six tutorials (RULE A.3); Season catch adds its lives rule. */
-export const GAME_SCORING_LINE = GAME_SCORING_RULE;
+/** The "Điểm" line of a tutorial: the same rule for all six games, with this round's numbers; Season catch adds its lives rule. */
+export function gameScoringLineFor(key: GameKey, words: readonly GameWord[]): string {
+  return gameScoringLine(gameRoundWords(key, words).length);
+}
 export const CATCH_LIVES_LINE = "Hứng sai hoặc để rơi: mất 1 mạng.";
 
 export function getGameRoundSummary(descriptor: Pick<GameDescriptor, "key" | "goal" | "scoring">, words: readonly GameWord[]) {
   // Server descriptors hard-code the largest round size ("10 từ", "8 từ",
   // "10 lượt"); the real round depends on the word set (HUD "Từ 1/8"), so the
   // counts in the copy are replaced with the values the game will actually use.
-  const scoring = descriptor.key === "eggs" ? `${GAME_SCORING_LINE} ${CATCH_LIVES_LINE}` : GAME_SCORING_LINE;
+  const line = gameScoringLineFor(descriptor.key, words);
+  const scoring = descriptor.key === "eggs" ? `${line} ${CATCH_LIVES_LINE}` : line;
   if (descriptor.key === "typing") return { goal: descriptor.goal.replace(/\d+ từ/, `${gameRoundWordCount("typing", words)} từ`), scoring };
   if (descriptor.key === "scramble") return { goal: descriptor.goal.replace(/\(\d+ từ\)/, `(${gameRoundWordCount("scramble", words)} từ)`), scoring };
   if (descriptor.key === "eggs") return { goal: descriptor.goal.replace(/\d+ lượt/, `${gameRoundWordCount("eggs", words)} lượt`), scoring };

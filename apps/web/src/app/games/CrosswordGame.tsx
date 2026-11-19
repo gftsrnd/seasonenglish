@@ -4,6 +4,7 @@ import { ArrowDown, ArrowRight, ChevronDown } from "lucide-react";
 import { buildCrosswordLayout, type CrosswordDirection, type CrosswordLayout, type CrosswordPlaced } from "@e4s/domain/engagement";
 import { prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
 import { GameHud, useGameClock, useRoundTally } from "./GameHud.js";
+import { gamePointValues } from "./scoring-rule.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import { GameFeedback } from "./GameFeedback.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
@@ -278,7 +279,7 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
           })}
         </div>)}
       </div>
-      <div className="crossword-actions"><button className="btn-primary" type="button" onClick={() => void check()} disabled={busy}>Kiểm tra</button><button className="btn-sm" type="button" onClick={hint} disabled={busy || !activeEntry} title={activeEntry ? `Gợi ý cho từ ${activeEntry.number} · từ này chỉ còn nửa phần.` : "Chọn một từ trước khi dùng gợi ý."}>Gợi ý 1 chữ</button><span className="crossword-actions-note">{activeEntry ? `Gợi ý cho từ ${activeEntry.number} · từ này chỉ còn nửa phần.` : "Chọn một từ trước khi dùng gợi ý."}</span></div>
+      <div className="crossword-actions"><button className="btn-primary" type="button" onClick={() => void check()} disabled={busy}>Kiểm tra</button><button className="btn-sm" type="button" onClick={hint} disabled={busy || !activeEntry} title={activeEntry ? `Gợi ý cho từ ${activeEntry.number} · từ này được +${gamePointValues(units.length).assisted}.` : "Chọn một từ trước khi dùng gợi ý."}>Gợi ý 1 chữ</button><span className="crossword-actions-note">{activeEntry ? `Gợi ý cho từ ${activeEntry.number} · từ này được +${gamePointValues(units.length).assisted}.` : "Chọn một từ trước khi dùng gợi ý."}</span></div>
       {(() => { const clueLists = <div className="crossword-clues">
         {([
           { direction: "across", label: "Ngang", Icon: ArrowRight },

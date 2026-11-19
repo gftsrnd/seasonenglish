@@ -202,10 +202,10 @@ describe("learner game visual and interaction regressions", () => {
     expect(screen.getByText("Hướng dẫn chơi", { exact: false })).toBeInTheDocument();
     expect(screen.getByText("Chạy, nhảy và chạm hộp quà để mở câu hỏi của cổng.")).toBeInTheDocument();
     expect(screen.getByText("Trả lời sai: 0 điểm, mất 1 mạng, cổng vẫn mở.")).toBeInTheDocument();
-    expect(screen.getByText("Gặp boss: trả lời trước khi hết giờ (sai rồi đúng được nửa phần). Chạm cờ để xong.")).toBeInTheDocument();
+    expect(screen.getByText("Gặp boss: trả lời trước khi hết giờ, sai được trả lời lại. Chạm cờ để xong.")).toBeInTheDocument();
     // Boss questions never reuse gate words: a 3-word set has 3 gates and no boss.
     expect(screen.getByText("Vượt 3 cổng rồi chạm cờ.")).toBeInTheDocument();
-    expect(screen.getByText(/không đứt chuỗi = 100/i)).toBeInTheDocument();
+    expect(screen.getByText(/Đúng ngay \+29 · Từ câu thứ 3 đúng liên tiếp \+43 · Câu dùng gợi ý \/ thử lại \+14 · Sai: 0 · Tối đa 100\./)).toBeInTheDocument();
     expect(screen.queryByText(/Mỗi hộp quà \? đứng trên một cột gỗ chắn ngang đường/i)).not.toBeInTheDocument();
     const tutorialMeta = document.querySelector(".game-tutorial-meta");
     expect(tutorialMeta).not.toBeNull();
@@ -226,7 +226,7 @@ describe("learner game visual and interaction regressions", () => {
     render(<LearnerGame descriptor={typing} wordSet={eightWords} result={null} actions={actions} />);
 
     expect(screen.getByText("Gõ đúng 8 từ thật nhanh, giữ chuỗi combo càng dài càng nhiều điểm.")).toBeInTheDocument();
-    expect(screen.getByText(/Đúng ngay: được 1 phần điểm\. Từ câu thứ 3 đúng liên tiếp: mỗi câu được gấp rưỡi\. Dùng gợi ý hoặc thử lại: được nửa phần\. Sai: 0 và mất chuỗi\. Đúng hết, không đứt chuỗi = 100\.$/)).toBeInTheDocument();
+    expect(screen.getByText(/Đúng ngay \+9 · Từ câu thứ 3 đúng liên tiếp \+14 · Câu dùng gợi ý \/ thử lại \+5 · Sai: 0 · Tối đa 100\./)).toBeInTheDocument();
     expect(screen.queryByText(/× combo/)).not.toBeInTheDocument();
     expect(screen.queryByText(/10 từ/)).not.toBeInTheDocument();
   });
@@ -240,7 +240,7 @@ describe("learner game visual and interaction regressions", () => {
     const eggs = { ...descriptor("eggs", []), goal: "Hứng đúng vật phẩm khớp với gợi ý, 10 lượt.", scoring: "+1 điểm mỗi vật phẩm hứng đúng, tối đa 10." };
     render(<LearnerGame descriptor={eggs} wordSet={wordSet} result={null} actions={actions} />);
     expect(screen.getByText("Hứng đúng vật phẩm khớp với gợi ý, 3 lượt.")).toBeInTheDocument();
-    expect(screen.getByText(/không đứt chuỗi = 100. Hứng sai hoặc để rơi: mất 1 mạng./)).toBeInTheDocument();
+    expect(screen.getByText(/Tối đa 100\. Hứng sai hoặc để rơi: mất 1 mạng\./)).toBeInTheDocument();
   });
 
   it("resets the learner main scroll container when a game starts", async () => {
