@@ -9,7 +9,7 @@ import { useTheme } from "../shared/ThemeProvider.js";
 import { useMediaQuery } from "../shared/useMediaQuery.js";
 import { formatScoreOutOf } from "../shared/format-score.js";
 import { Save as SaveIcon_ } from "lucide-react";
-import { ActionShortLabel, Description, InfoTip, SectionTip } from "../shared/CompactUi.js";
+import { ActionShortLabel, Description, InfoTip, InfoTitle, SectionTip, useUiTier } from "../shared/CompactUi.js";
 import { Paged } from "../shared/Pager.js";
 
 const SYSTEM_TEST_DATE_HELP = "Ngày này điều khiển lịch học, quyền vào bài, điểm danh, Season AI Coach và thông báo của toàn tổ chức. Chỉ Quản lý được thay đổi.";
@@ -92,6 +92,8 @@ export type SettingsProps = {
 type SettingsPanel = { id: string; label: string; content: ReactNode; tip?: { label: string; text: ReactNode } };
 
 export function SettingsPage({ role, manager, product, experience, capabilities, ai, operatorOverview, actions, accounts, arenaSeason }: SettingsProps) {
+  const settingsTier = useUiTier();
+  const settingsDescription = role === "manager" ? "Thiết lập lịch học, nhắc học, mùa xếp hạng, giao diện và người dùng." : "Chỉnh giao diện, nhạc nền, học theo tháng và người dùng.";
   const compact = useMediaQuery("(max-width: 1180px)");
   const [openPanels, setOpenPanels] = useState<Readonly<Record<string, boolean>>>({});
   const [aiDraft, setAiDraft] = useState<AiConfigurationInput | null>(ai ? { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model, speechToTextModel: ai.speechToTextModel } : null);
@@ -135,7 +137,7 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
   const defaultPanel = availablePanels[0]?.id;
 
   return <div className="settings-page" data-settings-role={role} data-compact={compact || undefined}>
-    <div className="page-title"><div><h1>Cài đặt</h1><p className="muted">{role === "manager" ? "Thiết lập lịch học, nhắc học, mùa xếp hạng, giao diện và người dùng." : "Chỉnh giao diện, nhạc nền, học theo tháng và người dùng."}</p></div></div>
+    <div className="page-title"><div><InfoTitle as="h1" title="Cài đặt" tip={settingsDescription} />{settingsTier === "desktop" ? <p className="muted">{settingsDescription}</p> : null}</div></div>
     {availablePanels.map(panel => {
       const expanded = openPanels[panel.id] ?? (panel.id === defaultPanel);
       const contentId = `setting-${panel.id}`;

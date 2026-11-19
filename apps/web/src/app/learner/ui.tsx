@@ -1,6 +1,6 @@
 import { useDialog } from "../shared/ModalProvider.js";
 import { ChevronRight } from "lucide-react";
-import { InfoTitle, ModalCloseButton, useCompactUi } from "../shared/CompactUi.js";
+import { InfoTitle, ModalCloseButton, useCompactUi, useUiTier } from "../shared/CompactUi.js";
 import { useLayoutEffect, useId, useRef, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type CSSProperties, type HTMLAttributes, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
 /** "Bài 5" / "Ôn tuần 2" at A1–A2; `english` (B1+ learners, who see no Vietnamese) gives "Lesson 5" / "Week 2 review". */
@@ -124,10 +124,12 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "warn" | "
  * (desktop renders the plain title, unchanged); `compactDetail: false` hides the detail
  * line on phones/tablets (use it when the same text is in `tip`).
  */
-export function PageTitle({ eyebrow, title, detail, aside, tip, compactDetail = true }: { eyebrow?: string; title: string; detail?: ReactNode; aside?: ReactNode; tip?: ReactNode; compactDetail?: boolean }) {
-  const compact = useCompactUi();
-  const showDetail = detail && (compactDetail || !compact);
-  return <header className="page-title"><div>{eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}{tip ? <InfoTitle as="h1" title={title} tip={tip} /> : <h1>{title}</h1>}{showDetail ? <p className="muted">{detail}</p> : null}</div>{aside}</header>;
+export function PageTitle({ eyebrow, title, detail, aside, tip }: { eyebrow?: string; title: string; detail?: ReactNode; aside?: ReactNode; tip?: ReactNode; compactDetail?: boolean }) {
+  // Owner 19/11: on phones and tablets every short description goes behind the ⓘ beside the title
+  // (no line under it); desktop keeps the line.
+  const desktop = useUiTier() === "desktop";
+  const info = tip ?? detail;
+  return <header className="page-title"><div>{eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}{info ? <InfoTitle as="h1" title={title} tip={info} /> : <h1>{title}</h1>}{desktop && detail ? <p className="muted">{detail}</p> : null}</div>{aside}</header>;
 }
 
 export function Progress({ value, max, label, segmented = false }: { value: number; max: number; label: string; segmented?: boolean }) {

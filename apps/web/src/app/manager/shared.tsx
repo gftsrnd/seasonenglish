@@ -23,8 +23,9 @@ export function ManagerSectionLayout({ children }: { children: ReactNode }) {
   return <ManagerSectionDescription.Provider value={hasOwnDescription ? null : description}>
     <header className="page-title manager-page-title manager-section-title no-print" data-section={section?.id}>
       <div className="manager-page-title__content">
-        <h1 className={tablet && hasOwnDescription ? "info-title" : undefined}>{tablet && hasOwnDescription ? <><span className="info-title-text">{"title" in item ? item.title : item.label}</span><InfoTip text={item.description} /></> : "title" in item ? item.title : item.label}</h1>
-        {hasOwnDescription ? <div className="manager-section-description">{compact ? <InfoTip text={item.description} /> : tablet ? <p className="muted tier-one-line" title={typeof item.description === "string" ? item.description : undefined}>{item.description}</p> : <p className="muted">{item.description}</p>}</div>
+        {/* Owner 19/11: phones and tablets put the description behind the ⓘ beside the title, no line under it. */}
+        <h1 className={(compact || tablet) && hasOwnDescription ? "info-title" : undefined}>{(compact || tablet) && hasOwnDescription ? <><span className="info-title-text">{"title" in item ? item.title : item.label}</span><InfoTip text={item.description} /></> : "title" in item ? item.title : item.label}</h1>
+        {hasOwnDescription ? (compact || tablet ? null : <div className="manager-section-description"><p className="muted">{item.description}</p></div>)
           : <div ref={setDescription} className="manager-section-description" />}
       </div>
       <ManagerSectionNavigation readOnly={operatorReadOnlyTabs.some((tab) => tab.to === pathname)} />
@@ -108,8 +109,7 @@ export function PageTitle({ children, description, actions }: { children: ReactN
 export function PageDescription({ text, tip = true }: { text: ReactNode; tip?: boolean }) {
   const tier = useUiTier();
   if (tier === "desktop") return <p className="muted">{text}</p>;
-  // Tablet: one short line (full text in the tooltip).
-  if (tier === "tablet") return <p className="muted tier-one-line" title={typeof text === "string" ? text : undefined}>{text}</p>;
+  // Phones and tablets: behind the ⓘ (owner 19/11), never a line under the title.
   return tip ? <InfoTip text={text} /> : null;
 }
 

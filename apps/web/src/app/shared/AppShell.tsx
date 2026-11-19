@@ -14,6 +14,7 @@ import { BadgeCelebration } from "./BadgeCelebration.js";
 import { NotificationBell } from "./NotificationBell.js";
 import { organisationThemeStorageKey, useTheme } from "./ThemeProvider.js";
 import { ScrollJumpButton, useScrollJump } from "./ScrollJump.js";
+import { useStableTabSwitch } from "./useStableTabSwitch.js";
 import { useMediaQuery } from "./useMediaQuery.js";
 import { AppGuide } from "./AppGuide.js";
 import { ModalCloseButton } from "./CompactUi.js";
@@ -122,6 +123,8 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
   learnerCefr?: CefrLevel;
   }) {
   const location = useLocation();
+  const mainRef = useRef<HTMLElement>(null);
+  useStableTabSwitch(mainRef);
   const role = session.role as ShellRole;
   const items = role === "learner" && (onboardingComplete === false || learnerHomeOnly) ? nav[role].slice(0, 1) : nav[role];
   const [logoutPending, setLogoutPending] = useState(false);
@@ -244,7 +247,7 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
         {accountMenu}
       </div>
     </header>}
-    <main className="app-content">
+    <main ref={mainRef} className="app-content">
       <div ref={scroll.start} className="app-scroll-edge" aria-hidden="true" />
       {children}
       <div ref={scroll.end} className="app-scroll-edge" aria-hidden="true" />
