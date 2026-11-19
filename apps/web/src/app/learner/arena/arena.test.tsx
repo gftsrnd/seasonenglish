@@ -113,9 +113,8 @@ describe("Đấu trường page", () => {
 
   it("has a stable arena title and a back link to Mini game", async () => {
     page(client());
-    expect(await screen.findByText(/Đấu trường B1/)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1, name: "Đấu trường từ vựng" })).toBeInTheDocument();
-    expect(screen.getByText(/6\.000 điểm XH tổng · Hạng 4\/5/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Đấu trường từ vựng" })).toBeInTheDocument();
+    expect(screen.getByText("Thách đấu bạn cùng cấp bằng bộ từ đang học và leo bảng xếp hạng mùa.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Về Game từ vựng/ })).toHaveAttribute("href", "/games");
     fireEvent.click(screen.getByRole("tab", { name: "Bảng xếp hạng" }));
     expect(screen.getByRole("heading", { level: 1, name: "Đấu trường từ vựng" })).toBeInTheDocument();
@@ -201,7 +200,7 @@ describe("Đấu trường page", () => {
     fireEvent.click(await screen.findByRole("tab", { name: "Bảng xếp hạng" }));
     expect(await screen.findByRole("columnheader", { name: "Season catch" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Tổng" })).toBeInTheDocument();
-    expect(screen.getByText("Bạn đang hạng 4/5")).toBeInTheDocument();
+    expect(screen.getByText(/^Bạn đang hạng 4\/5/)).toBeInTheDocument();
     expect(document.querySelector("tr.is-me")).toHaveTextContent("Bạn");
   });
 

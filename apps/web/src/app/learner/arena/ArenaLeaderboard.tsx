@@ -51,13 +51,10 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
   if (!home) return <div className="app-learner-page arena-page">{simpleHeader}<section className="card" aria-live="polite">Đang tải đấu trường…</section></div>;
   if (!home.eligible) return <div className="app-learner-page arena-page">{simpleHeader}<Notice tone="warn">Đấu trường mở từ B1. Bạn đang ở mức {home.level ?? "—"}.</Notice></div>;
 
-  const rankLine = home.rank && home.rank.of > 1 ? `Hạng ${home.rank.position}/${home.rank.of}` : "Chưa xếp hạng";
-  const seasonLine = home.season ? ` · mùa đến ${dateFormat.format(new Date(`${home.season.endsOn}T00:00:00+07:00`))}` : "";
   return <div className="app-learner-page arena-page">
     <header className="page-title arena-page-title"><div>
-      <div className="eyebrow">Đấu trường {home.level}{seasonLine}</div>
       <h1>Đấu trường từ vựng</h1>
-      <p className="muted">{numberFormat.format(home.total)} điểm XH tổng · {rankLine}</p>
+      <p className="muted">Thách đấu bạn cùng cấp bằng bộ từ đang học và leo bảng xếp hạng mùa.</p>
     </div>{back}</header>
     <nav className="request-tabs arena-tabs" aria-label="Đấu trường">
       {(["play", "board"] as Tab[]).map((key) => <a key={key} href={key === "board" ? "/arena?tab=board" : "/arena"} role="tab" aria-selected={tab === key} aria-current={tab === key ? "page" : undefined} onClick={(event) => { event.preventDefault(); setTab(key); }}><span>{TAB_TITLES[key]}</span></a>)}
@@ -311,6 +308,8 @@ function ArenaBoardTab({ level: myLevel, season, client, learnerId }: { level: C
   const me = boards?.[sort]?.me ?? null;
   const isMe = (row: Row) => row.learnerId === learnerId;
   const score = (row: Row) => sort === "total" ? row.total : row.games[sort as GameKey] ?? 0;
+  const shownSeason = seasonId ? pastSeasons.find((item) => item.id === seasonId) ?? null : season;
+  const seasonEnd = shownSeason ? dateFormat.format(new Date(`${shownSeason.endsOn}T00:00:00+07:00`)) : "";
 
   return <section className="card games-section-card arena-panel arena-board" aria-label="Bảng xếp hạng">
     <div className="arena-board__filters">
@@ -342,8 +341,8 @@ function ArenaBoardTab({ level: myLevel, season, client, learnerId }: { level: C
       </table></div>}
     {rows.length ? <div className="arena-board__pager"><Pager page={current} pages={pages} setPage={setPage} label="xếp hạng" /></div> : null}
     <div className="arena-board__foot">
-      <b>{me && rows.length > 1 && level === myLevel ? `Bạn đang hạng ${me.rank}/${me.of}` : level === myLevel ? "Chưa xếp hạng" : `Xếp hạng ${level}`}</b>
-      <span className="small muted">Bằng điểm: ai đạt trước xếp trên.</span>
+      <b>{me && rows.length > 1 && level === myLevel ? `Bạn đang hạng ${me.rank}/${me.of} · ${numberFormat.format(me.rating)} điểm` : level === myLevel ? "Chưa xếp hạng" : `Xếp hạng ${level}`}</b>
+      <span className="small muted">{seasonEnd ? `Mùa kết thúc ${seasonEnd} · ` : ""}Bằng điểm: ai đạt trước xếp trên.</span>
     </div>
   </section>;
 }
