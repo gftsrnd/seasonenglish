@@ -628,3 +628,8 @@
   :root:root:root:root:has(.manager-root) .manager-section-title .manager-section-description:has(> p) { display: block; flex-basis: 100%; }
   :root:root:root:root:has(.manager-root) .manager-section-title .manager-section-description > p { margin: 2px 0 0; }
 }
+@media (min-width: 601px) and (max-width: 1024px) {
+  /* the title keeps its own line; the description goes under it (no word-per-line squeeze) */
+  :root:root:root:root:has(.manager-root) .manager-section-title .manager-page-title__content:has(.manager-section-description > p) { display: grid; gap: 2px; }
+  :root:root:root:root:has(.manager-root) .manager-section-title .manager-page-title__content h1 { white-space: normal; min-width: 0; }
+}
