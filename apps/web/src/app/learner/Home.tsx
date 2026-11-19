@@ -167,7 +167,8 @@ function PrimaryLesson({ view, next, actions }: { view: LearnerHomeView; next: L
     return <section className="hero" style={{ background: "var(--mint)", color: "var(--text)" }} data-home-block="primary"><div className="eyebrow">{period}</div><h2>{dateLocked ? next.lock.opensAt ? `Bài này mở vào ${formatLessonDate(next.lock.opensAt)}` : "Bài này chưa mở" : reviewGate ? `Hoàn thành ${reviewLabel} để mở bài này` : "Học bù bài trước đã nhé"}</h2><p>{dateLocked ? "Chưa đến ngày học nên chưa có nút học bài này." : reviewGate ? "Bài đầu tuần mới chỉ mở khi đã xong bài ôn của tuần trước." : "Hoàn thành bài trước để mở bài này."}</p>{!dateLocked && blocker ? <AppLink className="btn btn-primary" href={`/lesson/${blocker.id}`} navigate={actions.navigate}>{reviewGate ? `Làm ${reviewLabel}` : `Học ${blocker.label ? learnerLessonPhrase(blocker.label) : monthly ? `bài ${blocker.dayNumber}` : `bài T${blocker.dayNumber + 1}`} ngay`}</AppLink> : null}</section>;
   }
   const catchUp = !view.monthlyUncounted && isCatchUp(view, next);
-  return <section className={`hero home-primary-lesson${catchUp ? " home-primary-lesson--catch-up" : ""}`} data-home-block="primary"><div><div className="eyebrow">{view.monthlyUncounted ? "Gợi ý học thử" : catchUp ? "Bài học bù" : "Bài hôm nay"} · {learnerLessonLabel(next)} · {period}</div><h2>{catchUp ? "Học bù bài trước đã nhé" : next.title}</h2>{catchUp ? <p style={{ margin: 0 }}>Hoàn thành {learnerLessonPhrase(learnerLessonLabel(next))}: {next.title}</p> : null}</div><div className="row" style={{ gap: 14, fontWeight: 800, fontSize: ".9rem" }}><span className="row" style={{ gap: 6 }}><ClockIcon /> {view.schedule.lessonMinutes} phút</span>{view.monthlyUncounted ? null : <span>{view.metrics.completedLessons}/{view.metrics.totalLessons} bài đã học</span>}</div><AppLink className="btn btn-primary btn-lg btn-block" href={`/lesson/${next.id}`} navigate={actions.navigate}>{next.status === "in_progress" && view.monthlyUncounted ? "Học tiếp" : catchUp ? `Học ${learnerLessonPhrase(learnerLessonLabel(next))} ngay` : "Học ngay"}</AppLink></section>;
+  const lessonTitle = splitLessonDay(next.title);
+  return <section className={`hero home-primary-lesson${catchUp ? " home-primary-lesson--catch-up" : ""}`} data-home-block="primary"><div><div className="eyebrow">{view.monthlyUncounted ? "Gợi ý học thử" : catchUp ? "Bài học bù" : "Bài hôm nay"} · {learnerLessonLabel(next)} · {period}</div><h2>{catchUp ? "Học bù bài trước đã nhé" : lessonTitle.title}</h2>{catchUp ? <p style={{ margin: 0 }}>Hoàn thành {learnerLessonPhrase(learnerLessonLabel(next))}: {lessonTitle.title}</p> : null}</div><div className="row" style={{ gap: 14, fontWeight: 800, fontSize: ".9rem" }}><span className="row" style={{ gap: 6 }}><ClockIcon /> {view.schedule.lessonMinutes} phút{lessonTitle.day ? ` · ${lessonTitle.day}` : ""}</span>{view.monthlyUncounted ? null : <span>{view.metrics.completedLessons}/{view.metrics.totalLessons} bài đã học</span>}</div><AppLink className="btn btn-primary btn-lg btn-block" href={`/lesson/${next.id}`} navigate={actions.navigate}>{next.status === "in_progress" && view.monthlyUncounted ? "Học tiếp" : catchUp ? `Học ${learnerLessonPhrase(learnerLessonLabel(next))} ngay` : "Học ngay"}</AppLink></section>;
 }
 
 function lessonTimingLabel(view: LearnerHomeView, lesson: LearnerHomeView["lessons"][number]) {
@@ -442,3 +443,9 @@ function pilotPhaseLabel(phase: LearnerHomeView["weekPhase"]) {
 
 
 
+
+/** Owner 19/11: "Handling Client Feedback Meetings – Ngày 1" shows the topic as the title and "Ngày 1" next to the minutes. */
+export function splitLessonDay(title: string): { title: string; day?: string } {
+  const match = /^(.*?)\s*[–—-]\s*(Ngày\s+\d+)\s*$/u.exec(title);
+  return match && match[1] ? { title: match[1], day: match[2]! } : { title };
+}
