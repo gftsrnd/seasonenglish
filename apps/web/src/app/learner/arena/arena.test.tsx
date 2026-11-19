@@ -234,7 +234,7 @@ describe("arena match screen", () => {
     const api = { match: vi.fn().mockResolvedValue(match({ playDeadline: new Date(Date.now() + 60_000).toISOString() })), forfeit: vi.fn() };
     render(<ModalProvider><ArenaMatchScreen matchId={ID} navigate={navigate} notify={vi.fn()} client={api as never} /></ModalProvider>);
     expect(await screen.findByRole("timer", { name: "Thời gian còn lại" })).toHaveTextContent(/00:(01:00|00:59)/);
-    fireEvent.click(screen.getByRole("link", { name: "Về Đấu trường" }));
+    fireEvent.click(screen.getByRole("link", { name: /Thoát/ }));
     expect(navigate).toHaveBeenCalledWith("/arena");
     expect(api.forfeit).not.toHaveBeenCalled();
   });
