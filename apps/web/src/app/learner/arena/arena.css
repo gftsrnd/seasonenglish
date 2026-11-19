@@ -1,7 +1,7 @@
 /*
  * Arena (Đấu trường): built from the app's own parts (.card, .btn, .chip, .badge, .page-title,
  * the solo .game-result card, Pager, Modal). This file only lays out the list rows, the small
- * rank medals and the "Đấu" button on the Mini game cards. Theme tokens only.
+ * rank medals, the Mini game entry card and the game picker. Theme tokens only.
  * Phone ≤ 600px compact, tablet 601–1024px middle tier, desktop normal.
  */
 
@@ -63,19 +63,19 @@
 :root:root .arena-page .arena-match-header > .arena-match-header__text { flex: 1 1 auto !important; min-width: 0; }
 :root:root .arena-page .arena-match-header > .game-exit-link { flex: none; }
 
-/* Mini game hub: a normal secondary "Đấu" button at the card's bottom-right (B1+). */
-.arena-game-slot { position: relative; display: grid; min-width: 0; }
-.arena-game-slot > .game-tile { height: 100%; }
-.arena-game-slot > .game-tile > :is(b, small):last-child { padding-right: 70px; }
-.arena-duel-button.arena-duel-button { position: absolute; right: 12px; bottom: 12px; z-index: 1; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-.arena-board-link { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-.arena-hub-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.arena-hub-head > h2 { margin: 0; }
+/* Mini game hub: "Đấu trường" is its own card under the personal games; the whole card opens /arena. */
+.arena-entry-card { padding-block: 14px; }
+:root:root .arena-entry-card__link { display: flex; align-items: center; gap: 12px; min-width: 0; color: inherit; text-decoration: none; }
+.arena-entry-card__text { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.arena-entry-card__text h2 { margin: 0; }
+.arena-entry-card__icon { flex: none; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--primary-soft); color: var(--primary-dark); }
+a.arena-entry-card__link:hover h2 { text-decoration: underline; text-underline-offset: 3px; }
+.arena-entry-card.is-locked .arena-entry-card__icon { background: var(--line); color: var(--muted); }
 
-@media (max-width: 1024px) {
-  :root:root:root .learner-root .arena-game-slot > .game-tile > :is(b, small) { padding-right: 62px; }
-  :root:root:root .learner-root .arena-duel-button.arena-duel-button { top: auto; bottom: 6px; right: 8px; }
-}
+/* Arena page: "Chọn trò để đấu" – six equal buttons, 3 per row (2 on phone). */
+.arena-pick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+:root:root .btn.arena-pick { display: flex; align-items: center; justify-content: flex-start; gap: 8px; min-width: 0; min-height: 44px; padding: 0 12px; white-space: nowrap; }
+.arena-pick > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 @media (max-width: 600px) {
   .arena-page { gap: 10px; }
@@ -84,16 +84,10 @@
   .arena-list__text b { font-size: 14px; }
   .arena-list__text small { font-size: 12px; }
   .dialog.arena-dialog > .row.between:first-child { margin: 0 -16px 8px; padding: 10px 16px 8px; }
-  /* Phone cards are one compact row: the name keeps the full width, "Đấu" sits beside the second line. */
-  :root:root:root .learner-root .arena-game-slot > .game-tile > :is(b, small) { padding-right: 50px; }
-  :root:root:root .learner-root .arena-duel-button.arena-duel-button { bottom: 5px; right: 5px; min-height: 28px !important; height: 28px; padding: 0 8px !important; font-size: 12px; }
-}
-
-/* Phone: "Đấu" becomes a 28px icon square (label kept for screen readers) so game names stay whole. */
-@media (max-width: 600px) {
-  :root:root:root .learner-root .arena-game-slot > .game-tile > :is(b, small) { padding-right: 30px; }
-  :root:root:root .learner-root .arena-duel-button.arena-duel-button { width: 28px; min-width: 28px !important; padding: 0 !important; justify-content: center; }
-  :root:root:root .learner-root .arena-duel-button .arena-duel-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .arena-entry-card { padding-block: 10px; }
+  .arena-entry-card__icon { width: 34px; height: 34px; border-radius: 10px; }
+  .arena-pick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  :root:root:root .btn.arena-pick { min-height: 38px; padding: 0 10px; font-size: 13px; }
 }
 /* List rows: the tappable text starts flush left in every row. */
 :root:root:root .arena-page .arena-list__open { padding-left: 0 !important; padding-right: 0 !important; }

@@ -100,9 +100,9 @@ describe("arena leaderboard", () => {
     ...overrides
   });
 
-  it("titles Xếp hạng B1 with the rules ⓘ and never shows Hạng x/y", async () => {
+  it("titles Đấu trường B1 with the rules ⓘ and never shows Hạng x/y", async () => {
     render(<ModalProvider><ArenaLeaderboard navigate={vi.fn()} notify={vi.fn()} learnerId="me" client={client() as never} /></ModalProvider>);
-    expect(await screen.findByRole("heading", { level: 1, name: /Xếp hạng B1/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: /Đấu trường B1/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Luật đấu trường" })).toBeInTheDocument();
     await screen.findByText("An");
     expect(document.body.textContent).not.toMatch(/Hạng\s*\d+\s*\/\s*\d+/);
@@ -208,14 +208,24 @@ describe("manager arena season field", () => {
   });
 });
 
-describe("Đấu on a Mini game card", () => {
-  it("quick-matches the card's game with the hub set and opens the match", async () => {
-    const { ArenaGameSlot } = await import("./ArenaHub.js");
+describe("Đấu trường entry and game picker", () => {
+  it("is its own card on the Mini game page: B1+ opens /arena, below B1 says it opens from B1", async () => {
+    const { ArenaEntryCard } = await import("./ArenaHub.js");
+    const { unmount } = render(<ArenaEntryCard level="B1" navigate={vi.fn()} />);
+    expect(screen.getByRole("link", { name: "Vào đấu trường" })).toHaveAttribute("href", "/arena");
+    unmount();
+    render(<ArenaEntryCard level="A2" navigate={vi.fn()} />);
+    expect(screen.queryByRole("link", { name: "Vào đấu trường" })).not.toBeInTheDocument();
+    expect(screen.getByText("Mở từ B1. Bạn đang ở mức A2.")).toBeInTheDocument();
+  });
+
+  it("quick-matches a game picked on the arena page and opens the match", async () => {
     const navigate = vi.fn();
     const quickMatch = vi.fn().mockResolvedValue({ joined: true, match: match() });
-    render(<ArenaGameSlot game="typing" setKind="curriculum" navigate={navigate} client={{ quickMatch }}><a href="/games/typing">Đua gõ từ</a></ArenaGameSlot>);
-    fireEvent.click(screen.getByRole("button", { name: "Đấu Đua gõ từ" }));
+    const api = { home: vi.fn().mockResolvedValue(home({})), leaderboard: vi.fn().mockResolvedValue(board), answerFriendly: vi.fn(), inviteFriendly: vi.fn(), quickMatch };
+    render(<ModalProvider><ArenaLeaderboard navigate={navigate} notify={vi.fn()} learnerId="me" client={api as never} /></ModalProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: "Đấu Đua gõ từ" }));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/arena/match/${ID}`));
-    expect(quickMatch).toHaveBeenCalledWith(expect.objectContaining({ game: "typing", setKind: "curriculum", requestId: expect.any(String) }));
+    expect(quickMatch).toHaveBeenCalledWith(expect.objectContaining({ game: "typing", requestId: expect.any(String) }));
   });
 });

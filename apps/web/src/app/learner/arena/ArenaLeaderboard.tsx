@@ -33,8 +33,9 @@ export function myMatchRows(home: ArenaHome): ArenaMatch[] {
 }
 
 /**
- * Screen 2 – Bảng xếp hạng (`/arena`), built from the app's list-page parts: page title "Xếp hạng B1"
- * with the rules in ⓘ (never "Hạng x/y"), the "Trận của bạn" card (at most one action per row, only
+ * Đấu trường (`/arena`), opened from its own card on the Mini game page, built from the app's
+ * list-page parts: page title "Đấu trường B1" with the rules in ⓘ (never "Hạng x/y"), the
+ * "Chọn trò để đấu" picker (join an open challenge or post one), the "Trận của bạn" card (at most one action per row, only
  * when the learner must act), the Tổng / 6 game chips, the paged ranked list (my row lightly
  * highlighted, small medals for 1–3) and one small "Mời bạn giao hữu" link at the bottom.
  */
@@ -75,7 +76,7 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
 
   const title = (level: string) => <header className="page-title"><div>
     <AppLink className="eyebrow arena-eyebrow-link" href="/games" navigate={navigate}>Mini game</AppLink>
-    <h1 className="info-title"><span className="info-title-text">Xếp hạng {level}</span><InfoTip label="Luật đấu trường" text={<ol className="arena-rules">{ARENA_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ol>} /></h1>
+    <h1 className="info-title"><span className="info-title-text">Đấu trường {level}</span><InfoTip label="Luật đấu trường" text={<ol className="arena-rules">{ARENA_RULES.map((rule) => <li key={rule}>{rule}</li>)}</ol>} /></h1>
   </div></header>;
 
   if (error && !home) return <div className="app-learner-page arena-page"><Notice tone="danger">{error}</Notice></div>;
@@ -91,6 +92,13 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
 
   return <div className="app-learner-page arena-page arena-board-page">
     {title(home.level ?? "")}
+
+    <section className="card arena-section" aria-labelledby="arena-pick-title">
+      <h2 id="arena-pick-title">Chọn trò để đấu</h2>
+      <div className="arena-pick-grid">{ARENA_GAMES.map((key) => <button key={key} type="button" className="btn arena-pick" disabled={Boolean(again.busyGame)} aria-busy={again.busyGame === key || undefined} aria-label={`Đấu ${ARENA_GAME_NAMES[key]}`} onClick={() => void again.start(key)}>
+        <ArenaGameIcon game={key} /><span>{again.busyGame === key ? "Đang vào…" : ARENA_GAME_NAMES[key]}</span>
+      </button>)}</div>
+    </section>
 
     <section className="card arena-section" aria-labelledby="arena-my-matches">
       <h2 id="arena-my-matches">Trận của bạn</h2>
@@ -110,11 +118,11 @@ export function ArenaLeaderboard({ navigate, notify, learnerId, client = arenaAp
             : <AppLink className="arena-list__open" href={`/arena/match/${match.id}`} navigate={navigate} ariaLabel={`Mở trận ${ARENA_GAME_NAMES[match.game]}`}>{text}{action ? null : <ChevronRight className="arena-list__chevron" size={16} aria-hidden="true" />}</AppLink>}
           {action}
         </li>;
-      })}</ul> : <p className="small muted">Chưa có trận. Bấm “Đấu” ở Mini game.</p>}
+      })}</ul> : <p className="small muted">Chưa có trận. Chọn một trò ở trên để đấu.</p>}
     </section>
 
     <section className="card arena-section" aria-labelledby="arena-board-title">
-      <h2 id="arena-board-title" className="sr-only">Bảng xếp hạng</h2>
+      <h2 id="arena-board-title">Bảng xếp hạng</h2>
       <div className="chips" role="group" aria-label="Lọc theo trò">
         {(["total", ...ARENA_GAMES] as ArenaBoardGame[]).map((key) => <button key={key} type="button" className={`chip arena-filter${game === key ? " is-active" : ""}`} aria-pressed={game === key} onClick={() => setGame(key)}>{key === "total" ? "Tổng" : ARENA_GAME_NAMES[key]}</button>)}
       </div>

@@ -70,8 +70,9 @@ describe("app games affordances", () => {
 
     const page = screen.getByRole("heading", { name: "Game từ vựng" }).closest(".games-page");
     expect(page).toHaveClass("games-page");
-    const sections = Array.from((page as HTMLElement).querySelectorAll<HTMLElement>(".games-section-card"));
+    const sections = Array.from((page as HTMLElement).querySelectorAll<HTMLElement>(".games-section-card:not(.arena-entry-card)"));
     expect(sections).toHaveLength(3);
+    expect((page as HTMLElement).lastElementChild).toHaveClass("arena-entry-card");
     for (const section of sections) expect(section).toHaveClass("games-section-card");
     const topicSection = sections[0]!;
     const wordSetSection = sections[1]!;
@@ -190,10 +191,12 @@ describe("app games affordances", () => {
     expect(screen.queryByText("Đấu trường nội bộ")).not.toBeInTheDocument();
   });
 
-  it("does not restore the arena for B1 learners", () => {
+  it("shows Đấu trường as its own card below the games, separate from the personal game cards", () => {
     renderGames(<LearnerGames view={{ ...view, cefr: "B1", arena: { ...view.arena, eligible: true, points: 12 } }} actions={actions} />);
 
     expect(screen.queryByText("Đấu trường nội bộ")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Vào đấu trường" })).toHaveAttribute("href", "/arena");
+    expect(screen.queryByRole("button", { name: /^Đấu / })).not.toBeInTheDocument();
   });
 
   it("uses consistent Lucide icons for the six game tiles without rendering raw tile glyphs", () => {
