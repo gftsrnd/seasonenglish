@@ -263,3 +263,15 @@
   :root:root:root .arena-entry__text b { font-size: 19.2px; }
   :root:root:root .arena-entry__text small { font-size: 13.12px; }
 }
+
+/* Phone (rules): buttons stay on the row's single line; clear secondary actions are identical icon squares
+   (label kept for screen readers and as the tooltip); Chơi / Nhận keep their words. */
+.arena-btn-icon { display: none; }
+@media (max-width: 600px) {
+  .arena-list__line { flex-wrap: nowrap; }
+  :root:root:root:root .arena-list__row .arena-row-action.is-icon { width: 30px; min-width: 30px; padding: 0 !important; justify-content: center; }
+  .arena-row-action.is-icon .arena-btn-icon { display: inline-flex; }
+  .arena-row-action.is-icon .arena-btn-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .arena-row-actions { gap: 4px; }
+  :root:root:root .arena-back-button { min-height: 34px !important; height: 34px; padding: 0 12px !important; font-size: 13px !important; }
+}

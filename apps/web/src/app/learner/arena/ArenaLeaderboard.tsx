@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { CefrLevel, GameHubView, GameKey } from "@e4s/contracts";
-import { ArrowLeft, ChevronDown, ChevronRight, Inbox, Users } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronDown, ChevronRight, Flag, Inbox, Users, X } from "lucide-react";
 import { arenaApiClient, type ArenaApiClient, type ArenaBoardGame, type ArenaHome, type ArenaLeaderboard as Board, type ArenaMatch, type ArenaOpenChallenge } from "../../../api/arena.js";
 import { learnerApiClient, type LearnerApiClient } from "../../../api/learner.js";
 import { useModal } from "../../shared/ModalProvider.js";
@@ -121,7 +121,8 @@ function ArenaPlayTab({ home, client, setClient, learnerId, navigate, notify, re
     if (await modal.confirm({ title: "Bỏ trận?", message, confirmLabel: "Bỏ trận", cancelLabel: "Quay lại", tone: "danger" }))
       await run(match.id, async () => { await client.forfeit(match.id); await refresh(); }, "Chưa bỏ trận được.");
   };
-  const wordsToggle = (id: string) => <button type="button" className="btn btn-sm arena-row-action" aria-expanded={wordsFor === id} onClick={() => setWordsFor(wordsFor === id ? null : id)}>{wordsFor === id ? "Ẩn từ" : "Xem từ"}</button>;
+  const iconLabel = (Icon: typeof X, label: string) => <><span className="arena-btn-icon" aria-hidden="true"><Icon size={15} /></span><span className="arena-btn-label">{label}</span></>;
+  const wordsToggle = (id: string) => <button type="button" className="btn btn-sm arena-row-action is-icon" title={wordsFor === id ? "Ẩn từ" : "Xem từ"} aria-expanded={wordsFor === id} onClick={() => setWordsFor(wordsFor === id ? null : id)}>{iconLabel(BookOpen, wordsFor === id ? "Ẩn từ" : "Xem từ")}</button>;
 
   const rows = myMatchRows(home);
   return <>
@@ -161,9 +162,9 @@ function ArenaPlayTab({ home, client, setClient, learnerId, navigate, notify, re
         const text = <><span className="arena-list__icon"><ArenaGameIcon game={match.game} /></span><span className="arena-list__text"><b>{ARENA_GAME_NAMES[match.game]}{match.mode === "friendly" ? <Users className="arena-mode-icon" size={12} role="img" aria-label="Giao hữu" /> : null}</b><small>{match.setTopic} · {matchStatusLabel(match)}{matchDeadline(match) ? <> · <ArenaCountdown until={matchDeadline(match)} /></> : null}</small></span></>;
         const canReview = match.status !== "settled";
         const actions = isInviteForMe(match)
-          ? <><button className="btn-primary btn-sm arena-row-action" type="button" disabled={rowBusy} onClick={() => void accept(match)}>Nhận</button><button className="btn btn-sm arena-row-action" type="button" disabled={rowBusy} onClick={() => void decline(match)}>Từ chối</button></>
-          : match.postedByMe && (match.status === "open" || match.status === "invited") ? <button className="btn btn-sm arena-row-action" type="button" disabled={rowBusy} onClick={() => void withdraw(match)}>Huỷ</button>
-          : match.status === "accepted" && !match.me.played ? <><AppLink className="btn btn-primary btn-sm arena-row-action" href={`/arena/match/${match.id}`} navigate={navigate}>Chơi</AppLink><button className="btn btn-sm arena-row-action" type="button" disabled={rowBusy} onClick={() => void giveUp(match)}>Bỏ trận</button></>
+          ? <><button className="btn-primary btn-sm arena-row-action" type="button" disabled={rowBusy} onClick={() => void accept(match)}>Nhận</button><button className="btn btn-sm arena-row-action is-icon" type="button" title="Từ chối" disabled={rowBusy} onClick={() => void decline(match)}>{iconLabel(X, "Từ chối")}</button></>
+          : match.postedByMe && (match.status === "open" || match.status === "invited") ? <button className="btn btn-sm arena-row-action is-icon" type="button" title="Huỷ" disabled={rowBusy} onClick={() => void withdraw(match)}>{iconLabel(X, "Huỷ")}</button>
+          : match.status === "accepted" && !match.me.played ? <><AppLink className="btn btn-primary btn-sm arena-row-action" href={`/arena/match/${match.id}`} navigate={navigate}>Chơi</AppLink><button className="btn btn-sm arena-row-action is-icon" type="button" title="Bỏ trận" disabled={rowBusy} onClick={() => void giveUp(match)}>{iconLabel(Flag, "Bỏ trận")}</button></>
           : null;
         return <li key={match.id} className="arena-list__row" data-arena-row={match.status}>
           <div className="arena-list__line">
