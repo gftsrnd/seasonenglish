@@ -101,7 +101,9 @@
 .arena-table tr.is-me td { background: color-mix(in srgb, var(--primary-soft) 70%, var(--surface)); }
 .arena-table tr.is-me td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
 .arena-rank { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; border-radius: 8px; background: color-mix(in srgb, var(--line) 55%, var(--surface)); font-weight: 700; }
-.arena-rank.is-first { background: color-mix(in srgb, #F5C842 30%, var(--surface)); color: #6B4A06; }
+.arena-rank.is-gold { background: linear-gradient(135deg, #FFE58A, #F2BD2C); color: #5C3D00; box-shadow: inset 0 0 0 1px #D9A21B; }
+.arena-rank.is-silver { background: linear-gradient(135deg, #F4F6F8, #C5CCD4); color: #3E4752; box-shadow: inset 0 0 0 1px #A7B0BA; }
+.arena-rank.is-bronze { background: linear-gradient(135deg, #F6CBA8, #D58D58); color: #4F2A10; box-shadow: inset 0 0 0 1px #B8733F; }
 .arena-board__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; }
 .arena-board__foot b { color: var(--primary-dark); }
 .arena-board__foot .small { display: inline-flex; align-items: center; gap: 4px; }

@@ -298,5 +298,6 @@ function ArenaBoardTab({ level: myLevel, client, learnerId }: { level: CefrLevel
 }
 
 function RankPill({ rank }: { rank: number }) {
-  return <span className={`arena-rank${rank === 1 ? " is-first" : ""}`} aria-label={`Hạng ${rank}`}>{rank}</span>;
+  const medal = rank === 1 ? " is-gold" : rank === 2 ? " is-silver" : rank === 3 ? " is-bronze" : "";
+  return <span className={`arena-rank${medal}`} aria-label={`Hạng ${rank}`}>{rank}</span>;
 }

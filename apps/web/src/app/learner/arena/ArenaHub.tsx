@@ -1,6 +1,6 @@
 import type { CefrLevel } from "@e4s/contracts";
 import { ChevronRight, Lock, Swords } from "lucide-react";
-import { seasonAssetUrl, useGameSeason } from "../../games/seven-season-art.js";
+import { useTheme } from "../../shared/ThemeProvider.js";
 import { AppLink } from "../ui.js";
 import { arenaEligible, isInviteForMe, isMyTurn } from "./arena-text.js";
 import type { ArenaHome, ArenaMatch } from "../../../api/arena.js";
@@ -18,9 +18,11 @@ export function myMatchRows(home: ArenaHome): ArenaMatch[] {
 }
 
 /** Background of the arena card and banner: the season colours plus the current season's scenery (no character). */
+const SCENE_FOLDERS = { spring: "xuan", summer: "ha", autumn: "thu", winter: "dong", tet: "tet", midautumn: "trung-thu", christmas: "giang-sinh" } as const;
+
 export function useArenaSceneStyle() {
-  const season = useGameSeason();
-  return { backgroundImage: `url(${seasonAssetUrl(season, "background")})` };
+  const folder = SCENE_FOLDERS[useTheme().resolvedTheme] ?? "giang-sinh";
+  return { backgroundImage: `url(/media/games/seven-seasons/seasons/${folder}/background.svg)` };
 }
 
 /**
