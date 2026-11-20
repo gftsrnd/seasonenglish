@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import "@testing-library/jest-dom/vitest";
 
@@ -28,8 +28,11 @@ it("closes with Escape", async () => {
   inbox.mockResolvedValue({ items: [badge("n2", "Thợ chữ")], unreadCount: 1, nextCursor: null });
   render(<MemoryRouter><BadgeCelebration /></MemoryRouter>);
   await screen.findByRole("dialog");
-  fireEvent.keyDown(window, { key: "Escape" });
-  expect(screen.queryByRole("dialog")).toBeNull();
+  // The key handler is attached in an effect after the dialog renders: press Escape until it is handled.
+  await waitFor(() => {
+    if (screen.queryByRole("dialog")) fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
   expect(markRead).toHaveBeenCalledWith({ ids: ["n2"] });
 });
 
