@@ -24,6 +24,15 @@ it("celebrates a new badge in a popup and marks it read when closed", async () =
   expect(JSON.parse(window.localStorage.getItem("e4s:badge-celebrated") ?? "[]")).toEqual(["n1"]);
 });
 
+it("closes with Escape", async () => {
+  inbox.mockResolvedValue({ items: [badge("n2", "Thợ chữ")], unreadCount: 1, nextCursor: null });
+  render(<MemoryRouter><BadgeCelebration /></MemoryRouter>);
+  await screen.findByRole("dialog");
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(markRead).toHaveBeenCalledWith({ ids: ["n2"] });
+});
+
 it("does not celebrate old, already celebrated or other notifications", async () => {
   window.localStorage.setItem("e4s:badge-celebrated", JSON.stringify(["seen"]));
   inbox.mockResolvedValue({ items: [badge("seen", "Khởi đầu"), badge("old", "Chuỗi ngày học", 30), { ...badge("x", "Khác"), kind: "complaint_received" }], unreadCount: 3, nextCursor: null });

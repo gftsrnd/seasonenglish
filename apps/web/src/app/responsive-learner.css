@@ -228,6 +228,10 @@
   :root:root:root .learner-root .reward-page .reward-actions > span { min-width: 0; flex: 1 1 auto; }
   :root:root:root .learner-root .cert-summary-title { display: flex; align-items: center; gap: 4px; }
 }
+/* Phone + tablet have the fixed bottom nav: the last row (Quay lại) must clear it, like the profile page. */
+@media (max-width: 1024px) {
+  :root:root:root .learner-root .reward-page { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+}
 @media (max-width: 720px) {
   :root:root:root .learner-root .reward-page .reward-print-note { display: none; }
   :root:root:root .learner-root .cert-summary { padding: 12px !important; gap: 8px !important; }

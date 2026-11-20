@@ -61,6 +61,16 @@ export function BadgeCelebration() {
     if (goToProfile) void navigate("/profile");
   };
 
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  // Esc closes it like every other popup.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") closeRef.current(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   if (!open) return null;
   const [first, ...more] = badges;
   const label = first!.context ?? "mới";
