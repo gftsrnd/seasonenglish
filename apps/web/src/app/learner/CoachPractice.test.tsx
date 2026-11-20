@@ -25,7 +25,7 @@ const actions = () => ({
   changeCoachPersona: vi.fn(),
   startNewCoachChat: vi.fn(),
   sendChallengeMessage: vi.fn(),
-  submitWeeklyPractice: vi.fn(),
+ 
   speak: vi.fn()
 } as unknown as LearnerCallbacks);
 

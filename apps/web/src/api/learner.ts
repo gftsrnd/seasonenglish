@@ -50,9 +50,6 @@ export interface LearnerApiClient {
   clearCoach(): Promise<CoachView>;
   getLevelChallenge(): Promise<LevelChallengeView>;
   sendLevelChallengeMessage(input: CoachMessageInput): Promise<LevelChallengeView>;
-  getWeeklyPractice(): Promise<WeeklyPracticeView>;
-  submitWeeklyPractice(input: { requestId: string; text: string; audio?: AudioArtifactInput }): Promise<WeeklyPracticeView>;
-  appealWeeklyPractice(submissionId: string, reason: string, evidence?: RequestEvidenceInput): Promise<WeeklyPracticeView>;
   getGames(): Promise<GameHubView>;
   generateGameWordSet(input: { requestId: string; topic: string }): Promise<GameHubView>;
   useWeeklyGameWordSet(): Promise<GameHubView>;
@@ -117,9 +114,6 @@ export const learnerApiClient: LearnerApiClient = {
   clearCoach: () => request("/api/v1/coach/session", { method: "DELETE", body: "{}" }),
   getLevelChallenge: () => request("/api/v1/challenge"),
   sendLevelChallengeMessage: (input) => request("/api/v1/challenge/messages", { method: "POST", body: JSON.stringify(input) }),
-  getWeeklyPractice: () => request("/api/v1/engagement/practice"),
-  submitWeeklyPractice: (input) => request("/api/v1/engagement/practice/submit", { method: "POST", body: JSON.stringify(input) }),
-  appealWeeklyPractice: (submissionId, reason, evidence) => request(`/api/v1/engagement/practice/${encodeURIComponent(submissionId)}/appeals`, { method: "POST", body: JSON.stringify({ reason, ...evidence }) }),
   getGames: () => request("/api/v1/engagement/games"),
   generateGameWordSet: (input) => request("/api/v1/engagement/games/word-set", { method: "POST", body: JSON.stringify(input) }),
   useWeeklyGameWordSet: () => request("/api/v1/engagement/games/word-set/weekly", { method: "POST", body: "{}" }),

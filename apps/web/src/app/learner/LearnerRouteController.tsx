@@ -162,7 +162,6 @@ function LearnerContent({ courseCompleted = false, learnerId, onLearnerCefr, onP
   const [error, setError] = useState("");
   const coachPending = useRef<{ message: string; requestId: string; audio?: AudioArtifactInput } | undefined>(undefined);
   const challengePending = useRef<{ message: string; requestId: string } | undefined>(undefined);
-  const practicePending = useRef<{ text: string; requestId: string; audio?: AudioArtifactInput } | undefined>(undefined);
   const gameSetPending = useRef<{ topic: string; requestId: string } | undefined>(undefined);
   const gamePending = useRef<{ input: GameFinishInput; requestId: string } | undefined>(undefined);
 
@@ -550,12 +549,6 @@ function LearnerContent({ courseCompleted = false, learnerId, onLearnerCefr, onP
       const pending = challengePending.current?.message === message ? challengePending.current : { message, requestId: crypto.randomUUID() };
       challengePending.current = pending; const challenge = await apiClient.sendLevelChallengeMessage(pending); challengePending.current = undefined; setContracts({ challenge });
     },
-    submitWeeklyPractice: async (text, audio) => {
-      const inputAudio = audioInput(audio);
-      const pending = practicePending.current?.text === text ? { ...practicePending.current, ...(inputAudio ? { audio: inputAudio } : {}) } : { text, requestId: crypto.randomUUID(), ...(inputAudio ? { audio: inputAudio } : {}) };
-      practicePending.current = pending; const practice = await apiClient.submitWeeklyPractice(pending); practicePending.current = undefined; setContracts({ practice });
-    },
-    appealWeeklyPractice: async (submissionId, reason, ...evidence) => setContracts({ practice: await apiClient.appealWeeklyPractice(submissionId, reason, ...evidence) }),
     submitSurvey: async (answers) => setContracts({ survey: await apiClient.submitSurvey(answers) }),
     saveAvatar: async (avatar: LearnerAvatarData) => {
       setProfileRecord(await apiClient.saveProfileAvatar(avatar));

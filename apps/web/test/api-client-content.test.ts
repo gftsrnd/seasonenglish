@@ -43,39 +43,11 @@ describe("content API client", () => {
       return new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } });
     }));
 
-    await operatorApiClient.getContentWeeks();
-    await operatorApiClient.saveContentWeeks([]);
-    await operatorApiClient.getContentLessonMatrix();
-    await operatorApiClient.getContentLessonSet(1, "A2");
-    await operatorApiClient.upsertContentLessonDay(1, "A2", 1, { dayNumber: 1, title: "T2", durationMinutes: 10, parts: [] }, 3);
-    await operatorApiClient.deleteContentLessonDay(1, "A2", 1, 4);
-    await operatorApiClient.saveContentLessonJson(1, "A2", [], 5);
-    await operatorApiClient.enrichContentLessonDraft(1, "A2", 5);
-    await operatorApiClient.fillContentLessonPhrases(1, "A2", 5);
-    await operatorApiClient.deleteContentLessonDraftSet(1, "A2");
-    await operatorApiClient.saveContentLessonDraft(1, "A2", []);
-    await operatorApiClient.submitContentLessonSet("version-1");
-    await operatorApiClient.publishContentLessonSet("version-1");
-    await operatorApiClient.retireContentLessonSet("version-1");
     await operatorApiClient.getContentReview();
     await operatorApiClient.getContentPrompts();
     await operatorApiClient.saveContentPrompts([]);
 
     expect(calls.map(({ url, init }) => [url, init?.method ?? "GET"])).toEqual([
-      ["/api/v1/content/weeks", "GET"],
-      ["/api/v1/content/weeks", "PUT"],
-      ["/api/v1/content/lesson-matrix", "GET"],
-      ["/api/v1/content/lesson-sets/1/A2", "GET"],
-      ["/api/v1/content/lesson-sets/1/A2/draft/lessons/1", "PUT"],
-      ["/api/v1/content/lesson-sets/1/A2/draft/lessons/1", "DELETE"],
-      ["/api/v1/content/lesson-sets/1/A2/draft/json", "PUT"],
-      ["/api/v1/content/lesson-sets/1/A2/draft/enrich", "POST"],
-      ["/api/v1/content/lesson-sets/1/A2/draft/fill-phrases", "POST"],
-      ["/api/v1/content/lesson-sets/1/A2/draft", "DELETE"],
-      ["/api/v1/content/lesson-sets/1/A2/draft", "PUT"],
-      ["/api/v1/content/lesson-set-versions/version-1/review", "POST"],
-      ["/api/v1/content/lesson-set-versions/version-1/publication", "POST"],
-      ["/api/v1/content/lesson-set-versions/version-1/retirement", "POST"],
       ["/api/v1/content/review", "GET"],
       ["/api/v1/content/prompts", "GET"],
       ["/api/v1/content/prompts", "PUT"]

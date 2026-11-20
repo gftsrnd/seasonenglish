@@ -92,21 +92,7 @@ export interface OperatorApiClient extends Partial<AssessmentBankClient> {
   copyAssessmentLevelFormToDraft(versionId: string): Promise<AssessmentLevelFormDetailView>;
   publishAssessmentLevelForm(versionId: string, confirmation?: { answersReviewed: true }): Promise<AssessmentLevelFormView>;
   deleteAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormDeleteView>;
-  getContentWeeks(): Promise<ContentWeekFrameView>;
-  saveContentWeeks(weeks: ContentWeekInput[]): Promise<ContentWeekFrameView>;
-  suggestContentWeeks(weekNumbers: number[]): Promise<{ weeks: ContentWeekSuggestionView[] }>;
-  getContentLessonMatrix(): Promise<ContentLessonMatrixView>;
-  setContentLessonLevels(levels: CefrLevel[]): Promise<ContentLessonMatrixView>;
-  getContentLessonSet(week: number, cefr: CefrLevel): Promise<ContentLessonSetVersionView>;
-  resolveContentLessonVocabularyImage?(week: number, cefr: CefrLevel, lessonId: string, itemIndex: number): Promise<ContentImageView>;
-  upsertContentLessonDay(week: number, cefr: CefrLevel, dayNumber: number, lesson: ContentLessonDraftInput, expectedVersion?: number): Promise<ContentLessonMutationResult>;
-  deleteContentLessonDay(week: number, cefr: CefrLevel, dayNumber: number, expectedVersion?: number): Promise<ContentLessonMutationResult>;
-  saveContentLessonJson(week: number, cefr: CefrLevel, lessons: ContentLessonDraftInput[], expectedVersion?: number): Promise<ContentLessonMutationResult>;
   saveContentWeeklyPractice(week: number, cefr: CefrLevel, input: ContentWeeklyPracticeDraftInput): Promise<ContentLessonMutationResult>;
-  enrichContentLessonDraft(week: number, cefr: CefrLevel, expectedVersion?: number): Promise<ContentLessonMutationResult>;
-  enrichContentLessonDay?(week: number, cefr: CefrLevel, dayNumber: number, expectedVersion?: number): Promise<ContentLessonMutationResult>;
-  fillContentLessonPhrases(week: number, cefr: CefrLevel, expectedVersion?: number): Promise<ContentLessonMutationResult>;
-  deleteContentLessonDraftSet(week: number, cefr: CefrLevel): Promise<{ deleted: true }>;
   getContentMonth(month: string): Promise<MonthlyOperatorOverviewView>;
   getCurrentContentMonth?(): Promise<MonthlyOperatorOverviewView>;
   previewContentMonthPublication?(id: string): Promise<import("@e4s/contracts").MonthlyPublicationPreviewView>;
@@ -155,23 +141,6 @@ export interface OperatorApiClient extends Partial<AssessmentBankClient> {
   saveContentMonthCorrection(id: string, dayNumber: number, correctionId: string, lesson: { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> }): Promise<{ severe: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; light: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; contractVersion: number }>;
   acknowledgeContentMonthCorrection(correctionId: string, findingKeys: string[]): Promise<void>;
   approveContentMonthCorrection(correctionId: string): Promise<void>;
-  saveContentLessonDraft(week: number, cefr: CefrLevel, lessons: ContentLessonDraftInput[]): Promise<ContentLessonSetVersionView>;
-  generateContentLessonDraft(week: number, cefr: CefrLevel): Promise<ContentLessonSetVersionView>;
-  generateContentLessonWeekBatch?(week: number, levels?: CefrLevel[]): Promise<{
-    weekNumber: number;
-    levels: Array<{
-      cefr: CefrLevel;
-      status: "completed" | "resumed" | "partial" | "failed";
-      completedDays?: number[];
-      resumedDays?: number[];
-      version?: ContentLessonSetVersionView;
-      partialDraft?: ContentLessonSetVersionView;
-      error?: { code: string; message?: string };
-    }>;
-  }>;
-  submitContentLessonSet(versionId: string): Promise<ContentLessonSetVersionView>;
-  publishContentLessonSet(versionId: string): Promise<ContentLessonSetVersionView>;
-  retireContentLessonSet(versionId: string): Promise<ContentLessonSetVersionView>;
   getContentReview(): Promise<ContentReviewView>;
   getContentReviewAppeals(input: { id: string } | { status: "all" | "pending" | "handled"; offset: number }): Promise<{ appeals: ContentReviewView["appeals"]; hasMore: boolean }>;
   getContentReviewAssessment(attemptId: string): Promise<ContentReviewAssessmentDetailView>;
@@ -232,21 +201,7 @@ export const operatorApiClient: OperatorApiClient = {
   copyAssessmentLevelFormToDraft: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}/draft`, { method: "POST", body: "{}" }),
   publishAssessmentLevelForm: (versionId, confirmation) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}/publication`, { method: "POST", body: JSON.stringify(confirmation ?? {}) }),
   deleteAssessmentLevelForm: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}`, { method: "DELETE" }),
-  getContentWeeks: () => request("/api/v1/content/weeks"),
-  saveContentWeeks: (weeks) => request("/api/v1/content/weeks", { method: "PUT", body: JSON.stringify({ weeks }) }),
-  suggestContentWeeks: (weekNumbers) => request("/api/v1/content/weeks/suggestions", { method: "POST", body: JSON.stringify({ weekNumbers }) }),
-  getContentLessonMatrix: () => request("/api/v1/content/lesson-matrix"),
-  setContentLessonLevels: (levels) => request("/api/v1/content/lesson-levels", { method: "PUT", body: JSON.stringify({ levels }) }),
-  getContentLessonSet: (week, cefr) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}`),
-  resolveContentLessonVocabularyImage: (week, cefr, lessonId, itemIndex) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/lessons/${encodeURIComponent(lessonId)}/vocabulary/${itemIndex}/image`),
-  upsertContentLessonDay: (week, cefr, dayNumber, lesson, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/lessons/${dayNumber}`, { method: "PUT", body: JSON.stringify({ ...lesson, ...(expectedVersion === undefined ? {} : { expectedVersion }) }) }),
-  deleteContentLessonDay: (week, cefr, dayNumber, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/lessons/${dayNumber}`, { method: "DELETE", body: JSON.stringify(expectedVersion === undefined ? {} : { expectedVersion }) }),
-  saveContentLessonJson: (week, cefr, lessons, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/json`, { method: "PUT", body: JSON.stringify({ lessons, ...(expectedVersion === undefined ? {} : { expectedVersion }) }) }),
   saveContentWeeklyPractice: (week, cefr, input) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/weekly-practice`, { method: "PUT", body: JSON.stringify(input) }),
-  enrichContentLessonDraft: (week, cefr, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/enrich`, { method: "POST", body: JSON.stringify(expectedVersion === undefined ? {} : { expectedVersion }) }),
-  enrichContentLessonDay: (week, cefr, dayNumber, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/enrich`, { method: "POST", body: JSON.stringify({ dayNumber, ...(expectedVersion === undefined ? {} : { expectedVersion }) }) }),
-  fillContentLessonPhrases: (week, cefr, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/fill-phrases`, { method: "POST", body: JSON.stringify(expectedVersion === undefined ? {} : { expectedVersion }) }),
-  deleteContentLessonDraftSet: (week, cefr) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft`, { method: "DELETE", body: "{}" }),
   getContentMonth: (month) => request(`/api/v1/content/months/${encodeURIComponent(month)}`),
   suggestContentMonthBrief: (month) => request(`/api/v1/content/months/${encodeURIComponent(month)}/brief/suggest`, { method: "POST", body: "{}" }),
   saveContentMonthBrief: (month, input) => request(`/api/v1/content/months/${encodeURIComponent(month)}/brief`, { method: "PUT", body: JSON.stringify(input) }),
@@ -288,12 +243,6 @@ export const operatorApiClient: OperatorApiClient = {
   saveContentMonthCorrection: (id, dayNumber, correctionId, lesson) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/days/${dayNumber}/corrections/${encodeURIComponent(correctionId)}`, { method: "PUT", body: JSON.stringify(lesson) }),
   acknowledgeContentMonthCorrection: async (correctionId, findingKeys) => { await request(`/api/v1/content/monthly-corrections/${encodeURIComponent(correctionId)}/quality-acknowledgement`, { method: "POST", body: JSON.stringify({ findingKeys }) }); },
   approveContentMonthCorrection: async (correctionId) => { await request(`/api/v1/content/monthly-corrections/${encodeURIComponent(correctionId)}/approve`, { method: "POST", body: "{}" }); },
-  saveContentLessonDraft: (week, cefr, lessons) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft`, { method: "PUT", body: JSON.stringify({ lessons }) }),
-  generateContentLessonDraft: (week, cefr) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/generate`, { method: "POST", body: "{}" }),
-  generateContentLessonWeekBatch: (week, levels) => request(`/api/v1/content/lesson-sets/${week}/generate`, { method: "POST", body: JSON.stringify(levels?.length ? { levels } : {}) }),
-  submitContentLessonSet: (versionId) => request(`/api/v1/content/lesson-set-versions/${encodeURIComponent(versionId)}/review`, { method: "POST", body: "{}" }),
-  publishContentLessonSet: (versionId) => request(`/api/v1/content/lesson-set-versions/${encodeURIComponent(versionId)}/publication`, { method: "POST", body: "{}" }),
-  retireContentLessonSet: (versionId) => request(`/api/v1/content/lesson-set-versions/${encodeURIComponent(versionId)}/retirement`, { method: "POST", body: "{}" }),
   getContentReview: () => request("/api/v1/content/review"),
   getContentReviewAppeals: input => {
     const query = "id" in input

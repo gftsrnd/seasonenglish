@@ -1,0 +1,23 @@
+// Removed 2026-11-20: learner weekly-practice client calls and callbacks (screen /practice already in legacy).
+
+    submitWeeklyPractice: async (text, audio) => {
+      const inputAudio = audioInput(audio);
+      const pending = practicePending.current?.text === text ? { ...practicePending.current, ...(inputAudio ? { audio: inputAudio } : {}) } : { text, requestId: crypto.randomUUID(), ...(inputAudio ? { audio: inputAudio } : {}) };
+      practicePending.current = pending; const practice = await apiClient.submitWeeklyPractice(pending); practicePending.current = undefined; setContracts({ practice });
+    },
+    appealWeeklyPractice: async (submissionId, reason, ...evidence) => setContracts({ practice: await apiClient.appealWeeklyPractice(submissionId, reason, ...evidence) }),
+
+  const practicePending = useRef<{ text: string; requestId: string; audio?: AudioArtifactInput } | undefined>(undefined);
+
+function PracticeHistory({ items }: { items: PracticeView["history"] }) {
+  if (!items?.length) return null;
+  return <section className="card" aria-label="Lịch sử bài tuần">
+    <h2>Lịch sử bài tuần</h2>
+    <div className="stack">
+      {items.map((item) => <article key={item.id} className="row between" style={{ gap: 12, alignItems: "flex-start" }}>
+        <div><b>Tuần {item.weekNumber} · {item.topic}</b><p className="small muted">{item.task}</p></div>
+        <span className="badge">{item.score ? formatScoreOutOf(item.score.total, 100) : "Chờ chấm"}</span>
+      </article>)}
+    </div>
+  </section>;
+}

@@ -21,7 +21,8 @@
     "test:e2e:monthly": "node scripts/monthly-learning-e2e.mjs",
     "prepare:local-scenarios": "tsx scripts/prepare-local-scenarios.ts",
     "cleanup:local-users": "tsx scripts/cleanup-local-test-users.ts",
-    "clean:generated": "node scripts/clean-generated.mjs"
+    "clean:generated": "node scripts/clean-generated.mjs",
+    "db:migrate": "tsx scripts/migrate-only.ts"
   },
   "devDependencies": {
     "@types/node": "24.10.13",

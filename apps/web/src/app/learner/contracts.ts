@@ -162,8 +162,6 @@ export interface LearnerCallbacks {
   changeCoachPersona: (persona: CoachPersona) => void | Promise<void>;
   startNewCoachChat: () => void | Promise<void>;
   sendChallengeMessage: (message: string) => void | Promise<void>;
-  submitWeeklyPractice: (text: string, audio?: LearnerAudioEvidence) => void | Promise<void>;
-  appealWeeklyPractice?: (submissionId: string, reason: string, evidence?: RequestEvidenceInput) => void | Promise<void>;
   submitSurvey: (answers: { rating: number; comment: string; studyTime: "work" | "outside" | "both" }) => void | Promise<void>;
   saveAvatar: (avatar: LearnerAvatarData) => void | Promise<void>;
   printReward: () => void;

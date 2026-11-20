@@ -20,7 +20,8 @@ services:
   minio:
     # The upstream minio/minio image was removed from Docker Hub.  Use the
     # maintained compatible build so a new local checkout can still start.
-    image: coollabsio/minio:latest
+    # Pinned to the image the live site runs (built 2025-10-27). Update deliberately, never via :latest.
+    image: coollabsio/minio@sha256:69b55a1c1c5dc285ce04db96689f5b2102317fc77a50680a1874ca6efd1c87f9
     command: server /data --console-address :9001
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-e4s_minio}

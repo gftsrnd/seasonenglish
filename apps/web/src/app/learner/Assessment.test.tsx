@@ -114,7 +114,7 @@ function makeActions(overrides: Partial<LearnerCallbacks> = {}) {
     changeCoachPersona: vi.fn(),
     startNewCoachChat: vi.fn(),
     sendChallengeMessage: vi.fn(),
-    submitWeeklyPractice: vi.fn(),
+   
     submitSurvey: vi.fn(),
     saveAvatar: vi.fn(),
     printReward: vi.fn(),

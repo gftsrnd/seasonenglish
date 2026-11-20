@@ -373,17 +373,3 @@ export function LearnerChallenge({ view, actions }: { view: ChallengeView; actio
   return <div className="app-learner-page"><PageTitle eyebrow={`Season nói ở mức ${view.targetLevel} · lượt ${view.progress.completedTurns}/${view.progress.requiredTurns}`} title={`Thử thách lên mức ${view.targetLevel}`} aside={<span className={`badge ${view.progress.average >= 3.5 && view.progress.offTopic <= 1 ? "ok" : "warn"}`}>TB {formatScoreOutOf(view.progress.average, 5)} · lạc đề {view.progress.offTopic}</span>} /><Notice>Đạt khi điểm trung bình (ý · từ · ngữ pháp) ≥ <b>3.5/5</b> sau {view.progress.requiredTurns} lượt, tối đa <b>1</b> lượt lạc đề. Trả lời đủ ý bằng tiếng Anh, đúng câu hỏi. Các lượt tính vào giới hạn {view.daily.limit} lượt/ngày (hôm nay {view.daily.used}/{view.daily.limit}), nhưng không tính điểm thưởng hay mục tiêu tuần.</Notice>{!view.aiAvailable ? <Notice tone="warn">AI chưa kết nối nên Season chưa trả lời. Báo người vận hành nhập API key trong Cài đặt.</Notice> : null}{capped && !complete ? <Notice tone="warn"><b>Đã dùng hết {view.daily.limit} lượt chat hôm nay.</b> Thử thách được lưu, mai làm tiếp.</Notice> : null}<section className="chat" aria-label="Cuộc trò chuyện thử thách" aria-busy={sending || undefined} style={challengeChatStyle}>{view.messages.map((item) => <article className={`msg ${item.speaker === "coach" ? "ai" : "user"}`} key={item.id}><b>{item.speaker === "coach" ? "Season" : "Bạn"}</b><p>{item.text}</p>{item.feedback ? <p className="small muted">{item.feedback.relevanceNote}</p> : null}</article>)}</section>{complete ? <Notice tone={passed && !rejectedRequest ? "ok" : "warn"}>{pendingRequest ? "Bạn đã vượt qua thử thách. Yêu cầu lên mức đã được gửi để duyệt." : approvedRequest ? "Yêu cầu lên mức đã được duyệt." : rejectedRequest ? "Yêu cầu lên mức chưa được duyệt; Season đã tạo kế hoạch luyện lại cho bạn." : retakeAvailable ? "Chưa đạt lần này. Season đã tạo kế hoạch luyện lại cho bạn." : passed ? "Bạn đã vượt qua thử thách." : "Kết quả thử thách đã được lưu."}</Notice> : <form className="chat-compose" aria-busy={sending || undefined} style={challengeComposeStyle} onSubmit={send}><textarea aria-label="Câu trả lời thử thách" aria-describedby={challengeError ? "challenge-error" : undefined} value={message} disabled={!view.aiAvailable || capped || sending} onChange={(event) => setMessage(event.target.value)} placeholder="Answer in English…" style={{ flex: "1 1 16rem", minWidth: 0, minHeight: 48 }} /><button className="btn-primary" style={{ minWidth: 44, minHeight: 44 }} type="submit" disabled={!view.aiAvailable || capped || sending || !message.trim()}>Gửi lượt này</button></form>}<ErrorText id={challengeError ? "challenge-error" : undefined} message={challengeError} /><p className="xs muted"><AppLink href="/home" navigate={actions.navigate}>← Trang chủ</AppLink> · Thử thách được lưu: thoát ra rồi vào làm tiếp.</p></div>;
 }
 
-function PracticeHistory({ items }: { items: PracticeView["history"] }) {
-  if (!items?.length) return null;
-  return <section className="card" aria-label="Lịch sử bài tuần">
-    <h2>Lịch sử bài tuần</h2>
-    <div className="stack">
-      {items.map((item) => <article key={item.id} className="row between" style={{ gap: 12, alignItems: "flex-start" }}>
-        <div><b>Tuần {item.weekNumber} · {item.topic}</b><p className="small muted">{item.task}</p></div>
-        <span className="badge">{item.score ? formatScoreOutOf(item.score.total, 100) : "Chờ chấm"}</span>
-      </article>)}
-    </div>
-  </section>;
-}
-
-

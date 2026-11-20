@@ -1,4 +1,5 @@
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig } from "vitest/config";
+import type { Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
 // Mirror the staff entry routes from the Docker web server in the local preview.
@@ -27,5 +28,7 @@ export default defineConfig({
     port: 4175,
     proxy: { "/api": process.env.E4S_API_PROXY_URL ?? "http://127.0.0.1:4174" }
   },
-  preview: { host: "127.0.0.1", port: 4175 }
+  preview: { host: "127.0.0.1", port: 4175 },
+  // `tsc -b` emits compiled copies of the tests into dist/; never run those stale copies.
+  test: { exclude: ["**/node_modules/**", "**/dist/**", ".tmp/**"] }
 });
