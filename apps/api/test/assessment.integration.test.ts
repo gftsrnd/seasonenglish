@@ -91,7 +91,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
       groups: section.groups.map(group => ({
         ...group,
         ...(group.stimulus?.type === "audio_script" ? { stimulus: {
-          ...group.stimulus, audioSrc: "/media/audio/placement-listening-LA.wav",
+          ...group.stimulus, audioSrc: "/media/audio/placement-listening-LA.mp3",
           lines: [{ speaker: "Team lead", text: "Please arrive at the training room at nine." }]
         } } : group.stimulus?.type === "passage" ? { stimulus: { ...group.stimulus, text: "Staff training starts at nine in the training room." } } : {}),
         tasks: group.tasks.map(task => ({
