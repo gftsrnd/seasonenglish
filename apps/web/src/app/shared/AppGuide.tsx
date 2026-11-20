@@ -197,6 +197,12 @@ export function AppGuide({ role, pathname, compact, onOpenChange, autoOpen = AUT
     trigger.current?.focus({ preventScroll: true });
   };
   const open = () => {
+    if (!steps.length && !isOpen) {
+      // Clicked before the observer's next frame: read the page now instead of ignoring the click.
+      const next = definitions ? currentContext(role, path, definitions) : null;
+      if (next?.steps.length) setState({ ...next, isOpen: true, index: 0 });
+      return;
+    }
     if (isOpen) {
       close();
       return;
@@ -426,7 +432,10 @@ export function AppGuide({ role, pathname, compact, onOpenChange, autoOpen = AUT
     helpHost.classList.add(name);
     return () => { if (!existed) helpHost.classList.remove(name); };
   }, [helpHost, popup, definitions, steps.length]);
-  if (!definitions || !steps.length) return null;
+  // Keep the button in place while a new page is still rendering its targets (no flicker on navigation);
+  // until the steps are found, a click does nothing (open() checks steps.length).
+  // A small popup without its own guide still shows no help button.
+  if (!definitions || (popup && !steps.length)) return null;
 
   const helpButton = <button ref={trigger} className={`btn-sm ${popup ? "app-guide-popup-trigger" : "btn-ghost"} app-guide-trigger`} type="button"
       aria-label="Hướng dẫn sử dụng" title="Hướng dẫn sử dụng" aria-haspopup="dialog" disabled={inboxOpen}
