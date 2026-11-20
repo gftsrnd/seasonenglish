@@ -32,14 +32,14 @@ describe("local service health", () => {
       await seedDemo(client);
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2) on conflict (user_id) do update set credential_hash = excluded.credential_hash, updated_at = now()",
-        [DEMO_IDS.manager, await createCredentialHash("manager-pass")]
+        [DEMO_IDS.manager, await createCredentialHash("test-manager-pw")]
       );
     } finally { client.release(); }
     await app.ready();
     const login = await app.inject({
       method: "POST",
       url: "/api/auth/staff/login",
-      payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" }
+      payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" }
     });
     expect(login.statusCode, login.body).toBe(200);
     managerCookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
@@ -78,7 +78,7 @@ describe("local service health", () => {
       maintenance: false,
       imageProviders: { pexels: true, pixabay: false }
     });
-    expect(capabilities.body).not.toContain("manager-pass");
+    expect(capabilities.body).not.toContain("test-manager-pw");
     expect(capabilities.body).not.toContain("e4s_test_password");
     expect(capabilities.body).not.toContain("PEXELS_API_KEY");
   });

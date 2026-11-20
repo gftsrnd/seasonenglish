@@ -48,7 +48,7 @@ describe("assessment audio lifecycle contract", () => {
         [
           DEMO_IDS.learner, await createPinHash("123456"),
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
-          DEMO_IDS.manager, await createCredentialHash("manager-pass")
+          DEMO_IDS.manager, await createCredentialHash("test-manager-pw")
         ]
       );
       await client.query("insert into organizations (id, name, slug) values ($1, 'Other org', 'other-org')", [otherOrganizationId]);

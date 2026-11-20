@@ -74,7 +74,7 @@ describe("assessment bank API lifecycle and immutable grading", () => {
         learnerId,
         await createPinHash("987654"),
         DEMO_IDS.manager,
-        await createCredentialHash("manager-pass"),
+        await createCredentialHash("test-manager-pw"),
       ]);
     } finally {
       client.release();
@@ -85,7 +85,7 @@ describe("assessment bank API lifecycle and immutable grading", () => {
       return String(r.headers["set-cookie"]).split(";")[0]!;
     };
     op = await login("/api/auth/staff/login", { email: "thu.ha.tran@e4s.local", password: "operator-pass" });
-    manager = await login("/api/auth/staff/login", { email: "quoc.bao.le@e4s.local", password: "manager-pass" });
+    manager = await login("/api/auth/staff/login", { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" });
     student = await login("/api/auth/learner/login", { email: "bank@e4s.local", pin: "987654" });
   }, 30_000);
   afterAll(async () => {

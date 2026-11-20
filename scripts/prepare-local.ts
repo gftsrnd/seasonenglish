@@ -2,6 +2,7 @@ import { Client } from "pg";
 import { migrateDatabase, seedDemo, DEMO_IDS } from "../packages/database/src/index.js";
 import { createCredentialHash, createPinHash } from "../packages/domain/src/identity/index.js";
 import { seedLocalScenarioAccounts } from "./local-scenario-accounts.js";
+import { localSecret } from "./local-secrets.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
@@ -18,9 +19,9 @@ try {
     [[DEMO_IDS.learner, DEMO_IDS.operator, DEMO_IDS.manager]]
   );
   const credentials = [
-    [DEMO_IDS.learner, "246810", "pin"],
-    [DEMO_IDS.operator, "staff-pass", "password"],
-    [DEMO_IDS.manager, "manager-pass", "password"]
+    [DEMO_IDS.learner, localSecret("E4S_DEMO_LEARNER_PIN", "pin"), "pin"],
+    [DEMO_IDS.operator, localSecret("E4S_DEMO_STAFF_PASSWORD", "password"), "password"],
+    [DEMO_IDS.manager, localSecret("E4S_DEMO_MANAGER_PASSWORD", "password"), "password"]
   ] as const;
   for (const [userId, secret, credentialType] of credentials) {
     await client.query(

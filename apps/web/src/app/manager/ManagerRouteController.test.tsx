@@ -483,7 +483,7 @@ describe("ManagerRouteController", () => {
     vi.spyOn(apiClient, "getManagerSettings").mockResolvedValue(managerSettings);
     vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
     vi.spyOn(apiClient, "getManagerAccounts").mockResolvedValue({ organizationName: "GFT", accounts: [{ id: "operator-1", displayName: "Người vận hành Demo", email: "operator@e4s.local", role: "operator", status: "active", createdAt: "2026-10-01T09:00:00.000Z" }] });
-    const reveal = vi.spyOn(apiClient, "getManagerAccountCredential").mockResolvedValue({ credential: "staff-pass-123", kind: "password" });
+    const reveal = vi.spyOn(apiClient, "getManagerAccountCredential").mockResolvedValue({ credential: "test-staff-pw-123", kind: "password" });
     const user = userEvent.setup();
 
     renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
@@ -492,9 +492,9 @@ describe("ManagerRouteController", () => {
     await user.click(revealButton);
 
     expect(reveal).toHaveBeenCalledWith("operator-1");
-    expect(screen.getByRole("textbox", { name: "Giá trị mật khẩu của Người vận hành Demo" })).toHaveValue("staff-pass-123");
+    expect(screen.getByRole("textbox", { name: "Giá trị mật khẩu của Người vận hành Demo" })).toHaveValue("test-staff-pw-123");
     await user.click(screen.getByRole("button", { name: "Ẩn mật khẩu của Người vận hành Demo" }));
-    expect(screen.queryByDisplayValue("staff-pass-123")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("test-staff-pw-123")).not.toBeInTheDocument();
   });
 
   it("requires Manager confirmation before deleting an account", async () => {

@@ -3,6 +3,7 @@ import { createCipheriv, randomBytes } from "node:crypto";
 import type { GameWordView } from "../packages/contracts/src/engagement-contract.js";
 import { createCredentialHash, createPinHash } from "../packages/domain/src/identity/index.js";
 import { DEMO_IDS } from "../packages/database/src/seed.js";
+import { localSecret } from "./local-secrets.js";
 
 function encryptScenarioPin(pin: string) {
   const encoded = process.env.E4S_SETTINGS_ENCRYPTION_KEY;
@@ -42,7 +43,7 @@ const learner = (
   role: "learner",
   email,
   displayName,
-  secret: "246810",
+  secret: localSecret("E4S_DEMO_LEARNER_PIN", "pin"),
   ...extra
 });
 
@@ -70,7 +71,7 @@ export const LOCAL_SCENARIO_ACCOUNTS: readonly LocalScenarioAccount[] = [
     role: "operator",
     email: "minh.chau.phan@scenario.e4s.local",
     displayName: "Phan Minh Châu",
-    secret: "review-pass"
+    secret: localSecret("E4S_SCENARIO_STAFF_PASSWORD", "password")
   },
   {
     key: "manager-review",
@@ -78,7 +79,7 @@ export const LOCAL_SCENARIO_ACCOUNTS: readonly LocalScenarioAccount[] = [
     role: "manager",
     email: "quoc.hung.ly@scenario.e4s.local",
     displayName: "Lý Quốc Hưng",
-    secret: "review-pass"
+    secret: localSecret("E4S_SCENARIO_STAFF_PASSWORD", "password")
   }
 ] as const;
 

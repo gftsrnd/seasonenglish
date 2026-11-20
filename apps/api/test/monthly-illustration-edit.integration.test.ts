@@ -47,7 +47,7 @@ describe("monthly core-word picture editing before approval", () => {
       await seedDemo(client);
       await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)", [
         DEMO_IDS.operator, await createCredentialHash("operator-pass"),
-        DEMO_IDS.manager, await createCredentialHash("manager-pass")
+        DEMO_IDS.manager, await createCredentialHash("test-manager-pw")
       ]);
       const month = (await client.query<{ month: string }>("select to_char(organization_system_date($1), 'YYYY-MM') as month", [DEMO_IDS.organization])).rows[0]!.month;
       const existing = await client.query<{ id: string }>("select id from program_months where organization_id = $1 and month = $2", [DEMO_IDS.organization, month]);
@@ -69,7 +69,7 @@ describe("monthly core-word picture editing before approval", () => {
     const login = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "thu.ha.tran@e4s.local", password: "operator-pass" } });
     expect(login.statusCode, login.body).toBe(200);
     operatorCookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
-    const managerLogin = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" } });
+    const managerLogin = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" } });
     expect(managerLogin.statusCode, managerLogin.body).toBe(200);
     managerCookie = String(managerLogin.headers["set-cookie"]).split(";")[0] ?? "";
   }, 60_000);

@@ -66,7 +66,7 @@ describe("Manager AI-off mode keeps the learning flow usable", () => {
         `insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6)
          on conflict (user_id) do update set credential_hash = excluded.credential_hash, updated_at = now()`,
         [
-          DEMO_IDS.manager, await createCredentialHash("manager-pass"),
+          DEMO_IDS.manager, await createCredentialHash("test-manager-pw"),
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
           DEMO_IDS.learner, await createPinHash("123456")
         ]
@@ -78,7 +78,7 @@ describe("Manager AI-off mode keeps the learning flow usable", () => {
     await app.ready();
     const managerLogin = await app.inject({
       method: "POST", url: "/api/auth/staff/login",
-      payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" }
+      payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" }
     });
     const learnerLogin = await app.inject({
       method: "POST", url: "/api/auth/learner/login",

@@ -180,10 +180,10 @@ describe("EntryScreen interaction", () => {
 
     await user.click(screen.getByRole("tab", { name: "Nhân sự" }));
     await user.type(screen.getByLabelText("Email"), "learner@e4s.local");
-    await user.type(screen.getByLabelText("Mật khẩu"), "246810");
+    await user.type(screen.getByLabelText("Mật khẩu"), "135790");
     await user.click(screen.getByRole("button", { name: "Đăng nhập nhân sự" }));
 
-    expect(client.staffLogin).toHaveBeenCalledWith({ email: "learner@e4s.local", password: "246810" });
+    expect(client.staffLogin).toHaveBeenCalledWith({ email: "learner@e4s.local", password: "135790" });
     expect(await screen.findByRole("alert")).toHaveTextContent("Không thể đăng nhập. Vui lòng kiểm tra email, mật khẩu và vai trò. Tài khoản người học cần đăng nhập ở tab Người học.");
     expect(screen.getByLabelText("Mật khẩu").closest("label")).toHaveTextContent("Không thể đăng nhập. Vui lòng kiểm tra email, mật khẩu và vai trò.");
     expect(screen.getByLabelText("Email").closest("label")).not.toHaveTextContent("Không thể đăng nhập.");

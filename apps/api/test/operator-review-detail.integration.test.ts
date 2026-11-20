@@ -54,7 +54,7 @@ describe("Operator review detail and AI grade API", () => {
         `insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6)`,
         [
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
-          DEMO_IDS.manager, await createCredentialHash("manager-pass"),
+          DEMO_IDS.manager, await createCredentialHash("test-manager-pw"),
           DEMO_IDS.learner, await createPinHash("123456")
         ]
       );
@@ -94,7 +94,7 @@ describe("Operator review detail and AI grade API", () => {
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
     operatorCookie = await login("/api/auth/staff/login", "thu.ha.tran@e4s.test", "operator-pass");
-    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.test", "manager-pass");
+    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.test", "test-manager-pw");
     learnerCookie = await login("/api/auth/learner/login", "minh.anh.nguyen@e4s.test", "123456");
   }, 30_000);
 

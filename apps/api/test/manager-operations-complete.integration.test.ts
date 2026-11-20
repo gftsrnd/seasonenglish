@@ -34,7 +34,7 @@ describe("complete Manager learner and account operations API", () => {
       await client.query(
         `insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)
          on conflict (user_id) do update set credential_hash = excluded.credential_hash, updated_at = now()`,
-        [DEMO_IDS.manager, await createCredentialHash("manager-pass"), DEMO_IDS.operator, await createCredentialHash("operator-pass")]
+        [DEMO_IDS.manager, await createCredentialHash("test-manager-pw"), DEMO_IDS.operator, await createCredentialHash("operator-pass")]
       );
       await client.query(
         `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
@@ -107,7 +107,7 @@ describe("complete Manager learner and account operations API", () => {
       expect(response.statusCode, response.body).toBe(200);
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
-    managerCookie = await login("quoc.bao.le@e4s.local", "manager-pass");
+    managerCookie = await login("quoc.bao.le@e4s.local", "test-manager-pw");
     operatorCookie = await login("thu.ha.tran@e4s.local", "operator-pass");
   }, 30_000);
 

@@ -35,7 +35,7 @@ describe("arena phase 2: XH, open challenges, friendly invites and the ledger", 
       await migrateDatabase(client);
       await seedDemo(client);
       await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)",
-        [DEMO_IDS.learner, await createPinHash("123456"), DEMO_IDS.manager, await createCredentialHash("manager-pass")]);
+        [DEMO_IDS.learner, await createPinHash("123456"), DEMO_IDS.manager, await createCredentialHash("test-manager-pw")]);
       for (const [index, learner] of learners.entries()) {
         await client.query("insert into users (id, organization_id, role, display_name, email) values ($1, $2, 'learner', $3, $4)",
           [learner.id, DEMO_IDS.organization, learner.name, learner.email]);
@@ -62,7 +62,7 @@ describe("arena phase 2: XH, open challenges, friendly invites and the ledger", 
     };
     for (const learner of learners) learner.cookie = await login("/api/auth/learner/login", { email: learner.email, pin: "123456" });
     a2Cookie = await login("/api/auth/learner/login", { email: "minh.anh.nguyen@e4s.local", pin: "123456" });
-    managerCookie = await login("/api/auth/staff/login", { email: "quoc.bao.le@e4s.local", password: "manager-pass" });
+    managerCookie = await login("/api/auth/staff/login", { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" });
   }, 60_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });

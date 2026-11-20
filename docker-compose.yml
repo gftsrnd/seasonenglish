@@ -65,6 +65,11 @@ services:
       DATABASE_URL: postgres://e4s:${POSTGRES_PASSWORD:-e4s_local_password}@postgres:5432/e4s
       E4S_SEED_SCENARIOS: "true"
       E4S_SETTINGS_ENCRYPTION_KEY: ${E4S_SETTINGS_ENCRYPTION_KEY:?E4S_SETTINGS_ENCRYPTION_KEY is required}
+      # Demo logins come from .env only (random values are generated and printed when unset).
+      E4S_DEMO_LEARNER_PIN: ${E4S_DEMO_LEARNER_PIN:-}
+      E4S_DEMO_STAFF_PASSWORD: ${E4S_DEMO_STAFF_PASSWORD:-}
+      E4S_DEMO_MANAGER_PASSWORD: ${E4S_DEMO_MANAGER_PASSWORD:-}
+      E4S_SCENARIO_STAFF_PASSWORD: ${E4S_SCENARIO_STAFF_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy

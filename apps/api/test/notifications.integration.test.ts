@@ -25,7 +25,7 @@ describe("learner notifications API", () => {
         `insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6)`,
         [
           DEMO_IDS.learner, await createPinHash("123456"),
-          DEMO_IDS.manager, await createCredentialHash("manager-pass"),
+          DEMO_IDS.manager, await createCredentialHash("test-manager-pw"),
           DEMO_IDS.operator, await createCredentialHash("operator-pass")
         ]
       );
@@ -89,7 +89,7 @@ describe("learner notifications API", () => {
   it("exposes a manager-queued reminder to its learner with delivery evidence", async () => {
     const managerLogin = await app.inject({
       method: "POST", url: "/api/auth/staff/login",
-      payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" }
+      payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" }
     });
     expect(managerLogin.statusCode, managerLogin.body).toBe(200);
     const managerCookie = String(managerLogin.headers["set-cookie"]).split(";")[0] ?? "";
@@ -130,7 +130,7 @@ describe("learner notifications API", () => {
       return String(login.headers["set-cookie"]).split(";")[0]!;
     };
     const learner = await cookieFor("/api/auth/learner/login", { email: "minh.anh.nguyen@e4s.local", pin: "123456" });
-    const manager = await cookieFor("/api/auth/staff/login", { email: "quoc.bao.le@e4s.local", password: "manager-pass" });
+    const manager = await cookieFor("/api/auth/staff/login", { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" });
     const inbox = "/api/v1/me/notifications";
     const submitted = await app.inject({ method: "POST", url: "/api/v1/learner/complaints", headers: { cookie: learner }, payload: { kind: "attendance", reason: "Điểm danh chưa được ghi nhận" } });
     expect(submitted.statusCode, submitted.body).toBe(201);
@@ -201,7 +201,7 @@ describe("learner notifications API", () => {
   it("keeps notifications learner-owned", async () => {
     const managerLogin = await app.inject({
       method: "POST", url: "/api/auth/staff/login",
-      payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" }
+      payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" }
     });
     const managerCookie = String(managerLogin.headers["set-cookie"]).split(";")[0] ?? "";
     const forbidden = await app.inject({ method: "GET", url: "/api/v1/notifications", headers: { cookie: managerCookie } });
@@ -212,7 +212,7 @@ describe("learner notifications API", () => {
     await createRepositories(pool).manager.saveLearnerBaseNotification(DEMO_IDS.manager, webhookReminderLearnerId, { webhookUrl: "https://base.example.test/personal", webhookTemplate: '{"base_content":"{message}"}', destinationLabel: "Base riêng" });
     const managerLogin = await app.inject({
       method: "POST", url: "/api/auth/staff/login",
-      payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" }
+      payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" }
     });
     const managerCookie = String(managerLogin.headers["set-cookie"]).split(";")[0] ?? "";
     const queued = await app.inject({
@@ -298,7 +298,7 @@ describe("learner notifications API", () => {
   });
 
   it("turns PIN activity into grouped, read-tracked Manager notifications", async () => {
-    const login = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" } });
+    const login = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" } });
     expect(login.statusCode, login.body).toBe(200);
     const manager = String(login.headers["set-cookie"]).split(";")[0]!;
     const selfReset = "Người học đã tự đổi PIN qua xác minh email.";

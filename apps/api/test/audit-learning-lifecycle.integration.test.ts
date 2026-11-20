@@ -76,8 +76,8 @@ describe("audited monthly learning lifecycle", () => {
       select v.blueprint from assessment_versions v join assessment_definitions d on d.id = v.definition_id
       where d.kind = 'placement' and d.organization_id = $1 and v.status = 'published' limit 1
     ) v`, [DEMO_IDS.organization]);
-    await pool.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [DEMO_IDS.manager, await createCredentialHash("manager-pass")]);
-    const response = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" } });
+    await pool.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [DEMO_IDS.manager, await createCredentialHash("test-manager-pw")]);
+    const response = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" } });
     expect(response.statusCode, response.body).toBe(200);
     managerCookie = String(response.headers["set-cookie"]).split(";")[0]!;
   }, 30_000);

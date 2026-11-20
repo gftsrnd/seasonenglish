@@ -108,13 +108,13 @@ async function main() {
   const operator = await browser.newPage();
   const learner = await browser.newPage();
   try {
-    await login(learner, "minh.anh.nguyen@e4s.local", "246810");
+    await login(learner, "minh.anh.nguyen@e4s.local", process.env.E4S_DEMO_LEARNER_PIN ?? "");
     await learner.goto(`${webUrl}/home`, { waitUntil: "networkidle" });
     const levelText = await learner.getByText(/Trình độ (A1|A2|B1|B2|C1)/).first().innerText();
     const cefr = levelText.match(/(A1|A2|B1|B2|C1)/)?.[1];
     assert(cefr, `learner level badge is missing: ${levelText}`);
 
-    await login(operator, "thu.ha.tran@e4s.local", "staff-pass", true);
+    await login(operator, "thu.ha.tran@e4s.local", process.env.E4S_DEMO_STAFF_PASSWORD ?? "", true);
     await operator.goto(`${webUrl}/op/months`, { waitUntil: "networkidle" });
     await operator.screenshot({ path: join(evidenceDir, "debug-operator-months-before-authoring.png"), fullPage: true });
     await operator.getByRole("heading", { name: "Bài học" }).waitFor();

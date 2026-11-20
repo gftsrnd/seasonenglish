@@ -53,7 +53,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
           DEMO_IDS.learner, await createPinHash("123456"),
           freshLearnerId, await createPinHash("654321"),
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
-          DEMO_IDS.manager, await createCredentialHash("manager-pass")
+          DEMO_IDS.manager, await createCredentialHash("test-manager-pw")
         ]
       );
     } finally { client.release(); }
@@ -76,7 +76,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     operatorCookie = String(operatorLogin.headers["set-cookie"]).split(";")[0] ?? "";
     const managerLogin = await app.inject({
       method: "POST", url: "/api/auth/staff/login",
-      payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" }
+      payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" }
     });
     managerCookie = String(managerLogin.headers["set-cookie"]).split(";")[0] ?? "";
 

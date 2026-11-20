@@ -53,7 +53,7 @@ describe("manager reminder channel API", () => {
       }
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2)",
-        [DEMO_IDS.manager, await createCredentialHash("manager-pass")]
+        [DEMO_IDS.manager, await createCredentialHash("test-manager-pw")]
       );
     } finally {
       client.release();
@@ -62,7 +62,7 @@ describe("manager reminder channel API", () => {
     const login = await app.inject({
       method: "POST",
       url: "/api/auth/staff/login",
-      payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" }
+      payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" }
     });
     managerCookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
   }, 30_000);

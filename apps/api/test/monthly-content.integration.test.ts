@@ -99,7 +99,7 @@ describe("monthly content API", () => {
       await seedDemo(client);
       await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)", [
         DEMO_IDS.operator, await createCredentialHash("operator-pass"),
-        DEMO_IDS.manager, await createCredentialHash("manager-pass")
+        DEMO_IDS.manager, await createCredentialHash("test-manager-pw")
       ]);
       await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [DEMO_IDS.learner, await createPinHash("123456")]);
     } finally { client.release(); }
@@ -107,7 +107,7 @@ describe("monthly content API", () => {
     const login = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "thu.ha.tran@e4s.local", password: "operator-pass" } });
     expect(login.statusCode, login.body).toBe(200);
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
-    const managerLogin = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" } });
+    const managerLogin = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" } });
     expect(managerLogin.statusCode, managerLogin.body).toBe(200);
     managerCookie = String(managerLogin.headers["set-cookie"]).split(";")[0] ?? "";
   }, 30_000);

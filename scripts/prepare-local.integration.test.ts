@@ -14,9 +14,9 @@ describe("local demo fixture preparation", () => {
   const pool = new Pool({ connectionString: databaseUrl });
   const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false });
   const credentials = [
-    ["minh.anh.nguyen@e4s.local", "246810", "learner", "pin"],
-    ["thu.ha.tran@e4s.local", "staff-pass", "operator", "password"],
-    ["quoc.bao.le@e4s.local", "manager-pass", "manager", "password"]
+    ["minh.anh.nguyen@e4s.local", "135790", "learner", "pin"],
+    ["thu.ha.tran@e4s.local", "test-staff-pw", "operator", "password"],
+    ["quoc.bao.le@e4s.local", "test-manager-pw", "manager", "password"]
   ] as const;
 
   beforeAll(async () => {
@@ -29,7 +29,7 @@ describe("local demo fixture preparation", () => {
     }
     await execFileAsync(process.execPath, [resolve("node_modules/tsx/dist/cli.mjs"), "scripts/prepare-local.ts"], {
       cwd: process.cwd(),
-      env: { ...process.env, DATABASE_URL: databaseUrl }
+      env: { ...process.env, DATABASE_URL: databaseUrl, E4S_DEMO_LEARNER_PIN: "135790", E4S_DEMO_STAFF_PASSWORD: "test-staff-pw", E4S_DEMO_MANAGER_PASSWORD: "test-manager-pw" }
     });
     await app.ready();
   }, 30_000);

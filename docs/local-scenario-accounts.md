@@ -10,17 +10,16 @@ $env:DATABASE_URL = "postgres://e4s:e4s_password@127.0.0.1:5432/e4s"
 pnpm prepare:local-scenarios
 ```
 
-- PIN dùng chung cho toàn bộ learner: `246810`.
-- Mật khẩu cho tài khoản vận hành và quản lý trong bảng: `review-pass`.
+- PIN và mật khẩu **không nằm trong git**. Script đọc chúng từ `.env` của máy: `E4S_DEMO_LEARNER_PIN` (PIN chung của learner), `E4S_DEMO_STAFF_PASSWORD`, `E4S_DEMO_MANAGER_PASSWORD`, `E4S_SCENARIO_STAFF_PASSWORD` (vận hành/quản lý tình huống). Thiếu biến nào thì script tự sinh giá trị ngẫu nhiên và in ra một lần.
 - Múi giờ nghiệp vụ của fixture: `Asia/Ho_Chi_Minh`.
 
 ## Tài khoản local cơ bản
 
 | Vai trò | Họ tên | Email | PIN / mật khẩu |
 | --- | --- | --- | --- |
-| Learner | Nguyễn Minh Anh | `minh.anh.nguyen@e4s.local` | PIN `246810` |
-| Operator | Trần Thu Hà | `thu.ha.tran@e4s.local` | `staff-pass` |
-| Manager | Lê Quốc Bảo | `quoc.bao.le@e4s.local` | `manager-pass` |
+| Learner | Nguyễn Minh Anh | `minh.anh.nguyen@e4s.local` | `E4S_DEMO_LEARNER_PIN` |
+| Operator | Trần Thu Hà | `thu.ha.tran@e4s.local` | `E4S_DEMO_STAFF_PASSWORD` |
+| Manager | Lê Quốc Bảo | `quoc.bao.le@e4s.local` | `E4S_DEMO_MANAGER_PASSWORD` |
 
 ## Ma trận tài khoản tình huống
 

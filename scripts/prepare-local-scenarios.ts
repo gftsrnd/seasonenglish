@@ -1,6 +1,7 @@
 import { Client } from "pg";
 import { migrateDatabase, seedDemo } from "../packages/database/src/index.js";
 import { LOCAL_SCENARIO_ACCOUNTS, seedLocalScenarioAccounts } from "./local-scenario-accounts.js";
+import { localSecret } from "./local-secrets.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
@@ -19,8 +20,8 @@ try {
   await seedLocalScenarioAccounts(client);
   process.stdout.write(`${JSON.stringify({
     timezone: "Asia/Ho_Chi_Minh",
-    learnerPin: "246810",
-    staffPassword: "review-pass",
+    learnerPin: localSecret("E4S_DEMO_LEARNER_PIN", "pin"),
+    staffPassword: localSecret("E4S_SCENARIO_STAFF_PASSWORD", "password"),
     accounts: LOCAL_SCENARIO_ACCOUNTS.map(({ key, displayName, email, role }) => ({ key, displayName, email, role }))
   }, null, 2)}\n`);
 } finally {

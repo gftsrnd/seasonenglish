@@ -174,31 +174,31 @@ def build_sample_data():
     ])
     doc.add_heading("Tài khoản dữ liệu mẫu", level=1)
     add_table(doc, ["Mục đích", "Họ tên", "Email", "PIN", "Dữ liệu mong đợi"], [
-        ["Nhắc học", "Mai Đức Thịnh", "duc.thinh.mai@scenario.e4s.local", "246810", "Không có hoạt động trong ít nhất 2 ngày; đã có nhắc học chờ gửi"],
-        ["Chuỗi ngày", "Ngô Thanh Thảo", "thanh.thao.ngo@scenario.e4s.local", "246810", "5 ngày liên tiếp Thứ Năm đến Thứ Hai, có Thứ Bảy và Chủ Nhật"],
-        ["Kiểm tra quản lý", "Lý Quốc Hưng", "quoc.hung.ly@scenario.e4s.local", "review-pass", "Tài khoản Manager xem bảng theo dõi và nhắc học"]
+        ["Nhắc học", "Mai Đức Thịnh", "duc.thinh.mai@scenario.e4s.local", "<E4S_DEMO_LEARNER_PIN>", "Không có hoạt động trong ít nhất 2 ngày; đã có nhắc học chờ gửi"],
+        ["Chuỗi ngày", "Ngô Thanh Thảo", "thanh.thao.ngo@scenario.e4s.local", "<E4S_DEMO_LEARNER_PIN>", "5 ngày liên tiếp Thứ Năm đến Thứ Hai, có Thứ Bảy và Chủ Nhật"],
+        ["Kiểm tra quản lý", "Lý Quốc Hưng", "quoc.hung.ly@scenario.e4s.local", "<E4S_SCENARIO_STAFF_PASSWORD>", "Tài khoản Manager xem bảng theo dõi và nhắc học"]
     ], [2.2, 2.8, 5.4, 2.0, 5.2])
     doc.add_heading("Danh sách đầy đủ tài khoản kịch bản", level=1)
-    doc.add_paragraph("Tất cả tài khoản dưới đây được tạo lại khi chạy prepare-local. Tài khoản người học dùng PIN 246810; tài khoản nhân sự dùng mật khẩu review-pass.")
+    doc.add_paragraph("Tất cả tài khoản dưới đây được tạo lại khi chạy prepare-local. Tài khoản người học dùng PIN <E4S_DEMO_LEARNER_PIN>; tài khoản nhân sự dùng mật khẩu <E4S_SCENARIO_STAFF_PASSWORD>.")
     add_table(doc, ["Kịch bản", "Họ tên và email", "Đăng nhập", "Trạng thái chuẩn bị"], [
-        ["Onboarding mới", "Nguyễn Khánh Linh\nkhanh.linh.nguyen@scenario.e4s.local", "Người học\n246810", "Chưa hoàn tất hồ sơ"],
-        ["Placement mới", "Trần Minh Quân\nminh.quan.tran@scenario.e4s.local", "Người học\n246810", "Chưa bắt đầu placement"],
-        ["Placement Nghe", "Lê Hoàng Anh\nhoang.anh.le@scenario.e4s.local", "Người học\n246810", "Đang ở phần Nghe"],
-        ["Placement Đọc", "Phạm Thu Trang\nthu.trang.pham@scenario.e4s.local", "Người học\n246810", "Đang ở phần Đọc"],
-        ["Placement Viết", "Vũ Đức Long\nduc.long.vu@scenario.e4s.local", "Người học\n246810", "Đang ở phần Viết"],
-        ["Placement Nói", "Đỗ Ngọc Mai\nngoc.mai.do@scenario.e4s.local", "Người học\n246810", "Đang ở phần Nói"],
-        ["Placement đã nộp", "Bùi Gia Hân\ngia.han.bui@scenario.e4s.local", "Người học\n246810", "Đã nộp, chờ xử lý"],
-        ["Placement chờ duyệt", "Hồ Anh Tuấn\nanh.tuan.ho@scenario.e4s.local", "Người học\n246810", "Có điểm AI để duyệt"],
-        ["Placement biên", "Dương Mỹ Linh\nmy.linh.duong@scenario.e4s.local", "Người học\n246810", "Có điểm chấm tay sát ngưỡng"],
-        ["Bài học B1", "Võ Thành Nam\nthanh.nam.vo@scenario.e4s.local", "Người học\n246810", "Đã duyệt mức B1"],
-        ["Hết lượt bài học", "Nguyễn Quỳnh Anh\nquynh.anh.nguyen@scenario.e4s.local", "Người học\n246810", "Phần Nghe sai đủ 2 lượt"],
-        ["Bài tuần", "Trương Hải Yến\nhai.yen.truong@scenario.e4s.local", "Người học\n246810", "Đủ 5 bài để mở bài tuần"],
-        ["Sẵn sàng lên mức", "Đặng Quốc Việt\nquoc.viet.dang@scenario.e4s.local", "Người học\n246810", "Đủ tiến độ, bài tuần và coach"],
-        ["Lịch sử và chuỗi ngày", "Ngô Thanh Thảo\nthanh.thao.ngo@scenario.e4s.local", "Người học\n246810", "Chuỗi 5 ngày qua cuối tuần"],
-        ["Nhắc học", "Mai Đức Thịnh\nduc.thinh.mai@scenario.e4s.local", "Người học\n246810", "Không hoạt động ít nhất 2 ngày"],
-        ["Kháng nghị", "Tạ Bảo Trâm\nbao.tram.ta@scenario.e4s.local", "Người học\n246810", "Có kháng nghị placement chờ xử lý"],
-        ["Operator", "Phan Minh Châu\nminh.chau.phan@scenario.e4s.local", "Nhân sự\nreview-pass", "Tài khoản vận hành"],
-        ["Manager", "Lý Quốc Hưng\nquoc.hung.ly@scenario.e4s.local", "Nhân sự\nreview-pass", "Tài khoản quản lý"],
+        ["Onboarding mới", "Nguyễn Khánh Linh\nkhanh.linh.nguyen@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Chưa hoàn tất hồ sơ"],
+        ["Placement mới", "Trần Minh Quân\nminh.quan.tran@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Chưa bắt đầu placement"],
+        ["Placement Nghe", "Lê Hoàng Anh\nhoang.anh.le@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Đang ở phần Nghe"],
+        ["Placement Đọc", "Phạm Thu Trang\nthu.trang.pham@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Đang ở phần Đọc"],
+        ["Placement Viết", "Vũ Đức Long\nduc.long.vu@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Đang ở phần Viết"],
+        ["Placement Nói", "Đỗ Ngọc Mai\nngoc.mai.do@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Đang ở phần Nói"],
+        ["Placement đã nộp", "Bùi Gia Hân\ngia.han.bui@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Đã nộp, chờ xử lý"],
+        ["Placement chờ duyệt", "Hồ Anh Tuấn\nanh.tuan.ho@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Có điểm AI để duyệt"],
+        ["Placement biên", "Dương Mỹ Linh\nmy.linh.duong@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Có điểm chấm tay sát ngưỡng"],
+        ["Bài học B1", "Võ Thành Nam\nthanh.nam.vo@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Đã duyệt mức B1"],
+        ["Hết lượt bài học", "Nguyễn Quỳnh Anh\nquynh.anh.nguyen@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Phần Nghe sai đủ 2 lượt"],
+        ["Bài tuần", "Trương Hải Yến\nhai.yen.truong@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Đủ 5 bài để mở bài tuần"],
+        ["Sẵn sàng lên mức", "Đặng Quốc Việt\nquoc.viet.dang@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Đủ tiến độ, bài tuần và coach"],
+        ["Lịch sử và chuỗi ngày", "Ngô Thanh Thảo\nthanh.thao.ngo@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Chuỗi 5 ngày qua cuối tuần"],
+        ["Nhắc học", "Mai Đức Thịnh\nduc.thinh.mai@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Không hoạt động ít nhất 2 ngày"],
+        ["Kháng nghị", "Tạ Bảo Trâm\nbao.tram.ta@scenario.e4s.local", "Người học\n<E4S_DEMO_LEARNER_PIN>", "Có kháng nghị placement chờ xử lý"],
+        ["Operator", "Phan Minh Châu\nminh.chau.phan@scenario.e4s.local", "Nhân sự\n<E4S_SCENARIO_STAFF_PASSWORD>", "Tài khoản vận hành"],
+        ["Manager", "Lý Quốc Hưng\nquoc.hung.ly@scenario.e4s.local", "Nhân sự\n<E4S_SCENARIO_STAFF_PASSWORD>", "Tài khoản quản lý"],
     ], [3.2, 6.0, 3.0, 5.0])
     doc.add_heading("Kiểm thử nhắc học", level=1)
     add_steps(doc, [
@@ -252,10 +252,10 @@ def build_no_ai():
     add_intro(doc, "Manager có thể tắt AI cho toàn tổ chức để kiểm tra trọn luồng học dự phòng mà không xoá hoặc thay đổi API key. Phạm vi phải bắt đầu từ Operator soạn bài theo level bằng tay, đi qua duyệt/xuất bản, học và làm bài, đến nộp bài thực hành cuối tuần để chấm tay. Khi tắt, server không gọi AI từ biến môi trường và cũng không dùng provider đã lưu.")
     doc.add_heading("Tài khoản và phạm vi", level=1)
     add_table(doc, ["Vai trò", "Email", "Mật khẩu hoặc PIN", "Phạm vi"], [
-        ["Manager", "quoc.hung.ly@scenario.e4s.local", "review-pass", "Bật hoặc tắt chế độ kiểm thử AI"],
-        ["Operator", "minh.chau.phan@scenario.e4s.local", "review-pass", "Soạn bài ngày và bài tuần bằng tay; duyệt/xuất bản"],
-        ["Người học", "quynh.anh.nguyen@scenario.e4s.local", "246810", "Kiểm tra học, bài tập và file ghi âm"],
-        ["Người học", "hai.yen.truong@scenario.e4s.local", "246810", "Kiểm tra mở và nộp bài thực hành cuối tuần"]
+        ["Manager", "quoc.hung.ly@scenario.e4s.local", "<E4S_SCENARIO_STAFF_PASSWORD>", "Bật hoặc tắt chế độ kiểm thử AI"],
+        ["Operator", "minh.chau.phan@scenario.e4s.local", "<E4S_SCENARIO_STAFF_PASSWORD>", "Soạn bài ngày và bài tuần bằng tay; duyệt/xuất bản"],
+        ["Người học", "quynh.anh.nguyen@scenario.e4s.local", "<E4S_DEMO_LEARNER_PIN>", "Kiểm tra học, bài tập và file ghi âm"],
+        ["Người học", "hai.yen.truong@scenario.e4s.local", "<E4S_DEMO_LEARNER_PIN>", "Kiểm tra mở và nộp bài thực hành cuối tuần"]
     ], [2.5, 6.0, 3.2, 6.0])
     doc.add_heading("Bật chế độ không có AI", level=1)
     add_steps(doc, [

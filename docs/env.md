@@ -57,6 +57,7 @@ Với bản thật (tunnel), Postgres và MinIO **không mở cổng** ra ngoài
 | Biến | Ý nghĩa |
 |---|---|
 | `E4S_SEED_SCENARIOS`, `E4S_ALLOW_LOCAL_SCENARIOS`, `E4S_ALLOW_REMOTE_SCENARIOS` | Cho phép tạo tài khoản tình huống. Không bao giờ bật trên bản thật. |
+| `E4S_DEMO_LEARNER_PIN`, `E4S_DEMO_STAFF_PASSWORD`, `E4S_DEMO_MANAGER_PASSWORD`, `E4S_SCENARIO_STAFF_PASSWORD` | PIN/mật khẩu của tài khoản demo khi seed local. Chỉ để trong `.env`, không commit. Thiếu thì script tự sinh ngẫu nhiên và in ra. |
 | `E4S_ENABLE_MAINTENANCE` | Mở endpoint bảo trì cho môi trường dev; bị bỏ qua khi `NODE_ENV=production` |
 | `E4S_REGISTER_TRIAL` | Khoá an toàn cho script đăng ký tháng học thử, chỉ chạy được trên 4300 (`dev-4300`) |
 | `E4S_E2E_*`, `E4S_CORE_FLOW_*` | Biến của các script e2e cũ (đã chuyển vào `legacy/scripts`) |

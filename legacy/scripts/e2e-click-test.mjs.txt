@@ -15,7 +15,7 @@ async function run() {
     const res = await fetch("/api/v1/auth/staff/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "thu.ha.tran@e4s.local", password: "staff-pass" })
+      body: JSON.stringify({ email: "thu.ha.tran@e4s.local", password: "<E4S_DEMO_STAFF_PASSWORD>" })
     });
     return { status: res.status, body: await res.json().catch(() => ({})) };
   });

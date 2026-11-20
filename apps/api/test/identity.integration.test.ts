@@ -32,8 +32,8 @@ describe("identity API", () => {
       await migrateDatabase(client);
       await seedDemo(client);
       const learnerHash = await createPinHash("123456");
-      const operatorHash = await createCredentialHash("staff-pass");
-      const managerHash = await createCredentialHash("manager-pass");
+      const operatorHash = await createCredentialHash("test-staff-pw");
+      const managerHash = await createCredentialHash("test-manager-pw");
       await client.query(
         `insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6)`,
         [DEMO_IDS.learner, learnerHash, DEMO_IDS.operator, operatorHash, DEMO_IDS.manager, managerHash]
@@ -152,7 +152,7 @@ describe("identity API", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/auth/staff/login",
-      payload: { email: "  THU.HA.TRAN@E4S.LOCAL  ", password: "staff-pass" }
+      payload: { email: "  THU.HA.TRAN@E4S.LOCAL  ", password: "test-staff-pw" }
     });
 
     expect(response.statusCode, response.body).toBe(200);
@@ -185,7 +185,7 @@ describe("identity API", () => {
     const login = await app.inject({
       method: "POST",
       url: "/api/v1/sessions",
-      payload: { audience: "staff", email: "thu.ha.tran@e4s.local", password: "staff-pass", role: "manager" }
+      payload: { audience: "staff", email: "thu.ha.tran@e4s.local", password: "test-staff-pw", role: "manager" }
     });
     expect(login.statusCode).toBe(200);
     expect(login.json()).toMatchObject({ role: "operator" });
@@ -208,7 +208,7 @@ describe("identity API", () => {
     const operatorLogin = await app.inject({
       method: "POST",
       url: "/api/auth/staff/login",
-      payload: { email: "thu.ha.tran@e4s.local", password: "staff-pass" }
+      payload: { email: "thu.ha.tran@e4s.local", password: "test-staff-pw" }
     });
     const operatorCookie = String(operatorLogin.headers["set-cookie"]).split(";")[0] ?? "";
     const allowed = await app.inject({ method: "GET", url: "/__test/operator", headers: { cookie: operatorCookie } });
@@ -225,7 +225,7 @@ describe("identity API", () => {
     const managerLogin = await app.inject({
       method: "POST",
       url: "/api/auth/staff/login",
-      payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" }
+      payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" }
     });
     const learnerBrowserCookie = String(learnerLogin.headers["set-cookie"]).split(";")[0] ?? "";
     const managerBrowserCookie = String(managerLogin.headers["set-cookie"]).split(";")[0] ?? "";
@@ -243,7 +243,7 @@ describe("identity API", () => {
     const beforeRequest = await app.inject({
       method: "POST",
       url: "/api/auth/staff/login",
-      payload: { email: "thu.ha.tran@e4s.local", password: "staff-pass" }
+      payload: { email: "thu.ha.tran@e4s.local", password: "test-staff-pw" }
     });
     expect(beforeRequest.statusCode, beforeRequest.body).toBe(200);
 
@@ -265,7 +265,7 @@ describe("identity API", () => {
     const afterRequest = await app.inject({
       method: "POST",
       url: "/api/auth/staff/login",
-      payload: { email: "thu.ha.tran@e4s.local", password: "staff-pass" }
+      payload: { email: "thu.ha.tran@e4s.local", password: "test-staff-pw" }
     });
     expect(afterRequest.statusCode, afterRequest.body).toBe(200);
   });
@@ -280,13 +280,13 @@ describe("identity API", () => {
     );
     await pool.query(
       "insert into user_credentials (user_id, credential_hash) values ($1, $2)",
-      [learnerId, await createPinHash("246810")]
+      [learnerId, await createPinHash("864200")]
     );
 
     const originalLogin = await app.inject({
       method: "POST",
       url: "/api/auth/learner/login",
-      payload: { email, pin: "246810" }
+      payload: { email, pin: "864200" }
     });
     expect(originalLogin.statusCode, originalLogin.body).toBe(200);
     const originalCookie = String(originalLogin.headers["set-cookie"]).split(";")[0] ?? "";
@@ -304,7 +304,7 @@ describe("identity API", () => {
     const afterStartLogin = await app.inject({
       method: "POST",
       url: "/api/auth/learner/login",
-      payload: { email, pin: "246810" }
+      payload: { email, pin: "864200" }
     });
     expect(afterStartLogin.statusCode, afterStartLogin.body).toBe(200);
 
@@ -319,7 +319,7 @@ describe("identity API", () => {
     const whileUnused = await app.inject({
       method: "POST",
       url: "/api/auth/learner/login",
-      payload: { email, pin: "246810" }
+      payload: { email, pin: "864200" }
     });
     expect(whileUnused.statusCode, whileUnused.body).toBe(200);
 
@@ -338,7 +338,7 @@ describe("identity API", () => {
     const afterExpiryLogin = await app.inject({
       method: "POST",
       url: "/api/auth/learner/login",
-      payload: { email, pin: "246810" }
+      payload: { email, pin: "864200" }
     });
     expect(afterExpiryLogin.statusCode, afterExpiryLogin.body).toBe(200);
     const originalSession = await app.inject({ method: "GET", url: "/api/session", headers: { cookie: originalCookie } });
@@ -496,7 +496,7 @@ describe("identity API", () => {
     const login = await app.inject({
       method: "POST",
       url: "/api/auth/staff/login",
-      payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" }
+      payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" }
     });
     managerCookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
 

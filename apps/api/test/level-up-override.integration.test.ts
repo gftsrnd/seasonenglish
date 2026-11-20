@@ -34,7 +34,7 @@ describe("Staff level-up override (Thi lên mức)", () => {
         [
           DEMO_IDS.learner, await createPinHash("123456"),
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
-          DEMO_IDS.manager, await createCredentialHash("manager-pass")
+          DEMO_IDS.manager, await createCredentialHash("test-manager-pw")
         ]
       );
       await client.query("insert into organizations (id, name, slug) values ($1, 'Other org', $2)", [otherOrganizationId, `other-${otherOrganizationId}`]);
@@ -79,7 +79,7 @@ describe("Staff level-up override (Thi lên mức)", () => {
     };
     learnerCookie = await login("/api/auth/learner/login", { email: "minh.anh.nguyen@e4s.local", pin: "123456" });
     operatorCookie = await login("/api/auth/staff/login", { email: "thu.ha.tran@e4s.local", password: "operator-pass" });
-    managerCookie = await login("/api/auth/staff/login", { email: "quoc.bao.le@e4s.local", password: "manager-pass" });
+    managerCookie = await login("/api/auth/staff/login", { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" });
     otherOperatorCookie = await login("/api/auth/staff/login", { email: "other.override.operator@e4s.local", password: "other-operator-pass" });
   }, 60_000);
 

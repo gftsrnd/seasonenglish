@@ -47,9 +47,9 @@ describe("manager progress and operations API", () => {
       await client.query(
         `insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6), ($7, $8)`,
         [
-          DEMO_IDS.manager, await createCredentialHash("manager-pass"),
+          DEMO_IDS.manager, await createCredentialHash("test-manager-pw"),
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
-          emptyManagerId, await createCredentialHash("empty-manager-pass"),
+          emptyManagerId, await createCredentialHash("empty-test-manager-pw"),
           DEMO_IDS.checker, await createCredentialHash("checker-pass")
         ]
       );
@@ -63,10 +63,10 @@ describe("manager progress and operations API", () => {
       expect(response.statusCode, response.body).toBe(200);
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
-    managerCookie = await login("quoc.bao.le@e4s.local", "manager-pass");
+    managerCookie = await login("quoc.bao.le@e4s.local", "test-manager-pw");
     operatorCookie = await login("thu.ha.tran@e4s.local", "operator-pass");
     checkerCookie = await login("gia.huy.pham@e4s.local", "checker-pass");
-    emptyManagerCookie = await login("empty-manager@e4s.local", "empty-manager-pass");
+    emptyManagerCookie = await login("empty-manager@e4s.local", "empty-test-manager-pw");
     const learnerLogin = await app.inject({ method: "POST", url: "/api/auth/learner/login", payload: { email: "minh.anh.nguyen@e4s.local", pin: "123456" } });
     expect(learnerLogin.statusCode, learnerLogin.body).toBe(200);
     learnerCookie = String(learnerLogin.headers["set-cookie"]).split(";")[0] ?? "";
@@ -238,7 +238,7 @@ describe("manager progress and operations API", () => {
   it("lets only a Manager reveal a recoverable staff password", async () => {
     const created = await app.inject({
       method: "POST", url: "/api/v1/manager/accounts", headers: { cookie: managerCookie },
-      payload: { displayName: "Staff Credential Reveal", email: "staff-credential@e4s.local", role: "operator", password: "staff-pass-123" }
+      payload: { displayName: "Staff Credential Reveal", email: "staff-credential@e4s.local", role: "operator", password: "test-staff-pw-123" }
     });
     expect(created.statusCode, created.body).toBe(201);
     const accountId = created.json().id as string;
@@ -247,7 +247,7 @@ describe("manager progress and operations API", () => {
     const nonManagerReveal = await app.inject({ method: "GET", url: `/api/v1/manager/accounts/${accountId}/credential`, headers: { cookie: checkerCookie } });
 
     expect(managerReveal.statusCode, managerReveal.body).toBe(200);
-    expect(managerReveal.json()).toEqual({ credential: "staff-pass-123", kind: "password" });
+    expect(managerReveal.json()).toEqual({ credential: "test-staff-pw-123", kind: "password" });
     expect(nonManagerReveal.statusCode).toBe(403);
   });
 

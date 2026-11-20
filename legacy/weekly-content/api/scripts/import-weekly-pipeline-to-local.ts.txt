@@ -12,7 +12,7 @@ const outputRoot = args.get("output-root");
 const weekNumber = Number(args.get("week") ?? "1");
 const apiBaseUrl = (args.get("api") ?? "http://127.0.0.1:4175").replace(/\/$/, "");
 const email = args.get("email") ?? "thu.ha.tran@e4s.local";
-const password = args.get("password") ?? "staff-pass";
+const password = args.get("password") ?? "<E4S_DEMO_STAFF_PASSWORD>";
 if (!outputRoot || !Number.isInteger(weekNumber) || weekNumber < 1) {
   throw new Error("Usage: --output-root <directory> [--week 1] [--api http://127.0.0.1:4175]");
 }

@@ -39,11 +39,11 @@ beforeAll(async () => {
     await client.query("insert into month_lessons (id, framework_id, lesson_number, lesson_date, scope_hash) values ($1, $2, 1, '2030-01-02', 'history-test')", [lesson, framework]);
     await client.query("insert into month_lesson_corrections (id, month_lesson_id, requested_by, reason, status, decision_reason, decided_at) values ($1, $2, $3, 'Published lesson correction', 'published', 'Decision retained', now())", [ids.lesson, lesson, DEMO_IDS.manager]);
     await client.query("insert into month_framework_reopen_requests (id, framework_id, framework_version, requested_by, reason, status, decision_reason, decided_at) values ($1, $2, 1, $3, 'Monthly resources correction', 'rejected', 'Decision retained', now())", [ids.framework, framework, DEMO_IDS.manager]);
-    await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [DEMO_IDS.manager, await createCredentialHash("manager-pass")]);
+    await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [DEMO_IDS.manager, await createCredentialHash("test-manager-pw")]);
   } finally {
     client.release();
   }
-  const login = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" } });
+  const login = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" } });
   expect(login.statusCode).toBe(200);
   cookie = String(login.headers["set-cookie"]).split(";")[0]!;
 }, 30_000);

@@ -20,8 +20,8 @@ const freshScreenshotPath = process.env.E4S_E2E_SCREENSHOT_PATH
 const demoManagerId = "00000000-0000-4000-8000-000000000103";
 const localRoleFixtures = [
   { label: "learner", email: "minh.anh.nguyen@e4s.local", password: "learner-pass", audience: "learner", role: "learner" },
-  { label: "operator", email: "thu.ha.tran@e4s.local", password: "staff-pass", audience: "staff", role: "operator" },
-  { label: "manager", email: "quoc.bao.le@e4s.local", password: "manager-pass", audience: "staff", role: "manager" }
+  { label: "operator", email: "thu.ha.tran@e4s.local", password: "<E4S_DEMO_STAFF_PASSWORD>", audience: "staff", role: "operator" },
+  { label: "manager", email: "quoc.bao.le@e4s.local", password: "<E4S_DEMO_MANAGER_PASSWORD>", audience: "staff", role: "manager" }
 ];
 
 let localProcess;
@@ -126,7 +126,7 @@ async function checkLocalRoleFixtures(apiUrl) {
 
   for (const [label, audience, email, password] of [
     ["learner-at-staff", "staff", "minh.anh.nguyen@e4s.local", "learner-pass"],
-    ["operator-at-learner", "learner", "thu.ha.tran@e4s.local", "staff-pass"]
+    ["operator-at-learner", "learner", "thu.ha.tran@e4s.local", "<E4S_DEMO_STAFF_PASSWORD>"]
   ]) {
     const response = await fetch(`${apiUrl}/api/auth/${audience}/login`, {
       method: "POST",
@@ -592,7 +592,7 @@ async function checkLearnerSession(webUrl) {
 async function checkOperatorRoute(webUrl) {
   await page.clickText("Nhân sự");
   await page.fill("input[name=email]", "thu.ha.tran@e4s.local");
-  await page.fill("input[name=password]", "staff-pass");
+  await page.fill("input[name=password]", "<E4S_DEMO_STAFF_PASSWORD>");
   await page.clickText("Đăng nhập nhân sự");
   await waitForPath("/op");
   await waitForSession("operator", "operator session state");
@@ -692,7 +692,7 @@ async function checkOperatorRoute(webUrl) {
 async function checkManagerGuardAndModal(webUrl) {
   await page.clickText("Nhân sự");
   await page.fill("input[name=email]", "quoc.bao.le@e4s.local");
-  await page.fill("input[name=password]", "manager-pass");
+  await page.fill("input[name=password]", "<E4S_DEMO_MANAGER_PASSWORD>");
   await page.clickText("Đăng nhập nhân sự");
   await waitForPath("/mgr");
   await waitForSession("manager", "manager session state");

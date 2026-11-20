@@ -32,7 +32,7 @@ describe("Operator learner/test operations", () => {
         "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6)",
         [
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
-          DEMO_IDS.manager, await createCredentialHash("manager-pass"),
+          DEMO_IDS.manager, await createCredentialHash("test-manager-pw"),
           freshLearnerId, await createPinHash("654321")
         ]
       );
@@ -44,7 +44,7 @@ describe("Operator learner/test operations", () => {
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
     operatorCookie = await login("/api/auth/staff/login", "thu.ha.tran@e4s.local", "operator-pass");
-    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.local", "manager-pass");
+    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.local", "test-manager-pw");
     const learnerLogin = await app.inject({ method: "POST", url: "/api/auth/learner/login", payload: { email: "fresh@e4s.local", pin: "654321" } });
     expect(learnerLogin.statusCode, learnerLogin.body).toBe(200);
     learnerCookie = String(learnerLogin.headers["set-cookie"]).split(";")[0] ?? "";

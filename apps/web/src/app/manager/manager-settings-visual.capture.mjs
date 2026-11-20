@@ -40,7 +40,7 @@ async function loginLocal(page) {
   await page.locator("#app-login-email").waitFor({ state: "visible", timeout: 10_000 });
   await page.getByRole("tab", { name: "Nhân sự" }).click();
   await page.locator("#app-login-email").fill("manager@e4s.local");
-  await page.locator("#app-login-password").fill("manager-pass");
+  await page.locator("#app-login-password").fill(process.env.E4S_DEMO_MANAGER_PASSWORD ?? "");
   await page.getByRole("button", { name: "Đăng nhập nhân sự", exact: true }).click();
   await page.waitForURL("**/mgr", { timeout: 10_000 });
   await settle(page);

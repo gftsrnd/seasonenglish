@@ -80,8 +80,8 @@ describe("Manager test date", () => {
         [randomUUID(), frameworkId, day.lessonNumber, day.date, day.lessonId]
       );
     }
-    await pool.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [DEMO_IDS.manager, await createCredentialHash("manager-pass")]);
-    const response = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" } });
+    await pool.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [DEMO_IDS.manager, await createCredentialHash("test-manager-pw")]);
+    const response = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "quoc.bao.le@e4s.local", password: "test-manager-pw" } });
     expect(response.statusCode, response.body).toBe(200);
     managerCookie = String(response.headers["set-cookie"]).split(";")[0]!;
   }, 60_000);

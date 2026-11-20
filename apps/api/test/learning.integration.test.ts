@@ -50,7 +50,7 @@ describe("learner profile, home, lesson and progress API", () => {
         [
           DEMO_IDS.learner, await createPinHash("123456"),
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
-          DEMO_IDS.manager, await createCredentialHash("manager-pass")
+          DEMO_IDS.manager, await createCredentialHash("test-manager-pw")
         ]
       );
     } finally {
@@ -64,7 +64,7 @@ describe("learner profile, home, lesson and progress API", () => {
     });
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
     operatorCookie = await loginStaff("thu.ha.tran@e4s.local", "operator-pass");
-    managerCookie = await loginStaff("quoc.bao.le@e4s.local", "manager-pass");
+    managerCookie = await loginStaff("quoc.bao.le@e4s.local", "test-manager-pw");
   }, 30_000);
 
   afterAll(async () => {

@@ -57,8 +57,8 @@ describe("persisted assessment audio playback", () => {
         `insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6)`,
         [
           DEMO_IDS.operator, await createCredentialHash("operator-pass-123"),
-          DEMO_IDS.manager, await createCredentialHash("manager-pass-123"),
-          DEMO_IDS.learner, await createPinHash("246810")
+          DEMO_IDS.manager, await createCredentialHash("test-manager-pw-123"),
+          DEMO_IDS.learner, await createPinHash("135790")
         ]
       );
       await client.query(
@@ -82,8 +82,8 @@ describe("persisted assessment audio playback", () => {
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
     operatorCookie = await login("/api/auth/staff/login", "thu.ha.tran@e4s.local", "operator-pass-123");
-    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.local", "manager-pass-123");
-    learnerCookie = await login("/api/auth/learner/login", "minh.anh.nguyen@e4s.local", "246810");
+    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.local", "test-manager-pw-123");
+    learnerCookie = await login("/api/auth/learner/login", "minh.anh.nguyen@e4s.local", "135790");
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });

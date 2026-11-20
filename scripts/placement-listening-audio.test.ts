@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { placementDefinition } from "../packages/database/src/assessment-blueprints.js";
 
-const files = ["LA", "LB", "LC"].map((part) => `apps/web/public/media/audio/placement-listening-${part}.wav`);
+const files = ["LA", "LB", "LC"].map((part) => `apps/web/media-src/audio/placement-listening-${part}.wav`);
 
 describe("placement listening audio", () => {
   it("uses natural neural voices without the old metallic normalization chain", () => {
@@ -37,7 +37,7 @@ describe("placement listening audio", () => {
   it("keeps every official transcript at a clear assessment pace", () => {
     const groups = placementDefinition.sections.find((section) => section.code === "listening")?.groups ?? [];
     groups.forEach((group) => {
-      const wav = readFileSync(`apps/web/public${group.stimulus?.audioSrc}`);
+      const wav = readFileSync(`apps/web/media-src/audio/${group.stimulus?.audioSrc?.split("/").pop()?.replace(/\.mp3$/, ".wav")}`);
       const sampleRate = wav.readUInt32LE(24);
       const bytesPerSecond = wav.readUInt32LE(28);
       const dataOffset = wav.indexOf(Buffer.from("data"));
@@ -53,7 +53,7 @@ describe("placement listening audio", () => {
 
   it("keeps Listening 2 at a natural conversational pace", () => {
     const group = placementDefinition.sections.find((section) => section.code === "listening")?.groups.find((candidate) => candidate.key === "LB");
-    const wav = readFileSync(`apps/web/public${group?.stimulus?.audioSrc}`);
+    const wav = readFileSync(`apps/web/media-src/audio/${group?.stimulus?.audioSrc?.split("/").pop()?.replace(/\.mp3$/, ".wav")}`);
     const bytesPerSecond = wav.readUInt32LE(28);
     const dataOffset = wav.indexOf(Buffer.from("data"));
     const durationMinutes = wav.readUInt32LE(dataOffset + 4) / bytesPerSecond / 60;

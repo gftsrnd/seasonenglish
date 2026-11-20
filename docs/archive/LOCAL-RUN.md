@@ -48,8 +48,8 @@ Không chạy `docker compose down -v` trong bước trên: named volumes giữ 
 
 Ba tài khoản demo chính:
 
-- `quoc.bao.le@e4s.local` / `manager-pass`
-- `thu.ha.tran@e4s.local` / `staff-pass`
+- `quoc.bao.le@e4s.local` / (xem file local)
+- `thu.ha.tran@e4s.local` / (xem file local)
 - `minh.anh.nguyen@e4s.local` / `learner-pass`
 
 Danh sách đầy đủ tài khoản scenario, PIN/mật khẩu và trạng thái kiểm thử nằm tại [`docs/local-scenario-accounts.md`](./local-scenario-accounts.md).

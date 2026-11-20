@@ -42,7 +42,7 @@ describe("level-form preview/version/delete API", () => {
         "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)",
         [
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
-          DEMO_IDS.manager, await createCredentialHash("manager-pass")
+          DEMO_IDS.manager, await createCredentialHash("test-manager-pw")
         ]
       );
     } finally { client.release(); }
@@ -53,7 +53,7 @@ describe("level-form preview/version/delete API", () => {
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
     operatorCookie = await login("thu.ha.tran@e4s.local", "operator-pass");
-    managerCookie = await login("quoc.bao.le@e4s.local", "manager-pass");
+    managerCookie = await login("quoc.bao.le@e4s.local", "test-manager-pw");
   }, 30_000);
 
   beforeEach(async () => {

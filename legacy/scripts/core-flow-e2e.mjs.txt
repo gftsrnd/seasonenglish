@@ -83,14 +83,14 @@ const roles = {
   },
   operator: {
     email: "thu.ha.tran@e4s.local",
-    password: "staff-pass",
+    password: "<E4S_DEMO_STAFF_PASSWORD>",
     expectedPath: "/op",
     loginTab: "Nhân sự",
     loginButton: "Đăng nhập nhân sự"
   },
   manager: {
     email: "quoc.bao.le@e4s.local",
-    password: "manager-pass",
+    password: "<E4S_DEMO_MANAGER_PASSWORD>",
     expectedPath: "/mgr",
     loginTab: "Nhân sự",
     loginButton: "Đăng nhập nhân sự"

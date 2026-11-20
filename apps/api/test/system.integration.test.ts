@@ -34,7 +34,7 @@ describe("organisation experience API", () => {
         [
           DEMO_IDS.learner, await createPinHash("123456"),
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
-          DEMO_IDS.manager, await createCredentialHash("manager-pass"),
+          DEMO_IDS.manager, await createCredentialHash("test-manager-pw"),
           outsideLearnerId, await createPinHash("654321")
         ]
       );
@@ -48,7 +48,7 @@ describe("organisation experience API", () => {
     };
     learnerCookie = await login("/api/auth/learner/login", "minh.anh.nguyen@e4s.local", "123456");
     operatorCookie = await login("/api/auth/staff/login", "thu.ha.tran@e4s.local", "operator-pass");
-    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.local", "manager-pass");
+    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.local", "test-manager-pw");
     outsideLearnerCookie = await login("/api/auth/learner/login", "outside-experience@e4s.local", "654321");
   }, 30_000);
 
