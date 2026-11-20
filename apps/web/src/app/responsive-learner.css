@@ -62,7 +62,7 @@
   :root:root:root .learner-root .monthly-learner-calendar-week { gap: 8px; margin-bottom: 6px; }
   :root:root:root .learner-root .monthly-learner-calendar-week { display: grid !important; grid-template-columns: 32px auto 32px !important; justify-content: center; align-items: center; }
   :root:root:root .learner-root .monthly-learner-calendar-week strong { white-space: nowrap; min-width: 0; }
-  :root:root:root .learner-root .monthly-learner-calendar--agenda .monthly-learner-calendar-link { min-height: 0 !important; padding-block: 0 !important; }
+  :root:root:root .learner-root .monthly-learner-calendar--agenda .monthly-learner-calendar-link { min-height: 24px !important; padding-block: 0 !important; } /* 24px tap target (WCAG 2.5.8) without changing the compact row */
   :root:root:root .learner-root .monthly-learner-calendar-week .btn { width: 32px; min-width: 32px !important; height: 30px; min-height: 30px !important; padding: 0 !important; }
   :root:root:root .learner-root .monthly-learner-calendar--agenda { gap: 4px !important; }
   :root:root:root .learner-root .monthly-learner-calendar--agenda .monthly-learner-calendar-day { min-height: 32px !important; padding: 4px 10px !important; align-items: center; }

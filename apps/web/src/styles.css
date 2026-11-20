@@ -5,7 +5,7 @@
   background: color-mix(in srgb, #fbb829 30%, white);
   font-synthesis: none;
   --surface: #fff; --surface-2: #f1efea; --surface-3: #f7f6f3; --surface-soft: #f7f6f3;
-  --text: #1e1e1e; --ink: #1e1e1e; --muted: #77736c; --border: #cfc9bf; --line: #eceae5; --track: #dad7d0;
+  --text: #1e1e1e; --ink: #1e1e1e; --muted: #6b675f; --border: #cfc9bf; --line: #eceae5; --track: #dad7d0;
   --primary: #fbb829; --primary-hover: #f3ad1e; --primary-dark: #f28c28; --primary-ink: #1e1e1e;
   --secondary: #f28c28; --accent: #f28c28; --primary-soft: #fff4d9; --primary-line: #f0d9a4; --primary-glow: rgba(251,184,41,.3);
   --beige: #d6ccbf; --taupe: #7a7064; --olive: #8ba33a; --olive-dark: #4b6120; --brown: #6e3b32;
@@ -123,7 +123,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .week-path .week-node { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: #f0efeb; color: #a49f96; font-weight: 800; }
 .week-path li[data-status="completed"] .week-node { background: var(--success); color: #404a27; }
 .week-path li[data-status="in_progress"] .week-node { background: var(--primary); color: #332719; }
-.week-path a > span:not(.week-node):not(.sr-only) { color: #77736c; font-size: 11px; }
+.week-path a > span:not(.week-node):not(.sr-only) { color: #6b675f; font-size: 11px; }
 .week-path small { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 10px; line-height: 1.25; }
 
 .attendance-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 4px 0 0; padding: 0; list-style: none; }

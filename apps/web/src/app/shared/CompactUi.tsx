@@ -118,7 +118,7 @@ export function InfoTip({ text, label = "Giải thích" }: { text: ReactNode; la
   // CSS puts a word joiner (U+2060) before the ⓘ (.info-tip::before), gluing it to the preceding word so it never
   // wraps onto a line of its own; it is generated content, so the title's text stays exactly the title.
   return <span className="info-tip" ref={ref}>
-    <button type="button" className="info-tip-button" aria-label={label} title={typeof text === "string" ? text : label} aria-expanded={open} aria-controls={id} onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }}><Info size={15} aria-hidden="true" /></button>
+    <button type="button" className="info-tip-button" aria-label={label} title={typeof text === "string" ? text : label} aria-expanded={open} aria-controls={open ? id : undefined} onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }}><Info size={15} aria-hidden="true" /></button>
     {open && !asModal ? createPortal(<span ref={popover} className="info-tip-popover" id={id} role="note" style={box ?? { visibility: "hidden" }}>{text}</span>, document.body) : null}
     {open && asModal ? createPortal(<div className="modal-backdrop info-tip-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
       <section ref={dialogBox} className="dialog info-tip-dialog" id={id} role="dialog" aria-modal="true" aria-label={modalTitle || label}>

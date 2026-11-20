@@ -33,7 +33,9 @@ describe("phone usability stylesheet", () => {
   });
 
   it("sizes form fields for phones; iOS focus zoom is turned off by the viewport meta instead of 16px text", () => {
-    expect(html).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1\.0, maximum-scale=1" \/>/);
+    // Zoom stays allowed for everyone (accessibility); only iOS gets maximum-scale=1, which stops its focus zoom.
+    expect(html).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1\.0" \/>/);
+    expect(html).toMatch(/iP\(hone\|ad\|od\)[\s\S]*?maximum-scale=1/);
     expect(css).toMatch(/--phone-field-h: 34px;/);
     expect(css).toMatch(/select\) \{\s*height: var\(--phone-field-h\);[\s\S]*?font-size: 14px;/);
     expect(css).toMatch(/textarea \{ min-height: 56px !important; height: auto !important;[^}]*field-sizing: content;/);

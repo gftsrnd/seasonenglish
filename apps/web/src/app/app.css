@@ -3,7 +3,7 @@
 /* ---- structural tokens: the same for every theme ---- */
 :root{
   color-scheme:light;
-  --surface:#FFFFFF; --surface-3:#F7F6F3; --text:#1E1E1E; --muted:#77736C; --ink:#1E1E1E; --border:#CFC9BF; --line:#ECEAE5; --track:#DAD7D0;
+  --surface:#FFFFFF; --surface-3:#F7F6F3; --text:#1E1E1E; --muted:#6B675F; --ink:#1E1E1E; --border:#CFC9BF; --line:#ECEAE5; --track:#DAD7D0;
   --primary-ink:#1E1E1E; --beige:#D6CCBF; --taupe:#7A7064;
   --olive:#8BA33A; --olive-dark:#4B6120; --brown:#6E3B32;
   --ok:#4B6120; --ok-soft:#DCE8C8; --ok-line:#CFDDB0; --ok-tint:#EEF3E3; --warn:#7A5200; --warn-soft:#FFF4D9; --warn-line:#F0D9A4; --danger:#6E3B32; --danger-soft:#F3E1DC; --danger-line:#E8CFC8;
@@ -84,7 +84,7 @@ pre{background:var(--surface-2);padding:.75rem;border-radius:12px;overflow:auto;
 }
 @media (max-width:960px){
   .bottomnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid #E4E2DC;z-index:20;padding:6px 8px calc(6px + env(safe-area-inset-bottom, 0px))}
-  .bottomnav a{flex:1;text-align:center;text-decoration:none;color:#8C8880;font-size:.7rem;font-weight:400;padding:6px 2px;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:3px}
+  .bottomnav a{flex:1;text-align:center;text-decoration:none;color:#6B675F;font-size:.7rem;font-weight:400;padding:6px 2px;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:3px}
   .bottomnav a .ico{font-size:1.2rem;line-height:1}
   .bottomnav a.active{color:var(--text);font-weight:600;background:transparent}
 }

@@ -2,7 +2,9 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- iOS only: stop the automatic zoom when a 14px field gets focus (Safari still allows pinch-zoom). Other browsers keep zoom. -->
+    <script>if(/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1))document.querySelector('meta[name="viewport"]').setAttribute("content","width=device-width, initial-scale=1.0, maximum-scale=1")</script>
     <meta name="description" content="E4S — English for Every Season" />
     <meta name="theme-color" content="#1A1A1A" />
     <link rel="icon" href="/favicon.ico" sizes="any" />
