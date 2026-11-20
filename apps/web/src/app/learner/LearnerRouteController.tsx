@@ -31,7 +31,7 @@ import { LearnerController, normalizeLearnerPath } from "./Router.js";
 import { CourseCompletion } from "./CourseCompletion.js";
 import { LearnerRequestHistory } from "./LearnerRequestHistory.js";
 import { ArenaRoute, arenaRouteMatch } from "./arena/ArenaRoutes.js";
-import { AppLink, Button, Modal } from "./ui.js";
+import { AppLink, Button, Empty, Modal, Notice, PageTitle } from "./ui.js";
 import { RotateCcw } from "lucide-react";
 
 type StaticRouteName = "home" | "monthly" | "onboard" | "coach" | "challenge" | "practice" | "survey" | "profile" | "games";
@@ -59,9 +59,17 @@ type LearnerLoadFailureProps = {
 export function LearnerLoadFailure({ route, message, onRetry, navigate }: LearnerLoadFailureProps) {
   const recovery = loadRecovery(route);
   const waiting = loadWaitState(route);
-  // Same card as the 404 page (owner 19/11: error pages look professional, not a bare notice).
+  // Content still being prepared is not an error: a calm page title + note, no error card.
+  if (waiting) return <div className="app-learner-page">
+    <PageTitle title={waiting.title} />
+    <Empty description={<Notice tone="warn">{waiting.message}</Notice>} action={<div className="row" style={{ flexWrap: "wrap" }}>
+      <button className="btn" type="button" onClick={onRetry}>Thử lại</button>
+      <AppLink className="btn btn-primary" href={recovery.href} navigate={navigate}>{recovery.label}</AppLink>
+    </div>} />
+  </div>;
+  // A real load failure uses the same card as the 404 page (owner 19/11: error pages look professional).
   return <div className="app-learner-page">
-    <NotFoundState icon="alert" code={null} title={waiting?.title ?? "Chưa thể mở trang"} message={waiting?.message ?? message}
+    <NotFoundState icon="alert" code={null} title="Chưa thể mở trang" message={message}
       home={<AppLink className="btn btn-primary" href={recovery.href} navigate={navigate}>{recovery.label}</AppLink>}
       actions={<button className="btn" type="button" onClick={onRetry}><RotateCcw size={16} aria-hidden="true" />Thử lại</button>} />
   </div>;
