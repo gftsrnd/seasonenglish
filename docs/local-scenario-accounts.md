@@ -1,8 +1,6 @@
-# Tài khoản tình huống E4S — local và Render
+# Tài khoản tình huống E4S — local và sandbox 4300
 
-Danh sách bên dưới dùng chung cho local và bản demo Render. Mỗi tài khoản giữ đúng trạng thái kiểm thử; tài khoản chưa được duyệt mức vẫn chờ duyệt trước khi vào tuần học và Mini game.
-
-Trên Render, `scripts/prepare-local.ts` tạo tài khoản khi API khởi động nếu có cả `E4S_SEED_SCENARIOS=true` và `E4S_ALLOW_REMOTE_SCENARIOS=true`. Hai biến này đã được khai báo trong `render.yaml`; service được cấu hình thủ công cần nhập chúng vào service API. Seeder chạy trong một transaction và chỉ reset dữ liệu của các ID scenario cố định.
+Danh sách bên dưới dùng cho môi trường local và sandbox 4300. Mỗi tài khoản giữ đúng trạng thái kiểm thử; tài khoản chưa được duyệt mức vẫn chờ duyệt trước khi vào tuần học và Mini game.
 
 Lệnh dưới đây dùng cho local; `prepare-local-scenarios.ts` vẫn từ chối production hoặc database ngoài local:
 
@@ -61,4 +59,4 @@ pnpm test scripts/local-scenario-accounts.integration.test.ts scripts/local-scen
 
 Test kiểm tra cả 16 learner, điều kiện khóa/mở, bộ từ, lượt làm thật, khả năng lên mức, đổi tuần, khôi phục dữ liệu thiếu và tính ổn định khi seed nhiều lần.
 
-Chạy lại seeder sẽ reset dữ liệu tình huống và thu hồi session cũ; trên Render điều này cũng xảy ra khi API khởi động lại với hai biến seed bật. Công cụ cleanup nhận diện để xóa cả tài khoản tình huống cũ và mới bằng UUID/email trong danh sách chính xác; một email người dùng bất kỳ không bị xóa chỉ vì dùng cùng domain. Ba tài khoản local cơ bản được giữ lại để nhận quyền sở hữu dữ liệu dùng chung. Luôn chạy dry-run và kiểm tra báo cáo trước khi dùng `--apply`.
+Chạy lại seeder sẽ reset dữ liệu tình huống và thu hồi session cũ. Công cụ cleanup nhận diện để xóa cả tài khoản tình huống cũ và mới bằng UUID/email trong danh sách chính xác; một email người dùng bất kỳ không bị xóa chỉ vì dùng cùng domain. Ba tài khoản local cơ bản được giữ lại để nhận quyền sở hữu dữ liệu dùng chung. Luôn chạy dry-run và kiểm tra báo cáo trước khi dùng `--apply`.

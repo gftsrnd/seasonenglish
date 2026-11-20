@@ -278,12 +278,6 @@ describe("Manager AI-off mode keeps the learning flow usable", () => {
     expect(generation.statusCode, generation.body).toBe(503);
     expect(generation.json()).toEqual({ code: "AI_UNAVAILABLE" });
 
-    const aiAuthoring = await app.inject({
-      method: "POST", url: "/api/v1/content/lesson-sets/1/A2/generate", headers: { cookie: operatorCookie }, payload: {}
-    });
-    expect(aiAuthoring.statusCode, aiAuthoring.body).toBe(503);
-    expect(aiAuthoring.json()).toMatchObject({ code: "AI_LESSON_GENERATION_FAILED" });
-
     const draft = await app.inject({
       method: "PUT", url: "/api/v1/content/lesson-sets/1/A2/draft", headers: { cookie: operatorCookie },
       payload: { lessons: [1, 2, 3, 4, 5].map(manualLesson) }

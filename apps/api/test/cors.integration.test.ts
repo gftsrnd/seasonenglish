@@ -6,7 +6,7 @@ describe("browser CORS contract", () => {
   const pool = new Pool();
   const app = buildApi({
     pool,
-    webOrigin: "https://e4s-web.onrender.com"
+    webOrigin: "https://web.example.com"
   });
 
   beforeAll(async () => { await app.ready(); });
@@ -17,14 +17,14 @@ describe("browser CORS contract", () => {
       method: "OPTIONS",
       url: "/api/v1/learner/profile",
       headers: {
-        origin: "https://e4s-web.onrender.com",
+        origin: "https://web.example.com",
         "access-control-request-method": "PUT",
         "access-control-request-headers": "content-type"
       }
     });
 
     expect(response.statusCode).toBe(204);
-    expect(response.headers["access-control-allow-origin"]).toBe("https://e4s-web.onrender.com");
+    expect(response.headers["access-control-allow-origin"]).toBe("https://web.example.com");
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
     expect(String(response.headers["access-control-allow-methods"]).split(/,\s*/)).toContain("PUT");
   });

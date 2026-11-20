@@ -88,7 +88,8 @@ export function RoleRoutes({ session, onSessionRevoked, ...learnerProps }: { ses
   if (pathname === "/op/prompts") return <AccessFallback home="/op" message="Tài khoản này không có quyền mở cấu hình Prompt & rubric." />;
   if (pathname === "/mgr/ops/prompts" || pathname === "/settings/prompts") return <AccessFallback home={role === "operator" ? "/op" : "/mgr/ops"} message="Tài khoản này không có quyền mở cấu hình Prompt & rubric." />;
   if (pathname === "/" || pathname === "/home") return <Navigate replace to={role === "operator" ? "/op" : "/mgr"} />;
-  if (role === "operator" && isRouteOrChild(pathname, "/op/lessons")) return <Navigate replace to="/op/months" />;
+  // Weekly topic frame and weekly lesson sets moved to legacy/ (20/11): old links land on the monthly lessons.
+  if (role === "operator" && (isRouteOrChild(pathname, "/op/lessons") || isRouteOrChild(pathname, "/op/weeks"))) return <Navigate replace to="/op/months" />;
   if (role === "operator" && (managerArea || rewardPreviewRoute || (settingsArea && pathname !== "/settings"))) return <AccessFallback home="/op" message="Tài khoản này không có quyền mở khu vực quản lý." />;
   const managerContentRoute = role === "manager" && managerContentRoutes.some((route) => pathname === route || (route === "/mgr/ops/months" && /^\/mgr\/ops\/months\/lesson\/[^/]+\/\d+$/u.test(pathname)));
   if (role === "manager" && !managerContentRoute && (operatorRoute || pathname.startsWith("/mgr/ops/"))) return <Navigate replace to="/mgr/ops" />;

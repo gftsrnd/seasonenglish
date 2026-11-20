@@ -6,12 +6,9 @@ import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   OperatorDashboard,
-  OperatorLessonSet,
-  OperatorLessons,
   OperatorLevelForms,
   OperatorPrompts,
-  OperatorReview,
-  OperatorWeeks
+  OperatorReview
 } from "./index.js";
 import { adaptAssessmentOverview, adaptLevelForms } from "./adapters.js";
 import { OperatorLevelFormDetail } from "./LevelForms.js";
@@ -276,32 +273,7 @@ describe("Operator app rebuild", () => {
     expect(screen.getByText("Chờ hoàn thiện 7 mục trước khi phát hành.")).toBeInTheDocument();
   });
 
-  it("preserves week suggestions, five-day plans and confirm/reopen behavior", async () => {
-    const user = userEvent.setup();
-    const onConfirmSuggestion = vi.fn();
-    const onReopenSuggestion = vi.fn();
-    render(<OperatorWeeks view={{ pilotStartDate: "05/10/2026", pilotWeeks: 1, aiConnected: true, status: "", weeks: [{
-      number: 1, dateRange: "05/10/2026 – 11/10/2026", current: true, topic: "", description: "", objectives: "", keyVocabHint: "",
-      suggestion: { state: "options", levels: ["A2"], options: [{ topic: "Meetings", description: "Lịch họp", keyVocabHint: "schedule", objectives: "Xác nhận lịch", plan: { A2: ["Mon", "Tue", "Wed", "Thu", "Fri"] } }] }
-    }] } as any} actions={{ onSuggestAll: vi.fn(), onSuggestWeek: vi.fn(), onCloseSuggestion: vi.fn(), onConfirmSuggestion, onReopenSuggestion, onChangeWeek: vi.fn(), onSave: vi.fn(), onOpenLessons: vi.fn() }} />);
-    expect(screen.getByText(/kế hoạch 5 ngày T2–T6 cho từng mức/)).toBeInTheDocument();
-    ["T2", "T3", "T4", "T5", "T6"].forEach(day => expect(screen.getByRole("columnheader", { name: day })).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Xác nhận phương án này" }).closest(".operator-card-header")).not.toBeNull();
-    await user.click(screen.getByRole("button", { name: "Xác nhận phương án này" }));
-    expect(onConfirmSuggestion).toHaveBeenCalledWith(1, 0);
 
-    cleanup();
-    render(<OperatorWeeks view={{ pilotStartDate: "05/10/2026", pilotWeeks: 1, aiConnected: true, status: "", weeks: [{ number: 1, dateRange: "05/10/2026 – 11/10/2026", current: true, topic: "Meetings", description: "", objectives: "", keyVocabHint: "", suggestion: { state: "confirmed", topic: "Meetings" } }] } as any} actions={{ onSuggestAll: vi.fn(), onSuggestWeek: vi.fn(), onCloseSuggestion: vi.fn(), onConfirmSuggestion: vi.fn(), onReopenSuggestion, onChangeWeek: vi.fn(), onSave: vi.fn(), onOpenLessons: vi.fn() }} />);
-    expect(screen.queryByText(/Đã xác nhận và lưu chủ đề/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Xem lại các phương án" })).not.toBeInTheDocument();
-  });
-
-  it("keeps the topic guidance explicit and makes saving visibly primary", () => {
-    render(<OperatorWeeks view={{ pilotStartDate: "12/10/2026", pilotWeeks: 2, aiConnected: true, status: "", weeks: [{ number: 1, dateRange: "12/10/2026 – 18/10/2026", current: true, topic: "Meetings", description: "", objectives: "", keyVocabHint: "" }] } as any} actions={{ onSuggestAll: vi.fn(), onSuggestWeek: vi.fn(), onCloseSuggestion: vi.fn(), onConfirmSuggestion: vi.fn(), onReopenSuggestion: vi.fn(), onChangeWeek: vi.fn(), onSave: vi.fn(), onOpenLessons: vi.fn() }} />);
-    expect(screen.getByRole("note")).toHaveTextContent(/3 phương án/);
-    expect(screen.getByRole("note")).toHaveTextContent(/kế hoạch 5 ngày T2–T6 cho từng mức/);
-    expect(screen.getByRole("button", { name: "Lưu khung chủ đề" })).toHaveClass("btn-primary");
-  });
 
   it("does not render a generic unavailable-actions banner on the level review screen", () => {
     render(<OperatorDashboard unavailable={{ viewTest: "Không có endpoint" }} view={{
@@ -311,110 +283,11 @@ describe("Operator app rebuild", () => {
     expect(screen.queryByText("Một số thao tác hiện chưa khả dụng.")).not.toBeInTheDocument();
   });
 
-  it("renders matrix states and the complete lesson-set review workflow", async () => {
-    const user = userEvent.setup();
-    const onOpenSet = vi.fn();
-    render(<OperatorLessons view={{ aiConnected: false, extraLevels: ["B1"], levels: [{ cefr: "A2", learnerCount: 2 }], weeks: [{ number: 1, topic: "Meetings", cells: [{ cefr: "A2", status: "draft", generatedAt: "14/10/2026", incomplete: true, lessons: 4, days: [{ day: "T2", title: "Opening" }, { day: "T3", title: "—" }, { day: "T4", title: "—" }, { day: "T5", title: "—" }, { day: "T6", title: "—" }] }] }] } as any} actions={{ onOpenSettings: vi.fn(), onAddLevel: vi.fn(), onRemoveLevel: vi.fn(), onGenerate: vi.fn(), onCreateManual: vi.fn(), onOpenSet }} />);
-    expect(screen.getByText(/AI hệ thống tạm chưa sẵn sàng/)).toBeInTheDocument();
-    expect(screen.queryByText(/API key/i)).not.toBeInTheDocument();
-    expect(screen.getByText("chưa đủ 4 kỹ năng")).toBeInTheDocument();
-    expect(screen.getByRole("table")).toHaveClass("operator-lesson-matrix");
-    expect(screen.getByRole("table").parentElement).toHaveClass("table-wrap");
-    expect(screen.getByText("chưa đủ 4 kỹ năng").closest("td")).toHaveAttribute("data-label", "A2 · 2 học viên");
-    expect(screen.queryByText("Có bài cuối tuần")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Xem bộ bài + bài cuối tuần" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Xem" }));
-    expect(onOpenSet).toHaveBeenCalledWith(1, "A2");
 
-    cleanup();
-    const onApprove = vi.fn();
-    render(<OperatorLessonSet view={{ week: 1, cefr: "A2", status: "draft", topic: "Meetings", explanationLanguage: "tiếng Việt", aiConnected: true, warnings: { incomplete: 1, level: ["T2: vượt mức"], phrases: 1, details: 1 }, lessons: [{ id: "l1", day: 1, dayLabel: "T2", title: "Opening a meeting", durationMin: 10, practiceKind: "điền từ", practiceAnswer: "start", manual: true, complete: false, intro: "Mở đầu cuộc họp", content: <p>Nội dung thật từ API</p> }] } as any} actions={{ onBack: vi.fn(), onApprove, onUnapprove: vi.fn(), onRegenerate: vi.fn(), onDeleteSet: vi.fn(), onFillPhrases: vi.fn(), onEnrich: vi.fn(), onEditLesson: vi.fn(), onDeleteLesson: vi.fn(), onComposeDay: vi.fn() }} />);
-    expect(screen.getByText(/Checklist duyệt/)).toBeInTheDocument();
-    expect(screen.getByText(/thiếu thành phần bắt buộc/)).toBeInTheDocument();
-    expect(screen.getAllByTestId("lesson-warning-content")).toHaveLength(1);
-    expect(screen.getByText(/chưa đủ 3 cụm từ/)).toBeInTheDocument();
-    const manualCompose = screen.getByTestId("lesson-section-manual-compose");
-    expect(within(manualCompose).getByRole("heading", { name: /Soạn bài trực tiếp/ })).toBeInTheDocument();
-    const weeklyPractice = screen.getByTestId("lesson-section-weekly-practice");
-    expect(screen.queryByRole("heading", { name: "Bài thực hành cuối tuần" })).not.toBeInTheDocument();
-    const lessonHeading = screen.getByRole("heading", { name: /Opening a meeting/ });
-    expect(lessonHeading.compareDocumentPosition(manualCompose) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(manualCompose.compareDocumentPosition(weeklyPractice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(weeklyPractice).toHaveClass("operator-weekly-practice-section");
-    expect(screen.getByRole("button", { name: "Duyệt bộ bài" }).parentElement).toHaveClass("operator-page-title-actions");
-    expect(screen.getByRole("heading", { name: /Opening a meeting/ }).closest(".operator-card-header")).not.toBeNull();
-    await user.click(screen.getByRole("button", { name: "Duyệt bộ bài" }));
-    expect(onApprove).toHaveBeenCalledTimes(1);
-  });
 
-  it("shows AI enrichment progress", () => {
-    render(<OperatorLessonSet view={{
-      week: 1, cefr: "A2", status: "draft", topic: "Meetings", explanationLanguage: "tiếng Việt",
-      aiConnected: true, mutationState: "loading", activeMutation: "enrich", mutationMessage: "AI đang bổ sung chi tiết cho 1 bài…",
-      warnings: { incomplete: 0, level: [], phrases: 0, details: 1, detailIssues: [{ lessonId: "l1", dayLabel: "T2", title: "Opening a meeting", missing: ["bài tập Từ loại", "Nghe chưa đủ 4 lựa chọn"] }] },
-      lessons: [{ id: "l1", day: 1, dayLabel: "T2", title: "Opening a meeting", durationMin: 10, practiceKind: "điền từ", practiceAnswer: "start", complete: true, content: <p>Nội dung</p> }]
-    } as any} actions={{ onBack: vi.fn(), onApprove: vi.fn(), onUnapprove: vi.fn(), onRegenerate: vi.fn(), onDeleteSet: vi.fn(), onFillPhrases: vi.fn(), onEnrich: vi.fn(), onEditLesson: vi.fn(), onDeleteLesson: vi.fn(), onComposeDay: vi.fn() }} />);
 
-    expect(screen.getByRole("button", { name: "Đang bổ sung…" })).toBeDisabled();
-    expect(screen.getByText("AI đang bổ sung chi tiết cho 1 bài…")).toBeInTheDocument();
-    expect(screen.getByText(/T2 · Opening a meeting/)).toBeInTheDocument();
-    expect(screen.getByText(/bài tập Từ loại · Nghe chưa đủ 4 lựa chọn/)).toBeInTheDocument();
-  });
 
-  it("labels free-response lessons clearly without exposing the answer in the card header", () => {
-    render(<OperatorLessonSet view={{
-      week: 1, cefr: "A2", status: "draft", topic: "Meetings", explanationLanguage: "tiếng Việt", aiConnected: true,
-      warnings: { incomplete: 0, level: [], phrases: 0, details: 0 },
-      lessons: [{ id: "l1", day: 2, dayLabel: "T3", title: "Budget concern", durationMin: 15, practiceKind: "tự viết", practiceAnswer: "I understand your concern about the budget.", complete: true, content: <p>Đáp án mẫu: I understand your concern about the budget.</p> }]
-    } as any} actions={{ onBack: vi.fn(), onApprove: vi.fn(), onUnapprove: vi.fn(), onRegenerate: vi.fn(), onDeleteSet: vi.fn(), onFillPhrases: vi.fn(), onEnrich: vi.fn(), onEditLesson: vi.fn(), onDeleteLesson: vi.fn(), onComposeDay: vi.fn() }} />);
 
-    const card = screen.getByTestId("lesson-section-T3");
-    expect(within(card).getByText("Câu trả lời tự do")).toBeInTheDocument();
-    expect(within(card).queryByText(/tự viết\s*·\s*đáp án:/i)).not.toBeInTheDocument();
-  });
-
-  it("routes a missing-detail row to the correct lesson editor", async () => {
-    const user = userEvent.setup();
-    const onEditLesson = vi.fn();
-    render(<OperatorLessonSet view={{
-      week: 1, cefr: "A2", status: "draft", topic: "Meetings", explanationLanguage: "tiếng Việt", aiConnected: true,
-      warnings: { incomplete: 0, level: [], phrases: 0, details: 1, detailIssues: [{ lessonId: "l1", dayLabel: "T2", title: "Opening a meeting", missing: ["bài tập Từ loại"] }] },
-      lessons: [{ id: "l1", day: 1, dayLabel: "T2", title: "Opening a meeting", durationMin: 10, practiceKind: "điền từ", practiceAnswer: "start", complete: true, content: <p>Nội dung</p> }]
-    } as any} actions={{ onBack: vi.fn(), onApprove: vi.fn(), onUnapprove: vi.fn(), onRegenerate: vi.fn(), onDeleteSet: vi.fn(), onFillPhrases: vi.fn(), onEnrich: vi.fn(), onEditLesson, onDeleteLesson: vi.fn(), onComposeDay: vi.fn() }} />);
-
-    const issueList = document.querySelector(".operator-lesson-detail-issues");
-    expect(issueList).not.toBeNull();
-    await user.click(within(issueList as HTMLElement).getByRole("button", { name: "Sửa T2" }));
-    expect(onEditLesson).toHaveBeenCalledWith("l1");
-  });
-
-  it("keeps only the optional C1 action in the page-title action group", () => {
-    render(<OperatorLessons view={{ aiConnected: true, extraLevels: ["C1"], levels: [], weeks: [] } as any} actions={{ onOpenSettings: vi.fn(), onAddLevel: vi.fn(), onRemoveLevel: vi.fn(), onGenerate: vi.fn(), onCreateManual: vi.fn(), onOpenSet: vi.fn() }} />);
-
-    expect(screen.getByRole("button", { name: "Thêm cột C1" }).parentElement).toHaveClass("operator-page-title-actions");
-    expect(screen.queryByRole("button", { name: /Xóa cột/ })).not.toBeInTheDocument();
-
-    cleanup();
-    render(<OperatorLessons view={{ aiConnected: true, extraLevels: [], levels: [{ cefr: "A1", learnerCount: 0 }, { cefr: "A2", learnerCount: 0 }, { cefr: "B1", learnerCount: 0 }, { cefr: "B2", learnerCount: 0 }, { cefr: "C1", learnerCount: 0 }], weeks: [] } as any} actions={{ onOpenSettings: vi.fn(), onAddLevel: vi.fn(), onRemoveLevel: vi.fn(), onGenerate: vi.fn(), onCreateManual: vi.fn(), onOpenSet: vi.fn() }} />);
-    expect(screen.getByRole("button", { name: "Xóa cột C1" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Xóa cột A1/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Xóa cột A2/ })).not.toBeInTheDocument();
-  });
-
-  it("does not ask operators to enter or manage the system AI key", () => {
-    const onOpenSettings = vi.fn();
-    render(<OperatorLessons view={{ aiConnected: false, extraLevels: [], levels: [], weeks: [] } as any} actions={{ onOpenSettings, onAddLevel: vi.fn(), onRemoveLevel: vi.fn(), onGenerate: vi.fn(), onCreateManual: vi.fn(), onOpenSet: vi.fn() }} />);
-    expect(screen.getByText("AI hệ thống tạm chưa sẵn sàng.")).toBeInTheDocument();
-    expect(screen.queryByText(/API key/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Cài đặt/i })).not.toBeInTheDocument();
-
-    cleanup();
-    render(<OperatorLevelForms view={{ aiConnected: false, generatingTarget: null, targets: [] } as any} actions={{ onBack: vi.fn(), onOpenSettings, onGenerate: vi.fn(), onView: vi.fn(), onDelete: vi.fn() }} />);
-    expect(screen.getByRole("note")).toHaveTextContent("AI hệ thống tạm chưa sẵn sàng");
-    expect(screen.queryByText(/API key/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Cài đặt/i })).not.toBeInTheDocument();
-    expect(onOpenSettings).not.toHaveBeenCalled();
-  });
 
   it("shows a server-owned AI fallback on level-form generation", () => {
     const onOpenSettings = vi.fn();
@@ -664,37 +537,6 @@ describe("Operator app rebuild", () => {
     expect(generate).toBeEnabled();
   });
 
-  it("renders weekly practice after manual compose without a duplicate standalone heading", () => {
-    const onSaveWeeklyPractice = vi.fn();
-    render(<OperatorLessonSet view={{
-      week: 1, cefr: "A2", version: 3, status: "draft", topic: "Asking for directions",
-      explanationLanguage: "tiếng Việt", aiConnected: true,
-      warnings: { incomplete: 0, level: [], phrases: 0, details: 0 },
-      lessons: [1, 2, 3, 4, 5].map(day => ({
-        id: `l${day}`, day, dayLabel: `T${day + 1}`, title: `Bài ${day}`, durationMin: 10,
-        practiceKind: "điền từ", practiceAnswer: "answer", complete: true, content: <p>Nội dung</p>
-      })),
-      weeklyPractice: {
-        task: "Write three sentences.", guidance: "Use weekly words.",
-        inputModeLabel: "Nhập văn bản hoặc nói để chuyển thành chữ", requiredVocabulary: ["left", "right"]
-      }
-    } as any} actions={{
-      onBack: vi.fn(), onApprove: vi.fn(), onUnapprove: vi.fn(), onRegenerate: vi.fn(), onDeleteSet: vi.fn(),
-      onFillPhrases: vi.fn(), onEnrich: vi.fn(), onEditLesson: vi.fn(), onDeleteLesson: vi.fn(), onComposeDay: vi.fn(),
-      onSaveWeeklyPractice
-    }} />);
-
-    const weekdaySections = screen.getAllByTestId(/^lesson-section-T/);
-    const manualCompose = screen.getByTestId("lesson-section-manual-compose");
-    const weeklyPractice = screen.getByTestId("lesson-section-weekly-practice");
-    expect(weekdaySections).toHaveLength(5);
-    expect(weekdaySections[4]!.compareDocumentPosition(manualCompose) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(manualCompose.compareDocumentPosition(weeklyPractice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(weeklyPractice).toHaveClass("operator-weekly-practice-section");
-    expect(screen.queryByRole("heading", { name: "Bài thực hành cuối tuần" })).not.toBeInTheDocument();
-    expect(within(weeklyPractice).getByRole("button", { name: "Sinh bài cuối tuần · Tuần 1 · A2" })).toBeInTheDocument();
-    expect(within(weeklyPractice).getByRole("button", { name: "Lưu bản nháp · Tuần 1 · A2" })).toBeInTheDocument();
-  });
 
   it("keeps a weekly-practice edit visible and prevents duplicate saves when saving fails", async () => {
     const user = userEvent.setup();
@@ -856,48 +698,7 @@ describe("Operator app rebuild", () => {
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ sections: [expect.objectContaining({ groups: [expect.objectContaining({ stimulus: expect.objectContaining({ audioSrc: "/api/v1/files/content-media/read?artifactKey=level-a2.mp3" }) })] })] }));
   });
 
-  it("keeps only workflow-specific back links while preserving callback navigation", async () => {
-    const user = userEvent.setup();
-    const onBack = vi.fn();
-    render(<OperatorPrompts view={{ prompts: [["base", "Quy tắc chung", "base"]] } as any} actions={{ onBack, onReset: vi.fn(), onSave: vi.fn(), onPublish: vi.fn() }} />);
-    const promptBack = screen.getByRole("link", { name: "← Cài đặt" });
-    expect(promptBack).toHaveAttribute("href", "/settings");
-    await user.click(promptBack);
-    expect(onBack).toHaveBeenCalledTimes(1);
 
-    cleanup();
-    render(<OperatorLevelForms view={{ aiConnected: true, generatingTarget: null, targets: [] } as any} actions={{ onBack, onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onDelete: vi.fn() }} />);
-    expect(screen.queryByRole("link", { name: "← Duyệt trình độ" })).not.toBeInTheDocument();
-    expect(onBack).toHaveBeenCalledTimes(1);
 
-    cleanup();
-    render(<OperatorLessonSet view={{ week: 1, cefr: "A2", status: "draft", topic: "Meetings", explanationLanguage: "tiếng Việt", aiConnected: true, warnings: { incomplete: 0, level: [], phrases: 0, details: 0 }, lessons: [] } as any} actions={{ onBack, onApprove: vi.fn(), onUnapprove: vi.fn(), onRegenerate: vi.fn(), onDeleteSet: vi.fn(), onFillPhrases: vi.fn(), onEnrich: vi.fn(), onEditLesson: vi.fn(), onDeleteLesson: vi.fn(), onComposeDay: vi.fn() }} />);
-    const lessonSetBack = screen.getByRole("link", { name: "← Ma trận bài học" });
-    expect(lessonSetBack).toHaveAttribute("href", "/op/lessons");
-    await user.click(lessonSetBack);
-    expect(onBack).toHaveBeenCalledTimes(2);
-  });
 
-  it("keeps app controls visible and disabled across read-only operator screens", () => {
-    render(<OperatorWeeks readOnly view={{ pilotStartDate: "05/10", pilotWeeks: 1, aiConnected: true, status: "", weeks: [{ number: 1, dateRange: "05/10 – 11/10", current: true, topic: "Meetings", description: "", objectives: "", keyVocabHint: "" }] } as any} actions={{ onSuggestAll: vi.fn(), onSuggestWeek: vi.fn(), onCloseSuggestion: vi.fn(), onConfirmSuggestion: vi.fn(), onReopenSuggestion: vi.fn(), onChangeWeek: vi.fn(), onSave: vi.fn(), onOpenLessons: vi.fn() }} />);
-    expect(screen.getByRole("button", { name: "Gợi ý các tuần còn trống" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Gợi ý" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Lưu khung chủ đề" })).toBeDisabled();
-    cleanup();
-
-    render(<OperatorPrompts readOnly view={{ prompts: [["base", "Quy tắc chung", "base"]] } as any} actions={{ onBack: vi.fn(), onReset: vi.fn(), onSave: vi.fn(), onPublish: vi.fn() }} />);
-    expect(screen.getByRole("button", { name: "Về mặc định" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeDisabled();
-  });
-
-  it("keeps week suggestion decisions visible but disabled in read-only mode", () => {
-    render(<OperatorWeeks readOnly view={{ pilotWeeks: 2, pilotStartDate: "05/10", aiConnected: true, weeks: [{ number: 1, dateRange: "05/10 – 11/10", current: true, topic: "Meetings", description: "", objectives: "", keyVocabHint: "", suggestion: { state: "options", levels: ["A2"], options: [{ topic: "Meetings", description: "Daily meetings", objectives: "", keyVocabHint: "agenda", plan: { A2: ["T2", "T3", "T4", "T5", "T6"] } }] } }] } as any} actions={{ onChangeWeek: vi.fn(), onSuggestAll: vi.fn(), onSuggestWeek: vi.fn(), onCloseSuggestion: vi.fn(), onConfirmSuggestion: vi.fn(), onReopenSuggestion: vi.fn(), onSave: vi.fn(), onOpenLessons: vi.fn() }} />);
-    expect(screen.getByRole("button", { name: "Bỏ gợi ý" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Xác nhận phương án này" })).toBeDisabled();
-  });
-
-  it("marks operator card headers for wrap-safe title and control spacing", () => {
-    render(<OperatorWeeks view={{ pilotStartDate: "05/10", pilotWeeks: 1, aiConnected: true, status: "", weeks: [{ number: 1, dateRange: "05/10 – 11/10", current: true, topic: "Meetings", description: "", objectives: "", keyVocabHint: "" }] } as any} actions={{ onSuggestAll: vi.fn(), onSuggestWeek: vi.fn(), onCloseSuggestion: vi.fn(), onConfirmSuggestion: vi.fn(), onReopenSuggestion: vi.fn(), onChangeWeek: vi.fn(), onSave: vi.fn(), onOpenLessons: vi.fn() }} />);
-    expect(screen.getByRole("heading", { name: /Tuần 1/ }).closest(".operator-card-header")).not.toBeNull();
-  });
 });

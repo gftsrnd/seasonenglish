@@ -102,19 +102,4 @@ describe("granular lesson-set authoring", () => {
     expect(response.statusCode, response.body).toBe(200);
   });
 
-  it("keeps AI authoring actions available to staff and honest when no runner is configured", async () => {
-    const operator = await app.inject({
-      method: "POST", url: "/api/v1/content/lesson-sets/2/B1/draft/enrich",
-      headers: { cookie: operatorCookie }, payload: { expectedVersion: 0 }
-    });
-    expect(operator.statusCode).toBe(503);
-    expect(operator.json()).toMatchObject({ code: "AI_UNAVAILABLE" });
-
-    const manager = await app.inject({
-      method: "POST", url: "/api/v1/content/lesson-sets/2/B1/draft/fill-phrases",
-      headers: { cookie: managerCookie }, payload: { expectedVersion: 0 }
-    });
-    expect(manager.statusCode).toBe(503);
-    expect(manager.json()).toMatchObject({ code: "AI_UNAVAILABLE" });
-  });
 });

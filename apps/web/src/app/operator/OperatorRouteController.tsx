@@ -32,13 +32,11 @@ import { operatorApiClient as apiClient } from "../../api/operator.js";
 import { OperatorDashboard, OperatorProfileRows } from "./Dashboard.js";
 import { OperatorLevelFormDetail, OperatorLevelForms } from "./LevelForms.js";
 import { PlacementRetakeCard } from "./PlacementRetakeCard.js";
-import { OperatorLessonSet, OperatorLessons } from "./Lessons.js";
 import { useMonthlyGenerationRevision } from "./monthly-generation-progress.js";
 import { emptyLesson, LessonFormEditor } from "./LessonFormEditor.js";
 import { OperatorPrompts } from "./Prompts.js";
 import { OperatorReview, OperatorReviewAssessmentDetail, promptExerciseCorrection } from "./Review.js";
 import type { ManualScoreInput } from "./AssessmentManualScore.js";
-import { OperatorWeeks } from "./Weeks.js";
 import { MonthlyLessonPreview, OperatorMonths } from "./Months.js";
 import { OperatorRequests } from "./OperatorRequests.js";
 import { MonthlyFinalReview } from "./MonthlyFinalReview.js";
@@ -49,7 +47,7 @@ import { useToast } from "../shared/design-system.js";
 import { errorCode, errorMessage, GENERIC_ERROR_MESSAGE } from "../shared/error-message.js";
 import type { AudioEvidence } from "../shared/media/audio-evidence.js";
 import { formatScore, formatScoreOutOf } from "../shared/format-score.js";
-import { adaptAssessmentOverview, adaptLevelForms, adaptLessonMatrix, adaptLessonSet, adaptPrompts, adaptReview, adaptWeeks } from "./adapters.js";
+import { adaptAssessmentOverview, adaptLevelForms, adaptPrompts, adaptReview } from "./adapters.js";
 import type { Cefr, LessonSetActionKey, LevelFormTarget, OperatorReviewActions, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
 import { describeBatchLevelResults, generateLessonWeeksBatchSettled, lessonGenerationJobsSnapshot, startLessonGenerationJob, subscribeLessonGenerationJobs } from "./lesson-generation.js";
 import { Eye as EyeIcon_, Pencil as PencilIcon_, X as XIcon_ } from "lucide-react";
@@ -177,16 +175,12 @@ function OperatorRouteControllerContent({ session, client, paths }: { session: S
     return <Navigate to={`${paths.review}?${query}`} replace />;
   }
   const props = { client, readOnly };
-  const detail = location.pathname.match(new RegExp(`^${escapeRegExp(paths.lessons)}/(\\d+)/(A1|A2|B1|B2|C1)$`));
   const monthlyLesson = location.pathname.match(new RegExp(`^${escapeRegExp(paths.months)}/lesson/([^/]+)/(\\d+)$`));
-  const content = detail ? <LessonSetRoute {...props} week={Number(detail[1])} cefr={detail[2] as Cefr} />
-    : location.pathname === paths.root ? <DashboardRoute {...props} />
-      : location.pathname === paths.weeks ? <WeeksRoute {...props} />
+  const content = location.pathname === paths.root ? <DashboardRoute {...props} />
       : location.pathname === paths.tests ? <TestsRoute key={paths.tests} {...props} retakeGeneration={retakeGeneration} initialTab="placement" />
         : location.pathname === paths.levelForms ? <TestsRoute key={paths.levelForms} {...props} retakeGeneration={retakeGeneration} initialTab="promotion" />
         : monthlyLesson ? <MonthsRoute {...props} preview={{ frameworkId: monthlyLesson[1]!, dayNumber: Number(monthlyLesson[2]) }} />
         : location.pathname === paths.months ? <MonthsRoute {...props} />
-          : location.pathname === paths.lessons ? <LessonsRoute {...props} />
             : location.pathname === paths.review ? (readOnly ? <ReviewRoute {...props} canEditWeeklyPractice /> : <OperatorReviewWorkspace client={client} />)
               : location.pathname === paths.prompts ? <PromptsRoute client={client} readOnly={false} />
                 : <NotFoundState message="Đường dẫn vận hành này không tồn tại hoặc đã đổi. Hãy quay về trang chủ Vận hành." home={<Link className="btn btn-primary" to={paths.root}><StatusHomeIcon />Về trang chủ</Link>} />;
@@ -1331,288 +1325,6 @@ function LevelFormsRoute({ client, readOnly, embedded = false, slots, retakeGene
       }}
     /> : null}
   </>;
-}
-
-function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
-  const navigate = useNavigate();
-  const paths = useOperatorRoutePaths();
-  const [data, setData] = useState<ContentWeekFrameView>();
-  const [suggestions, setSuggestions] = useState<Record<number, WeekSuggestion>>({});
-  const [generatingWeek, setGeneratingWeek] = useState<number | null>(null);
-  const [generationStatus, setGenerationStatus] = useState("");
-  const [generationLevels, setGenerationLevels] = useState<Cefr[]>(["A1", "A2", "B1", "B2", "C1"]);
-  const [occupiedWeeks, setOccupiedWeeks] = useState<number[]>([]);
-  const [generationDialog, setGenerationDialog] = useState<{ weeks: number[]; selectedWeeks: number[]; replacementWeeks: number[]; levelCount: number }>();
-  const [preferredGenerationWeek, setPreferredGenerationWeek] = useState<number>();
-  const [error, setError] = useState<string>();
-  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
-  const capabilities = useCapabilities(client);
-  const { notify, notifyError } = useOperatorNotify();
-  useEffect(() => { void client.getContentWeeks().then(setData).catch(reason => setError(message(reason))); }, [client]);
-  useEffect(() => {
-    if (typeof client.getContentLessonMatrix !== "function") return;
-    void client.getContentLessonMatrix().then(matrix => {
-      const levels = matrix.levels.map(level => level.cefr as Cefr);
-      if (levels.length) setGenerationLevels(levels);
-      setOccupiedWeeks(matrix.weeks.filter(week => week.cells.some(cell => cell.status !== "missing" || cell.lessons.length > 0)).map(week => week.weekNumber));
-    }).catch(() => undefined);
-  }, [client]);
-  if (error) return <Status tone="error">Không tải được khung chủ đề: {error}</Status>;
-  if (!data) return <Status>Đang tải khung chủ đề…</Status>;
-  const inputs = (source = data) => source.weeks
-    .filter(week => week.topic.trim())
-    .map(week => ({ weekNumber: week.weekNumber, topic: week.topic, description: week.description, objectives: week.objectives, keyVocabHint: week.keyVocabHint, ...(week.plan ? { plan: week.plan } : {}) }));
-  const suggest = (numbers: number[]) => { if (readOnly) return; numbers.forEach(number => setSuggestions(current => ({ ...current, [number]: { state: "loading" } }))); void client.suggestContentWeeks(numbers).then(result => { const next: Record<number, WeekSuggestion> = {}; result.weeks.forEach(week => { next[week.weekNumber] = { state: "options", levels: week.levels ?? [], options: week.options.map(option => ({ ...option, plan: option.plan ?? {} })) }; }); setSuggestions(current => ({ ...current, ...next })); notify("Đã tải 3 phương án chủ đề kèm kế hoạch CEFR × 5 ngày."); }).catch(reason => { setSuggestions(current => { const next = { ...current }; numbers.forEach(number => delete next[number]); return next; }); notifyError(reason); }); };
-  const save = (source = data, options: { promptForGeneration?: boolean } = {}) => {
-    if (readOnly) return Promise.resolve(undefined);
-    const payload = inputs(source);
-    const request = saveQueue.current.catch(() => undefined).then(() => client.saveContentWeeks(payload));
-    saveQueue.current = request.then(() => undefined, () => undefined);
-    const completed = request.then(saved => {
-      setData(saved);
-      notify("Đã lưu khung chủ đề.");
-      if (options.promptForGeneration) {
-        const weeks = saved.weeks.filter(week => week.topic.trim()).map(week => week.weekNumber);
-        const preferredWeek = preferredGenerationWeek && weeks.includes(preferredGenerationWeek)
-          ? preferredGenerationWeek
-          : saved.weeks.find(week => week.current && weeks.includes(week.weekNumber))?.weekNumber ?? weeks[0];
-        if (weeks.length && preferredWeek) setGenerationDialog({ weeks, selectedWeeks: [preferredWeek], replacementWeeks: occupiedWeeks.filter(week => weeks.includes(week)), levelCount: generationLevels.length });
-        else notify("Đã lưu khung chủ đề. Chưa có tuần nào có chủ đề để sinh bài.", "danger");
-      }
-      return saved;
-    });
-    void completed.catch(reason => notifyError(reason));
-    return completed;
-  };
-  const startGeneration = (weekNumbers: number[], levels = generationLevels, savePromise?: Promise<ContentWeekFrameView | undefined>) => {
-    const orderedLevels = levels.length ? levels : ["A1", "A2", "B1", "B2", "C1"] as Cefr[];
-    setGenerationDialog(undefined);
-    setGeneratingWeek(weekNumbers[0] ?? null);
-    setGenerationStatus(savePromise ? "Đang lưu chủ đề trước khi sinh bài…" : "Đang chuẩn bị sinh bài…");
-    void (async () => {
-      try {
-        if (savePromise) await savePromise;
-        if (typeof client.generateContentLessonWeekBatch !== "function") {
-          throw new Error("Máy chủ chưa hỗ trợ sinh tuần theo batch");
-        }
-        // One server-side batch per week: the API normalizes the canonical plan once,
-        // runs every level with its own checkpoints and saves each level as it finishes.
-        const results = await generateLessonWeeksBatchSettled(
-          weekNumbers,
-          orderedLevels,
-          (week, batchLevels) => client.generateContentLessonWeekBatch!(week, [...batchLevels]),
-          (week, _level, completed, total) => {
-            setGeneratingWeek(week);
-            setGenerationStatus(`Đang sinh tuần ${week} · batch ${orderedLevels.length} mức (${completed + 1}/${total} bộ đã khởi động)…`);
-          }
-        );
-        const failed = results.filter((result) => result.status === "failed");
-        const succeeded = results.length - failed.length;
-        const levelSummary = describeBatchLevelResults(results);
-        if (failed.length) {
-          setGenerationStatus(`⚠ Đã sinh ${succeeded}/${results.length} bộ. ${levelSummary}. Bấm sinh lại để tiếp tục từ checkpoint.`);
-          notify(`Đã giữ ${succeeded} bộ thành công; ${failed.length} bộ cần thử lại.`, "danger");
-        } else {
-          setGenerationStatus(`✓ Đã sinh đủ ${results.length * 5} bài T2–T6. ${levelSummary}.`);
-          notify(`Đã sinh đủ bài cho ${weekNumbers.length} tuần.`);
-          navigate(paths.lessons);
-        }
-      } catch (reason) {
-        const detail = message(reason);
-        setGenerationStatus(`✗ Không thể chuẩn bị đợt sinh bài: ${detail}.`);
-        notify(`Không thể chuẩn bị đợt sinh bài: ${detail}`, "danger");
-      } finally {
-        setGeneratingWeek(null);
-      }
-    })();
-  };
-  const view = adaptWeeks(data, { aiConnected: capabilities?.ai ?? false, status: generationStatus, suggestions, generationDialog });
-  return <><OperatorWeeks readOnly={readOnly} view={view} actions={{
-    onSuggestAll: () => { if (!generatingWeek) suggest(data.weeks.filter(week => !week.topic.trim()).map(week => week.weekNumber).length ? data.weeks.filter(week => !week.topic.trim()).map(week => week.weekNumber) : data.weeks.map(week => week.weekNumber)); },
-    onSuggestWeek: week => { if (!generatingWeek) { setPreferredGenerationWeek(week); suggest([week]); } }, onCloseSuggestion: week => setSuggestions(current => { const next = { ...current }; delete next[week]; return next; }), onReopenSuggestion: week => setSuggestions(current => {
-      const suggestion = current[week];
-      if (suggestion?.state !== "confirmed") return current;
-      return {
-        ...current,
-        [week]: suggestion.options?.length
-          ? { state: "options", levels: suggestion.levels ?? [], options: suggestion.options }
-          : { state: "error", message: "Các phương án cũ không còn trong API response; bấm Gợi ý để tải lại." }
-      };
-    }),
-    onConfirmSuggestion: (weekNumber, index) => {
-      if (readOnly || generatingWeek) return;
-      const suggestion = suggestions[weekNumber];
-      if (suggestion?.state !== "options") return;
-      const option = suggestion.options[index];
-      if (!option) return;
-      const updated = { ...data, weeks: data.weeks.map(week => week.weekNumber === weekNumber ? { ...week, topic: option.topic, description: option.description, objectives: option.objectives, keyVocabHint: option.keyVocabHint, plan: option.plan } : week) };
-      setData(updated);
-      setPreferredGenerationWeek(weekNumber);
-      setSuggestions(current => ({ ...current, [weekNumber]: { state: "confirmed", topic: option.topic, levels: suggestion.levels ?? [], options: suggestion.options } }));
-    },
-    onChangeWeek: (weekNumber, patch) => { if (!readOnly) { setPreferredGenerationWeek(weekNumber); setData(current => current ? { ...current, weeks: current.weeks.map(week => {
-      if (week.weekNumber !== weekNumber) return week;
-      const changed = { ...week, ...patch };
-      if ("topic" in patch && patch.topic !== week.topic) { const { plan: _discardedPlan, ...withoutPlan } = changed; return withoutPlan; }
-      return changed;
-    }) } : current); } },
-    onSave: () => { if (!generatingWeek) void save(undefined, { promptForGeneration: true }).catch(() => undefined); },
-    onToggleGenerationWeek: week => setGenerationDialog(current => current ? { ...current, selectedWeeks: current.selectedWeeks.includes(week) ? current.selectedWeeks.filter(item => item !== week) : [...current.selectedWeeks, week].sort((a, b) => a - b) } : current),
-    onCancelGeneration: () => setGenerationDialog(undefined),
-    onStartGeneration: weeks => { if (!generatingWeek && weeks.length) startGeneration(weeks); },
-    onOpenLessons: () => { if (!generatingWeek) navigate(paths.lessons); }
-  }} /></>;
-}
-
-function LessonsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
-  const modal = useModal();
-  const navigate = useNavigate();
-  const paths = useOperatorRoutePaths();
-  const [data, setData] = useState<ContentLessonMatrixView>();
-  const generationJobs = useSyncExternalStore(subscribeLessonGenerationJobs, lessonGenerationJobsSnapshot, lessonGenerationJobsSnapshot);
-  const [error, setError] = useState<string>();
-  const capabilities = useCapabilities(client);
-  const { toast, notify, notifyError } = useOperatorNotify();
-  useEffect(() => { void client.getContentLessonMatrix().then(setData).catch(reason => setError(message(reason))); }, [client]);
-  if (error) return <Status tone="error">Không tải được ma trận bài học: {error}</Status>;
-  if (!data) return <Status>Đang tải ma trận bài học…</Status>;
-  const open = (week: number, cefr: Cefr, state?: { manualCreate?: boolean; topic?: string }) => navigate(`${paths.lessons}/${week}/${cefr}`, state ? { state } : undefined);
-  const produce = (week: number, cefr: Cefr) => {
-    // One toast at a time for this action: "preparing" stays until the job ends, then gives way to its result.
-    const preparing = toast.show({ message: "Đang chuẩn bị bộ 5 bài…", tone: "ok", durationMs: 0 });
-    void startLessonGenerationJob(week, cefr, () => client.generateContentLessonDraft(week, cefr))
-      .then(() => {
-        toast.dismiss(preparing);
-        notify(`Đã sinh xong tuần ${week} · mức ${cefr}.`);
-        return reloadQuietly(() => client.getContentLessonMatrix().then(setData));
-      }, (reason: unknown) => { toast.dismiss(preparing); notifyError(reason); });
-  };
-  const saveLevels = (levels: Cefr[]) => {
-    if (readOnly || typeof client.setContentLessonLevels !== "function") return;
-    void client.setContentLessonLevels(levels).then(setData).catch(notifyError);
-  };
-  const removeLevel = async (cefr: Cefr) => {
-    if (cefr !== "C1" || readOnly || data.levels.length <= 1) return;
-    const confirmed = await modal.confirm({
-      title: `Xóa cột ${cefr}?`,
-      message: `Cột ${cefr} sẽ được ẩn khỏi ma trận và AI chủ đề/sinh bài sẽ không chạy mức này. Dữ liệu bài ${cefr} cũ vẫn được giữ để có thể thêm lại sau.`,
-      confirmLabel: `Xóa cột ${cefr}`,
-      tone: "danger"
-    });
-    if (confirmed) saveLevels(data.levels.filter(level => level.cefr !== cefr).map(level => level.cefr));
-  };
-  return <><OperatorLessons readOnly={readOnly} view={adaptLessonMatrix(data, { aiConnected: capabilities?.ai ?? false, extraLevels: data.levels.some(item => item.cefr === "C1") ? [] : ["C1"], generatingCells: generationJobs.filter(job => job.status === "running").map(job => ({ week: job.week, cefr: job.level as Cefr, message: "Đang sinh bộ 5 bài…" })) })} actions={{
-    onOpenSettings: () => navigate("/settings"), onAddLevel: cefr => { if (cefr === "C1") saveLevels([...data.levels.map(level => level.cefr), cefr]); }, onRemoveLevel: removeLevel, onGenerate: (week, cefr) => { if (!readOnly) produce(week, cefr); }, onCreateManual: (week, cefr) => { if (!readOnly) { const topic = data.weeks.find(candidate => candidate.weekNumber === week)?.topic; open(week, cefr, topic ? { manualCreate: true, topic } : { manualCreate: true }); } }, onOpenSet: open
-  }} /></>;
-}
-
-function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiClient; readOnly: boolean; week: number; cefr: Cefr }) {
-  const modal = useModal();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const paths = useOperatorRoutePaths();
-  const [data, setData] = useState<ContentLessonSetVersionView>();
-  const [error, setError] = useState<string>();
-  const [actionError, setActionError] = useState<string>();
-  const [actionMessage, setActionMessage] = useState<string>();
-  const [activeMutation, setActiveMutation] = useState<LessonSetActionKey>();
-  const [busy, setBusy] = useState(false);
-  const [editor, setEditor] = useState<ContentLessonDraftInput>();
-  const capabilities = useCapabilities(client);
-  const manualCreate = Boolean((location.state as { manualCreate?: boolean } | null)?.manualCreate);
-  const manualTopic = (location.state as { topic?: string } | null)?.topic ?? "";
-  const transientManualSet = (): ContentLessonSetVersionView => ({
-    lessonSetId: "", versionId: "", version: 0, status: "draft", weekNumber: week, topic: manualTopic,
-    cefr, explanationLanguage: "Tiếng Việt", createdBy: null, approvedBy: null, createdAt: new Date().toISOString(), publishedAt: null,
-    weeklyPractice: { task: `Write 3–5 sentences about “${manualTopic || "this week's topic"}”.`, guidance: "Use at least 3 words from this week's lessons.", inputMode: "text_or_dictation", requiredVocabulary: [] }, lessons: []
-  });
-  const load = () => client.getContentLessonSet(week, cefr).then(setData).catch(reason => {
-    if (manualCreate && reason instanceof Error && reason.message === "CONTENT_LESSON_SET_NOT_FOUND") setData(transientManualSet());
-    else setError(message(reason));
-  });
-  useEffect(() => { void load(); }, [client, week, cefr]);
-  if (error) return <Status tone="error">Không tải được bộ bài: {error}</Status>;
-  if (!data) return <Status>Đang tải bộ bài…</Status>;
-  const mutate = (promise: Promise<ContentLessonSetVersionView>, options?: { action?: LessonSetActionKey; pending?: string; success?: string }) => {
-    if (readOnly) return;
-    setActionError(undefined);
-    setActionMessage(options?.pending);
-    setActiveMutation(options?.action);
-    setBusy(true);
-    void promise
-      .then(result => { setData(result); setActionMessage(options?.success); setEditor(undefined); })
-      .catch(reason => { setActionMessage(undefined); setActionError(message(reason)); })
-      .finally(() => { setBusy(false); setActiveMutation(undefined); });
-  };
-  const publish = () => {
-    if (readOnly) return;
-    setActionError(undefined);
-    setBusy(true);
-    const prepared = data.status === "draft" ? client.submitContentLessonSet(data.versionId) : Promise.resolve(data);
-    void prepared
-      .then(version => { setData(version); return client.publishContentLessonSet(version.versionId); })
-      .then(setData)
-      .catch(reason => setActionError(message(reason)))
-      .finally(() => setBusy(false));
-  };
-  const confirmAction = async (options: Parameters<typeof modal.confirm>[0], action: () => void) => {
-    if (readOnly) return;
-    if (await modal.confirm(options)) action();
-  };
-  const approveSet = () => void confirmAction({
-    title: "Duyệt bộ bài?",
-    message: `Bộ bài tuần ${week} · ${cefr} sẽ được xuất bản cho học viên ở mức này.`,
-    confirmLabel: "Duyệt bộ bài",
-    tone: "primary"
-  }, publish);
-  const regenerateSet = () => void confirmAction({
-    title: "Sinh lại bộ bài?",
-    message: `AI sẽ tạo lại bộ bài tuần ${week} · ${cefr}. Nội dung hiện tại có thể bị thay thế.`,
-    confirmLabel: "Sinh lại",
-    tone: "danger",
-    countdownSeconds: 5
-  }, () => mutate(client.generateContentLessonDraft(week, cefr)));
-  const retireSet = () => void confirmAction({
-    title: "Thu hồi duyệt bộ bài?",
-    message: `Học viên mức ${cefr} sẽ không còn truy cập bộ bài tuần ${week}.`,
-    confirmLabel: "Thu hồi duyệt",
-    tone: "danger"
-  }, () => mutate(client.retireContentLessonSet(data.versionId)));
-  const saveLesson = (lesson: ContentLessonDraftInput) => mutate(client.upsertContentLessonDay(week, cefr, lesson.dayNumber, lesson, data.version || undefined));
-  const openEditor = (day: number, id?: string) => {
-    const current = id ? data.lessons.find(lesson => lesson.id === id) : data.lessons.find(lesson => lesson.dayNumber === day);
-    setEditor(current ? { dayNumber: current.dayNumber, title: current.title, durationMinutes: current.durationMinutes, parts: current.parts } : emptyLesson(day));
-  };
-  const deleteLesson = async (id: string) => {
-    if (readOnly) return;
-    const lesson = data.lessons.find(candidate => candidate.id === id);
-    if (lesson && await modal.confirm({ title: `Xoá ${lesson.title}?`, message: "Bài học sẽ bị xoá khỏi bộ bài nháp.", confirmLabel: "Xoá bài", tone: "danger" })) mutate(client.deleteContentLessonDay(week, cefr, lesson.dayNumber, data.version));
-  };
-  const deleteSet = async () => { if (readOnly) return; if (await modal.confirm({ title: "Xoá toàn bộ bộ bài nháp?", message: `Toàn bộ bài tuần ${week} · ${cefr} sẽ bị xoá.`, confirmLabel: "Xoá bộ bài", tone: "danger" })) { if (!data.versionId) { navigate(paths.lessons); return; } setActionError(undefined); setBusy(true); void client.deleteContentLessonDraftSet(week, cefr).then(() => navigate(paths.lessons)).catch(reason => setActionError(message(reason))).finally(() => setBusy(false)); } };
-  const unavailableSet = {
-    ...(typeof client.fillContentLessonPhrases !== "function" ? { fillPhrases: unavailable("endpoint bổ sung cụm từ cho bộ bài") } : {}),
-    ...(typeof client.enrichContentLessonDraft !== "function" && typeof client.enrichContentLessonDay !== "function"
-      ? { enrich: unavailable("endpoint bổ sung chi tiết cho bộ bài") }
-      : {})
-  };
-  const mutationMessage = actionError ?? actionMessage;
-  return <><OperatorLessonSet readOnly={readOnly} unavailable={unavailableSet} view={adaptLessonSet(data, { aiConnected: capabilities?.ai ?? false, mutationState: busy ? "loading" : actionError ? "error" : "idle", ...(activeMutation ? { activeMutation } : {}), ...(mutationMessage ? { mutationMessage } : {}), ...(typeof client.resolveContentLessonVocabularyImage === "function" ? { resolveVocabularyImage: (lessonId: string, itemIndex: number) => client.resolveContentLessonVocabularyImage!(week, cefr, lessonId, itemIndex) } : {}) })} actions={{
-    onBack: () => navigate(paths.lessons), onApprove: approveSet, onUnapprove: retireSet, onRegenerate: regenerateSet, onDeleteSet: deleteSet,
-    onFillPhrases: () => { if (typeof client.fillContentLessonPhrases === "function") mutate(client.fillContentLessonPhrases(week, cefr, data.version), { action: "fillPhrases", pending: "AI đang bổ sung cụm từ…", success: "Đã bổ sung cụm từ. Các nội dung cũ được giữ nguyên." }); },
-    onEnrich: () => { if (typeof client.enrichContentLessonDraft === "function") mutate(client.enrichContentLessonDraft(week, cefr, data.version), { action: "enrich", pending: "AI đang tự động điền các nội dung còn thiếu…", success: "Đã tự động điền các nội dung còn thiếu. Vui lòng kiểm tra lại trước khi duyệt." }); },
-    onRegenerateDay: day => { if (typeof client.enrichContentLessonDay === "function") mutate(client.enrichContentLessonDay(week, cefr, day, data.version), { action: "enrich", pending: `AI đang sinh lại bài T${day + 1}…`, success: `Đã sinh lại bài T${day + 1}; các ngày khác được giữ nguyên.` }); },
-    onEditLesson: id => openEditor(0, id), onDeleteLesson: deleteLesson, onComposeDay: openEditor,
-    onSaveWeeklyPractice: async input => {
-      if (readOnly) return;
-      const saved = await client.saveContentWeeklyPractice(input.week, input.cefr, {
-        expectedVersion: input.expectedVersion,
-        task: input.task,
-        guidance: input.guidance,
-        requiredVocabulary: input.requiredVocabulary
-      });
-      setData(saved);
-    }
-  }} />{!readOnly && editor && <LessonFormEditor weekNumber={week} cefr={cefr} initial={editor} onSave={saveLesson} onCancel={() => setEditor(undefined)} uploadMedia={client.uploadContentMedia} busy={busy} />}</>;
 }
 
 const reviewSections = [

@@ -11,7 +11,7 @@ describe("ApiError presentation", () => {
 
 describe("apiUrl", () => {
   it("prefixes relative API paths for a separately hosted API", () => {
-    expect(apiUrl("/api/health", "https://e4s-api.onrender.com/")).toBe("https://e4s-api.onrender.com/api/health");
+    expect(apiUrl("/api/health", "https://api.example.com/")).toBe("https://api.example.com/api/health");
   });
 
   it("keeps relative paths for the local same-origin proxy", () => {
