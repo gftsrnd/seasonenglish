@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const audioDirectory = new URL("../public/media/audio/", import.meta.url);
+const audioDirectory = new URL("../media-src/audio/", import.meta.url);
 
 function wavStats(filename: string) {
   const wav = new Uint8Array(readFileSync(new URL(filename, audioDirectory)));

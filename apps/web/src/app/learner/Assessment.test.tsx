@@ -391,7 +391,7 @@ describe("assessment HCI states", () => {
     view.definition.sections[0]!.groups[0] = {
       ...view.definition.sections[0]!.groups[0]!,
       maxPlays: 2,
-      stimulus: { type: "audio_script", audioSrc: "/media/audio/placement-listening-LB.wav", text: "Dialogue" }
+      stimulus: { type: "audio_script", audioSrc: "/media/audio/placement-listening-LB.mp3", text: "Dialogue" }
     };
     render(<LearnerAssessment view={view} actions={makeActions({
       speak,
@@ -441,7 +441,7 @@ describe("assessment HCI states", () => {
         maxPlays: 2,
         stimulus: {
           type: "audio_script",
-          audioSrc: "/media/audio/placement-listening-LA.wav",
+          audioSrc: "/media/audio/placement-listening-LA.mp3",
           lines: [
             { speaker: "Manager", text: "Good morning." },
             { speaker: "Employee", text: "Why has the time changed?" }
@@ -458,7 +458,7 @@ describe("assessment HCI states", () => {
       "Good morning. Why has the time changed?",
       "en-GB",
       expect.objectContaining({
-        audioSrc: "/media/audio/placement-listening-LA.wav",
+        audioSrc: "/media/audio/placement-listening-LA.mp3",
         onStatus: expect.any(Function)
       })
     );

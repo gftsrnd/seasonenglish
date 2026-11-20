@@ -1,10 +1,12 @@
 param(
-  [string]$OutputDirectory = (Join-Path $PSScriptRoot "..\apps\web\public\media\audio"),
+  # Lossless WAV sources (checked by apps/web/test/placement-audio-assets.test.ts) and the MP3s the app serves.
+  [string]$OutputDirectory = (Join-Path $PSScriptRoot "..\apps\web\media-src\audio"),
+  [string]$PublicDirectory = (Join-Path $PSScriptRoot "..\apps\web\public\media\audio"),
   [string]$WslDistribution = "Ubuntu-26.04"
 )
 
 $ErrorActionPreference = "Stop"
-New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
+New-Item -ItemType Directory -Force -Path $OutputDirectory, $PublicDirectory | Out-Null
 $ffmpeg = Get-Command ffmpeg -ErrorAction Stop
 $wsl = "C:\Program Files\WSL\wsl.exe"
 if (-not (Test-Path -LiteralPath $wsl)) { throw "WSL is required to generate the neural listening assets." }
@@ -84,6 +86,9 @@ try {
     $dialogueFilter = "silenceremove=stop_periods=-1:stop_duration=0.15:stop_threshold=-45dB:stop_silence=0.06,loudnorm=I=-15:TP=-1.0:LRA=11,aresample=48000"
     & $ffmpeg.Source -hide_banner -loglevel error -y -f concat -safe 0 -i $concatPath -af $dialogueFilter -ac 1 -c:a pcm_s16le $path
     if ($LASTEXITCODE -ne 0) { throw "ffmpeg failed while assembling $($dialogue.File)" }
+    $mp3Path = Join-Path $PublicDirectory ([IO.Path]::ChangeExtension($dialogue.File, ".mp3"))
+    & $ffmpeg.Source -hide_banner -loglevel error -y -i $path -ac 1 -c:a libmp3lame -b:a 64k $mp3Path
+    if ($LASTEXITCODE -ne 0) { throw "ffmpeg failed while encoding $mp3Path" }
   }
 } finally {
   Remove-Item -LiteralPath $tempDirectory -Recurse -Force -ErrorAction SilentlyContinue
@@ -121,4 +126,4 @@ function Write-ExamWarningTone([string]$Path) {
   }
 }
 
-Write-ExamWarningTone (Join-Path $OutputDirectory "exam-warning.wav")
+Write-ExamWarningTone (Join-Path $PublicDirectory "exam-warning.wav")

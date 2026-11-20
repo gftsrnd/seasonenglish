@@ -56,7 +56,7 @@ const listeningGroups: StoredAssessmentDefinition["sections"][number]["groups"] 
   {
     key: "LA", title: "Part A – Thông báo của quản lý",
     instruction: "Nghe thông báo và trả lời câu 1–4.", maxPlays: 2,
-    stimulus: { type: "audio_script", audioSrc: "/media/audio/placement-listening-LA.wav", lines: [
+    stimulus: { type: "audio_script", audioSrc: "/media/audio/placement-listening-LA.mp3", lines: [
       { speaker: "Manager", text: "Good morning, everyone. Just a quick reminder about tomorrow's team meeting. It will start at 9:30, not 9:00 as originally planned. We'll meet in Room 210. Please bring the latest sales report because we'll discuss our results from last month." },
       { speaker: "Employee", text: "Why has the time changed?" },
       { speaker: "Manager", text: "The client has asked us to move our morning call, so we needed to change the meeting time." }
@@ -71,7 +71,7 @@ const listeningGroups: StoredAssessmentDefinition["sections"][number]["groups"] 
   {
     key: "LB", title: "Part B – Hội thoại với cấp trên",
     instruction: "Nghe cuộc trao đổi và trả lời câu 5–10.", maxPlays: 2,
-    stimulus: { type: "audio_script", audioSrc: "/media/audio/placement-listening-LB.wav", lines: [
+    stimulus: { type: "audio_script", audioSrc: "/media/audio/placement-listening-LB.mp3", lines: [
       { speaker: "Employee", text: "Hi, James. Do you have a minute? I'm working on the customer report, but I'm not sure how to handle one part of it." },
       { speaker: "Supervisor", text: "Sure. What's the problem?" },
       { speaker: "Employee", text: "The customer is asking for a refund, but the situation is a little unusual. I'm not sure which procedure applies." },
@@ -94,7 +94,7 @@ const listeningGroups: StoredAssessmentDefinition["sections"][number]["groups"] 
   {
     key: "LC", title: "Part C – Chính sách hybrid",
     instruction: "Nghe thảo luận và trả lời câu 11–15.", maxPlays: 2,
-    stimulus: { type: "audio_script", audioSrc: "/media/audio/placement-listening-LC.wav", lines: [
+    stimulus: { type: "audio_script", audioSrc: "/media/audio/placement-listening-LC.mp3", lines: [
       { speaker: "Anna", text: "So, what do you think about the new hybrid-work policy?" },
       { speaker: "Mark", text: "I think there are some advantages. People can probably concentrate better when they're working on tasks that require a lot of individual focus. But I'm concerned about communication." },
       { speaker: "Anna", text: "What do you mean?" },

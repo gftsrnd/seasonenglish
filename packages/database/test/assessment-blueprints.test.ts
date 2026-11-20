@@ -74,9 +74,9 @@ describe("placement assessment blueprint", () => {
   it("packages a dedicated multi-speaker recording for every listening part", () => {
     const listening = section("listening");
     expect(listening.groups.map((group) => group.stimulus?.audioSrc)).toEqual([
-      "/media/audio/placement-listening-LA.wav",
-      "/media/audio/placement-listening-LB.wav",
-      "/media/audio/placement-listening-LC.wav"
+      "/media/audio/placement-listening-LA.mp3",
+      "/media/audio/placement-listening-LB.mp3",
+      "/media/audio/placement-listening-LC.mp3"
     ]);
     expect(listening.groups.every((group) => new Set(group.stimulus?.lines?.map((line) => line.speaker)).size >= 2)).toBe(true);
   });
@@ -205,7 +205,7 @@ describe("Pass Course Form A blueprint", () => {
     expect(listening.groups.flatMap((group) => group.tasks)).toHaveLength(15);
     expect(listening.groups.flatMap((group) => group.tasks).map((task) => task.maxScore)).toEqual([...Array(10).fill(1), ...Array(5).fill(2)]);
     expect(listening.groups.map((group) => group.stimulus?.audioSrc)).toEqual([
-      "/media/audio/pass-course-form-a-listening-a.wav", "/media/audio/pass-course-form-a-listening-b.wav", "/media/audio/pass-course-form-a-listening-c.wav"
+      "/media/audio/pass-course-form-a-listening-a.mp3", "/media/audio/pass-course-form-a-listening-b.mp3", "/media/audio/pass-course-form-a-listening-c.mp3"
     ]);
     expect(listening.groups[0]?.tasks[0]).toMatchObject({ prompt: "Who is the message for?", correctAnswer: "B", options: expect.arrayContaining([expect.objectContaining({ value: "B", label: "Helen" })]) });
     expect(listening.groups[2]?.tasks[2]).toMatchObject({ prompt: 'What risk of "over-softening" does she mention?', correctAnswer: "D" });
