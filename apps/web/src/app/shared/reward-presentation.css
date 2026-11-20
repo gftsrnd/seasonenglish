@@ -18,7 +18,7 @@
   border: 1px solid currentColor;
   border-radius: 6px;
   color: var(--text);
-  font-size: .78rem;
+  font-size: max(11px, .78rem);
   font-weight: 800;
   text-transform: uppercase;
   justify-self: start;

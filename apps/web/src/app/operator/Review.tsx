@@ -335,7 +335,7 @@ export function OperatorReview({ view, actions, readOnly = false, unavailable = 
           <td className="operator-result-action"><Button small disabled={Boolean(blocked("viewTest"))} title={blocked("viewTest")} onClick={() => actions.onViewTest(item.id)}>Xem</Button></td>
         </tr>)}</tbody>
       </table>
-    </div>}</Paged></div> : <Empty>Chưa có bài test.</Empty>;
+    </div>}</Paged></div> : <div className="card"><Empty>Chưa có bài test.</Empty></div>;
   };
 
   const content = <>{!embedded && <PageTitle><h1>Chấm & Kháng nghị</h1><p className="muted">Kiểm tra phản hồi Season, xử lý kháng nghị và theo dõi cảnh báo bài tập.</p></PageTitle>}{actionError && <div className="banner danger" role="alert" style={{ marginBottom: 12 }}><div className="body small">{actionError.message}</div></div>}{mode === "weekly" && !embedded && <div className="tabs operator-review-tabs" role="tablist" aria-label="Nhóm nội dung cần kiểm tra">{TABS.map(([key, label]) => <button type="button" role="tab" aria-selected={view.activeTab === key} className={view.activeTab === key ? "active" : ""} key={key} onClick={() => actions.onTabChange(key)}>{key === "attempts" ? label : `${label} (${key === "weekly" || key === "subs" ? 0 : view.counts[key] ?? 0}${key === "subs" ? " chưa đọc" : ""})`}</button>)}</div>}{body()}</>;

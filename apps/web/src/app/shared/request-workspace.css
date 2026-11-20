@@ -282,3 +282,9 @@
   :root:root:root:root .manager-section-title .manager-section-description { display: inline-flex; flex: none; align-items: center; margin: 0; min-block-size: 0; }
   :root:root:root:root .manager-section-title .manager-section-description:empty { display: none; }
 }
+
+@media (min-width: 601px) and (max-width: 1024px) {
+  /* Tablet section headers outside .manager-root (Quản lý › Vận hành): the description line goes under the title, not beside it. */
+  :root:root:root:root:root .manager-section-title .manager-page-title__content:has(.manager-section-description > p) { display: grid; gap: 2px; }
+  :root:root:root:root:root .manager-section-title .manager-page-title__content:has(.manager-section-description > p) .manager-section-description { display: block; }
+}

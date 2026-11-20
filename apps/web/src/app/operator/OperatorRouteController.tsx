@@ -5,6 +5,7 @@ import { monthlyDefaultLessonTitle, monthlyGatedLightFindings, monthlyLessonDisp
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import "./styles.css";
+import { NotFoundState, StatusHomeIcon } from "../shared/StatusPage.js";
 import { describeMonthlyIntegrityIssues, integrityIssuesFromError, MONTHLY_INTEGRITY_LINE_PREFIX, monthlyIntegrityBlockedMessage } from "./monthly-failure-findings.js";
 import type {
   AssessmentFormPreviewView,
@@ -188,7 +189,7 @@ function OperatorRouteControllerContent({ session, client, paths }: { session: S
           : location.pathname === paths.lessons ? <LessonsRoute {...props} />
             : location.pathname === paths.review ? (readOnly ? <ReviewRoute {...props} canEditWeeklyPractice /> : <OperatorReviewWorkspace client={client} />)
               : location.pathname === paths.prompts ? <PromptsRoute client={client} readOnly={false} />
-                : <Status tone="error">Đường dẫn vận hành không tồn tại.</Status>;
+                : <NotFoundState message="Đường dẫn vận hành này không tồn tại hoặc đã đổi. Hãy quay về trang chủ Vận hành." home={<Link className="btn btn-primary" to={paths.root}><StatusHomeIcon />Về trang chủ</Link>} />;
   return content;
 }
 
@@ -484,7 +485,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
   if (preview && overview) {
     const framework = overview.frameworks.find((item) => item.id === preview.frameworkId);
     const lesson = framework?.lessons.find((item) => item.lessonNumber === preview.dayNumber);
-    if (!framework || !lesson) return <Status tone="error">Không tìm thấy bài học tháng.</Status>;
+    if (!framework || !lesson) return <NotFoundState code={null} title="Không tìm thấy bài học tháng" message="Bài học này không có trong tháng đang xem hoặc đã bị đổi. Hãy quay về danh sách bài học." home={<Link className="btn btn-primary" to={paths.months}><StatusHomeIcon />Về Bài học</Link>} />;
     const isDraft = lesson.status !== "approved";
     return <><MonthlyLessonPreview date={lesson.lessonDate} cefr={framework.cefr} lesson={lesson} focusedPart={focusedPart} {...(framework.resources ? { resources: framework.resources } : {})} busy={busy} onClose={() => navigate(paths.months)}
       {...(isDraft && !readOnly ? {

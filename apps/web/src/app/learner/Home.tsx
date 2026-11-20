@@ -340,8 +340,7 @@ export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actio
       </div> : <>
         <header className="monthly-assessment-header">
           <div>
-            <div className="eyebrow">Lịch thi</div>
-            <h2>{examDate ? formatLessonDate(examDate) : "Đang chờ lịch thi"}</h2>
+            <h2>{examDate ? `Lịch thi: ${formatLessonDate(examDate)}` : "Đang chờ lịch thi"}</h2>
           </div>
           <span className={`badge ${exam?.status === "ready" || exam?.status === "completed" ? "ok" : "warn"}`}>{publishState}</span>
         </header>

@@ -1,7 +1,6 @@
 import { NotFoundState, StatusHomeIcon } from "./shared/StatusPage.js";
 import { Component, createContext, Suspense, useContext, useEffect, useState, type ComponentType, type ErrorInfo, type ReactNode } from "react";
 import { Link, Navigate, useLocation } from "react-router";
-import { CircleHelp, LockKeyhole } from "lucide-react";
 import type { SessionView } from "@e4s/contracts";
 import { ManagerSectionLayout } from "./manager/shared.js";
 import type { LearnerRouteProps } from "./learner/LearnerRouteController.js";
@@ -194,5 +193,5 @@ function isRouteOrChild(pathname: string, route: string): boolean {
 }
 
 function AccessFallback({ message, home }: { message: string; home?: "/" | "/home" | "/op" | "/mgr/ops" }) {
-  return <section className="empty"><div className="big" aria-hidden="true"><LockKeyhole size={32} strokeWidth={1.8} /></div><p role="alert">{message}</p>{home ? <Link className="btn" to={home}>Về trang chủ</Link> : null}</section>;
+  return <NotFoundState icon="lock" code="403" title="Không có quyền truy cập" message={message} home={home ? <Link className="btn btn-primary" to={home}><StatusHomeIcon />Về trang chủ</Link> : null} />;
 }

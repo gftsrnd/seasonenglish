@@ -31,7 +31,8 @@ import { LearnerController, normalizeLearnerPath } from "./Router.js";
 import { CourseCompletion } from "./CourseCompletion.js";
 import { LearnerRequestHistory } from "./LearnerRequestHistory.js";
 import { ArenaRoute, arenaRouteMatch } from "./arena/ArenaRoutes.js";
-import { Empty, Notice, PageTitle, AppLink, Button, Modal } from "./ui.js";
+import { AppLink, Button, Modal } from "./ui.js";
+import { RotateCcw } from "lucide-react";
 
 type StaticRouteName = "home" | "monthly" | "onboard" | "coach" | "challenge" | "practice" | "survey" | "profile" | "games";
 export type ResolvedLearnerRoute =
@@ -58,12 +59,11 @@ type LearnerLoadFailureProps = {
 export function LearnerLoadFailure({ route, message, onRetry, navigate }: LearnerLoadFailureProps) {
   const recovery = loadRecovery(route);
   const waiting = loadWaitState(route);
+  // Same card as the 404 page (owner 19/11: error pages look professional, not a bare notice).
   return <div className="app-learner-page">
-    <PageTitle title={waiting?.title ?? "Chưa thể mở trang"} />
-    <Empty description={<Notice tone={waiting ? "warn" : "danger"}>{waiting?.message ?? message}</Notice>} action={<div className="row" style={{ flexWrap: "wrap" }}>
-      <button className="btn" type="button" onClick={onRetry}>Thử lại</button>
-      <AppLink className="btn btn-primary" href={recovery.href} navigate={navigate}>{recovery.label}</AppLink>
-    </div>} />
+    <NotFoundState icon="alert" code={null} title={waiting?.title ?? "Chưa thể mở trang"} message={waiting?.message ?? message}
+      home={<AppLink className="btn btn-primary" href={recovery.href} navigate={navigate}>{recovery.label}</AppLink>}
+      actions={<button className="btn" type="button" onClick={onRetry}><RotateCcw size={16} aria-hidden="true" />Thử lại</button>} />
   </div>;
 }
 

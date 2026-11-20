@@ -199,7 +199,7 @@ describe("learner game visual and interaction regressions", () => {
     expect(screen.getByRole("heading", { name: "Season-rio" })).toBeInTheDocument();
     expect(screen.getByText("Kỷ lục: chưa có")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Thoát game" })).toHaveClass("btn", "btn-sm");
-    expect(screen.getByText("Hướng dẫn chơi", { exact: false })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Cách chơi Season-rio" })).toBeInTheDocument();
     expect(screen.getByText("Chạy, nhảy và chạm hộp quà để mở câu hỏi của cổng.")).toBeInTheDocument();
     expect(screen.getByText("Trả lời sai: 0 điểm, mất 1 mạng, cổng vẫn mở.")).toBeInTheDocument();
     expect(screen.getByText("Gặp boss: trả lời trước khi hết giờ, sai được trả lời lại. Chạm cờ để xong.")).toBeInTheDocument();

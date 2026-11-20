@@ -92,7 +92,7 @@ export function ManagerHolidays() {
       {compact ? null : <p className="small muted">Ngày lễ Việt Nam được tự nhận diện. Ngày nghỉ T2–T6 vẫn tính là ngày hiệu lực và học viên đang học được tự động điểm danh.</p>}
       {holidays === undefined ? <p role="status">{error ? "Chưa tải được danh sách." : "Đang tải…"}</p>
         : !filtered.length ? <p className="muted">Chưa có ngày nghỉ trong mục này.</p>
-        : <ul ref={holidayList} className="manager-holiday-list" aria-label="Danh sách ngày nghỉ" tabIndex={0}>{(compact ? paged.visible : filtered).map(holiday => <li key={holiday.id}>
+        : <ul ref={holidayList} className="manager-holiday-list" aria-label="Danh sách ngày nghỉ" tabIndex={0}>{paged.visible.map(holiday => <li key={holiday.id}>
           <div className="manager-holiday-description">
             <b><time dateTime={holiday.date}>{holidayDate(holiday.date)}</time>{holiday.name ? ` · ${holiday.name}` : ""}</b>
             <small className="muted">
@@ -102,7 +102,7 @@ export function ManagerHolidays() {
           </div>
           {holiday.source !== "national" ? <button className="btn-sm btn-danger" type="button" disabled={busy} onClick={() => void remove(holiday)}><ActionLabel icon={Trash2} label="Xóa" /></button> : null}
         </li>)}</ul>}
-      {compact ? <Pager {...paged} label="ngày nghỉ" /> : null}
+      <Pager {...paged} label="ngày nghỉ" />
     </section>
   </div>;
 }
