@@ -234,13 +234,13 @@ describe("App session shell", () => {
 
   it("maps every resolved season to a dedicated pattern asset", () => {
     expect(themePatternUrls).toEqual({
-      spring: "/patterns/season-spring.png",
-      summer: "/patterns/season-summer.png",
-      autumn: "/patterns/season-autumn.png",
-      winter: "/patterns/season-winter.png",
-      tet: "/patterns/season-tet.png",
-      midautumn: "/patterns/season-midautumn.png",
-      christmas: "/patterns/season-christmas.png"
+      spring: "/patterns/season-spring.webp",
+      summer: "/patterns/season-summer.webp",
+      autumn: "/patterns/season-autumn.webp",
+      winter: "/patterns/season-winter.webp",
+      tet: "/patterns/season-tet.webp",
+      midautumn: "/patterns/season-midautumn.webp",
+      christmas: "/patterns/season-christmas.webp"
     });
   });
 
@@ -346,7 +346,7 @@ describe("App session shell", () => {
     await waitFor(() => expect(screen.getByTestId("music-allowed")).toHaveTextContent("false"));
     expect(client.getOrganisationExperience).toHaveBeenCalledOnce();
     expect(document.documentElement.dataset.themePattern).toBe("winter");
-    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
+    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.webp");
   });
 
   it("keeps the last known organisation theme on the login screen after logout", async () => {
@@ -356,14 +356,14 @@ describe("App session shell", () => {
 
     await waitFor(() => {
       expect(document.documentElement.dataset.theme).toBe("winter");
-      expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
+      expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.webp");
     });
     await user.click(screen.getByRole("button", { name: "Đăng xuất khỏi tài khoản này" }));
 
     expect(await screen.findByRole("textbox", { name: "Email" })).toBeInTheDocument();
     await flushThemeEffects();
     expect(document.documentElement.dataset.theme).toBe("winter");
-    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
+    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.webp");
   });
 
   it("keeps the last known organisation theme on a connection error and presents a complete recovery panel", async () => {
@@ -373,7 +373,7 @@ describe("App session shell", () => {
 
     await waitFor(() => {
       expect(document.documentElement.dataset.theme).toBe("winter");
-      expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
+      expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.webp");
     });
     window.dispatchEvent(new StorageEvent("storage", { key: "e4s:auth:changed", newValue: "changed" }));
 
@@ -382,7 +382,7 @@ describe("App session shell", () => {
     expect(screen.getByRole("button", { name: "Thử kết nối lại" })).toBeEnabled();
     await flushThemeEffects();
     expect(document.documentElement.dataset.theme).toBe("winter");
-    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
+    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.webp");
     await user.click(screen.getByRole("button", { name: "Thử kết nối lại" }));
     expect(await screen.findByRole("textbox", { name: "Email" })).toBeInTheDocument();
   });
@@ -399,7 +399,7 @@ describe("App session shell", () => {
     await act(async () => finishTheme({ theme: "christmas" }));
     expect(await screen.findByRole("textbox", { name: "Email" })).toBeInTheDocument();
     expect(document.documentElement.dataset.theme).toBe("christmas");
-    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-christmas.png");
+    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-christmas.webp");
     expect(client.getOrganisationExperience).not.toHaveBeenCalled();
   });
 
@@ -413,7 +413,7 @@ describe("App session shell", () => {
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Chưa thể mở E4S" })).toBeInTheDocument();
     expect(document.documentElement.dataset.theme).toBe("christmas");
-    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-christmas.png");
+    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-christmas.webp");
   });
 
   it("uses the current seasonal theme when the organisation explicitly selects auto", async () => {

@@ -1,6 +1,6 @@
 import type { LearnerAvatarData, OrganisationExperienceView, ProductPreferencesView, SessionView } from "@e4s/contracts";
 import type { AuthClient } from "../features/auth/contracts.js";
-import { request } from "./runtime.js";
+import { currentSessionRequest, request } from "./runtime.js";
 
 export interface SharedApiClient extends AuthClient {
   currentSession(): Promise<SessionView>;
@@ -20,7 +20,7 @@ export const sharedApiClient: SharedApiClient = {
   verifyLearnerPinReset: (input) => request("/api/auth/learner/pin-reset/verify", { method: "POST", body: JSON.stringify(input) }),
   completeLearnerPinReset: (input) => request("/api/auth/learner/pin-reset/complete", { method: "POST", body: JSON.stringify(input) }),
   requestStaffPasswordHelp: (input) => request("/api/auth/staff/password-help", { method: "POST", body: JSON.stringify(input) }),
-  currentSession: () => request("/api/session"),
+  currentSession: () => currentSessionRequest(),
   saveSessionAvatar: (avatar) => request("/api/v1/me/avatar", { method: "PATCH", body: JSON.stringify(avatar) }),
   logout: () => request("/api/logout", { method: "POST", body: "{}" }),
   getProductPreferences: () => request("/api/v1/product-preferences"),

@@ -22,7 +22,7 @@ const SCENE_FOLDERS = { spring: "xuan", summer: "ha", autumn: "thu", winter: "do
 
 export function useArenaSceneStyle() {
   const folder = SCENE_FOLDERS[useTheme().resolvedTheme] ?? "giang-sinh";
-  return { backgroundImage: `url(/media/games/seven-seasons/seasons/${folder}/background.svg)` };
+  return { backgroundImage: `url(/media/games/seven-seasons/seasons/${folder}/background.webp)` };
 }
 
 /**

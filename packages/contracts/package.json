@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./dist/src/index.js"
   },
@@ -12,4 +13,3 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }
 }
-

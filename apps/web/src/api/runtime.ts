@@ -103,3 +103,22 @@ async function readJson(response: Response): Promise<unknown> {
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
+
+declare global { interface Window { __e4sSessionPrefetch?: Promise<Response> } }
+
+/**
+ * index.html starts GET /api/session while the scripts download (same-origin builds only).
+ * The first session read uses that response once; every later read is a normal request.
+ */
+export async function currentSessionRequest<T>(): Promise<T> {
+  const prefetch = typeof window !== "undefined" ? window.__e4sSessionPrefetch : undefined;
+  if (prefetch && apiUrl("/api/session") === "/api/session") {
+    delete window.__e4sSessionPrefetch;
+    const response = await prefetch.catch(() => undefined);
+    if (response) {
+      if (!response.ok) throw await apiResponseError(response);
+      return parseJsonResponse<T>(response);
+    }
+  }
+  return request<T>("/api/session");
+}

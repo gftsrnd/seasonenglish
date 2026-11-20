@@ -76,7 +76,7 @@ describe("Manager AI provider settings", () => {
 
     expect(document.documentElement.dataset.theme).toBe("winter");
     expect(document.documentElement.dataset.themePattern).toBe("winter");
-    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
+    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.webp");
   });
 
   it("applies the saved seasonal theme to the live app shell", async () => {
@@ -138,7 +138,7 @@ describe("Manager AI provider settings", () => {
     const menu = document.getElementById(account.getAttribute("popovertarget")!)!;
     menu.removeAttribute("popover"); // jsdom does not open native popovers.
     await user.click(within(menu).getByRole("button", { name: "Đổi avatar" }));
-    const dialog = within(screen.getByRole("dialog", { name: "Avatar của bạn" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "Avatar của bạn" })); // lazy-loaded
     await user.click(dialog.getByRole("button", { name: "Thỏ hồng" }));
     await user.click(dialog.getByRole("button", { name: "Màu nền Tím nhạt" }));
     await user.click(dialog.getByRole("button", { name: "Lưu avatar" }));

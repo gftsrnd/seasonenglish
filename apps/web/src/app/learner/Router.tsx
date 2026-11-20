@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { NotFoundState, StatusHomeIcon } from "../shared/StatusPage.js";
 import type { AssessmentView, CoachView, GameHubView, LearnerHomeView, LearnerProfileView, LearnerProgressView, LessonLockView, LessonView, LevelChallengeView, RewardView, SurveyView, WeeklyPracticeView } from "@e4s/contracts";
 import type { LearnerCallbacks, LearnerScreen } from "./contracts.js";
@@ -5,7 +6,8 @@ import { LearnerAssessment } from "./Assessment.js";
 import { LearnerChallenge, LearnerCoach } from "./CoachPractice.js";
 import { LearnerGame, LearnerGames } from "./Games.js";
 import { LearnerHome, LearnerMonthly } from "./Home.js";
-import { LearnerLesson } from "./Learning.js";
+// The lesson screen (with the pronunciation and grammar catalogs) loads only when a lesson opens.
+const LearnerLesson = lazy(() => import("./Learning.js").then((module) => ({ default: module.LearnerLesson })));
 import { LearnerOnboard } from "./Onboard.js";
 import { LearnerProfile, LearnerReward, LearnerSurvey } from "./ProfileReward.js";
 import { Empty, Notice, PageTitle, AppLink } from "./ui.js";
@@ -16,7 +18,7 @@ export function LearnerRouter({ screen, callbacks }: { screen: LearnerScreen; ca
     case "monthly": return <LearnerMonthly view={screen.view} actions={callbacks} />;
     case "onboard": return <LearnerOnboard view={screen.view} actions={callbacks} />;
     case "assessment": return <LearnerAssessment view={screen.view} actions={callbacks} />;
-    case "lesson": return <LearnerLesson view={screen.view} actions={callbacks} />;
+    case "lesson": return <Suspense fallback={null}><LearnerLesson view={screen.view} actions={callbacks} /></Suspense>;
     case "coach": return <LearnerCoach view={screen.view} actions={callbacks} />;
     case "challenge": return <LearnerChallenge view={screen.view} actions={callbacks} />;
     case "survey": return <LearnerSurvey view={screen.view} actions={callbacks} />;
@@ -44,7 +46,7 @@ export function LearnerController({ path, contracts, callbacks, uiState = {}, co
     return <LearnerOnboard view={{ profile: contracts.onboard?.profile ?? {}, mode: state.mode ?? (contracts.onboard ? "edit" : "new"), ...(draftAvailable === undefined ? {} : { draftAvailable }), ...(state.saving === undefined ? {} : { saving: state.saving }), ...(state.error === undefined ? {} : { error: state.error }) }} actions={callbacks} />;
   }
   if (parts[0] === "test" && parts.length === 2 && ["placement", "levelup", "level-up", "monthly", "final", "pass-course", "passcourse"].includes(parts[1]!)) return contracts.assessment ? <LearnerAssessment view={{ ...contracts.assessment, ...(uiState.assessment ?? {}) }} actions={callbacks} /> : missing("Bài test chưa sẵn sàng.");
-  if (parts[0] === "lesson" && parts.length === 2 && parts[1]) return contracts.lesson ? <LearnerLesson view={{ lesson: contracts.lesson, lock: contracts.lesson.lock ?? uiState.lessonLock ?? null }} actions={callbacks} /> : missing("Bài học không tồn tại hoặc chưa mở.");
+  if (parts[0] === "lesson" && parts.length === 2 && parts[1]) return contracts.lesson ? <Suspense fallback={null}><LearnerLesson view={{ lesson: contracts.lesson, lock: contracts.lesson.lock ?? uiState.lessonLock ?? null }} actions={callbacks} /></Suspense> : missing("Bài học không tồn tại hoặc chưa mở.");
   if (parts[0] === "coach" && parts.length === 1) return contracts.coach ? <LearnerCoach view={{ ...contracts.coach, ...(uiState.coach ?? {}) }} actions={callbacks} /> : missing("Cuộc trò chuyện với Season chưa sẵn sàng.");
   if (parts[0] === "challenge" && parts.length === 1) return contracts.challenge ? <LearnerChallenge view={{ ...contracts.challenge, ...(uiState.challenge ?? {}) }} actions={callbacks} /> : missing("Thử thách lên mức chưa mở.");
   if (parts[0] === "survey" && parts.length === 1) return contracts.survey ? <LearnerSurvey view={contracts.survey} actions={callbacks} /> : missing("Khảo sát chưa sẵn sàng.");

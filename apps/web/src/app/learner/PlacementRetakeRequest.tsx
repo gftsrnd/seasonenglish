@@ -1,9 +1,10 @@
-import { useEffect, useId, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useState } from "react";
 import { Link } from "react-router";
 import { apiUrl } from "../../api/runtime.js";
 import { Button, Modal } from "./ui.js";
 import { Eye } from "lucide-react";
-import { OperatorReviewAssessmentDetail } from "../operator/Review.js";
+// The submission viewer is shared with the Operator review screen; load it only when a learner opens a test.
+const OperatorReviewAssessmentDetail = lazy(() => import("../operator/Review.js").then((module) => ({ default: module.OperatorReviewAssessmentDetail })));
 import type { AssessmentPlacementRetakeRequestView, ContentReviewAssessmentDetailView } from "@e4s/contracts";
 import { learnerApiClient, type LearnerApiClient } from "../../api/learner.js";
 
@@ -123,5 +124,5 @@ export function OriginalPlacementModal({ submission, onClose, retake = false }: 
     decision: null,
     appeal: null
   };
-  return <OperatorReviewAssessmentDetail detail={detail} learnerFeedback={feedback} {...(retake ? { learnerTitle: "Bài thi lại đã nộp" } : {})} onClose={onClose} />;
+  return <Suspense fallback={null}><OperatorReviewAssessmentDetail detail={detail} learnerFeedback={feedback} {...(retake ? { learnerTitle: "Bài thi lại đã nộp" } : {})} onClose={onClose} /></Suspense>;
 }

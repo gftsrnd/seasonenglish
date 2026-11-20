@@ -1,7 +1,7 @@
 /*
  * Arena (Đấu trường), owner reference 19/11: the Mini game entry card (season colours + scenery), the app's
  * segmented tabs (Đấu | Bảng xếp hạng), the two play panels and the leaderboard table. Season colours
- * come from the theme tokens and the scenery from the current season's background.svg.
+ * come from the theme tokens and the scenery from the current season's background.webp (rendered from background.svg).
  * Phone ≤ 600px compact, tablet 601–1024px middle tier, desktop normal.
  */
 .arena-page { display: grid; gap: 14px; align-content: start; }

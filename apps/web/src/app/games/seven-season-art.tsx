@@ -22,7 +22,9 @@ export function useGameSeason() {
 }
 
 export function seasonAssetUrl(season: Season, asset: string) {
-  return asset === "shared-jump" ? `${root}/effects/jump.svg` : `${root}/seasons/${season.id}/${asset}.svg`;
+  if (asset === "shared-jump") return `${root}/effects/jump.svg`;
+  // The traced scenery SVGs are 0.1–1.7 MB; the WebP render (1680×1121) is 17–95 KB and looks the same as a background.
+  return `${root}/seasons/${season.id}/${asset}.${asset === "background" ? "webp" : "svg"}`;
 }
 
 export function SeasonImage({ season, asset, className, style, alt = "" }: {

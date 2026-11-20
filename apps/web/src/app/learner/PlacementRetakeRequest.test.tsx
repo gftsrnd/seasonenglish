@@ -95,7 +95,7 @@ describe("placement retake request: bell → support page → 'Xin thi lại' �
     expect(screen.getByText("Chờ xử lý")).toHaveClass("warn");
     expect(screen.getByText(/Phản hồi bài đầu vào: Hãy luyện thêm kỹ năng nghe/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Xem bài làm" }));
-    const dialog = screen.getByRole("dialog", { name: "Bài đầu vào đã nộp" });
+    const dialog = await screen.findByRole("dialog", { name: "Bài đầu vào đã nộp" }); // the viewer is lazy-loaded
     expect(within(dialog).getByText("Hãy luyện thêm kỹ năng nghe.")).toBeInTheDocument();
     for (const name of ["Nghe", "Đọc", "Viết", "Nói"]) await user.click(within(dialog).getByText(new RegExp(`^${name} ·`)));
     await user.click(within(dialog).getByText("Group listening", { exact: true }));

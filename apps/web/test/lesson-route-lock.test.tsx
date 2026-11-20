@@ -38,15 +38,15 @@ const lesson: LessonView = {
 };
 
 describe("learner lesson route lock binding", () => {
-  it("renders the server-provided lock instead of exposing future lesson content", () => {
+  it("renders the server-provided lock instead of exposing future lesson content", async () => {
     render(<LearnerController path={`/lesson/${lesson.id}`} contracts={{ lesson }} callbacks={callbacks} />);
 
-    expect(screen.getByRole("heading", { name: /học bù bài trước đã nhé/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /học bù bài trước đã nhé/i })).toBeInTheDocument(); // lesson screen is lazy-loaded
     expect(screen.getByText(/bạn chưa hoàn thành/i)).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: lesson.title })).not.toBeInTheDocument();
   });
 
-  it("renders the schedule date lock with the recoverable coach/home actions", () => {
+  it("renders the schedule date lock with the recoverable coach/home actions", async () => {
     const { rerender } = render(<LearnerController path={`/lesson/${lesson.id}`} contracts={{ lesson }} callbacks={callbacks} />);
     rerender(<LearnerController path={`/lesson/${lesson.id}`} contracts={{ lesson: {
       ...lesson,
@@ -59,7 +59,7 @@ describe("learner lesson route lock binding", () => {
       }
     } }} callbacks={callbacks} />);
 
-    expect(screen.getByRole("heading", { name: /bài này mở vào/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /bài này mở vào/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /luyện với season/i })).toHaveAttribute("href", "/coach");
     expect(screen.getByRole("link", { name: /về trang chủ/i })).toHaveAttribute("href", "/home");
   });

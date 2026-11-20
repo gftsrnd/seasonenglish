@@ -29,8 +29,11 @@ Danh sách cập nhật ở cuối file này, sau mỗi lần dọn test. Mục 
 
 ### Trạng thái ngày 20/11/2026
 
-- Web: **1.521/1.521 pass**.
-- API + packages + scripts: **2.525/2.526 pass**. `pnpm typecheck` sạch.
-- Test còn hỏng: `apps/api/test/monthly-content.integration.test.ts` › "keeps one shared brief and locks a submitted framework through the Operator API". Bài học tháng trong fixture `approvableMonthlyContract` (`apps/api/test/support/monthly-final-fixture.ts`) chưa đạt chuẩn chất lượng hiện tại: 25 lỗi nặng (ngôn ngữ hướng dẫn A1, mục tiêu can-do, 3 collocation mỗi từ, phần ngữ pháp hằng ngày, phát âm). Muốn sửa phải viết bộ dựng bài riêng cho từng mức.
-- `monthly-final-quality-gate` chỉ chạy được khi chạy riêng (nó bỏ qua bước reset schema), nên chạy chung cả bộ có thể hỏng.
-- Ca test của luồng tuần và các route đã gỡ được chuyển vào `legacy/*/test` và `legacy/old-routes/removed-test-cases.txt`.
+- Trên một bản checkout sạch, chạy đúng các bước của CI: **4.047/4.047 test pass**, kèm typecheck, kiểm tra media và build web.
+- Test cần Postgres: CI dùng service `pgvector/pgvector:pg18` qua biến `TEST_DATABASE_URL`. Ở máy local, `pnpm test` tự bật Postgres nhúng. Gói `embedded-postgres` 18.4.0-beta.17 bản cài mới bị thiếu `dist/`; nếu Postgres nhúng không khởi động được, dùng Docker:
+  ```powershell
+  docker run -d --name e4s-test-pg -e POSTGRES_USER=e4s -e POSTGRES_PASSWORD=e4s_test_password -e POSTGRES_DB=e4s_test -p 127.0.0.1:55432:5432 pgvector/pgvector:pg18
+  $env:TEST_DATABASE_URL = "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test"; pnpm test
+  ```
+- Test e2e nội dung tháng dùng bài A1/C1 thật (`apps/api/test/fixtures/monthly-real-lessons.json`) vì bài giả không còn qua được bộ kiểm tra chất lượng.
+- Test của luồng tuần và các route đã gỡ được chuyển vào `legacy/*/test` và `legacy/old-routes/removed-test-cases.txt`.

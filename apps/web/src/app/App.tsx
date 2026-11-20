@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { BrowserRouter, useLocation } from "react-router";
 import { RefreshCw, WifiOff } from "lucide-react";
 import type { CefrLevel, LearnerAvatarData, LearnerProfileView, OrganisationBackgroundMusicView, SessionView } from "@e4s/contracts";
@@ -14,7 +14,8 @@ import { ToastProvider } from "./shared/design-system.js";
 import { useToast } from "./shared/design-system.js";
 import { ThemeProvider, useTheme } from "./shared/ThemeProvider.js";
 import { preloadRoleRoute, RoleRoutes } from "./RoleRoutes.js";
-import { AvatarDialog } from "./learner/ProfileReward.js";
+// Loaded on demand: the profile module (Season card, certificate) must not ride in the entry bundle.
+const AvatarDialog = lazy(() => import("./learner/ProfileReward.js").then((module) => ({ default: module.AvatarDialog })));
 import { LockedLearnerSupport } from "./shared/LockedLearnerSupport.js";
 import { ModalScrollJump } from "./shared/ModalScrollJump.js";
 import "./shared/status-page.css";
@@ -256,7 +257,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
       {children ? children(session) : <RoleRoutes session={session} onSessionRevoked={clearSession} onLearnerCefr={setLearnerCefr}
         onPlacementRetakeActive={setPlacementRetakeActive} sharedProfileRecord={profileRecord} onProfileRecord={setProfileRecord} />}
     </AppShell>
-    {avatarOpen && avatarReady ? <AvatarDialog initial={avatar} name={session.user.displayName} onClose={closeAvatar} onSave={saveAvatar} /> : null}
+    {avatarOpen && avatarReady ? <Suspense fallback={null}><AvatarDialog initial={avatar} name={session.user.displayName} onClose={closeAvatar} onSave={saveAvatar} /></Suspense> : null}
   </ModalProvider></BrowserRouter></ExperienceProvider>;
 }
 

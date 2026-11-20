@@ -4,13 +4,13 @@ import { resolveAutomaticTheme, useAutomaticTheme } from "../../features/experie
 export const themePreferences = ["auto", "spring", "summer", "autumn", "winter", "tet", "midautumn", "christmas"] as const;
 export type ThemePreference = typeof themePreferences[number];
 export const themePatternUrls: Record<Exclude<ThemePreference, "auto">, string> = {
-  spring: "/patterns/season-spring.png",
-  summer: "/patterns/season-summer.png",
-  autumn: "/patterns/season-autumn.png",
-  winter: "/patterns/season-winter.png",
-  tet: "/patterns/season-tet.png",
-  midautumn: "/patterns/season-midautumn.png",
-  christmas: "/patterns/season-christmas.png"
+  spring: "/patterns/season-spring.webp",
+  summer: "/patterns/season-summer.webp",
+  autumn: "/patterns/season-autumn.webp",
+  winter: "/patterns/season-winter.webp",
+  tet: "/patterns/season-tet.webp",
+  midautumn: "/patterns/season-midautumn.webp",
+  christmas: "/patterns/season-christmas.webp"
 };
 type ThemeApi = {
   theme: ThemePreference;

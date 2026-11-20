@@ -52,6 +52,9 @@ jobs:
           pnpm verify:pronunciation
           pnpm verify:app-media
 
+      - name: Playwright browser (layout tests open a real Chromium)
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Tests (Postgres service)
         run: pnpm test
 

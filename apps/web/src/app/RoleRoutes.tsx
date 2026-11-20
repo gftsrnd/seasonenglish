@@ -52,6 +52,8 @@ const OperatorRouteController = operatorRouteModule.Component;
  * parallel with the session/theme bootstrap instead of after it. Best effort:
  * failures are surfaced again (and recovered) when the route renders.
  */
+const learnerPreloadPrefixes = ["/home", "/monthly", "/coach", "/games", "/arena", "/profile", "/support", "/lesson", "/test", "/challenge", "/survey", "/onboard", "/reward"] as const;
+
 export function preloadRoleRoute(role: SessionView["role"] | null, pathname: string) {
   const path = normalizePathname(pathname);
   const staffSettings = path === "/settings";
@@ -60,7 +62,9 @@ export function preloadRoleRoute(role: SessionView["role"] | null, pathname: str
       : role === "manager" ? (path.startsWith("/mgr/ops/") ? operatorRouteModule : managerRouteModule)
         : isRouteOrChild(path, "/op") ? operatorRouteModule
           : isRouteOrChild(path, "/mgr") || staffSettings ? managerRouteModule
-            : undefined;
+            // Learner pages (a reload of /home, /games…) start fetching their controller before the session answers.
+            : learnerPreloadPrefixes.some((route) => isRouteOrChild(path, route)) ? learnerRouteModule
+              : undefined;
   void target?.preload().catch(() => undefined);
 }
 

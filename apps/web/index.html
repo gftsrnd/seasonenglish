@@ -12,6 +12,18 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
     <link rel="manifest" href="/site.webmanifest" />
     <title>E4S · English for Every Season</title>
+    <!-- Ask for the session while the app scripts download (the app reuses this response once). -->
+    <script>try{window.__e4sSessionPrefetch=fetch("/api/session",{credentials:"include"})}catch(e){}</script>
+    <style>
+      /* Static first paint (no JS yet): the same brand splash as the app's loading screen; React replaces it. */
+      html,body{margin:0;min-height:100%}
+      .boot{min-height:100vh;min-height:100dvh;display:grid;place-items:center;font-family:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:radial-gradient(circle at 18% 12%,#dcebdf 0,transparent 42%),radial-gradient(circle at 85% 88%,#fbeed0 0,transparent 40%),linear-gradient(160deg,#eef4ef 0%,#f6f4ec 100%)}
+      .boot__in{display:grid;justify-items:center;gap:14px;text-align:center}
+      .boot__logo{display:grid;place-items:center;width:104px;height:104px;border-radius:28px;background:#fff;box-shadow:0 14px 36px rgb(31 90 60/.14)}
+      .boot__logo img{width:62px;height:62px}
+      .boot__brand{margin:6px 0 0;color:#1f3d2c;font-size:1.35rem;font-weight:700}
+      .boot__tag{margin:-8px 0 0;color:#6b7a70;font-size:.9rem}
+    </style>
   </head>
-  <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
+  <body><div id="root"><main class="boot" aria-busy="true"><div class="boot__in"><span class="boot__logo"><img src="/favicon.svg" alt="" width="62" height="62" /></span><p class="boot__brand">Season English</p><p class="boot__tag">English for Every Season</p></div></main></div><script type="module" src="/src/main.tsx"></script></body>
 </html>

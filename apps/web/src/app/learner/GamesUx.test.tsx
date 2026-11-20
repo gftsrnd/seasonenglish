@@ -77,7 +77,7 @@ describe("learner game visual and interaction regressions", () => {
   it("uses the current season's supplied Catch scene and keeps the four-item cap", () => {
     localStorage.setItem("e4s:organisation-theme", "autumn");
     const catchView = render(<ThemeProvider><SeasonCatchGame words={wordSet.words} cefr="A2" onFinish={vi.fn()} /></ThemeProvider>);
-    expect(catchView.container.querySelector('.season-stage-background')).toHaveAttribute("src", "/media/games/seven-seasons/seasons/thu/background.svg");
+    expect(catchView.container.querySelector('.season-stage-background')).toHaveAttribute("src", "/media/games/seven-seasons/seasons/thu/background.webp");
     expect(catchView.container.querySelector('.falling-item img[src$="/drop.svg"]')).toBeInTheDocument();
     expect(catchView.container.querySelector('.catch-hero img')).toHaveAttribute("alt", "Sóc cầm rổ");
     expect(catchView.container.querySelectorAll('.game-lives img[src$="/heart.svg"]')).toHaveLength(3);
