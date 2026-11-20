@@ -690,7 +690,7 @@ describe("practice, games, arena, rewards and survey API", () => {
     expect(removed.json()).toMatchObject({ wordSet: null });
   });
 
-  it("retires the Arena and Duel endpoints", async () => {
+  it("no longer serves the first Arena and Duel endpoints (moved to legacy/)", async () => {
     const responses = await Promise.all([
       app.inject({ method: "GET", url: "/api/v1/engagement/arena", headers: { cookie } }),
       app.inject({ method: "POST", url: "/api/v1/engagement/duels", headers: { cookie }, payload: {} }),
@@ -699,8 +699,7 @@ describe("practice, games, arena, rewards and survey API", () => {
     ]);
 
     for (const response of responses) {
-      expect(response.statusCode, response.body).toBe(410);
-      expect(response.json()).toEqual({ code: "ARENA_RETIRED" });
+      expect(response.statusCode, response.body).toBe(404);
     }
   });
 

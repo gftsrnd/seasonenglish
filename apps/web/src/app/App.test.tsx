@@ -191,30 +191,6 @@ describe("App session shell", () => {
     expect(screen.queryByRole("button", { name: "Liên hệ Quản lý" })).not.toBeInTheDocument();
   });
 
-  it("opens the old support link before placement without any appeals area", async () => {
-    window.history.replaceState({}, "", "/profile#my-requests");
-    learnerClient.getProfile.mockResolvedValue({ profile: {}, completed: false, version: 1 });
-    learnerClient.getProgress.mockResolvedValue({ learner: { id: "learner-1", cefr: null } });
-    learnerClient.getLearnerComplaints.mockResolvedValue({ complaints: [] });
-    learnerClient.getLearnerAppeals.mockResolvedValue({ appeals: [] });
-    learnerClient.getAppealableAssessments.mockResolvedValue({ results: [{ attemptId: "exam-1", title: "Bài thi đầu vào", availableUntil: null }] });
-    const user = userEvent.setup();
-    render(<App />);
-    expect(await screen.findByRole("heading", { name: "Hỗ trợ học tập" })).toBeInTheDocument();
-    expect(window.location.pathname).toBe("/support");
-    const sections = screen.getByRole("navigation", { name: "Các mục hỗ trợ học tập" });
-    await waitFor(() => expect(screen.getByText("Theo dõi khiếu nại của bạn.")).toBeInTheDocument());
-    expect(within(sections).queryByRole("link", { name: "Kháng nghị" })).not.toBeInTheDocument();
-    // No monthly survey before learning starts.
-    expect(within(sections).getAllByRole("link").map(link => link.textContent)).toEqual(["Tất cả", "Khiếu nại"]);
-    await user.click(within(sections).getByRole("link", { name: "Khiếu nại" }));
-    await user.click(await screen.findByRole("button", { name: "Gửi khiếu nại" }));
-    expect(screen.getByLabelText("Lý do khiếu nại")).toBeVisible();
-    // Only account complaints apply before there are lessons or attendance.
-    expect(within(screen.getByLabelText("Loại khiếu nại")).getAllByRole("option").map(option => option.textContent)).toEqual(["Tài khoản"]);
-    expect(screen.queryByRole("button", { name: "Gửi kháng nghị" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Về Tiến độ & hồ sơ" })).toHaveAttribute("href", "/profile");
-  });
 
   it.each(["appeals", "feedback"])("sends a typed %s URL back to the All tab while the level is not approved", async (type) => {
     window.history.replaceState({}, "", `/support?type=${type}`);

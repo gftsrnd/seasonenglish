@@ -297,8 +297,8 @@ describe("app shell navigation and logout", () => {
 
   it.each([
     ["/mgr/reminders", "Theo dõi"], ["/mgr/report", "Theo dõi"],
-    ["/mgr/holidays", "Vận hành"], ["/mgr/complaints", "Yêu cầu"],
-    ["/mgr/reopen-requests", "Yêu cầu"], ["/mgr/requests", "Yêu cầu"], ["/settings", "Cài đặt"]
+    ["/mgr/holidays", "Vận hành"],
+    ["/mgr/requests", "Yêu cầu"], ["/settings", "Cài đặt"]
   ])("keeps four Manager destinations and highlights the correct group on %s", (path, label) => {
     render(<ExperienceProvider><MemoryRouter initialEntries={[path]}><AppShell session={session("manager")} onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
     for (const name of ["Điều hướng quản lý", "Điều hướng trên thiết bị di động"]) {

@@ -19,7 +19,7 @@ function homeView(next: Record<string, unknown>, systemDate: string): LearnerHom
       { label: "T2", date: "2026-11-30", status: "upcoming" }, { label: "T3", date: "2026-12-01", status: systemDate === "2026-12-01" ? "today" : "missed" },
       { label: "T4", date: "2026-12-02", status: "upcoming" }, { label: "T5", date: "2026-12-03", status: "upcoming" }, { label: "T6", date: "2026-12-04", status: "upcoming" }
     ] },
-    coach: { turnsThisWeek: 0, targetTurns: 30, href: "/coach" }, practice: { status: "locked", detail: "", href: "/practice" },
+    coach: { turnsThisWeek: 0, targetTurns: 30, href: "/coach" },
     levelReadiness: { targetLevel: "A2", windowDays: 14, eligible: false, examAvailable: false, criteria: [] }
   } as unknown as LearnerHomeView;
 }

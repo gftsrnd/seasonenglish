@@ -34,7 +34,7 @@ import { ArenaRoute, arenaRouteMatch } from "./arena/ArenaRoutes.js";
 import { AppLink, Button, Empty, Modal, Notice, PageTitle } from "./ui.js";
 import { RotateCcw } from "lucide-react";
 
-type StaticRouteName = "home" | "monthly" | "onboard" | "coach" | "challenge" | "practice" | "survey" | "profile" | "games";
+type StaticRouteName = "home" | "monthly" | "onboard" | "coach" | "challenge" | "survey" | "profile" | "games";
 export type ResolvedLearnerRoute =
   | { name: StaticRouteName; params: Record<string, never> }
   | { name: "assessment"; params: { kind: AssessmentKind | "levelup" | "passcourse" } }
@@ -93,9 +93,8 @@ const assessmentCelebrationKey = "e4s:assessment-complete-celebration";
 export function resolveLearnerRoute(pathname: string): ResolvedLearnerRoute {
   const clean = (pathname.startsWith("#") ? pathname.slice(1) : pathname).split(/[?#]/, 1)[0] || "/";
   const segments = clean.split("/").filter(Boolean).map(safeDecode);
-  if (segments[0] === "arena" || segments[0] === "duel") return { name: "games", params: {} };
-  if (segments[0] === "practice") return { name: "home", params: {} };
-  if (segments.length === 1 && ["home", "monthly", "onboard", "coach", "challenge", "practice", "survey", "profile", "games"].includes(segments[0]!)) return { name: segments[0] as StaticRouteName, params: {} };
+  if (segments[0] === "arena") return { name: "games", params: {} };
+  if (segments.length === 1 && ["home", "monthly", "onboard", "coach", "challenge", "survey", "profile", "games"].includes(segments[0]!)) return { name: segments[0] as StaticRouteName, params: {} };
   if (segments[0] === "test" && segments.length === 2) {
     const raw = segments[1];
     if (raw === "placement") return { name: "assessment", params: { kind: raw } };
@@ -134,9 +133,7 @@ export function LearnerRouteController(props: LearnerRouteProps = {}) {
 function LearnerRoutes(props: LearnerRouteProps) {
   const { pathname, hash } = useLocation();
   const path = normalizeLearnerPath(pathname);
-  if (path === "/profile" && hash === "#my-requests") return <Navigate replace to="/support?from=profile" />;
   if (path === "/support") return <LearnerRequestHistory />;
-  if (path === "/survey/monthly") return <Navigate replace to="/support?type=feedback" />;
   if (path === "/reward/course") return <CourseCompletion onPrint={printLearnerReward} />;
   if (arenaRouteMatch(path)) return <ArenaRoute path={path} learnerId={props.learnerId} />;
   return <LearnerContent {...props} />;
@@ -262,7 +259,6 @@ function LearnerContent({ courseCompleted = false, learnerId, onLearnerCefr, onP
         case "lesson": accept({ lesson: await apiClient.getLesson(route.params.id) }); break;
         case "coach": accept({ coach: await apiClient.getCoach() }); break;
         case "challenge": accept({ challenge: await apiClient.getLevelChallenge() }); break;
-        case "practice": accept({ practice: await apiClient.getWeeklyPractice() }); break;
         case "survey": {
           const home = await apiClient.getHome();
           if (home.month || home.monthlyPreparation) {
@@ -628,7 +624,7 @@ function loadingLabel(route: ResolvedLearnerRoute["name"]) {
   const labels: Record<ResolvedLearnerRoute["name"], string> = {
     home: "Đang tải trang chủ", monthly: "Đang tải bài tháng", onboard: "Đang tải hồ sơ", assessment: "Đang tải bài test", lesson: "Đang tải bài học",
     coach: "Đang mở cuộc trò chuyện", challenge: "Đang mở thử thách lên mức",
-    practice: "Đang mở bài thực hành", survey: "Đang mở khảo sát", profile: "Đang tải tiến độ", reward: "Đang tạo chứng nhận",
+    survey: "Đang mở khảo sát", profile: "Đang tải tiến độ", reward: "Đang tạo chứng nhận",
     games: "Đang mở mini game", game: "Đang mở trò chơi", notFound: "Đang mở trang"
   };
   return labels[route];
@@ -638,7 +634,7 @@ function loadError(route: ResolvedLearnerRoute["name"]) {
   const labels: Record<ResolvedLearnerRoute["name"], string> = {
     home: "Không tải được trang chủ.", monthly: "Không tải được bài tháng.", onboard: "Không tải được hồ sơ.", assessment: "Không tải được bài test.", lesson: "Không tải được bài học.",
     coach: "Không tải được cuộc trò chuyện với Season.", challenge: "Chưa có thử thách lên mức đang mở.",
-    practice: "Không tải được bài thực hành tuần.", survey: "Không tải được khảo sát.", profile: "Không tải được tiến độ.", reward: "Chứng nhận chưa sẵn sàng.",
+    survey: "Không tải được khảo sát.", profile: "Không tải được tiến độ.", reward: "Chứng nhận chưa sẵn sàng.",
     games: "Chưa có bộ từ cho mini game.", game: "Chưa có bộ từ cho mini game.", notFound: "Không tìm thấy trang."
   };
   return labels[route];
@@ -672,10 +668,6 @@ function loadRecovery(route: ResolvedLearnerRoute["name"]) {
 }
 
 function loadWaitState(route: ResolvedLearnerRoute["name"]) {
-  if (route === "practice") return {
-    title: "Bài thực hành tuần đang được chuẩn bị",
-    message: "Bạn cần đợi bài thực hành tuần được chuẩn bị hoặc được giao. Hãy quay lại sau."
-  };
   if (route === "game" || route === "games") return {
     title: "Mini game đang được chuẩn bị",
     message: "Nếu chưa được xếp trình độ, hãy hoàn thành bài đầu vào. Nếu đã có trình độ, hãy thử tải lại."

@@ -335,7 +335,6 @@ describe("learner profile, home, lesson and progress API", () => {
           ]
         },
         coach: { turnsThisWeek: 2, targetTurns: 50, href: "/coach" },
-        practice: { status: "locked", href: "/practice" },
         levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: true }
       });
       expect(response.json()).not.toHaveProperty("finalAssessment");

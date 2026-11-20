@@ -11,8 +11,8 @@ const matchParams = z.object({ matchId: z.uuid() });
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)));
 
 /**
- * Arena phase 2 API (THIET-KE-DAU-TRUONG, DOT 2). The retired `/api/v1/engagement/arena`
- * and `/duels` URLs keep answering 410 ARENA_RETIRED; the new arena lives here.
+ * Arena phase 2 API (THIET-KE-DAU-TRUONG, DOT 2). The first arena (`/api/v1/engagement/arena`,
+ * `/duels`) was moved to legacy/old-routes on 2026-11-20; the arena lives here.
  */
 export function registerArenaRoutes(app: FastifyInstance, pool: Pool): void {
   const arena = new ArenaRepository(pool);

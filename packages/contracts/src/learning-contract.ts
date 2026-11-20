@@ -431,11 +431,6 @@ export interface LearnerHomeView {
     days: Array<{ label: string; date: string; status: "attended" | "today" | "missed" | "upcoming" }>;
   };
   coach: { turnsToday?: number; turnsThisWeek: number; targetTurns: number; href: "/coach" };
-  practice: {
-    status: "locked" | "open" | "draft" | "submitted" | "reviewed";
-    detail: string;
-    href: "/practice";
-  };
   levelReadiness: LevelReadinessView;
   /** Lifecycle fields are server-derived; older clients may omit them while rolling out. */
   pilotPhase?: PilotPhase;

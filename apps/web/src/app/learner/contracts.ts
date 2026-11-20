@@ -39,7 +39,7 @@ import type { AudioDeletionMetadata, AudioEvidence } from "../shared/media/audio
 
 export const LEARNER_ROUTES = [
   "/home", "/onboard", "/test/:kind", "/lesson/:id",
-  "/coach", "/monthly", "/challenge", "/practice", "/survey", "/profile",
+  "/coach", "/monthly", "/challenge", "/survey", "/profile",
   "/reward/:mode", "/games", "/games/:game"
 ] as const;
 
@@ -117,7 +117,6 @@ export type LearnerScreen =
   | { kind: "lesson"; view: LessonView }
   | { kind: "coach"; view: CoachView }
   | { kind: "challenge"; view: ChallengeView }
-  | { kind: "practice"; view: PracticeView }
   | { kind: "survey"; view: SurveyView }
   | { kind: "profile"; view: ProfileView }
   | { kind: "reward"; view: RewardView }

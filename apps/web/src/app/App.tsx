@@ -347,7 +347,7 @@ function isManagerPath(pathname: string): boolean {
 }
 
 function isLearnerPath(pathname: string): boolean {
-  return ["/home", "/onboard", "/coach", "/monthly", "/challenge", "/practice", "/survey", "/support", "/profile", "/games", "/arena", "/lesson", "/test"].some((route) => isRouteOrChild(pathname, route)) || isRouteOrChild(pathname, "/reward/done") || pathname === "/reward/course";
+  return ["/home", "/onboard", "/coach", "/monthly", "/challenge", "/survey", "/support", "/profile", "/games", "/arena", "/lesson", "/test"].some((route) => isRouteOrChild(pathname, route)) || isRouteOrChild(pathname, "/reward/done") || pathname === "/reward/course";
 }
 
 function isRouteOrChild(pathname: string, route: string): boolean {

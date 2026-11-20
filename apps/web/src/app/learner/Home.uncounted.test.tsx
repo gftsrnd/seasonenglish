@@ -17,7 +17,7 @@ function homeView(overrides: Partial<LearnerHomeView> = {}): LearnerHomeView {
     lessons: [lessonOne], nextLesson: lessonOne,
     metrics: { completedLessons: 0, totalLessons: 16, studyDays: 0, streakDays: 0, points: 0, completedReviews: 0, totalReviews: 4 },
     schedule: { daysPerWeek: 5, lessonMinutes: 10, days: [] },
-    coach: { turnsThisWeek: 0, targetTurns: 30, href: "/coach" }, practice: { status: "locked", detail: "", href: "/practice" },
+    coach: { turnsThisWeek: 0, targetTurns: 30, href: "/coach" },
     levelReadiness: { targetLevel: "A2", windowDays: 14, eligible: false, examAvailable: false, criteria: [] },
     monthlyUncounted: { countsFrom: "2026-12-01" },
     ...overrides

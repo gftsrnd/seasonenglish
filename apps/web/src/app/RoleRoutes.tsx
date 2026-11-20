@@ -64,7 +64,7 @@ export function preloadRoleRoute(role: SessionView["role"] | null, pathname: str
   void target?.preload().catch(() => undefined);
 }
 
-const managerRoutes = ["/mgr", "/mgr/ops", "/mgr/requests", "/mgr/reopen-requests", "/mgr/complaints", "/mgr/holidays", "/mgr/recovery", "/mgr/reminders", "/mgr/report", "/mgr/surveys", "/mgr/rewards"] as const;
+const managerRoutes = ["/mgr", "/mgr/ops", "/mgr/requests", "/mgr/holidays", "/mgr/reminders", "/mgr/report", "/mgr/surveys", "/mgr/rewards"] as const;
 const operatorRoutes = ["/op", "/op/levelforms", "/op/months", "/op/review", "/op/requests", "/op/tests"] as const;
 const managerContentRoutes = ["/mgr/ops/levels", "/mgr/ops/months", "/mgr/ops/review", "/mgr/ops/tests", "/mgr/ops/level-forms"] as const;
 
@@ -79,17 +79,12 @@ export function RoleRoutes({ session, onSessionRevoked, ...learnerProps }: { ses
   const managerRoute = managerRoutes.some((route) => route === pathname);
   if (!isSupportedRole(role)) return <AccessFallback home="/" message="Vai trò tài khoản này không được hỗ trợ. Vui lòng quay lại trang bắt đầu." />;
   if (role === "learner") {
-    if (pathname === "/practice") return <Navigate replace to="/home" />;
     if (operatorRoute) return <AccessFallback home="/home" message="Tài khoản này không có quyền mở khu vực vận hành." />;
     if (managerArea || settingsArea || (rewardPreviewRoute && pathname !== "/reward/preview")) return <AccessFallback home="/home" message="Tài khoản này không có quyền mở khu vực quản lý." />;
     if (pathname === "/") return <Navigate replace to="/home" />;
     return <RoleRouteLoadingBoundary label={loadingLabel(pathname)}><LearnerRouteController key={session.user.id} learnerId={session.user.id} courseCompleted={session.courseCompleted === true} {...learnerProps} /></RoleRouteLoadingBoundary>;
   }
-  if (pathname === "/op/prompts") return <AccessFallback home="/op" message="Tài khoản này không có quyền mở cấu hình Prompt & rubric." />;
-  if (pathname === "/mgr/ops/prompts" || pathname === "/settings/prompts") return <AccessFallback home={role === "operator" ? "/op" : "/mgr/ops"} message="Tài khoản này không có quyền mở cấu hình Prompt & rubric." />;
   if (pathname === "/" || pathname === "/home") return <Navigate replace to={role === "operator" ? "/op" : "/mgr"} />;
-  // Weekly topic frame and weekly lesson sets moved to legacy/ (20/11): old links land on the monthly lessons.
-  if (role === "operator" && (isRouteOrChild(pathname, "/op/lessons") || isRouteOrChild(pathname, "/op/weeks"))) return <Navigate replace to="/op/months" />;
   if (role === "operator" && (managerArea || rewardPreviewRoute || (settingsArea && pathname !== "/settings"))) return <AccessFallback home="/op" message="Tài khoản này không có quyền mở khu vực quản lý." />;
   const managerContentRoute = role === "manager" && managerContentRoutes.some((route) => pathname === route || (route === "/mgr/ops/months" && /^\/mgr\/ops\/months\/lesson\/[^/]+\/\d+$/u.test(pathname)));
   if (role === "manager" && !managerContentRoute && (operatorRoute || pathname.startsWith("/mgr/ops/"))) return <Navigate replace to="/mgr/ops" />;
@@ -170,12 +165,11 @@ function loadingLabel(pathname: string): string {
   if (pathname === "/mgr") return "Đang tải tiến độ nhóm";
   if (pathname === "/mgr/ops") return "Đang tải hiệu suất vận hành";
   if (pathname === "/mgr/reminders") return "Đang tải danh sách nhắc học";
-  if (pathname === "/mgr/requests" || pathname === "/mgr/reopen-requests" || pathname === "/mgr/complaints") return "Đang tải danh sách yêu cầu";
+  if (pathname === "/mgr/requests") return "Đang tải danh sách yêu cầu";
   if (pathname === "/mgr/holidays") return "Đang tải lịch nghỉ lễ";
-  if (pathname === "/mgr/recovery") return "Đang tải danh sách khôi phục";
   if (pathname === "/mgr/report") return "Đang tải báo cáo";
-  if (pathname === "/mgr/surveys" || pathname === "/survey/monthly") return "Đang tải khảo sát tháng";
-  if (pathname === "/op/requests" || pathname === "/support") return "Đang tải yêu cầu";
+  if (pathname === "/mgr/surveys") return "Đang tải khảo sát tháng";
+  if (pathname === "/support") return "Đang tải yêu cầu";
   if (pathname === "/op") return "Đang tải duyệt trình độ";
   return "Đang tải trang";
 }

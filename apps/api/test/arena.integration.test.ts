@@ -115,7 +115,7 @@ describe("arena phase 2: XH, open challenges, friendly invites and the ledger", 
     });
     expect(view.json().season).toMatchObject({ status: "active" });
     // The old duel URLs stay retired.
-    expect((await call(l1.cookie, "GET", "/api/v1/engagement/arena")).statusCode).toBe(410);
+    expect((await call(l1.cookie, "GET", "/api/v1/engagement/arena")).statusCode).toBe(404);
   });
 
   it("lists an open challenge to the same level without the poster, and one of two simultaneous accepts wins", async () => {

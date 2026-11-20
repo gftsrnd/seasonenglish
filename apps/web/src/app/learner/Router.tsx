@@ -2,7 +2,7 @@ import { NotFoundState, StatusHomeIcon } from "../shared/StatusPage.js";
 import type { AssessmentView, CoachView, GameHubView, LearnerHomeView, LearnerProfileView, LearnerProgressView, LessonLockView, LessonView, LevelChallengeView, RewardView, SurveyView, WeeklyPracticeView } from "@e4s/contracts";
 import type { LearnerCallbacks, LearnerScreen } from "./contracts.js";
 import { LearnerAssessment } from "./Assessment.js";
-import { LearnerChallenge, LearnerCoach, LearnerPractice } from "./CoachPractice.js";
+import { LearnerChallenge, LearnerCoach } from "./CoachPractice.js";
 import { LearnerGame, LearnerGames } from "./Games.js";
 import { LearnerHome, LearnerMonthly } from "./Home.js";
 import { LearnerLesson } from "./Learning.js";
@@ -19,7 +19,6 @@ export function LearnerRouter({ screen, callbacks }: { screen: LearnerScreen; ca
     case "lesson": return <LearnerLesson view={screen.view} actions={callbacks} />;
     case "coach": return <LearnerCoach view={screen.view} actions={callbacks} />;
     case "challenge": return <LearnerChallenge view={screen.view} actions={callbacks} />;
-    case "practice": return <LearnerPractice view={screen.view} actions={callbacks} />;
     case "survey": return <LearnerSurvey view={screen.view} actions={callbacks} />;
     case "profile": return <LearnerProfile view={screen.view} actions={callbacks} />;
     case "reward": return <LearnerReward view={screen.view} actions={callbacks} />;
@@ -48,7 +47,6 @@ export function LearnerController({ path, contracts, callbacks, uiState = {}, co
   if (parts[0] === "lesson" && parts.length === 2 && parts[1]) return contracts.lesson ? <LearnerLesson view={{ lesson: contracts.lesson, lock: contracts.lesson.lock ?? uiState.lessonLock ?? null }} actions={callbacks} /> : missing("Bài học không tồn tại hoặc chưa mở.");
   if (parts[0] === "coach" && parts.length === 1) return contracts.coach ? <LearnerCoach view={{ ...contracts.coach, ...(uiState.coach ?? {}) }} actions={callbacks} /> : missing("Cuộc trò chuyện với Season chưa sẵn sàng.");
   if (parts[0] === "challenge" && parts.length === 1) return contracts.challenge ? <LearnerChallenge view={{ ...contracts.challenge, ...(uiState.challenge ?? {}) }} actions={callbacks} /> : missing("Thử thách lên mức chưa mở.");
-  if (parts[0] === "practice" && parts.length === 1) return contracts.practice ? <LearnerPractice view={{ ...contracts.practice, ...(uiState.aiAvailable === undefined ? {} : { aiAvailable: uiState.aiAvailable }) }} actions={callbacks} /> : missing("Bài thực hành tuần chưa sẵn sàng.");
   if (parts[0] === "survey" && parts.length === 1) return contracts.survey ? <LearnerSurvey view={contracts.survey} actions={callbacks} /> : missing("Khảo sát chưa sẵn sàng.");
   if (parts[0] === "profile" && parts.length === 1) return contracts.profile ? <LearnerProfile view={{ ...contracts.profile, ...(uiState.profile ?? {}) }} actions={callbacks} courseCompleted={courseCompleted} /> : missing("Tiến độ chưa sẵn sàng.");
   if (parts[0] === "reward" && parts.length === 2 && (parts[1] === "preview" || parts[1] === "done")) return contracts.reward ? <LearnerReward view={contracts.reward} actions={callbacks} /> : missing("Chứng nhận chưa sẵn sàng.");

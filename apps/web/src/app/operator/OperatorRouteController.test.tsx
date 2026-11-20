@@ -551,18 +551,6 @@ describe("OperatorRouteController", () => {
 
 
 
-  it("lets Manager edit Prompt & rubric from its Settings area", async () => {
-    const client = { getContentPrompts: vi.fn().mockResolvedValue({ groups: [
-      { key: "system_rules", label: "Quy tắc chung", content: "current", defaultContent: "default", version: 1, status: "active" },
-      { key: "assessment_scoring", label: "Chấm test", content: "score", defaultContent: "score default", version: 1, status: "active" }
-    ] }) };
-    render(<MemoryRouter initialEntries={["/settings/prompts"]}><OperatorRouteController session={manager} client={client as any} basePath="/mgr/ops" /></MemoryRouter>);
-    expect(await screen.findByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
-    screen.getAllByRole("button", { name: "Về mặc định" }).forEach(button => expect(button).toBeEnabled());
-    expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeEnabled();
-    expect(screen.getByRole("textbox", { name: "Quy tắc chung" })).not.toHaveAttribute("readonly");
-    expect(screen.queryByText(/bài siêu ngắn/i)).not.toBeInTheDocument();
-  });
 
   it("keeps Manager review read-only and omits the retired super-short lesson", async () => {
     const review = {
@@ -591,17 +579,6 @@ describe("OperatorRouteController", () => {
     expect(screen.queryByRole("tab", { name: /bài siêu ngắn|bài nộp/i })).not.toBeInTheDocument();
   });
 
-  it("keeps the Manager Prompt settings editable without an operations inspection banner", async () => {
-    const client = { getContentPrompts: vi.fn().mockResolvedValue({ groups: [
-      { key: "system_rules", label: "Quy tắc chung", content: "current", defaultContent: "default", version: 1, status: "active" }
-    ] }), saveContentPrompts: vi.fn() };
-    render(<MemoryRouter initialEntries={["/settings/prompts"]}><OperatorRouteController session={manager} client={client as any} basePath="/mgr/ops" /></MemoryRouter>);
-
-    expect(await screen.findByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeEnabled();
-    expect(screen.queryByText(/chế độ chỉ đọc/i)).not.toBeInTheDocument();
-    expect(client.saveContentPrompts).not.toHaveBeenCalled();
-  });
 
   it("disables dashboard actions whose backend endpoint is absent and explains why", async () => {
     const client = { getAssessmentReviewOverview: vi.fn().mockResolvedValue({

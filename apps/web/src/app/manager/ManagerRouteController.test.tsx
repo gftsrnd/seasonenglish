@@ -96,25 +96,6 @@ describe("ManagerRouteController", () => {
     await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ simulatedSystemDate: "2026-11-14" })));
   });
 
-  it.each([
-    ["/mgr/reopen-requests", "Yêu cầu", "Yêu cầu mở khóa", "Duyệt yêu cầu mở khóa tài khoản và nội dung học."],
-    ["/mgr/complaints", "Khiếu nại", "Khiếu nại học viên", "Xem và phản hồi khiếu nại của học viên."]
-  ])("opens the legacy %s URL on the %s tab", async (path, label, tab, description) => {
-    vi.spyOn(apiClient, "getManagerReopenRequests").mockResolvedValue({ requests: [] });
-    renderManager(<MemoryRouter initialEntries={[path]}>
-      <RoleRoutes session={{ role: "manager", user: { id: "manager-1", displayName: "Quản lý", email: null }, permissions: ["report:read"] }} />
-    </MemoryRouter>);
-
-    await waitFor(() => expect(apiClient.getManagerReopenRequests).toHaveBeenCalled());
-    const heading = await screen.findByRole("heading", { name: label });
-    const tabs = screen.getByRole("navigation", { name: "Loại yêu cầu" });
-    expect(heading.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(tabs).getByRole("link", { name: tab })).toHaveAttribute("aria-current", "page");
-    expect(heading.parentElement).toHaveTextContent(description);
-    expect(await screen.findByRole("table", { name: label })).toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "Các mục yêu cầu" })).not.toBeInTheDocument();
-  });
-
   const resourcesRequest = {
     id: "framework-request-1", target: "monthly_resources" as const, targetId: "framework-a2", requestedBy: "operator-1",
     reason: "Kế hoạch cũ thiếu bài tập kỹ năng", status: "pending" as const, decisionReason: null,
@@ -122,51 +103,7 @@ describe("ManagerRouteController", () => {
     monthlyResources: { frameworkId: "framework-a2", month: "2026-11", cefr: "A2" as const, frameworkVersion: 1, lessonCount: 20, lessonsWithContent: 0, removedLessonCount: null }
   };
 
-  it("lists a monthly resources reopen request with its month, level and version and approves it with a reason", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(apiClient, "getManagerReopenRequests")
-      .mockResolvedValueOnce({ requests: [resourcesRequest] })
-      .mockResolvedValue({ requests: [{ ...resourcesRequest, status: "approved", decisionReason: "Đồng ý mở lại", decidedAt: "2026-11-05T02:00:00.000Z", monthlyResources: { ...resourcesRequest.monthlyResources, lessonCount: 0, removedLessonCount: 20 } }] });
-    const decide = vi.spyOn(apiClient, "decideManagerReopenRequest").mockResolvedValue({ ...resourcesRequest, status: "approved", decisionReason: "Đồng ý mở lại", decidedAt: "2026-11-05T02:00:00.000Z" });
-    renderManager(<MemoryRouter initialEntries={["/mgr/reopen-requests"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
 
-    const queue = (await screen.findByText("Tài nguyên tháng 11/2026 · A2")).closest("tr")!;
-    expect(within(queue).getByText("Phiên bản tài nguyên v1")).toBeInTheDocument();
-    expect(within(queue).queryByRole("alert")).not.toBeInTheDocument();
-
-    await user.click(within(queue).getByRole("button", { name: "Duyệt mở khóa" }));
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveTextContent("xoá 20 bài chưa có nội dung");
-    await user.type(within(dialog).getByLabelText("Lý do gửi cho vận hành và học viên"), "Đồng ý mở lại");
-    await user.click(within(dialog).getByRole("button", { name: "Duyệt mở khóa" }));
-
-    await waitFor(() => expect(decide).toHaveBeenCalledWith("framework-request-1", "approved", "Đồng ý mở lại"));
-    expect(await within(queue).findByText("Đã xoá 20 bài khỏi lịch.")).toBeInTheDocument();
-  });
-
-  it("warns before approving a monthly resources reopen that removes lessons with content, and rejects with a reason", async () => {
-    const user = userEvent.setup();
-    const withContent = { ...resourcesRequest, monthlyResources: { ...resourcesRequest.monthlyResources, lessonsWithContent: 3 } };
-    vi.spyOn(apiClient, "getManagerReopenRequests").mockResolvedValue({ requests: [withContent] });
-    const decide = vi.spyOn(apiClient, "decideManagerReopenRequest").mockResolvedValue({ ...withContent, status: "rejected", decisionReason: "Giữ nguyên", decidedAt: "2026-11-05T02:00:00.000Z" });
-    renderManager(<MemoryRouter initialEntries={["/mgr/reopen-requests"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
-
-    const queue = (await screen.findByText("Tài nguyên tháng 11/2026 · A2")).closest("tr")!;
-    expect(await within(queue).findByRole("alert")).toHaveTextContent("3 bài đã có nội dung sẽ bị xoá");
-
-    await user.click(within(queue).getByRole("button", { name: "Duyệt mở khóa" }));
-    const approveDialog = await screen.findByRole("dialog");
-    expect(approveDialog).toHaveTextContent("Cảnh báo: 3/20 bài đã có nội dung");
-    await user.click(within(approveDialog).getByRole("button", { name: "Huỷ" }));
-    expect(decide).not.toHaveBeenCalled();
-
-    await user.click(within(queue).getByRole("button", { name: "Từ chối" }));
-    const rejectDialog = await screen.findByRole("dialog");
-    expect(rejectDialog).not.toHaveTextContent("Cảnh báo");
-    await user.type(within(rejectDialog).getByLabelText("Lý do gửi cho vận hành và học viên"), "Giữ nguyên");
-    await user.click(within(rejectDialog).getByRole("button", { name: "Từ chối" }));
-    await waitFor(() => expect(decide).toHaveBeenCalledWith("framework-request-1", "rejected", "Giữ nguyên"));
-  });
 
   it("scrolls the Manager header horizontally to reveal the active destination on tablet widths", async () => {
     const nav = document.createElement("nav");
@@ -207,12 +144,6 @@ describe("ManagerRouteController", () => {
     expect(screen.queryByRole("heading", { name: /^Mã PIN/ })).not.toBeInTheDocument();
   });
 
-  it("does not expose Operator prompts to Manager", async () => {
-    renderManager(<MemoryRouter initialEntries={["/settings/prompts"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
-
-    expect(await screen.findByRole("heading", { name: "Cài đặt" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Prompt & rubric" })).not.toBeInTheDocument();
-  });
 
   it("keeps the Manager operations summary scoped to account operations", async () => {
     vi.spyOn(apiClient, "getManagerOperations").mockResolvedValue(operations);

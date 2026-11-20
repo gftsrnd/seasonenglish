@@ -7,31 +7,32 @@ const expectedRoutes = [
   "/onboard",
   "/test/:kind",
   "/home",
-  "/micro/:id",
   "/lesson/:id",
   "/coach",
   "/challenge",
-  "/practice",
   "/games",
   "/games/:game",
+  "/monthly",
   "/arena",
-  "/duel/:id",
+  "/arena/match/:id",
+  "/support",
   "/profile",
   "/reward/:mode",
   "/survey",
   "/op",
   "/op/levelforms",
-  "/op/weeks",
-  "/op/lessons",
-  "/op/lessons/:week/:cefr",
+  "/op/months",
+  "/op/tests",
   "/op/review",
-  "/op/prompts",
   "/settings",
   "/mgr",
   "/mgr/ops",
   "/mgr/reminders",
   "/mgr/report",
-  "/mgr/rewards"
+  "/mgr/rewards",
+  "/mgr/requests",
+  "/mgr/holidays",
+  "/mgr/surveys"
 ] as const;
 
 describe("approved E4S screen contract", () => {
@@ -53,27 +54,9 @@ describe("approved E4S screen contract", () => {
   });
 
   it("keeps the approved primary navigation per role", () => {
-    expect(ROLE_NAVIGATION.learner).toEqual([
-      "/home",
-      "/coach",
-      "/practice",
-      "/games",
-      "/profile"
-    ]);
-    expect(ROLE_NAVIGATION.operator).toEqual([
-      "/op",
-      "/op/weeks",
-      "/op/lessons",
-      "/op/review",
-      "/settings"
-    ]);
-    expect(ROLE_NAVIGATION.manager).toEqual([
-      "/mgr",
-      "/mgr/ops",
-      "/mgr/reminders",
-      "/mgr/report",
-      "/settings"
-    ]);
+    expect(ROLE_NAVIGATION.learner).toEqual(["/home", "/coach", "/monthly", "/games", "/profile"]);
+    expect(ROLE_NAVIGATION.operator).toEqual(["/op", "/op/months", "/op/review", "/op/tests", "/settings"]);
+    expect(ROLE_NAVIGATION.manager).toEqual(["/mgr", "/mgr/ops", "/mgr/requests", "/settings"]);
   });
 
   it("makes Manager the Product Admin while keeping organisation administration outside Operator", () => {
@@ -95,7 +78,7 @@ describe("approved E4S screen contract", () => {
   it("requires every manager route to declare real data states instead of a pending placeholder", () => {
     const managerScreens: readonly VisibleScreen[] = SCREEN_CONTRACT.filter((screen) => screen.path.startsWith("/mgr"));
 
-    expect(managerScreens).toHaveLength(5);
+    expect(managerScreens).toHaveLength(8);
     for (const screen of managerScreens) {
       expect(screen.states).toEqual(expect.arrayContaining(["loading", "empty", "error", "populated"]));
     }

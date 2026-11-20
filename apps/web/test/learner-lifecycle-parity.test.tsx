@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LearnerHome, LearnerCoach, LearnerChallenge, LearnerPractice } from "../src/app/learner/index.js";
+import { LearnerHome, LearnerCoach, LearnerChallenge } from "../src/app/learner/index.js";
 import type { LearnerCallbacks } from "../src/app/learner/contracts.js";
 
 afterEach(cleanup);
@@ -26,7 +26,6 @@ const home = {
   week: { id: "w1", weekNumber: 1, topic: "Meetings", description: "", objectives: [] },
   lessons: [], nextLesson: null, metrics: { completedLessons: 5, totalLessons: 5, studyDays: 5, streakDays: 3, points: 20 },
   schedule: { daysPerWeek: 5, lessonMinutes: 10, days: [] }, coach: { turnsThisWeek: 1, targetTurns: 2, href: "/coach" },
-  practice: { status: "reviewed", detail: "Đã chấm", href: "/practice" },
   levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: true, examAvailable: true, criteria: [] },
   pilotPhase: "in_pilot", levelUpPhase: "requested", monthlyGoal: "Speak clearly", rewardAnnouncement: { kind: "new-level-announcement", points: 20, nextPoints: 60, seasonName: "Mùa thu" }
 } as any;
@@ -133,18 +132,4 @@ describe("learner lifecycle app states", () => {
     expect(screen.getByText(/kế hoạch luyện lại/i)).toBeInTheDocument();
   });
 
-  it("renders practice appeal action and pending/decided hidden states", () => {
-    const base = {
-      state: "reviewed", weekId: "w", weekNumber: 1, topic: "Meetings", completedLessons: 5, totalLessons: 5,
-      task: "Write", guidance: "Eight words", submission: { id: "sub", status: "reviewed", text: "text", submittedAt: null,
-        score: { total: 70 }, feedback: "Feedback", suggestions: [], correctedText: "" }, appeal: null
-    } as any;
-    const callback = actions();
-    const { rerender } = render(<LearnerPractice view={base} actions={callback} />);
-    expect(screen.getByRole("button", { name: /gửi kháng nghị/i })).toBeInTheDocument();
-    rerender(<LearnerPractice view={{ ...base, appeal: { status: "pending", reason: "reason" } }} actions={callback} />);
-    expect(screen.getByText(/kháng nghị.*pending/i)).toBeInTheDocument();
-    rerender(<LearnerPractice view={{ ...base, appeal: { status: "accepted", reason: "reason", resolution: "Đã chấp nhận" } }} actions={callback} />);
-    expect(screen.getByText(/đã chấp nhận/i)).toBeInTheDocument();
-  });
 });

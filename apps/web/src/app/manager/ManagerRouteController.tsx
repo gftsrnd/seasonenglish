@@ -55,17 +55,13 @@ export function ManagerRouteController({ role, currentUserId, onSessionRevoked }
     <Route path="/mgr/ops" element={role === "manager" ? <OperationsRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/ops/*" element={<Navigate replace to={role === "manager" ? "/mgr/ops" : "/op"} />} />
     <Route path="/mgr/requests" element={role === "manager" ? <ManagerRequests /> : <Navigate replace to="/op" />} />
-    <Route path="/mgr/reopen-requests" element={<Navigate replace to={role === "manager" ? "/mgr/requests?kind=reopen" : "/op"} />} />
-    <Route path="/mgr/complaints" element={<Navigate replace to={role === "manager" ? "/mgr/requests?kind=complaint" : "/op"} />} />
     <Route path="/mgr/holidays" element={role === "manager" ? <ManagerHolidays /> : <Navigate replace to="/op" />} />
-    <Route path="/mgr/recovery" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
     <Route path="/mgr/reminders" element={role === "manager" ? <RemindersRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/report" element={role === "manager" ? <ReportRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/surveys" element={role === "manager" ? <ManagerMonthlySurveys /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/rewards" element={role === "manager" ? <ManagerRewards /> : <Navigate replace to="/op" />} />
     <Route path="/reward/preview" element={role === "manager" ? <ManagerRewardCertificate /> : <Navigate replace to="/op" />} />
     <Route path="/settings" element={<SettingsRoute role={role} currentUserId={currentUserId} onSessionRevoked={onSessionRevoked} />} />
-    <Route path="/settings/prompts" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
   </Routes></div>;
 }
 

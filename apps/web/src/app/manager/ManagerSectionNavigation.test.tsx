@@ -36,7 +36,7 @@ describe("Manager grouped navigation", () => {
     }
   });
 
-  it.each(["/mgr/requests", "/mgr/reopen-requests", "/mgr/complaints"])("omits secondary navigation on %s", (path) => {
+  it.each(["/mgr/requests"])("omits secondary navigation on %s", (path) => {
     render(<MemoryRouter initialEntries={[path]}><ManagerSectionNavigation /></MemoryRouter>);
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
   });

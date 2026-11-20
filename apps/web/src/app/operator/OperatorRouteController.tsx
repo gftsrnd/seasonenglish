@@ -34,7 +34,6 @@ import { OperatorLevelFormDetail, OperatorLevelForms } from "./LevelForms.js";
 import { PlacementRetakeCard } from "./PlacementRetakeCard.js";
 import { useMonthlyGenerationRevision } from "./monthly-generation-progress.js";
 import { emptyLesson, LessonFormEditor } from "./LessonFormEditor.js";
-import { OperatorPrompts } from "./Prompts.js";
 import { OperatorReview, OperatorReviewAssessmentDetail, promptExerciseCorrection } from "./Review.js";
 import type { ManualScoreInput } from "./AssessmentManualScore.js";
 import { MonthlyLessonPreview, OperatorMonths } from "./Months.js";
@@ -47,7 +46,7 @@ import { useToast } from "../shared/design-system.js";
 import { errorCode, errorMessage, GENERIC_ERROR_MESSAGE } from "../shared/error-message.js";
 import type { AudioEvidence } from "../shared/media/audio-evidence.js";
 import { formatScore, formatScoreOutOf } from "../shared/format-score.js";
-import { adaptAssessmentOverview, adaptLevelForms, adaptPrompts, adaptReview } from "./adapters.js";
+import { adaptAssessmentOverview, adaptLevelForms, adaptReview } from "./adapters.js";
 import type { Cefr, LessonSetActionKey, LevelFormTarget, OperatorReviewActions, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
 import { describeBatchLevelResults, generateLessonWeeksBatchSettled, lessonGenerationJobsSnapshot, startLessonGenerationJob, subscribeLessonGenerationJobs } from "./lesson-generation.js";
 import { Eye as EyeIcon_, Pencil as PencilIcon_, X as XIcon_ } from "lucide-react";
@@ -62,14 +61,10 @@ export type OperatorApiClient = typeof apiClient;
 
 type OperatorRoutePaths = {
   root: string;
-  weeks: string;
   levelForms: string;
   months: string;
-  lessons: string;
   review: string;
-  requests: string;
   tests: string;
-  prompts: string;
 };
 
 const defaultOperatorRoutePaths = routePathsFor("/op");
@@ -167,13 +162,6 @@ function OperatorRouteControllerContent({ session, client, paths }: { session: S
   const retakeGeneration = useRetakeGeneration(client, session.user.id);
   if (session.role !== "operator" && session.role !== "manager") return <Status tone="error">Tài khoản này không có quyền mở khu vực học thuật.</Status>;
   const readOnly = session.role === "manager";
-  const query = new URLSearchParams(location.search);
-  const reviewTab = query.get("tab") ?? (location.state as { reviewTab?: ReviewTab } | null)?.reviewTab;
-  const oldReopens = location.pathname === paths.months && location.hash === "#my-reopen-requests";
-  if (!readOnly && (location.pathname === paths.requests || oldReopens)) {
-    query.set("tab", oldReopens || reviewTab === "sent" ? "sent" : "appeals");
-    return <Navigate to={`${paths.review}?${query}`} replace />;
-  }
   const props = { client, readOnly };
   const monthlyLesson = location.pathname.match(new RegExp(`^${escapeRegExp(paths.months)}/lesson/([^/]+)/(\\d+)$`));
   const content = location.pathname === paths.root ? <DashboardRoute {...props} />
@@ -182,7 +170,6 @@ function OperatorRouteControllerContent({ session, client, paths }: { session: S
         : monthlyLesson ? <MonthsRoute {...props} preview={{ frameworkId: monthlyLesson[1]!, dayNumber: Number(monthlyLesson[2]) }} />
         : location.pathname === paths.months ? <MonthsRoute {...props} />
             : location.pathname === paths.review ? (readOnly ? <ReviewRoute {...props} canEditWeeklyPractice /> : <OperatorReviewWorkspace client={client} />)
-              : location.pathname === paths.prompts ? <PromptsRoute client={client} readOnly={false} />
                 : <NotFoundState message="Đường dẫn vận hành này không tồn tại hoặc đã đổi. Hãy quay về trang chủ Vận hành." home={<Link className="btn btn-primary" to={paths.root}><StatusHomeIcon />Về trang chủ</Link>} />;
   return content;
 }
@@ -190,14 +177,10 @@ function OperatorRouteControllerContent({ session, client, paths }: { session: S
 function routePathsFor(basePath: "/op" | "/mgr/ops"): OperatorRoutePaths {
   return {
     root: basePath === "/op" ? basePath : `${basePath}/levels`,
-    weeks: `${basePath}/weeks`,
     levelForms: basePath === "/op" ? `${basePath}/levelforms` : `${basePath}/level-forms`,
     months: `${basePath}/months`,
-    lessons: `${basePath}/lessons`,
     review: `${basePath}/review`,
-    requests: `${basePath}/requests`,
-    tests: `${basePath}/tests`,
-    prompts: "/settings/prompts"
+    tests: `${basePath}/tests`
   };
 }
 
@@ -1504,25 +1487,6 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly =
     rescoring={gradingAction === "ai"}
     {...(typeof client.confirmAssessmentAudioDeletion === "function" && typeof client.deleteAssessmentAudio === "function" && !readOnly ? { onDeleteAudio: deleteReviewedAudio } : {})}
   />}</>;
-}
-
-function PromptsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
-  const modal = useModal();
-  const navigate = useNavigate();
-  const [data, setData] = useState<ContentPromptSettingsView>();
-  const [error, setError] = useState<string>();
-  const [saving, setSaving] = useState(false);
-  useEffect(() => { void client.getContentPrompts().then(setData).catch(reason => setError(message(reason))); }, [client]);
-  if (error) return <Status tone="error">Không tải được prompt: {error}</Status>;
-  if (!data) return <Status>Đang tải prompt…</Status>;
-  return <OperatorPrompts readOnly={readOnly} view={adaptPrompts(data, { saveState: saving ? "loading" : "idle" })} actions={{
-    onBack: () => navigate("/settings"),
-    onReset: key => { if (!readOnly) setData(current => current ? { ...current, groups: current.groups.map(group => group.key === promptToApi[key] ? { ...group, content: group.defaultContent } : group) } : current); },
-    onSave: values => { if (readOnly) return; setSaving(true); void client.saveContentPrompts(Object.entries(values).map(([key, content]) => ({ key: promptToApi[key as PromptKey], content }))).then(setData).catch(reason => setError(message(reason))).finally(() => setSaving(false)); },
-    onPublish: async (key, version) => {
-      if (readOnly || !await modal.confirm({ title: "Phát hành hướng dẫn AI?", message: "Phiên bản này sẽ được dùng cho các lượt AI tiếp theo.", confirmLabel: "Phát hành" })) return;
-      setSaving(true); void client.publishContentPrompt(promptToApi[key], version).then(group => setData(current => current ? { groups: current.groups.map(item => item.key === group.key ? group : item) } : current)).catch(reason => setError(message(reason))).finally(() => setSaving(false)); }
-  }} />;
 }
 
 const operatorErrorMessages: Record<string, string> = {

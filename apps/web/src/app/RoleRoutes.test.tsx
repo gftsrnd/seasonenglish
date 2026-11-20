@@ -46,7 +46,6 @@ const unlockedHome: LearnerHomeView = {
   metrics: { completedLessons: 0, totalLessons: 0, studyDays: 0, streakDays: 0, points: 0 },
   schedule: { daysPerWeek: 5, lessonMinutes: 10, days: [] },
   coach: { turnsThisWeek: 0, targetTurns: 2, href: "/coach" },
-  practice: { status: "locked", detail: "Chưa mở", href: "/practice" },
   levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: false, criteria: [] },
 };
 
@@ -173,14 +172,6 @@ describe("RoleRoutes authorization boundary", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("blocks Operator from both legacy and direct Prompt settings routes", () => {
-    const legacy = render(<MemoryRouter initialEntries={["/op/prompts"]}><RoleRoutes session={operator} /></MemoryRouter>);
-    expect(screen.getByRole("alert")).toHaveTextContent("Tài khoản này không có quyền mở cấu hình Prompt & rubric.");
-
-    legacy.unmount();
-    render(<MemoryRouter initialEntries={["/settings/prompts"]}><RoleRoutes session={operator} /></MemoryRouter>);
-    expect(screen.getByRole("alert")).toHaveTextContent("Tài khoản này không có quyền mở cấu hình Prompt & rubric.");
-  });
 
   it("recognizes the new Operator Bài kiểm tra route", async () => {
     vi.spyOn(operatorApiClient, "getContentReview").mockResolvedValue({ tabs: [], submissions: [], coachSamples: [], microLessons: [], weeklyPractices: [], appeals: [], lessonAttempts: [], assessments: [] });

@@ -37,7 +37,7 @@ export const managerSections = [
 ] as const;
 
 export function managerSectionForPath(pathname: string) {
-  if (pathname === "/mgr/requests" || pathname === "/mgr/reopen-requests" || pathname === "/mgr/complaints") return managerSections[2];
+  if (pathname === "/mgr/requests") return managerSections[2];
   const section = managerSections.find(section => section.items.some(item => item.to !== "/mgr" && (pathname === item.to || pathname.startsWith(`${item.to}/`))));
   if (section) return section;
   return pathname === "/mgr" || pathname.startsWith("/mgr/") ? managerSections[0] : undefined;

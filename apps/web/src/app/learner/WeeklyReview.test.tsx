@@ -103,7 +103,7 @@ describe("locked Monday after an unfinished review", () => {
       lessons: [next], nextLesson: next,
       metrics: { completedLessons: 4, totalLessons: 16, studyDays: 4, streakDays: 0, points: 0, completedReviews: 0, totalReviews: 4 },
       schedule: { daysPerWeek: 5, lessonMinutes: 10, days: [] },
-      coach: { turnsThisWeek: 0, targetTurns: 30, href: "/coach" }, practice: { status: "locked", detail: "", href: "/practice" },
+      coach: { turnsThisWeek: 0, targetTurns: 30, href: "/coach" },
       levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: false, criteria: [] }
     } as unknown as LearnerHomeView;
     render(<LearnerHome view={view} actions={{ navigate: vi.fn() } as any} />);

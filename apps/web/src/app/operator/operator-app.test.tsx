@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   OperatorDashboard,
   OperatorLevelForms,
-  OperatorPrompts,
   OperatorReview
 } from "./index.js";
 import { adaptAssessmentOverview, adaptLevelForms } from "./adapters.js";
@@ -299,40 +298,6 @@ describe("Operator app rebuild", () => {
     expect(onOpenSettings).not.toHaveBeenCalled();
   });
 
-  it("removes the retired super-short lesson from Operator review and prompts", async () => {
-    const user = userEvent.setup();
-    const onTabChange = vi.fn();
-    render(<OperatorReview view={{ activeTab: "subs", counts: { subs: 1, coach: 2, appeals: 1, attempts: 0, tests: 4 }, submissions: [], coachTurns: [], appeals: [], attempts: [], tests: [] } as any} actions={{ onTabChange, onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn() }} />);
-    expect(screen.getByText("Theo dõi đề bài tuần, bài đã nộp, phản hồi AI Coach, kháng nghị và lịch sử làm bài.")).toBeInTheDocument();
-    expect(screen.getAllByRole("tab")).toHaveLength(5);
-    expect(screen.queryByText(/bài siêu ngắn/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Lịch sử làm bài" })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /Bài test/ })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /Kháng nghị/ }));
-    expect(onTabChange).toHaveBeenCalledWith("appeals");
-
-    cleanup();
-    const onReset = vi.fn();
-    const onSave = vi.fn();
-    const onPublish = vi.fn();
-    render(<OperatorPrompts view={{ prompts: [
-      ["base", "Quy tắc chung", "base", "active", 1],
-      ["placement", "Chấm test & xếp trình độ", "placement", "active", 1],
-      ["lesson", "Sinh 5 bài học cho tuần", "lesson", "active", 1],
-      ["weeks", "Gợi ý khung chủ đề tuần", "weeks", "draft", 2],
-      ["coach", "AI coach hội thoại", "coach", "active", 1],
-      ["grade", "Chấm bài thực hành thứ Sáu", "grade", "active", 1]
-    ] } as any} actions={{ onBack: vi.fn(), onReset, onSave, onPublish }} />);
-    expect(screen.getAllByRole("textbox")).toHaveLength(6);
-    expect(screen.queryByText(/bài siêu ngắn/i)).not.toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: "Về mặc định" })[0]!);
-    expect(onReset).toHaveBeenCalledWith("base");
-    await user.click(screen.getByRole("button", { name: "Lưu prompt" }));
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ base: "base", grade: "grade" }));
-    expect(screen.getByText("Bản nháp v2")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Phát hành Gợi ý khung chủ đề tuần" }));
-    expect(onPublish).toHaveBeenCalledWith("weeks", 2);
-  });
 
   it("keeps AI regrade and an editable manual score with feedback available after a submission was graded", async () => {
     const user = userEvent.setup();

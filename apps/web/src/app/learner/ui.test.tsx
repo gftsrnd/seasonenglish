@@ -103,7 +103,6 @@ describe("learner app UI primitives", () => {
   });
 
   it.each([
-    ["practice", "Bài thực hành tuần đang được chuẩn bị", /đợi bài thực hành tuần được chuẩn bị hoặc được giao/i],
     ["games", "Mini game đang được chuẩn bị", /Nếu chưa được xếp trình độ/i]
   ] as const)("shows the %s wait state as preparation, not a broken page", (route, title, message) => {
     render(<LearnerLoadFailure route={route} message="Lỗi API thô không nên hiện." onRetry={vi.fn()} navigate={vi.fn()} />);

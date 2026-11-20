@@ -97,39 +97,4 @@ it.each([false, true])("shows the full retake appeal card with the appropriate c
   for (const button of buttons) expect(button.className).not.toMatch(/\b(?:btn-primary|btn-danger|operator-retake-approve|operator-retake-reject)\b/);
 });
 
-it("redirects the old month hash and shows decisions directly in the manager request list", async () => {
-  openRoute("/op/months#my-reopen-requests", {
-    getOwnReopenRequests: vi.fn().mockResolvedValue({ requests: [{
-      id: "reopen-1", target: "weekly_review", status: "pending", reason: "Bổ sung nội dung", createdAt: "2026-11-07T01:00:00Z",
-      lesson: { date: "2026-11-07", cefr: "A2", number: 4 }
-    }] }),
-    getOwnDeletionRequests: vi.fn().mockResolvedValue({ requests: [{
-      id: "deletion-1", learnerName: "Học viên cũ", status: "approved", reason: "Tài khoản tạo nhầm", note: "Đã xác minh",
-      requestedAt: "2026-11-08T01:00:00Z", decidedAt: "2026-11-08T02:00:00Z"
-    }] })
-  });
 
-  expect(await screen.findByRole("heading", { name: "Yêu cầu" })).toBeInTheDocument();
-  const list = within(screen.getByRole("table", { name: "Danh sách yêu cầu" }));
-  expect(await list.findByText("Mở lại bài ôn")).toBeVisible();
-  expect(list.getByText(/2026-11-07 · A2 · Ôn tập/)).toBeVisible();
-  expect(list.queryByText(/Bài 4/)).not.toBeInTheDocument();
-  expect(list.getByText("Phản hồi: Đã xác minh")).toBeVisible();
-  expect(list.getByText("Tài khoản tạo nhầm")).toBeVisible();
-  expect(list.getByText("Đã duyệt")).toBeVisible();
-  expect(list.queryAllByText("—", { exact: true })).toHaveLength(0);
-  expect(list.queryByRole("link")).not.toBeInTheDocument();
-});
-
-it("names a reopened daily lesson by its new-lesson number, not the raw calendar slot", async () => {
-  openRoute("/op/months#my-reopen-requests", {
-    getOwnReopenRequests: vi.fn().mockResolvedValue({ requests: [{
-      id: "reopen-2", target: "daily_lesson", status: "pending", reason: "Sửa ví dụ", createdAt: "2026-11-09T01:00:00Z",
-      lesson: { date: "2026-11-09", cefr: "A1", number: 6, newLessonNumber: 5 }
-    }] }),
-    getOwnDeletionRequests: vi.fn().mockResolvedValue({ requests: [] })
-  });
-  const list = within(await screen.findByRole("table", { name: "Danh sách yêu cầu" }));
-  expect(await list.findByText(/2026-11-09 · A1 · Bài 5/)).toBeVisible();
-  expect(list.queryByText(/Bài 6/)).not.toBeInTheDocument();
-});

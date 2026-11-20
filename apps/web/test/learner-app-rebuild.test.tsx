@@ -69,7 +69,6 @@ describe("new learner app frontend", () => {
         metrics: { completedLessons: 0, totalLessons: 5, studyDays: 0, streakDays: 0, points: 0 },
         schedule: { daysPerWeek: 5, lessonMinutes: 10, days: [{ label: "T2", date: "2026-10-12", status: "today" }] },
         coach: { turnsThisWeek: 0, targetTurns: 2, href: "/coach" },
-        practice: { status: "locked", detail: "Mở khi hoàn thành đủ 5 bài.", href: "/practice" },
         levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: false, criteria: [] },
         microLesson: { id: "m1", topic: "Email ngắn", durationMinutes: 5, completed: false },
         reward: { points: 0, nextPoints: 60, seasonName: "Mùa xuân – gieo hạt" }
@@ -100,7 +99,6 @@ describe("new learner app frontend", () => {
       metrics: { completedLessons: 0, totalLessons: 0, studyDays: 0, streakDays: 0, points: 0 },
       schedule: { daysPerWeek: 5, lessonMinutes: 10, days: [] },
       coach: { turnsThisWeek: 0, targetTurns: 2, href: "/coach" },
-      practice: { status: "locked", detail: "Chưa mở", href: "/practice" },
       levelReadiness: { targetLevel: null, windowDays: 14, eligible: false, examAvailable: false, criteria: [] },
     } }} callbacks={callbacks()} />);
     expect(screen.getByRole("heading", { name: "3 bước để bắt đầu học" })).toBeInTheDocument();

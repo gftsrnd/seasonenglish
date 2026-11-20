@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LearnerChallenge, LearnerCoach, LearnerPractice } from "./CoachPractice.js";
+import { LearnerChallenge, LearnerCoach } from "./CoachPractice.js";
 import type { LearnerCallbacks, PracticeView } from "./contracts.js";
 
 afterEach(() => {
@@ -167,22 +167,7 @@ describe("app coach and weekly practice speech input", () => {
     expect(within(bubble!).getByLabelText("Phát Bản ghi âm câu trả lời")).toBeInTheDocument();
   });
 
-  it("normalizes weekly submission audioArtifact responses while retaining feedback", () => {
-    render(<LearnerPractice view={{ ...practice, state: "submitted", submission: {
-      id: "submission-1", status: "submitted", text: "I coordinate the weekly project meeting every Monday morning.", submittedAt: "2026-10-28T00:00:00.000Z", score: null,
-      feedback: "Result kept after playback", suggestions: [], correctedText: "", audioArtifact: { fileId: "weekly-file", artifactKey: "audio/weekly.webm", signedUrl: "/audio/weekly.webm" }
-    } }} actions={actions()} />);
-    expect(screen.getByLabelText("Phát Bản ghi âm bài thực hành")).toHaveAttribute("src", "/audio/weekly.webm");
-    expect(screen.getByText("Result kept after playback")).toBeInTheDocument();
-  });
 
-  it("shows weekly-practice unlock progress against the fixed five-lesson requirement", () => {
-    render(<LearnerPractice view={{ ...practice, state: "locked", completedLessons: 0, totalLessons: 0 }} actions={actions()} />);
-
-    expect(screen.getByText("0/5 bài đã hoàn thành")).toBeInTheDocument();
-    expect(screen.queryByText("0/0 bài đã hoàn thành")).not.toBeInTheDocument();
-    expect(screen.getByRole("progressbar", { name: "Tiến độ mở bài thực hành" })).toHaveAttribute("aria-valuemax", "5");
-  });
 
   it("keeps clear-chat focus inside the confirmation dialog", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -868,140 +853,9 @@ describe("app coach and weekly practice speech input", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/micro/i);
   });
 
-  it("keeps Practice write/dialogue mode and exposes the microphone only when supported", async () => {
-    const user = userEvent.setup();
-    const { rerender } = render(<LearnerPractice view={{ ...practice, inputMode: "write", speechSupported: false }} actions={actions()} />);
-    expect(screen.getByLabelText("Bài làm")).toHaveAttribute("data-input-mode", "write");
-    expect(screen.queryByRole("button", { name: "Nói" })).not.toBeInTheDocument();
 
-    enableSpeechRecognition();
-    rerender(<LearnerPractice view={{ ...practice, inputMode: "dialogue", speechSupported: true }} actions={actions()} />);
-    const dialogueDraft = screen.getByLabelText("Câu trả lời hội thoại");
-    expect(dialogueDraft).toHaveAttribute("data-input-mode", "dialogue");
-    await user.click(screen.getByRole("button", { name: "Nói" }));
-    latestRecognition?.onresult?.({ results: [[{ transcript: "Please reschedule" }]] });
-    await waitFor(() => expect(dialogueDraft).toHaveValue("Please reschedule"));
-    await user.click(screen.getByRole("button", { name: "Đang nghe" }));
-    expect(latestRecognition?.stop).toHaveBeenCalledTimes(1);
-  });
 
-  it("L-060 preserves the weekly-practice recording with the submitted transcript", async () => {
-    enableSpeechRecognition();
-    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
-    Object.defineProperty(navigator, "mediaDevices", {
-      configurable: true,
-      value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop: vi.fn() }] }) }
-    });
-    const submitWeeklyPractice = vi.fn().mockResolvedValue(undefined);
-    const uploadAssessmentAudio = vi.fn().mockResolvedValue("audio/practice-1.webm");
-    const user = userEvent.setup();
-    render(<LearnerPractice view={practice} actions={{ ...actions(), submitWeeklyPractice, uploadAssessmentAudio } as unknown as LearnerCallbacks} />);
 
-    await user.click(screen.getByRole("button", { name: "Nói" }));
-    latestRecognition?.onresult?.({ results: [[{ transcript: "I coordinate the weekly project meeting every Monday morning" }]] });
-    await waitFor(() => expect(screen.getByRole("textbox", { name: "Bài làm" })).toHaveValue("I coordinate the weekly project meeting every Monday morning"));
-    await user.click(screen.getByRole("button", { name: "Đang nghe" }));
-    expect(uploadAssessmentAudio).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText(/bản ghi âm đã lưu/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Nộp bài" }));
-    expect(submitWeeklyPractice).toHaveBeenCalledWith("I coordinate the weekly project meeting every Monday morning", expect.objectContaining({ artifactKey: "audio/practice-1.webm" }));
-  });
 
-  it("keeps a weekly practice submission single-flight and restores the draft after failure", async () => {
-    let rejectSubmit!: (reason?: unknown) => void;
-    const submitWeeklyPractice = vi.fn(() => new Promise<never>((_, reject) => { rejectSubmit = reject; }));
-    const callback = { ...actions(), submitWeeklyPractice } as unknown as LearnerCallbacks;
-    const user = userEvent.setup();
-    render(<LearnerPractice view={practice} actions={callback} />);
-
-    const draft = screen.getByRole("textbox", { name: "Bài làm" });
-    await user.type(draft, "I coordinate the weekly project meeting every Monday morning.");
-    await user.click(screen.getByRole("button", { name: "Nộp bài" }));
-
-    expect(screen.getByRole("button", { name: "Đang nộp…" })).toBeDisabled();
-    expect(draft.closest("form")).toHaveAttribute("aria-busy", "true");
-    expect(submitWeeklyPractice).toHaveBeenCalledTimes(1);
-
-    rejectSubmit(new Error("SUBMIT_FAILED"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Chưa nộp được bài");
-    await waitFor(() => expect(draft).toHaveFocus());
-    expect(draft).toHaveValue("I coordinate the weekly project meeting every Monday morning.");
-    expect(screen.getByRole("button", { name: "Nộp bài" })).toBeEnabled();
-  });
-
-  it("requires at least eight words before enabling weekly-practice submission", async () => {
-    const user = userEvent.setup();
-    render(<LearnerPractice view={practice} actions={actions()} />);
-
-    const draft = screen.getByRole("textbox", { name: "Bài làm" });
-    await user.type(draft, "one two three four five six seven");
-    expect(screen.getByText("7/8 từ tối thiểu")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nộp bài" })).toBeDisabled();
-
-    await user.type(draft, " eight");
-    expect(screen.getByText("8/8 từ tối thiểu")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nộp bài" })).toBeEnabled();
-  });
-
-  it("shows prior weekly-practice history and hides appeal after manual grading", () => {
-    const reviewed: PracticeView = {
-      ...practice,
-      state: "reviewed",
-      submission: {
-        id: "submission-1", status: "reviewed", text: "My submitted answer has enough words.", submittedAt: "2026-10-15T08:00:00.000Z",
-        score: { total: 82, rubric: { meaning: 4, vocabulary: 4, grammar: 3 } }, reviewState: "graded-manual",
-        gradingSource: "manual", feedback: "Checked by an operator.", suggestions: [{
-          original: "I coordinate meeting.", corrected: "I coordinate the meeting.", explanation: "Add the article."
-        }], correctedText: "Corrected answer."
-      },
-      history: [{
-        id: "history-1", weekId: "week-0", weekNumber: 0, topic: "Introductions", task: "Introduce yourself.",
-        submittedAt: "2026-10-08T08:00:00.000Z", score: { total: 75, rubric: { meaning: 4, vocabulary: 3, grammar: 3 } }
-      }]
-    };
-
-    render(<LearnerPractice view={reviewed} actions={actions()} />);
-    expect(screen.getByText("82/100")).toBeInTheDocument();
-    expect(screen.getByText("I coordinate meeting. → I coordinate the meeting.")).toBeInTheDocument();
-    expect(screen.getByText("Add the article.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Lịch sử bài tuần" })).toBeInTheDocument();
-    expect(screen.getByText(/Tuần 0 · Introductions/)).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Lý do kháng nghị" })).not.toBeInTheDocument();
-    expect(screen.getByText(/đã được chấm tay/i)).toBeInTheDocument();
-  });
-
-  it("keeps a weekly-practice appeal pending, recoverable, and clear of the bottom navigation", async () => {
-    let rejectAppeal!: (reason?: unknown) => void;
-    const appealWeeklyPractice = vi.fn(() => new Promise<never>((_, reject) => { rejectAppeal = reject; }));
-    const callback = { ...actions(), appealWeeklyPractice } as unknown as LearnerCallbacks;
-    const reviewed: PracticeView = {
-      ...practice,
-      state: "reviewed",
-      submission: {
-        id: "submission-1", status: "reviewed", text: "My submitted answer.", submittedAt: "2026-10-15T08:00:00.000Z",
-        score: { total: 82, rubric: { meaning: 4, vocabulary: 4, grammar: 3 } }, reviewState: "graded-ai",
-        feedback: "Good structure.", suggestions: [], correctedText: ""
-      }
-    };
-    const user = userEvent.setup();
-    const { container } = render(<LearnerPractice view={reviewed} actions={callback} />);
-
-    const reason = screen.getByRole("textbox", { name: "Lý do kháng nghị" });
-    const submitAppeal = screen.getByRole("button", { name: "Gửi kháng nghị" });
-    await user.type(reason, "abcd");
-    expect(submitAppeal).toBeDisabled();
-    await user.type(reason, "e");
-    expect(submitAppeal).toBeEnabled();
-    await user.click(submitAppeal);
-
-    expect(screen.getByRole("button", { name: "Đang gửi…" })).toBeDisabled();
-    expect(appealWeeklyPractice).toHaveBeenCalledWith("submission-1", "abcde");
-    expect((container.firstElementChild as HTMLElement).style.paddingBottom).toBe("calc(88px + env(safe-area-inset-bottom))");
-
-    rejectAppeal(new Error("APPEAL_FAILED"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Chưa gửi được kháng nghị");
-    await waitFor(() => expect(reason).toHaveFocus());
-    expect(reason).toHaveValue("abcde");
-  });
 });

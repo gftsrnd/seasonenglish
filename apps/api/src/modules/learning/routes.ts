@@ -347,13 +347,6 @@ export function registerLearningRoutes(
         ? buildMonthlySchedule(uncounted ? [] : summaries, monthlyContext.systemDate, Number(progress.learner.profile.durationMinutes ?? 10), monthlyAccess?.state === "active" ? monthlyAccess.startDate : undefined)
         : buildSchedule(Number(progress.learner.profile.durationMinutes ?? 10), [], organizationDate),
       coach: { turnsToday: monthlyContext ? progress.stats.coachTurnsToday ?? 0 : 0, turnsThisWeek: monthlyContext ? progress.stats.coachTurns : 0, targetTurns: coachTarget, href: "/coach" },
-      practice: {
-        status: "locked",
-        detail: monthlyContext
-          ? `Mở khi hoàn thành đủ ${dailyLessons.length} bài · hiện có ${completedLessons}/${dailyLessons.length}.`
-          : "Mở khi bộ bài tháng đã được phát hành.",
-        href: "/practice"
-      },
       levelReadiness: progress.levelReadiness,
       ...(passCourse ? { passCourse } : {}),
       ...(lifecycle ? {
