@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
-import EmbeddedPostgres from "embedded-postgres";
 
 /** Ask the OS for a free port (a pid-derived port could collide with a running server). */
 function freePort() {
@@ -19,6 +18,8 @@ function freePort() {
 }
 
 async function startPostgres() {
+  // Loaded only when no TEST_DATABASE_URL is given (the package needs its platform binary build).
+  const { default: EmbeddedPostgres } = await import("embedded-postgres");
   let lastError;
   // Embedded Postgres occasionally fails to start (port race, slow disk); retry with a fresh dir and port.
   for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -51,6 +52,15 @@ async function startPostgres() {
 }
 
 let exitCode = 1;
+
+// CI (and anyone with Docker) can provide a real Postgres instead of the embedded one:
+//   TEST_DATABASE_URL=postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test pnpm test
+if (process.env.TEST_DATABASE_URL) {
+  const child = spawn(process.execPath, [resolve("node_modules/vitest/vitest.mjs"), "run", ...process.argv.slice(2)], { env: process.env, shell: false, stdio: "inherit" });
+  exitCode = await new Promise((resolveExit) => child.on("exit", (code) => resolveExit(code ?? 1)));
+  process.exit(exitCode);
+}
+
 const { pg, port } = await startPostgres();
 try {
   const args = process.argv.slice(2);

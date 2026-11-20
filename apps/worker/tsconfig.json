@@ -2,12 +2,25 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "rootDir": ".",
     "outDir": "dist"
   },
   "references": [
-    { "path": "../../packages/database" }
+    {
+      "path": "../../packages/database"
+    },
+    {
+      "path": "../../packages/ai"
+    },
+    {
+      "path": "../../packages/storage"
+    }
   ],
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts"
+  ]
 }

@@ -1,4 +1,4 @@
-# Runs on every push and pull request: typecheck, media checks, all tests (embedded Postgres), web build.
+# Runs on every push and pull request: typecheck, media checks, all tests (Postgres service), web build.
 name: CI
 
 on:
@@ -14,6 +14,21 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # Same Postgres image as production. The embedded-postgres npm build (18.4.0-beta.17) ships without dist/,
+    # so a fresh install cannot start it; tests use this service through TEST_DATABASE_URL instead.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: e4s
+          POSTGRES_PASSWORD: e4s_test_password
+          POSTGRES_DB: e4s_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U e4s -d e4s_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://e4s:e4s_test_password@127.0.0.1:5432/e4s_test
     steps:
       - uses: actions/checkout@v4
 
@@ -37,7 +52,7 @@ jobs:
           pnpm verify:pronunciation
           pnpm verify:app-media
 
-      - name: Tests (embedded Postgres)
+      - name: Tests (Postgres service)
         run: pnpm test
 
       - name: Build web

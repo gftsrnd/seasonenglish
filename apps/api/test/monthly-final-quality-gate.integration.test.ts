@@ -2,7 +2,7 @@ import {randomUUID} from "node:crypto";
 import {Pool} from "pg";
 import {afterAll,beforeAll,describe,expect,it} from "vitest";
 import {createCredentialHash} from "@e4s/domain";
-import {DEMO_IDS,migrateDatabase,seedDemo} from "@e4s/database";
+import {DEMO_IDS,migrateDatabase,resetPublicSchema,seedDemo} from "@e4s/database";
 import type {AiTaskRunner} from "@e4s/ai";
 import {buildApi} from "../src/app.js";
 import {assembleMonthlyFinalFromAi,buildMonthlyFinalGenerationInput} from "../src/modules/assessment/monthly-final-builder.js";
@@ -25,7 +25,8 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("monthly final failed generation
   const app=buildApi({pool,secureCookies:false,aiRunner:runner});
   beforeAll(async()=>{
     const client=await pool.connect();try {
-      await migrateDatabase(client);await seedDemo(client);
+      // Own clean schema: other suites leave credentials and months behind on the shared test database.
+      await resetPublicSchema(client);await migrateDatabase(client);await seedDemo(client);
       await client.query("insert into user_credentials(user_id,credential_hash) values($1,$2)",[DEMO_IDS.operator,await createCredentialHash("operator-pass")]);
       await client.query("update organization_settings set configuration=configuration || '{\"simulatedSystemDate\":\"2026-11-06\"}'::jsonb where organization_id=$1",[DEMO_IDS.organization]);
       const monthId=randomUUID();

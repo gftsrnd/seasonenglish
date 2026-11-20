@@ -1,10 +1,11 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildMonthlyCalendar, createCredentialHash, createPinHash } from "@e4s/domain";
+import { buildMonthlyCalendar, buildMonthlyCurriculum, createCredentialHash, createPinHash } from "@e4s/domain";
 import type { CefrLevel } from "@e4s/contracts";
 import { DEMO_IDS, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { buildApi } from "../src/app.js";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { AiTaskRunner } from "@e4s/ai";
 import { buildManualMonthlyFinalDraft, buildMonthlyFinalGenerationInput } from "../src/modules/assessment/monthly-final-builder.js";
 import { MONTHLY_FINAL_MANUAL_RULES } from "../src/modules/assessment/monthly-final-checks.js";
@@ -75,6 +76,17 @@ describe("monthly content API", () => {
     expect(reviewed.statusCode, reviewed.body).toBe(200);
     const published = await app.inject({ method: "POST", url: `/api/v1/monthly-final-forms/${form.versionId}/publication`, headers: { cookie } });
     expect(published.statusCode, published.body).toBe(200);
+  };
+  /** The placeholder answers do not match the real lesson, so a wrong first try is followed by the second (last) one; both finish the part. */
+  const attemptUntilFinished = async (lessonId: string, code: string, evidence: Record<string, string>, learnerCookie: string) => {
+    for (let attemptNumber = 1; attemptNumber <= 2; attemptNumber += 1) {
+      const attempt = await app.inject({
+        method: "POST", url: `/api/v1/lessons/${lessonId}/parts/${code}/attempts`, headers: { cookie: learnerCookie },
+        payload: { requestId: crypto.randomUUID(), evidence }
+      });
+      expect(attempt.statusCode, attempt.body).toBe(200);
+      if (attempt.json<{ evidence?: { status?: string } }>().evidence?.status !== "wrong_retry") return;
+    }
   };
   let cookie = "";
   let managerCookie = "";
@@ -259,17 +271,21 @@ describe("monthly content API", () => {
     expect(overview.statusCode, overview.body).toBe(200);
     expect(overview.json()).toMatchObject({ brief: { title: "Quarterly budget review", status: "approved" }, frameworks: [{ id: frameworkId, status: "approved" }] });
     expect(overview.json<{ frameworks: Array<{ lessons: Array<{ status: string; correctionCount: number }> }> }>().frameworks[0]?.lessons[0]).toMatchObject({ status: "approved", correctionCount: 1 });
+    // Publication needs every day approved; this flow approves day 1 only, so mark the framework published directly.
+    await pool.query("update month_frameworks set published_at = now(), published_on = $2::date where id = $1", [frameworkId, `2026-11-01`]);
     await setSystemDate(calendar.examDate);
     await pool.query("update enrollments set cefr = 'A1' where learner_id = $1", [DEMO_IDS.learner]);
+    // Changing the level stamps today as its start; this learner has studied A1 since the month began.
+    await pool.query("update enrollments set cefr_started_on = '2026-11-01' where learner_id = $1", [DEMO_IDS.learner]);
     const learnerLogin = await app.inject({ method: "POST", url: "/api/auth/learner/login", payload: { email: "minh.anh.nguyen@e4s.local", pin: "123456" } });
     const learnerCookie = String(learnerLogin.headers["set-cookie"]).split(";")[0] ?? "";
     const learnerMonth = await app.inject({ method: "GET", url: "/api/v1/learner/months/2026-11", headers: { cookie: learnerCookie } });
     expect(learnerMonth.statusCode, learnerMonth.body).toBe(200);
-    expect(learnerMonth.json()).toMatchObject({ month: "2026-11", lessons: [{ dayNumber: 1, title: "The budget list" }] });
+    expect(learnerMonth.json()).toMatchObject({ month: "2026-11", lessons: [{ dayNumber: 1, title: A1_DAY1_TITLE }] });
     const lessonId = learnerMonth.json<{ lessons: Array<{ id: string }> }>().lessons[0]!.id;
     const learnerLesson = await app.inject({ method: "GET", url: `/api/v1/lessons/${lessonId}`, headers: { cookie: learnerCookie } });
     expect(learnerLesson.statusCode, learnerLesson.body).toBe(200);
-    expect(learnerLesson.json()).toMatchObject({ id: lessonId, title: "The budget list" });
+    expect(learnerLesson.json()).toMatchObject({ id: lessonId, title: A1_DAY1_TITLE });
     const study = await app.inject({ method: "POST", url: `/api/v1/lessons/${lessonId}/study-completion`, headers: { cookie: learnerCookie } });
     expect(study.statusCode, study.body).toBe(200);
     const assignedPronunciationWords = learnerLesson.json<{ content: { parts: Array<{ code: string; content: { words?: Array<{ word: string }> } }> } }>()
@@ -289,11 +305,7 @@ describe("monthly content API", () => {
       ["word_use", { answer: "The budget list" }],
       ["speaking", { artifactKey: "monthly-e2e/speaking.webm" }]
     ] as const) {
-      const attempt = await app.inject({
-        method: "POST", url: `/api/v1/lessons/${lessonId}/parts/${code}/attempts`, headers: { cookie: learnerCookie },
-        payload: { requestId: crypto.randomUUID(), evidence }
-      });
-      expect(attempt.statusCode, attempt.body).toBe(200);
+      await attemptUntilFinished(lessonId, code, evidence, learnerCookie);
     }
     const completed = await app.inject({ method: "PUT", url: `/api/v1/lessons/${lessonId}/progress`, headers: { cookie: learnerCookie }, payload: { markComplete: true } });
     expect(completed.statusCode, completed.body).toBe(200);
@@ -334,11 +346,6 @@ describe("monthly content API", () => {
     const reviewOverview = await app.inject({ method: "GET", url: "/api/v1/content/review", headers: { cookie } });
     expect(reviewOverview.statusCode, reviewOverview.body).toBe(200);
     expect(reviewOverview.json<{ assessments: Array<{ id: string; kind: string }> }>().assessments).toContainEqual(expect.objectContaining({ id: finalAttemptId, kind: "final" }));
-    const appeal = await app.inject({
-      method: "POST", url: `/api/v1/assessment-attempts/${finalAttemptId}/appeals`, headers: { cookie: learnerCookie },
-      payload: { reason: "Xin xem lại phần viết của bài thi tháng." }
-    });
-    expect(appeal.statusCode, appeal.body).toBe(201);
     const managerDecision = await app.inject({
       method: "POST", url: `/api/v1/assessment-reviews/${finalAttemptId}/decision`, headers: { cookie: managerCookie },
       payload: { status: "approved", reason: "Đã đối chiếu bài làm và chấp nhận kết quả bài thi tháng." }
@@ -350,6 +357,17 @@ describe("monthly content API", () => {
     });
     expect(operatorDecision.statusCode, operatorDecision.body).toBe(200);
     expect(operatorDecision.json()).toMatchObject({ attemptId: finalAttemptId, status: "approved", approvedLevel: null, decidedBy: DEMO_IDS.operator });
+    // Appeals open once the result is decided (learnerAssessmentAppealCandidates); the Operator then resolves it.
+    const appeal = await app.inject({
+      method: "POST", url: `/api/v1/assessment-attempts/${finalAttemptId}/appeals`, headers: { cookie: learnerCookie },
+      payload: { reason: "Xin xem lại phần viết của bài thi tháng." }
+    });
+    expect(appeal.statusCode, appeal.body).toBe(201);
+    const appealResolution = await app.inject({
+      method: "POST", url: `/api/v1/content/review/appeals/${appeal.json<{ id: string }>().id}/decision`, headers: { cookie },
+      payload: { status: "accepted", resolution: "Đã đối chiếu bài làm và chấp nhận kết quả bài thi tháng." }
+    });
+    expect(appealResolution.statusCode, appealResolution.body).toBe(200);
     const approvedFinal = await app.inject({ method: "GET", url: "/api/v1/assessments/monthly", headers: { cookie: learnerCookie } });
     expect(approvedFinal.statusCode, approvedFinal.body).toBe(200);
     expect(approvedFinal.json()).toMatchObject({
@@ -372,8 +390,11 @@ describe("monthly content API", () => {
     expect(c1Day.statusCode, c1Day.body).toBe(200);
     const c1DayApproval = await app.inject({ method: "POST", url: `/api/v1/content/month-frameworks/${c1FrameworkId}/days/1/approve`, headers: { cookie } });
     expect(c1DayApproval.statusCode, c1DayApproval.body).toBe(204);
+    // Publication needs every day approved; this flow approves day 1 only, so mark the framework published directly.
+    await pool.query("update month_frameworks set published_at = now(), published_on = $2::date where id = $1", [c1FrameworkId, `2026-11-01`]);
     await setSystemDate(calendar.examDate);
     await pool.query("update enrollments set cefr = 'C1' where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query("update enrollments set cefr_started_on = '2026-11-01' where learner_id = $1", [DEMO_IDS.learner]);
     const c1Month = await app.inject({ method: "GET", url: "/api/v1/learner/months/2026-11", headers: { cookie: learnerCookie } });
     expect(c1Month.statusCode, c1Month.body).toBe(200);
     const c1LessonId = c1Month.json<{ lessons: Array<{ id: string }> }>().lessons[0]!.id;
@@ -393,8 +414,7 @@ describe("monthly content API", () => {
       ["listening", { answer: "The budget list" }], ["reading", { answer: "The budget list" }], ["writing", { answer: "The budget list is ready." }],
       ["word_class", { answer: "The budget list" }], ["word_use", { answer: "The budget list" }], ["speaking", { artifactKey: "monthly-e2e/c1-speaking.webm" }]
     ] as const) {
-      const attempt = await app.inject({ method: "POST", url: `/api/v1/lessons/${c1LessonId}/parts/${code}/attempts`, headers: { cookie: learnerCookie }, payload: { requestId: crypto.randomUUID(), evidence } });
-      expect(attempt.statusCode, attempt.body).toBe(200);
+      await attemptUntilFinished(c1LessonId, code, evidence, learnerCookie);
     }
     const c1Completed = await app.inject({ method: "PUT", url: `/api/v1/lessons/${c1LessonId}/progress`, headers: { cookie: learnerCookie }, payload: { markComplete: true } });
     expect(c1Completed.statusCode, c1Completed.body).toBe(200);
@@ -416,29 +436,29 @@ describe("monthly content API", () => {
   });
 });
 
+/** Day-1 lessons that pass today's monthly quality gate: real December 2026 lessons from the 4300 sandbox, rebuilt for November. */
 function lessonFor(curriculum: ReturnType<typeof contract>, dayNumber: number) {
-  const spec = curriculum.daySpecs.find((day) => day.lessonNumber === dayNumber)!;
-  const terms = spec.coreTermIds.map((id) => curriculum.coreTerms.find((term) => term.id === id)!);
-  const sound = curriculum.sounds.find((item) => item.id === spec.soundId)!;
-  const pronunciation = spec.pronunciationExampleIds.map((id) => sound.examples.find((item) => item.id === id)!);
-  const grammar = curriculum.grammarTopics.flatMap((topic) => topic.steps).find((step) => step.id === spec.grammarStepId)!;
-  const choice = { prompt: "Which words are on the budget list?", options: ["The budget list", "A travel plan", "A lunch menu", "A sports team"], answer: "The budget list" };
-  return { title: "The budget list", parts: [
-    { code: "objective", content: { text: "Use the words in a short workplace exchange." } },
-    { code: "instruction", content: { steps: ["Read the examples.", "Choose an answer."] } },
-    { code: "vocabulary", content: { items: terms.map((term) => ({ word: term.word, meaning: term.meaning, synonyms: ["plan"], antonyms: ["opposite"] })) } },
-    { code: "grammar", content: { formula: grammar.formula, text: grammar.usage } },
-    { code: "pronunciation", content: { focus: sound.ipa, words: pronunciation } },
-    { code: "listening", content: { script: "The budget list is ready.", ...choice } },
-    { code: "reading", content: { text: "The budget list is ready.", ...choice } },
-    { code: "writing", content: { prompt: "Write one sentence about the budget list.", answer: "The budget list is ready." } },
-    { code: "word_class", content: choice },
-    { code: "word_use", content: choice },
-    { code: "speaking", content: { prompt: "Say one sentence about the budget list.", sample: "The budget list is ready." } }
-  ] };
+  if (dayNumber !== 1) throw new Error("Only day 1 has a real lesson fixture");
+  return structuredClone(realLessons[curriculum.cefr as "A1" | "C1"].day1Lesson);
 }
 
 /** The shared valid November 2026 contract; the curriculum rules require real standalone headwords. */
-function contract(cefr: CefrLevel = "A1") {
-  return approvableMonthlyContract(cefr, { version: 1, title: "Quarterly budget review", brief: "Prepare a quarterly budget review.", context: "Finance meeting", communicationGoal: "Explain a cost." });
+function contract(cefr: "A1" | "C1" = "A1") {
+  const source = realLessons[cefr];
+  const build = (supportTerms: unknown[]) => buildMonthlyCurriculum({
+    month: "2026-11", cefr,
+    theme: { version: 1, title: "Quarterly budget review", brief: "Prepare a quarterly budget review.", context: "Finance meeting", communicationGoal: "Explain a cost." },
+    coreTerms: source.coreTerms, supportTerms, grammarTopics: source.grammarTopics, sounds: source.sounds
+  } as Parameters<typeof buildMonthlyCurriculum>[0]);
+  // The source month was December: move each expanded term to the November day of its core term.
+  const coreDay = new Map(build(source.supportTerms).coreTerms.map((term) => [term.id, term.dayNumber] as const));
+  return build(source.supportTerms.map((term) => {
+    const linked = (term as { relatedCoreTermId?: string }).relatedCoreTermId;
+    return linked && coreDay.has(linked) ? { ...(term as object), dayNumber: coreDay.get(linked) } : term;
+  }));
 }
+
+const realLessons = JSON.parse(readFileSync(new URL("./fixtures/monthly-real-lessons.json", import.meta.url), "utf8")) as Record<"A1" | "C1", {
+  coreTerms: unknown[]; supportTerms: unknown[]; grammarTopics: unknown[]; sounds: unknown[]; day1Lesson: { title: string; parts: unknown[] };
+}>;
+const A1_DAY1_TITLE = realLessons.A1.day1Lesson.title;
