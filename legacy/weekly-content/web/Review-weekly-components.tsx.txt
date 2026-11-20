@@ -1,0 +1,123 @@
+// Removed 2026-11-20 from apps/web/src/app/operator/Review.tsx: weekly submission card and weekly-practice editor (no longer rendered; subs/weekly tabs show the monthly empty state).
+
+function SubmissionReviewCard({
+  item, aiConnected, readOnly, manualGradeBlocked, gradeAiBusy, gradeAiBlocked, onGradeAi, onGradeManual, onMarkRead, onDeleteAudio
+}: {
+  item: ReviewSubmission;
+  aiConnected: boolean;
+  readOnly: boolean;
+  manualGradeBlocked?: string;
+  gradeAiBusy: boolean;
+  gradeAiBlocked?: string;
+  onGradeAi(): void;
+  onGradeManual(input: { meaning: number; vocabulary: number; grammar: number; feedback: string }): void;
+  onMarkRead(checked: boolean): void;
+  onDeleteAudio?: NonNullable<OperatorReviewActions["onDeleteAudio"]>;
+}) {
+  const [meaning, setMeaning] = useState(item.rubric?.meaning ?? 0);
+  const [vocabulary, setVocabulary] = useState(item.rubric?.vocab ?? 0);
+  const [grammar, setGrammar] = useState(item.rubric?.grammar ?? 0);
+  const [feedback, setFeedback] = useState(item.feedback ?? "");
+  useEffect(() => {
+    setMeaning(item.rubric?.meaning ?? 0);
+    setVocabulary(item.rubric?.vocab ?? 0);
+    setGrammar(item.rubric?.grammar ?? 0);
+    setFeedback(item.feedback ?? "");
+  }, [item.id, item.rubric?.meaning, item.rubric?.vocab, item.rubric?.grammar, item.feedback]);
+  const valid = [meaning, vocabulary, grammar].every(value => Number.isFinite(value) && value >= 0 && value <= 5) && feedback.trim().length > 0;
+  const scoreInput = (label: string, value: number, setValue: (value: number) => void) => <label className="operator-submission-score-field"><span>{label}</span><input aria-label={label} type="number" min={0} max={5} step={0.5} value={value} disabled={readOnly} onChange={event => setValue(Number(event.target.value))} /></label>;
+  return <div className="card operator-review-card">
+    <div className="row between operator-card-header"><div><b>{item.learnerName}</b> {item.cefr && <LevelChip level={item.cefr} />} <span className="xs muted">Bài tháng · {item.type ? (item.type === "dialogue" ? "Hội thoại" : "Viết") : "—"} · {item.submittedAt}</span></div></div>
+    <div className="operator-submission-content" role="region" aria-label={`Nội dung bài nộp của ${item.learnerName}`}>
+    <div className="operator-submission-brief">
+      <section className="operator-submission-task"><b className="operator-review-field-label">Đề bài</b><p>{item.task || "—"}</p></section>
+      <section className="operator-submission-guidance"><b className="operator-review-field-label">Hướng dẫn</b><p>{item.guidance || "—"}</p></section>
+      <section className="operator-submission-vocabulary"><b className="operator-review-field-label">Từ bắt buộc</b><p>{item.requiredVocabulary?.length ? item.requiredVocabulary.join(", ") : "—"}</p></section>
+      <section className="operator-submission-answer"><b className="operator-review-field-label">Bài làm của học viên</b><p>{item.text}</p>{item.audioArtifact ? <AudioEvidencePanel label={`Bản ghi âm bài nộp của ${item.learnerName}`} evidence={{ ...item.audioArtifact, transcript: item.audioArtifact.transcript ?? item.text }} {...(onDeleteAudio ? { onDelete: onDeleteAudio } : {})} /> : null}</section>
+    </div>
+    </div>
+    {item.total != null ? <div className="operator-submission-result" role="region" aria-label={`Kết quả và nhận xét của ${item.learnerName}`}><div className="row operator-submission-result-summary" aria-label="Kết quả chấm"><b>{formatScoreOutOf(item.total, 100)}</b><Rubric value={item.rubric} />{item.aiGraded ? <Badge>AI chấm</Badge> : <Badge>Người chấm</Badge>}</div><details className="operator-submission-ai-detail"><summary><b>Nhận xét và gợi ý sửa ({item.suggestions?.length ?? 0})</b>{item.feedback ? <span className="small muted">{item.feedback}</span> : null}</summary><div className="operator-submission-ai-detail-body">{item.feedback ? <div className="operator-submission-feedback-copy"><b className="operator-review-field-label">Nhận xét đã chấm</b><p>{item.feedback}</p></div> : null}<Suggestions items={item.suggestions} /></div></details></div> : <div className="operator-submission-status-row"><Badge tone="warn">Chưa chấm</Badge></div>}
+    <details className="operator-submission-grader" aria-label={`Chấm bài của ${item.learnerName}`} open={item.total == null}>
+      <summary><b>{item.total == null ? "Chấm bài" : "Chấm lại / chỉnh kết quả"}</b><span className="small muted">3 tiêu chí · nhận xét · thao tác</span></summary>
+      <div className="operator-submission-grader-body">
+      <div className="operator-submission-score-grid" role="group" aria-label="Ba tiêu chí chấm điểm">{scoreInput("Đúng ý", meaning, setMeaning)}{scoreInput("Từ vựng", vocabulary, setVocabulary)}{scoreInput("Ngữ pháp", grammar, setGrammar)}</div>
+      <label className="operator-submission-feedback"><span>Nhận xét</span><textarea aria-label="Nhận xét" rows={3} value={feedback} disabled={readOnly} onChange={event => setFeedback(event.target.value)} placeholder="Nhập nhận xét gửi học viên…" /></label>
+      <div className="row operator-review-action-footer">{aiConnected ? <Button small danger={item.total != null} busy={gradeAiBusy} disabled={readOnly || Boolean(gradeAiBlocked)} title={gradeAiBlocked} onClick={onGradeAi}>{gradeAiBusy ? "Đang chấm bằng AI…" : item.total == null ? "Chấm bằng AI" : "Chấm lại bằng AI"}</Button> : null}<Button primary={item.total == null} danger={item.total != null} small disabled={readOnly || Boolean(manualGradeBlocked) || !valid} title={manualGradeBlocked} onClick={() => onGradeManual({ meaning, vocabulary, grammar, feedback: feedback.trim() })}>Lưu kết quả chấm</Button><Button small disabled={readOnly} onClick={() => onMarkRead(!item.operatorChecked)}>{item.operatorChecked ? "Đã đọc" : "Đánh dấu đã đọc"}</Button></div>
+      </div>
+    </details>
+  </div>;
+}
+
+export function generateWeeklyPracticeDraft(topic: string, cefr: Cefr, vocabulary: readonly string[], variation = 0) {
+  const sentenceRange = cefr === "A1" ? "3–4" : cefr === "A2" ? "3–5" : "5–7";
+  const words = [...new Set(vocabulary.map(value => value.trim()).filter(Boolean))].slice(0, 12);
+  const options = [
+    {
+      task: `Write ${sentenceRange} sentences about “${topic}”.`,
+      guidance: `Viết ${sentenceRange} câu tiếng Anh về chủ đề “${topic}”.`
+    },
+    {
+      task: `Describe a realistic workplace situation about “${topic}” in ${sentenceRange} sentences.`,
+      guidance: `Mô tả một tình huống công việc thực tế về “${topic}” bằng ${sentenceRange} câu tiếng Anh.`
+    },
+    {
+      task: `Write a short connected paragraph of ${sentenceRange} sentences about “${topic}”.`,
+      guidance: `Viết một đoạn liền mạch ${sentenceRange} câu tiếng Anh về “${topic}”, có mở đầu và kết quả.`
+    },
+    {
+      task: `In ${sentenceRange} sentences, explain what happened and what should happen next in a situation about “${topic}”.`,
+      guidance: `Trong ${sentenceRange} câu tiếng Anh, nêu điều đã xảy ra và bước xử lý tiếp theo trong tình huống “${topic}”.`
+    }
+  ];
+  const option = options[((variation % options.length) + options.length) % options.length]!;
+  const vocabularyInstruction = words.length
+    ? ` Dùng ít nhất 3 từ trong bài tuần này: ${words.join(", ")}.`
+    : " Dùng ít nhất 3 từ trong bài tuần này.";
+  return {
+    task: option.task,
+    guidance: `${option.guidance}${vocabularyInstruction}`
+  };
+}
+
+export function WeeklyPracticeEditor({ item, readOnly, onSave, compact = false, contextLabel, headingLabel }: { item: ReviewWeeklyPractice; readOnly: boolean; onSave: NonNullable<OperatorReviewActions["onSaveWeeklyPractice"]>; compact?: boolean; contextLabel?: string; headingLabel?: string }) {
+  const [task, setTask] = useState(item.task);
+  const [guidance, setGuidance] = useState(item.guidance);
+  const [vocabulary, setVocabulary] = useState(item.requiredVocabulary.join(", "));
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string>();
+  const savingRef = useRef(false);
+  const lastSaveAttemptRef = useRef(0);
+  const generationRef = useRef(0);
+  const requiredVocabulary = [...new Set(vocabulary.split(/[\n,]+/u).map(value => value.trim()).filter(Boolean))];
+  const context = contextLabel ?? `Tuần ${item.week} · ${item.cefr}`;
+  const generate = () => {
+    const generated = generateWeeklyPracticeDraft(item.topic, item.cefr, requiredVocabulary, generationRef.current);
+    generationRef.current += 1;
+    setTask(generated.task);
+    setGuidance(generated.guidance);
+  };
+  const save = async () => {
+    const now = Date.now();
+    if (savingRef.current || now - lastSaveAttemptRef.current < 500 || readOnly || !task.trim() || !guidance.trim()) return;
+    lastSaveAttemptRef.current = now;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError(undefined);
+    try {
+      await onSave({ week: item.week, cefr: item.cefr, expectedVersion: item.version, task: task.trim(), guidance: guidance.trim(), requiredVocabulary });
+    } catch (reason) {
+      setSaveError(actionErrorMessage(reason));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+  return <article className="card operator-weekly-practice-editor">
+    <div className={`operator-weekly-practice-header${compact ? " compact" : ""}`}>{compact ? null : <div className="operator-weekly-practice-heading"><b>{headingLabel ?? `Tuần ${item.week} · ${item.topic}`}</b><div className="operator-weekly-practice-meta"><LevelChip level={item.cefr} /><span>v{item.version}</span><span>{item.status === "approved" ? "Đã duyệt" : item.status === "review" ? "Chờ duyệt" : "Bản nháp"}</span></div></div>}<Button small aria-label={`Sinh bài cuối tuần · ${context}`} disabled={readOnly || saving} onClick={generate}>Sinh bài cuối tuần</Button></div>
+    <div className="operator-weekly-practice-fields"><label>Đề bài<textarea aria-label={`Đề bài · ${context}`} value={task} disabled={readOnly || saving} onChange={event => setTask(event.target.value)} /></label>
+    <label>Hướng dẫn<textarea aria-label={`Hướng dẫn · ${context}`} value={guidance} disabled={readOnly || saving} onChange={event => setGuidance(event.target.value)} /></label>
+    <label>Từ bắt buộc<LineField aria-label={`Từ bắt buộc · ${context}`} value={vocabulary} disabled={readOnly || saving} onChange={event => setVocabulary(event.target.value)} /></label></div>
+    {saveError && <div className="small" role="alert">{saveError}</div>}
+    <div className="row operator-review-action-footer"><Button small primary aria-label={`Lưu bản nháp · ${context}`} busy={saving} disabled={readOnly || saving || !task.trim() || !guidance.trim() || requiredVocabulary.length > 12} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</Button></div>
+  </article>;
+}

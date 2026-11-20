@@ -20,7 +20,7 @@ function topLevelPreludes(source: string): string[] {
 
 describe("phone usability stylesheet", () => {
   it("is loaded after the tablet/touch stylesheet", () => {
-    expect(app).toMatch(/import "\.\/responsive-compact\.css";\nimport "\.\/responsive-phone\.css";/);
+    expect(app).toMatch(/import "\.\/responsive-compact\.css";\r?\nimport "\.\/responsive-phone\.css";/);
   });
 
   it("never touches desktop: every rule is inside a phone or tablet width query", () => {

@@ -85,7 +85,8 @@ describe("Manager layout rhythm contract", () => {
   it("keeps long Manager account lists inside a bounded scroll region", () => {
     expect(css).toMatch(/\.manager-accounts-table\s*\{[\s\S]*?max-height:\s*560px[\s\S]*?overflow-y:\s*auto/);
     expect(css).toMatch(/\.manager-accounts-table__table\s+thead\s+th\s*\{[\s\S]*?position:\s*sticky[\s\S]*?top:\s*0/);
-    expect(css).toMatch(/\.manager-accounts-pagination\s*\{[\s\S]*?display:\s*flex[\s\S]*?flex-wrap:\s*wrap/);
+    // Paging now comes from the shared Pager (phone 2 / tablet 5 rows) instead of a Manager-only pagination bar.
+    expect(controller).toMatch(/<Pager \{\.\.\.accountsPaged\} label="tài khoản" \/>/);
   });
 
   it("keeps all six Manager account columns readable without collapsing the action buttons", () => {
@@ -109,7 +110,7 @@ describe("Manager layout rhythm contract", () => {
   });
 
   it("separates the permanent-delete actions from the confirmation content", () => {
-    expect(css).toMatch(/\.manager-purge-dialog__actions\s*\{[^}]*gap:\s*16px[^}]*padding-top:\s*16px[^}]*border-top:\s*1px\s+solid\s+var\(--line\)/s);
+    expect(css).toMatch(/\.manager-purge-dialog__actions\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap[^}]*gap:\s*8px[^}]*margin-top:\s*16px/s);
   });
 
   it("contains the recovery panel and replaces the browser's raw summary marker", () => {

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssessmentRuntimeView, AssessmentSectionCode } from "@e4s/contracts";
 import type { AssessmentView, LearnerCallbacks } from "../src/app/learner/contracts.js";
 import { LearnerAssessment } from "../src/app/learner/Assessment.js";
+import { ToastProvider } from "../src/app/shared/design-system.js";
 
 afterEach(() => {
   cleanup();
@@ -64,7 +65,8 @@ describe("app assessment runtime", () => {
   });
 
   it("shows the server-owned timer and five-minute warning state", () => {
-    render(<LearnerAssessment view={baseView(runtime({ remainingSeconds: 300 }))} actions={callbacks()} />);
+    // Exam notices are shown through the app-level ToastProvider.
+    render(<ToastProvider><LearnerAssessment view={baseView(runtime({ remainingSeconds: 300 }))} actions={callbacks()} /></ToastProvider>);
     expect(screen.getByRole("timer")).toHaveTextContent("05:00");
     const warning = screen.getByText(/còn 5 phút/i).closest(".assessment-toast");
     expect(warning).toBeInTheDocument();
@@ -75,7 +77,8 @@ describe("app assessment runtime", () => {
   });
 
   it("shows the one-minute warning from the server runtime", () => {
-    render(<LearnerAssessment view={baseView(runtime({ remainingSeconds: 60 }))} actions={callbacks()} />);
+    // Exam notices are shown through the app-level ToastProvider.
+    render(<ToastProvider><LearnerAssessment view={baseView(runtime({ remainingSeconds: 60 }))} actions={callbacks()} /></ToastProvider>);
     expect(screen.getByRole("timer")).toHaveTextContent("01:00");
     expect(screen.getByText(/còn 1 phút/i)).toBeInTheDocument();
   });
@@ -227,7 +230,8 @@ describe("app assessment runtime", () => {
   it("keeps a recoverable error after section submission fails", async () => {
     const complete = vi.fn(async () => { throw new Error("network"); });
     vi.useFakeTimers();
-    render(<LearnerAssessment view={baseView()} actions={callbacks({ completeAssessmentSection: complete })} />);
+    // Exam notices are shown through the app-level ToastProvider.
+    render(<ToastProvider><LearnerAssessment view={baseView()} actions={callbacks({ completeAssessmentSection: complete })} /></ToastProvider>);
     fireEvent.click(screen.getByRole("button", { name: /nộp phần nghe/i }));
     fireEvent.click(screen.getByRole("button", { name: /nộp phần này/i }));
     expect(screen.getByText(/nộp phần này sau 5 giây/i)).toBeInTheDocument();

@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema } from "../src/migrate.js";
 import { createRepositories } from "../src/repositories.js";
 import { DEMO_IDS, seedDemo } from "../src/seed.js";
+import { levelUpDefinition } from "../src/assessment-blueprints.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
@@ -19,6 +20,17 @@ describe("assessment runtime persistence", () => {
     await resetPublicSchema(client);
     await migrateDatabase(client);
     await seedDemo(client);
+    // The demo seed no longer ships the B1 level-up form; add it for the runtime cases that use it.
+    await client.query(
+      `insert into assessment_definitions (id, organization_id, assessment_key, kind, title)
+       values ($1, $2, 'levelup-b1', 'level_up', 'Đề thi lên mức B1')`,
+      [DEMO_IDS.levelUpDefinition, DEMO_IDS.organization]
+    );
+    await client.query(
+      `insert into assessment_versions (id, definition_id, version, status, blueprint, published_at)
+       values ($1, $2, 1, 'published', $3::jsonb, now())`,
+      [DEMO_IDS.levelUpVersion, DEMO_IDS.levelUpDefinition, JSON.stringify(levelUpDefinition)]
+    );
     learnerId = randomUUID();
     await client.query(
       `insert into users (id, organization_id, role, display_name, email)
@@ -96,6 +108,14 @@ describe("assessment runtime persistence", () => {
   });
 
   it("serializes concurrent duplicate violation requests before incrementing the counter", async () => {
+    // A fresh learner: startAttempt reuses the submitted level-up attempt of the previous case.
+    const violationLearnerId = randomUUID();
+    await pool.query(
+      `insert into users (id, organization_id, role, display_name, email)
+       values ($1, $2, 'learner', 'Runtime Violation Learner', $3)`,
+      [violationLearnerId, DEMO_IDS.organization, `${violationLearnerId}@e4s.local`]
+    );
+    const learnerId = violationLearnerId;
     const attempt = await repositories.assessments.startAttempt({
       learnerId,
       assessmentVersionId: DEMO_IDS.levelUpVersion,

@@ -4,8 +4,9 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import { userEvent } from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { GameHubView, LearnerHomeView, LearnerProfileView, LearnerProgressView, MicroLessonView } from "@e4s/contracts";
+import type { GameHubView, LearnerHomeView, LearnerProfileView, LearnerProgressView } from "@e4s/contracts";
 import { ApiError } from "../src/api/runtime.js";
+import { ModalProvider } from "../src/app/shared/ModalProvider.js";
 
 const api = vi.hoisted(() => ({
   getHome: vi.fn(),
@@ -46,9 +47,7 @@ describe("learner route integration controller", () => {
     ["/test/level-up", { name: "assessment", params: { kind: "levelup" } }],
     ["/lesson/lesson%201", { name: "lesson", params: { id: "lesson 1" } }],
     ["/games/scramble", { name: "game", params: { game: "scramble" } }],
-    ["/reward/done", { name: "reward", params: { mode: "done" } }],
-    ["/duel/d-1", { name: "games", params: {} }],
-    ["/practice", { name: "home", params: {} }]
+    ["/reward/done", { name: "reward", params: { mode: "done" } }]
   ] as const)("resolves %s without asking App to map params", (path, expected) => {
     expect(resolveLearnerRoute(path)).toEqual(expected);
   });
@@ -66,7 +65,8 @@ describe("learner route integration controller", () => {
     render(<MemoryRouter initialEntries={["/onboard"]}><LearnerRouteController /></MemoryRouter>);
 
     expect(await screen.findByRole("heading", { name: "Cho Season biết về bạn nhé" })).toBeInTheDocument();
-    expect(screen.getByText("Hồ sơ")).toBeInTheDocument();
+    // Owner 19/11: no uppercase "Hồ sơ" eyebrow above the title any more.
+    expect(screen.queryByText("Hồ sơ", { selector: ".eyebrow" })).toBeNull();
     expect(screen.getByRole("button", { name: "Lưu nháp" })).toBeInTheDocument();
   });
 
@@ -75,9 +75,12 @@ describe("learner route integration controller", () => {
     api.getGames.mockResolvedValue(gameHubView);
     api.deleteGameWordSet.mockResolvedValue({ ...gameHubView, wordSet: { ...gameHubView.wordSet, source: "weekly", topic: "Tuần 1" } });
 
-    render(<MemoryRouter initialEntries={["/games"]}><LearnerRouteController /></MemoryRouter>);
+    // The app mounts every learner route inside the shared ModalProvider.
+    render(<MemoryRouter initialEntries={["/games"]}><ModalProvider><LearnerRouteController /></ModalProvider></MemoryRouter>);
 
     await user.click(await screen.findByRole("button", { name: "Xoá bộ này" }));
+    // Removing the word set in use asks for confirmation first.
+    await user.click(await screen.findByRole("button", { name: "Xoá bộ từ" }));
 
     await waitFor(() => expect(api.deleteGameWordSet).toHaveBeenCalledOnce());
     expect(api.useWeeklyGameWordSet).not.toHaveBeenCalled();
@@ -114,41 +117,6 @@ describe("learner route integration controller", () => {
     await user.click(within(screen.getByRole("group", { name: "Bạn học hiệu quả nhất khi… *" })).getByRole("checkbox", { name: "Đọc & ghi chú" }));
     await user.click(await screen.findByRole("button", { name: "Lưu hồ sơ" }));
     await waitFor(() => expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ fullName: "Lan", email: "lan@example.com" }), 7));
-  });
-
-  it("passes the explicit regenerate command through the app controller", async () => {
-    const user = userEvent.setup();
-    const micro: MicroLessonView = {
-      id: "m-1", topic: "Meetings", cefr: "A2", durationMinutes: 5,
-      regenerateAvailable: true,
-      theory: "Use a clear question to ask for the next project deadline.", vocabulary: ["deadline", "clarify", "schedule"],
-      practice: { prompt: "Choose the clear question.", type: "mcq", options: ["Could you clarify the deadline?", "Tell me now."] }
-    };
-    api.getMicroLesson.mockResolvedValue(micro);
-    api.generateMicroLesson.mockResolvedValue({ ...micro, id: "m-2" });
-    render(<MemoryRouter initialEntries={["/micro/m-1"]}><LearnerRouteController /></MemoryRouter>);
-
-    await user.click(await screen.findByRole("button", { name: "Tạo lại bài" }));
-
-    await waitFor(() => expect(api.generateMicroLesson).toHaveBeenCalledWith(expect.any(String), true));
-  });
-
-  it("keeps the micro screen mounted and exposes the server error when regeneration is unavailable", async () => {
-    const user = userEvent.setup();
-    const micro: MicroLessonView = {
-      id: "m-1", topic: "Meetings", cefr: "A2", durationMinutes: 5,
-      regenerateAvailable: true,
-      theory: "Use a clear question to ask for the next project deadline.", vocabulary: ["deadline", "clarify", "schedule"],
-      practice: { prompt: "Choose the clear question.", type: "mcq", options: ["Could you clarify the deadline?", "Tell me now."] }
-    };
-    api.getMicroLesson.mockResolvedValue(micro);
-    api.generateMicroLesson.mockRejectedValue(new Error("AI_UNAVAILABLE"));
-    render(<MemoryRouter initialEntries={["/micro/m-1"]}><LearnerRouteController /></MemoryRouter>);
-
-    await user.click(await screen.findByRole("button", { name: "Tạo lại bài" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("Season chưa kết nối AI");
-    expect(screen.getByRole("heading", { name: "Meetings" })).toBeInTheDocument();
   });
 
   it("scopes the landscape certificate print rule to the print lifecycle", () => {

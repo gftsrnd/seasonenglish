@@ -503,7 +503,7 @@ describe("App session shell", () => {
     await user.type(await screen.findByRole("textbox", { name: "Email" }), "learner@example.test");
     await user.type(screen.getByLabelText("Mã PIN"), "123456");
     client.learnerLogin.mockResolvedValueOnce(learnerSession);
-    await user.click(screen.getByRole("button", { name: "Đăng nhập người học" }));
+    await user.click(screen.getByRole("button", { name: "Đăng nhập" }));
 
     expect(await screen.findByRole("heading", { name: "Trang học" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/home");

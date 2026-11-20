@@ -717,7 +717,9 @@ export function registerLearningRoutes(
     const [micro, runner] = await Promise.all([
       repositories.learning.findMicroLesson(learnerId, params.data.microLessonId),
       runnerFor(learnerId),
-      monthlyExamEligibility(pool, learnerId)
+      // Side effect only (auto-approves expired eligibility complaints); a learner without a
+      // monthly enrolment must still open micro lessons, so a missing eligibility row is not an error.
+      monthlyExamEligibility(pool, learnerId).catch(() => undefined)
     ]);
     return micro ? microLessonView(micro, Boolean(runner)) : reply.code(404).send({ code: "MICRO_LESSON_NOT_FOUND" });
   });
@@ -732,7 +734,9 @@ export function registerLearningRoutes(
       repositories.learning.getProfile(learnerId),
       repositories.aiRuns.activeTaskPrompt(learnerId, "micro_grading"),
       runnerFor(learnerId),
-      monthlyExamEligibility(pool, learnerId)
+      // Side effect only (auto-approves expired eligibility complaints); a learner without a
+      // monthly enrolment must still open micro lessons, so a missing eligibility row is not an error.
+      monthlyExamEligibility(pool, learnerId).catch(() => undefined)
     ]);
     if (!micro) return reply.code(404).send({ code: "MICRO_LESSON_NOT_FOUND" });
     const policyGrade = gradeMicroAttempt({
@@ -804,7 +808,9 @@ export function registerLearningRoutes(
     const [micro, runner] = await Promise.all([
       repositories.learning.completeMicroLesson(learnerId, params.data.microLessonId),
       runnerFor(learnerId),
-      monthlyExamEligibility(pool, learnerId)
+      // Side effect only (auto-approves expired eligibility complaints); a learner without a
+      // monthly enrolment must still open micro lessons, so a missing eligibility row is not an error.
+      monthlyExamEligibility(pool, learnerId).catch(() => undefined)
     ]);
     return micro ? microLessonView(micro, Boolean(runner)) : reply.code(409).send({ code: "MICRO_FEEDBACK_REQUIRED" });
   });

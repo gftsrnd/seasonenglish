@@ -96,14 +96,15 @@ describe("Operator learner/test operations", () => {
     ]));
   });
 
-  it("lets both staff roles manage learner operations and persists evidence", async () => {
+  it("lets the Operator manage learner operations, keeps the Manager read-only and persists evidence", async () => {
+    // Learner level changes use the Operator-only assessment guard; the Manager is read-only here.
     const managerLevel = await app.inject({
       method: "PATCH", url: `/api/v1/assessment-reviews/learners/${DEMO_IDS.learner}/level`,
       headers: { cookie: managerCookie },
       payload: { mode: "direct", targetLevel: "B1", reason: "Manager review", evidence: "review" }
     });
-    expect(managerLevel.statusCode, managerLevel.body).toBe(200);
-    expect(managerLevel.json()).toMatchObject({ learnerId: DEMO_IDS.learner, mode: "direct", targetLevel: "B1" });
+    expect(managerLevel.statusCode, managerLevel.body).toBe(403);
+    expect(managerLevel.json()).toEqual({ code: "FORBIDDEN" });
 
     const level = await app.inject({
       method: "PATCH", url: `/api/v1/assessment-reviews/learners/${freshLearnerId}/level`,

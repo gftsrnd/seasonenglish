@@ -35,21 +35,25 @@ describe("retired final assessment", () => {
     await pool.end();
   });
 
-  it("rejects the retired final kind while preserving placement and level-up routes", async () => {
+  it("keeps the monthly final exam locked for a new learner while preserving placement and level-up routes", async () => {
     const finalResponse = await app.inject({ method: "GET", url: "/api/v1/assessments/final", headers: { cookie } });
     const placementResponse = await app.inject({ method: "GET", url: "/api/v1/assessments/placement", headers: { cookie } });
     const levelUpResponse = await app.inject({ method: "GET", url: "/api/v1/assessments/level-up", headers: { cookie } });
 
-    expect(finalResponse.statusCode).toBe(400);
-    expect(placementResponse.statusCode).toBe(200);
-    expect(levelUpResponse.statusCode).toBe(200);
+    // "final" is the monthly exam again; a learner without an eligible month gets a locked state, not a 400.
+    expect(finalResponse.statusCode, finalResponse.body).toBe(409);
+    expect(placementResponse.statusCode, placementResponse.body).toBe(200);
+    // The level-up route is still recognised; the demo seed ships no published level-up form (it comes from the bank).
+    expect(levelUpResponse.statusCode, levelUpResponse.body).toBe(404);
+    expect(levelUpResponse.json()).toEqual({ code: "ASSESSMENT_NOT_PUBLISHED" });
   });
 
-  it("does not seed a final assessment definition", async () => {
+  it("seeds placement and Pass Course definitions but no final assessment definition", async () => {
     const result = await pool.query<{ kind: string }>(
       "select kind from assessment_definitions order by kind"
     );
 
-    expect(result.rows.map((row) => row.kind)).toEqual(["level_up", "placement"]);
+    // Level-up forms come from the assessment bank; monthly finals are created per month.
+    expect(result.rows.map((row) => row.kind)).toEqual(["pass_course", "placement"]);
   });
 });

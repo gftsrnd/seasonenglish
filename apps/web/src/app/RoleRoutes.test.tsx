@@ -179,7 +179,8 @@ describe("RoleRoutes authorization boundary", () => {
 
     renderRoute("/op/tests", operator);
 
-    expect(await screen.findByRole("heading", { name: "Bài kiểm tra" })).toBeInTheDocument();
+    // The /op/tests page is now titled "Kết quả bài thi" (its h1 also carries the ⓘ tip button).
+    expect(await screen.findByRole("heading", { level: 1, name: /^Kết quả bài thi/ })).toBeInTheDocument();
     expect(screen.queryByText("Đường dẫn vận hành không tồn tại.")).not.toBeInTheDocument();
   });
 

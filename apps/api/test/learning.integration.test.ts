@@ -290,120 +290,6 @@ describe("learner profile, home, lesson and progress API", () => {
     expect(editDraft.json()).toMatchObject({ completed: true, draftAvailable: true, profile: { learningStyles: [] } });
   });
 
-  it("returns the current week, five ordered lessons and the next resumable lesson", async () => {
-    const response = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.json()).toMatchObject({
-      onboardingRequired: false,
-      week: { weekNumber: 1 },
-      metrics: { completedLessons: 1, totalLessons: 5 }
-    });
-    expect(response.json().lessons).toHaveLength(5);
-    expect(response.json().nextLesson).toMatchObject({ dayNumber: 2 });
-    expect(response.json().lessons[2]).toMatchObject({
-      dayNumber: 3,
-      lock: {
-        reason: "prior",
-        blocker: { id: DEMO_IDS.lessons[1], dayNumber: 2, title: "Past simple: I joined…" },
-        totalLessons: 5
-      }
-    });
-  });
-
-  it("returns the existing home capabilities instead of reducing home to a lesson list", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-10-13T12:00:00.000Z"));
-    try {
-      await pool.query(
-        "update activities set occurred_at = '2026-10-12T09:00:00.000Z' where id = $1",
-        [DEMO_IDS.activity]
-      );
-      const response = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
-
-      expect(response.statusCode, response.body).toBe(200);
-      expect(response.json()).toMatchObject({
-        program: { name: "E4S Pilot", weekCount: 2 },
-        schedule: {
-          daysPerWeek: 5,
-          lessonMinutes: 10,
-          days: [
-            { label: "T2", status: "attended" },
-            { label: "T3", status: "today" },
-            { label: "T4", status: "upcoming" },
-            { label: "T5", status: "upcoming" },
-            { label: "T6", status: "upcoming" }
-          ]
-        },
-        coach: { turnsThisWeek: 2, targetTurns: 50, href: "/coach" },
-        levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: true }
-      });
-      expect(response.json()).not.toHaveProperty("finalAssessment");
-      expect(response.json()).not.toHaveProperty("inactivityReminder");
-      expect(response.json().levelReadiness.criteria).toHaveLength(4);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("keeps the weekday streak across a weekend without counting Saturday or Sunday", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-10-19T12:00:00.000Z"));
-    const snapshot = await pool.query<{ id: string; occurred_at: Date }>(
-      "select id, occurred_at from activities where learner_id = $1 order by id",
-      [DEMO_IDS.learner]
-    );
-    const temporaryIds = [randomUUID(), randomUUID(), randomUUID()];
-    try {
-      await pool.query("update activities set occurred_at = '2026-10-16T09:00:00.000Z' where learner_id = $1", [DEMO_IDS.learner]);
-      await pool.query(
-        `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence, occurred_at)
-         values ($1, $4, 'lesson', 'lesson', $5, 10, '{}'::jsonb, '2026-10-17T09:00:00.000Z'),
-                ($2, $4, 'lesson', 'lesson', $5, 10, '{}'::jsonb, '2026-10-18T09:00:00.000Z'),
-                ($3, $4, 'lesson', 'lesson', $5, 10, '{}'::jsonb, '2026-10-19T09:00:00.000Z')`,
-        [...temporaryIds, DEMO_IDS.learner, DEMO_IDS.lessons[0]]
-      );
-
-      const response = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
-
-      expect(response.statusCode, response.body).toBe(200);
-      expect(response.json().metrics.streakDays).toBe(2);
-    } finally {
-      await pool.query("delete from activities where id = any($1::uuid[])", [temporaryIds]);
-      for (const row of snapshot.rows) {
-        await pool.query("update activities set occurred_at = $2 where id = $1", [row.id, row.occurred_at]);
-      }
-      vi.useRealTimers();
-    }
-  });
-
-  it("reports a home inactivity reminder after two full days without learning", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-10-14T12:00:00.000Z"));
-    const snapshot = await pool.query<{ id: string; occurred_at: Date }>(
-      "select id, occurred_at from activities where learner_id = $1 order by id",
-      [DEMO_IDS.learner]
-    );
-    const programSnapshot = await pool.query<{ start_date: string }>(
-      "select start_date::text from programs where id = $1",
-      [DEMO_IDS.program]
-    );
-    try {
-      await pool.query("update programs set start_date = '2026-10-12' where id = $1", [DEMO_IDS.program]);
-      await pool.query("update activities set occurred_at = '2026-10-12T09:00:00.000Z' where learner_id = $1", [DEMO_IDS.learner]);
-
-      const response = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
-
-      expect(response.statusCode, response.body).toBe(200);
-      expect(response.json().inactivityReminder).toEqual({ inactiveDays: 2 });
-    } finally {
-      await pool.query("update programs set start_date = $2::date where id = $1", [DEMO_IDS.program, programSnapshot.rows[0]!.start_date]);
-      for (const row of snapshot.rows) {
-        await pool.query("update activities set occurred_at = $2 where id = $1", [row.id, row.occurred_at]);
-      }
-      vi.useRealTimers();
-    }
-  });
-
   it("does not count inactivity from before the learner program started", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-14T12:00:00.000Z"));
@@ -433,8 +319,8 @@ describe("learner profile, home, lesson and progress API", () => {
   });
 
   it("preserves lesson content order and resumes server-side progress evidence", async () => {
-    const home = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
-    const lessonId = home.json().nextLesson.id as string;
+    // The weekly home no longer lists lessons; use the seeded day-2 lesson the learner resumes next.
+    const lessonId = DEMO_IDS.lessons[1]!;
 
     const lesson = await app.inject({ method: "GET", url: `/api/v1/lessons/${lessonId}`, headers: { cookie } });
     expect(lesson.statusCode).toBe(200);
@@ -449,6 +335,13 @@ describe("learner profile, home, lesson and progress API", () => {
     try {
       const study = await app.inject({ method: "POST", url: `/api/v1/lessons/${lessonId}/study-completion`, headers: { cookie } });
       expect(study.statusCode, study.body).toBe(200);
+      // Speaking opens only after the learner has listened to every pronunciation word.
+      const pronunciation = lesson.json().content.parts.find((part: { code: string }) => part.code === "pronunciation");
+      for (const entry of (pronunciation?.content.words ?? []).slice(0, 3) as Array<string | { word: string }>) {
+        const word = typeof entry === "string" ? entry : entry.word;
+        const listened = await app.inject({ method: "POST", url: `/api/v1/lessons/${lessonId}/pronunciation/listens`, headers: { cookie }, payload: { word } });
+        expect(listened.statusCode, listened.body).toBe(200);
+      }
       for (const code of ["listening", "reading"] as const) {
         for (let attempt = 0; attempt < 2; attempt += 1) {
           const saved = await app.inject({
@@ -495,8 +388,8 @@ describe("learner profile, home, lesson and progress API", () => {
   });
 
   it("does not let a learner complete a lesson by fabricating missing exercise evidence", async () => {
-    const home = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
-    const lessonId = home.json().nextLesson.id as string;
+    // The weekly home no longer lists lessons; use the seeded day-2 lesson the learner resumes next.
+    const lessonId = DEMO_IDS.lessons[1]!;
     const lesson = await app.inject({ method: "GET", url: `/api/v1/lessons/${lessonId}`, headers: { cookie } });
     const required = lesson.json().content.parts
       .map((part: { code: string }) => part.code)
@@ -519,8 +412,8 @@ describe("learner profile, home, lesson and progress API", () => {
   });
 
   it("does not retain staged client evidence for a later completion request", async () => {
-    const home = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
-    const lessonId = home.json().nextLesson.id as string;
+    // The weekly home no longer lists lessons; use the seeded day-2 lesson the learner resumes next.
+    const lessonId = DEMO_IDS.lessons[1]!;
     const original = await pool.query<{
       id: string; status: "not_started" | "in_progress" | "completed"; score: string | null;
       evidence: Record<string, unknown>; started_at: Date | null; completed_at: Date | null; updated_at: Date;
@@ -591,70 +484,6 @@ describe("learner profile, home, lesson and progress API", () => {
       await pool.query("update lesson_set_versions set status = $2 where id = $1", [setVersion.rows[0]!.id, setVersion.rows[0]!.status]);
       await pool.query("alter table lesson_set_versions enable trigger user");
     }
-  });
-
-  it("counts only completed lessons from one through five and unlocks weekly practice at five", async () => {
-    const snapshot = await pool.query<{
-      id: string; learner_id: string; lesson_id: string; status: "not_started" | "in_progress" | "completed";
-      score: string | null; evidence: Record<string, unknown>; started_at: Date | null; completed_at: Date | null; updated_at: Date;
-    }>(
-      `select id, learner_id, lesson_id, status, score::text, evidence, started_at, completed_at, updated_at
-       from progress_records where learner_id = $1 and lesson_id = any($2::uuid[])`,
-      [DEMO_IDS.learner, DEMO_IDS.lessons]
-    );
-    try {
-      for (let index = 1; index < DEMO_IDS.lessons.length; index += 1) {
-        await pool.query(
-          `insert into progress_records (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at, updated_at)
-           values ($1, $2, $3, 'completed', 100, '{"completedPartCodes":[],"evidence":{}}'::jsonb, now(), now(), now())
-           on conflict (learner_id, lesson_id) do update
-           set status = 'completed', score = 100, evidence = excluded.evidence, completed_at = now(), updated_at = now()`,
-          [randomUUID(), DEMO_IDS.learner, DEMO_IDS.lessons[index]]
-        );
-        const home = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
-        expect(home.statusCode, home.body).toBe(200);
-        expect(home.json().metrics).toMatchObject({ completedLessons: index + 1, totalLessons: 5 });
-        expect(home.json().practice.status).toBe(index === 4 ? "open" : "locked");
-      }
-    } finally {
-      await pool.query("delete from progress_records where learner_id = $1 and lesson_id = any($2::uuid[])", [DEMO_IDS.learner, DEMO_IDS.lessons]);
-      for (const record of snapshot.rows) {
-        await pool.query(
-          `insert into progress_records (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at, updated_at)
-           values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)`,
-          [record.id, record.learner_id, record.lesson_id, record.status, record.score, JSON.stringify(record.evidence), record.started_at, record.completed_at, record.updated_at]
-        );
-      }
-    }
-  });
-
-  it("keeps a newly logged-in learner's home progress separate from the prior learner", async () => {
-    const email = `progress-isolation-${randomUUID()}@e4s.local`;
-    const registration = await app.inject({
-      method: "POST",
-      url: "/api/auth/learner/register",
-      payload: { displayName: "Học viên độc lập", email, pin: "654321" }
-    });
-    expect(registration.statusCode, registration.body).toBe(201);
-    const secondCookie = String(registration.headers["set-cookie"]).split(";")[0] ?? "";
-    const secondLearner = await pool.query<{ id: string }>("select id from users where email = $1", [email]);
-    expect(secondLearner.rows).toHaveLength(1);
-    await pool.query(
-      "update enrollments set cefr = 'A2', cefr_approved = true where learner_id = $1 and program_id = $2",
-      [secondLearner.rows[0]!.id, DEMO_IDS.program]
-    );
-
-    const [firstHome, secondHome] = await Promise.all([
-      app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } }),
-      app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie: secondCookie } })
-    ]);
-    expect(firstHome.statusCode, firstHome.body).toBe(200);
-    expect(secondHome.statusCode, secondHome.body).toBe(200);
-    expect(firstHome.json().metrics.completedLessons).toBeGreaterThan(0);
-    expect(secondHome.json()).toMatchObject({
-      metrics: { completedLessons: 0, totalLessons: 5 },
-      nextLesson: { id: DEMO_IDS.lessons[0], dayNumber: 1, status: "not_started" }
-    });
   });
 
   it("returns the enriched vocabulary relations used by the learner detail modals", async () => {
@@ -769,47 +598,6 @@ describe("learner profile, home, lesson and progress API", () => {
     expect(response.json()).toEqual({ status: "unavailable" });
   });
 
-  it("returns progress evidence for the profile screen without exposing another learner", async () => {
-    const response = await app.inject({ method: "GET", url: "/api/v1/learner/progress", headers: { cookie } });
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.json()).toMatchObject({ learner: { id: DEMO_IDS.learner }, points: 20 });
-    expect(response.json().weeks[0]).toMatchObject({ weekNumber: 1, completedLessons: 1, totalLessons: 5 });
-  });
-
-  it("marks profile days from real deadlines instead of colouring incomplete future days red", async () => {
-    const previousProgram = await pool.query<{ start_date: string }>(
-      "select start_date::text from programs where id = $1",
-      [DEMO_IDS.program]
-    );
-    const previousProgress = await pool.query<{ completed_at: Date | null }>(
-      "select completed_at from progress_records where learner_id = $1 and lesson_id = $2",
-      [DEMO_IDS.learner, DEMO_IDS.lessons[0]]
-    );
-    await pool.query("update programs set start_date = current_date where id = $1", [DEMO_IDS.program]);
-    await pool.query(
-      "update progress_records set status = 'completed', completed_at = now() where learner_id = $1 and lesson_id = $2",
-      [DEMO_IDS.learner, DEMO_IDS.lessons[0]]
-    );
-
-    try {
-      const response = await app.inject({ method: "GET", url: "/api/v1/learner/progress", headers: { cookie } });
-      expect(response.statusCode, response.body).toBe(200);
-      expect(response.json().weeks[0].days).toEqual([
-        { label: "T2", status: "on_time" },
-        { label: "T3", status: "upcoming" },
-        { label: "T4", status: "upcoming" },
-        { label: "T5", status: "upcoming" },
-        { label: "T6", status: "upcoming" }
-      ]);
-    } finally {
-      await pool.query("update programs set start_date = $2::date where id = $1", [DEMO_IDS.program, previousProgram.rows[0]!.start_date]);
-      await pool.query(
-        "update progress_records set completed_at = $3 where learner_id = $1 and lesson_id = $2",
-        [DEMO_IDS.learner, DEMO_IDS.lessons[0], previousProgress.rows[0]?.completed_at ?? null]
-      );
-    }
-  });
-
   it("returns season, badge roadmap, readiness and assessment evidence for the existing profile screen", async () => {
     const response = await app.inject({ method: "GET", url: "/api/v1/learner/progress", headers: { cookie } });
 
@@ -821,7 +609,8 @@ describe("learner profile, home, lesson and progress API", () => {
         earnedBadgeCount: 1,
         requiredBadgeCount: 2
       },
-      stats: { completedLessons: 1, coachTurns: 2, studyDays: 1 },
+      // Profile stats count the current monthly cycle only; the seeded weekly activity is outside it.
+      stats: { completedLessons: 0, coachTurns: 0, studyDays: 0 },
       levelReadiness: { targetLevel: "B1", eligible: false },
       assessments: {
         placement: {

@@ -25,7 +25,8 @@ describe("App entry bootstrap", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("button", { name: "Đăng nhập người học" })).toBeInTheDocument();
+    // Separate staff entry is on (dev default), so the learner-only entry shows a plain "Đăng nhập" submit.
+    expect(await screen.findByRole("button", { name: "Đăng nhập" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Dùng thử" })).not.toBeInTheDocument();
     expect(client.getProductPreferences).not.toHaveBeenCalled();
     expect(client.getOrganisationExperience).not.toHaveBeenCalled();

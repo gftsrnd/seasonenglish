@@ -45,10 +45,14 @@ describe("monthly lesson output contract", () => {
   const codes = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"];
   const output = (parts: string[]) => ({ lesson: { title: "Monthly lesson", parts: parts.map((code) => ({ code, content: {} })) } });
 
-  it("accepts a requested repair subset but rejects duplicate part codes", () => {
+  it("accepts a requested repair subset and merges duplicate part codes into one part", () => {
     expect(monthlyLessonDayOutputSchema.safeParse(output(codes)).success).toBe(true);
     expect(monthlyLessonDayOutputSchema.safeParse(output(["speaking"])).success).toBe(true);
-    expect(monthlyLessonDayOutputSchema.safeParse(output([...codes.slice(0, -1), "word_use"])).success).toBe(false);
+    // A model that splits one section over two entries is merged by the normalizer, never kept twice.
+    const duplicated = monthlyLessonDayOutputSchema.safeParse(output([...codes.slice(0, -1), "word_use"]));
+    expect(duplicated.success).toBe(true);
+    const mergedCodes = duplicated.success ? duplicated.data.lesson.parts.map((part) => part.code) : [];
+    expect(mergedCodes).toEqual(codes.slice(0, -1));
   });
 });
 

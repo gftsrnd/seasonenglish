@@ -221,28 +221,18 @@ describe("Operator assessment audio playback", () => {
     expect(screen.getByRole("button", { name: "Xoá bản ghi âm" })).toBeDisabled();
   });
 
-  it("plays normalized Season and weekly audio in the operator review cards", () => {
-    const onDeleteAudio = vi.fn();
-    const { rerender } = render(<OperatorReview
-      view={reviewView({
-        counts: { ...reviewView().counts, coach: 1 },
-        submissions: [{ ...reviewView().submissions[0]!, audioArtifact: { fileId: "weekly-file", artifactKey: "audio/weekly.webm", signedUrl: "/audio/weekly.webm", transcript: "Weekly transcript" } }],
-        coachTurns: [{ id: "turn-1", sessionId: "session-1", learnerName: "Lan", at: "28/10/2026 08:00", checked: false, userText: "Season answer", reply: "Season reply", audioArtifact: { fileId: "season-file", artifactKey: "audio/season.webm", signedUrl: "/audio/season.webm", transcript: "Season transcript" } }]
-      })}
-      actions={reviewActions({ onDeleteAudio })}
-    />);
-
-    expect(screen.getByLabelText("Phát Bản ghi âm bài nộp của Lan")).toHaveAttribute("src", "/audio/weekly.webm");
-    rerender(<OperatorReview
+  it("plays normalized Season audio in the operator coach cards", () => {
+    render(<OperatorReview
       view={reviewView({
         activeTab: "coach",
         counts: { ...reviewView().counts, coach: 1 },
         coachTurns: [{ id: "turn-1", sessionId: "session-1", learnerName: "Lan", at: "28/10/2026 08:00", checked: false, userText: "Season answer", reply: "Season reply", audioArtifact: { fileId: "season-file", artifactKey: "audio/season.webm", signedUrl: "/audio/season.webm", transcript: "Season transcript" } }]
       })}
-      actions={reviewActions({ onDeleteAudio })}
+      actions={reviewActions({ onDeleteAudio: vi.fn() })}
     />);
+
+    fireEvent.click(screen.getByText("Lan"));
     expect(screen.getByLabelText("Phát Bản ghi âm Season của Lan")).toHaveAttribute("src", "/audio/season.webm");
-    expect(onDeleteAudio).toBeDefined();
   });
 
   it("plays learner audio in a level-up assessment detail", () => {
@@ -447,23 +437,5 @@ describe("Operator assessment result detail shell", () => {
     expect(screen.getByText("Nhật ký cảnh báo (0)")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Bài làm và bằng chứng" })).toBeInTheDocument();
     expect(document.querySelectorAll("[data-assessment-section]")).toHaveLength(4);
-  });
-});
-describe("Operator review action states", () => {
-  it("keeps AI grading disabled while pending and reports a rejected action", async () => {
-    const user = userEvent.setup();
-    let reject!: (reason: Error) => void;
-    const onGradeAi = vi.fn(() => new Promise<void>((_, nextReject) => { reject = nextReject; }));
-
-    render(<OperatorReview view={reviewView()} actions={reviewActions({ onGradeAi })} />);
-
-    const button = screen.getByRole("button", { name: "Chấm bằng AI" });
-    await user.click(button);
-    expect(screen.getByRole("button", { name: "Đang chấm bằng AI…" })).toBeDisabled();
-
-    reject(new Error("AI đang bận"));
-
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("AI đang bận"));
-    expect(screen.getByRole("button", { name: "Chấm bằng AI" })).not.toBeDisabled();
   });
 });

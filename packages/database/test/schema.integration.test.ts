@@ -16,7 +16,13 @@ const expectedTables = [
   "lesson_sets", "lesson_versions", "lessons", "lesson_part_appeals", "lesson_part_attempts", "media_assets", "micro_lessons", "notification_deliveries", "organization_settings", "organizations",
   "certificate_issuances", "level_up_retry_plans", "practice_appeals", "practice_submissions", "program_weeks", "programs", "progress_records", "scheduled_level_changes",
   "manager_destructive_confirmations", "manager_maintenance_backups", "manager_pin_reports", "month_framework_reopen_requests", "month_frameworks", "monthly_resource_generation_checkpoints", "month_lesson_corrections", "month_lessons", "program_months", "prompt_versions", "provider_configurations", "reminders", "reward_events", "rubric_versions", "sessions",
-  "surveys", "topic_reports", "topic_strikes", "user_credentials", "users"
+  "surveys", "topic_reports", "topic_strikes", "user_credentials", "users",
+  // Added by migrations since the list was last updated (assessment bank/audio, notifications, monthly lifecycle).
+  "assessment_attempt_audio", "assessment_bank_attempt_sources", "assessment_bank_attempts", "assessment_bank_policies",
+  "assessment_bank_policy_sources", "assessment_version_audio", "coach_turn_reservations", "inbox_notifications",
+  "learner_base_notification_channels", "learner_complaints", "learner_review_sessions", "level_up_overrides",
+  "month_framework_images", "monthly_survey_forms", "monthly_survey_submissions", "organization_holiday_audit",
+  "organization_holidays", "pass_course_certificates", "pass_course_readiness", "reminder_base_destinations"
 ].sort();
 
 describe("normalized E4S database", () => {

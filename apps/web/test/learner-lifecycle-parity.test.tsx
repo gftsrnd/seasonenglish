@@ -35,7 +35,7 @@ describe("learner lifecycle app states", () => {
     const callback = actions();
     const { container } = render(<LearnerHome view={{ ...home, rewardAnnouncement: { ...home.rewardAnnouncement, announcementId: "level-change-1", level: "B1", kind: "new-level-announcement" } }} actions={callback} />);
     expect(container).not.toHaveTextContent(/đang trong giai đoạn pilot/i);
-    expect(container).toHaveTextContent(/thông tin của bạn/i);
+    expect(container).toHaveTextContent(/thông tin hồ sơ của bạn/i);
     expect(container).toHaveTextContent(/hồ sơ và đánh giá đầu vào/i);
     expect(container).not.toHaveTextContent(/chặng 1/i);
   });
@@ -44,11 +44,9 @@ describe("learner lifecycle app states", () => {
     const callback = actions();
     const user = userEvent.setup();
     render(<LearnerHome view={{ ...home, rewardAnnouncement: { ...home.rewardAnnouncement, announcementId: "level-change-1", level: "B1", kind: "new-level-announcement" } }} actions={callback} />);
-    const modal = screen.getByTestId("modal.level-up-celebration");
-    expect(modal).toHaveTextContent(/thông báo thật/i);
-    expect(modal).toHaveTextContent(/mùa thu/i);
-    expect(modal).toHaveTextContent(/b1/i);
-    expect(modal).toHaveTextContent(/quy tắc|duyệt/i);
+    // The level-up notice is a compact shared popup named after the new level (no "Thông báo thật"/rule copy).
+    const modal = screen.getByRole("dialog", { name: "Bạn đã lên mức B1" });
+    expect(modal).not.toHaveTextContent(/thông báo thật|quy tắc công nhận/i);
     await user.click(within(modal).getByRole("button", { name: /tiếp tục học/i }));
     expect(callback.acknowledgeRewardAnnouncement).toHaveBeenCalledWith("level-change-1");
   });

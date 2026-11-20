@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GameHubView } from "@e4s/contracts";
 import { LearnerGames } from "../src/app/learner/Games.js";
+import { ModalProvider } from "../src/app/shared/ModalProvider.js";
 import type { LearnerCallbacks } from "../src/app/learner/contracts.js";
 
 afterEach(cleanup);
@@ -15,13 +16,14 @@ const actions = {
 const view = (topicModeration: GameHubView["topicModeration"]): GameHubView => ({
   cefr: "A2", aiAvailable: true,
   ...(topicModeration === undefined ? {} : { topicModeration }),
-  wordSet: { id: "00000000-0000-4000-8000-000000000301", topic: "Tuần 1", cefr: "A2", source: "weekly", words: [] },
+  wordSet: { id: "00000000-0000-4000-8000-000000000301", topic: "Tháng 1", cefr: "A2", source: "monthly", words: [] },
   games: [], arena: { eligible: false, requiredLevel: "B1", points: 0, pendingDuels: 0 }
 });
 
 describe("app game moderation states", () => {
   it.each([
-    [{ state: "empty" }, /nhập chủ đề/i],
+    // With the month's learned words in use, the idle notice names that source.
+    [{ state: "empty" }, /đang dùng bộ từ đã học/i],
     [{ state: "loading" }, /đang kiểm tra/i],
     [{ state: "success", topic: "Sprint planning" }, /đã tạo bộ từ theo chủ đề/i],
     [{ state: "invalid", message: "Chủ đề không hợp lệ." }, /chủ đề không hợp lệ/i],
@@ -30,7 +32,7 @@ describe("app game moderation states", () => {
     [{ state: "ai_rejected", message: "AI không trả về được bộ từ hợp lệ." }, /ai từ chối/i],
     [{ state: "error", message: "Không thể kiểm tra chủ đề." }, /không thể kiểm tra chủ đề/i]
   ] as const)("renders server topic state %#", (topicModeration, expected) => {
-    render(<LearnerGames view={view(topicModeration)} actions={actions} />);
+    render(<ModalProvider><LearnerGames view={view(topicModeration)} actions={actions} /></ModalProvider>);
     expect(screen.getByText(expected)).toBeInTheDocument();
   });
 });

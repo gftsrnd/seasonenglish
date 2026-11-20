@@ -284,7 +284,7 @@ describe("learner lesson study content", () => {
     expect(homeLink).toHaveAttribute("href", "/home");
     expect(homeLink.querySelector("svg.lucide-chevron-left")).toBeInTheDocument();
     expect(homeLink.querySelector("span")).not.toBeInTheDocument();
-    expect(within(lessonHeading!).getByText("Tuần 3 · T3 · Team collaboration")).toBeInTheDocument();
+    expect(within(lessonHeading!).getByText("Bài 2 · Team collaboration")).toBeInTheDocument();
     expect(within(lessonHeading!).getByText("Past simple: I joined…")).toHaveAttribute("data-lesson-structure");
     expect(within(lessonHeading!).queryByText("Bài 2/5 · A2 · 10 phút")).not.toBeInTheDocument();
 
@@ -442,9 +442,10 @@ describe("learner lesson study content", () => {
   });
 
   it("keeps horizontal and wrapped pronunciation examples visibly separated", async () => {
-    const moduleName = "node:fs/promises";
-    const { readFile } = await import(moduleName);
-    const css = await readFile("apps/web/src/app/learner/learner.css", "utf8");
+    const moduleName = "node:fs";
+    const { existsSync, readFileSync } = await import(moduleName);
+    // jsdom gives import.meta.url an http scheme; resolve from apps/web or the repo root.
+    const css = readFileSync(existsSync("src/app") ? "src/app/learner/learner.css" : "apps/web/src/app/learner/learner.css", "utf8");
 
     expect(css).toMatch(/\.lesson-page \.lesson-pronunciation-words\{[^}]*column-gap:20px;[^}]*row-gap:14px;[^}]*\}/);
   });

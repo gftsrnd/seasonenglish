@@ -215,9 +215,10 @@ describe("Operator review detail and AI grade API", () => {
     expect(repeated.json()).toMatchObject({ jobId: first.json().jobId, status: "succeeded", result: { total: 90 } });
     expect(runTask).toHaveBeenCalledTimes(1);
 
+    // AI grading uses the Operator-only authors guard; the Manager cannot start or repeat it.
     const manager = await app.inject({ ...request, headers: { cookie: managerCookie } });
-    expect(manager.statusCode, manager.body).toBe(200);
-    expect(manager.json()).toMatchObject({ jobId: first.json().jobId, status: "succeeded", result: { total: 90 } });
+    expect(manager.statusCode, manager.body).toBe(403);
+    expect(manager.json()).toEqual({ code: "FORBIDDEN" });
     expect(runTask).toHaveBeenCalledTimes(1);
 
     const manual = await app.inject({

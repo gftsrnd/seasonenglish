@@ -1,5 +1,5 @@
-import { buildMonthlyCalendar, buildMonthlyCurriculum, monthlyDayKind, type MonthlyCurriculumInput } from "@e4s/domain";
-import { Client, type Pool } from "pg";
+import { buildMonthlyCalendar, buildMonthlyCurriculum, type MonthlyCurriculumInput } from "@e4s/domain";
+import { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema } from "../src/migrate.js";
 import { MonthlyContentRepository } from "../src/monthly-content-repository.js";
@@ -12,7 +12,9 @@ const month = "2026-11";
 
 describe("monthly content persistence", () => {
   const client = new Client({ connectionString: databaseUrl });
-  const repository = new MonthlyContentRepository(client);
+  // Production builds the repository on a Pool; its transactions check out their own connection.
+  const pool = new Pool({ connectionString: databaseUrl });
+  const repository = new MonthlyContentRepository(pool);
 
   beforeAll(async () => {
     await client.connect();
@@ -21,7 +23,7 @@ describe("monthly content persistence", () => {
     await seedDemo(client);
   }, 30_000);
 
-  afterAll(async () => client.end());
+  afterAll(async () => { await client.end(); await pool.end(); });
 
   it("persists one shared brief, materializes immutable day specs, and leaves the first ten days pending", async () => {
     const brief = await repository.saveBrief(DEMO_IDS.operator, {
@@ -110,11 +112,11 @@ describe("monthly content persistence", () => {
       light: [{ severity: "light" as const, code: "MONTHLY_SYNONYM_OR_ANTONYM_MISSING", message: "Missing a lexical relation", dayNumber: 1, component: "vocabulary" }]
     };
     await repository.saveMonthlyDayDraft(DEMO_IDS.operator, framework.id, 1, { title: "Budget words", parts: [] }, report);
-    await expect(repository.approveMonthlyDay(DEMO_IDS.operator, framework.id, 1)).rejects.toThrow(/acknowledge/i);
+    await expect(repository.approveMonthlyDay(DEMO_IDS.operator, framework.id, 1)).rejects.toThrow(/xác nhận từng cảnh báo/i);
     await repository.acknowledgeMonthlyDayQuality(DEMO_IDS.operator, framework.id, 1, ["MONTHLY_SYNONYM_OR_ANTONYM_MISSING:1:vocabulary"]);
     await repository.approveMonthlyDay(DEMO_IDS.operator, framework.id, 1);
 
-    await expect(repository.saveMonthlyDayDraft(DEMO_IDS.operator, framework.id, 1, { title: "Replacement", parts: [] }, report)).rejects.toThrow(/immutable/i);
+    await expect(repository.saveMonthlyDayDraft(DEMO_IDS.operator, framework.id, 1, { title: "Replacement", parts: [] }, report)).rejects.toThrow(/đã được duyệt nên đang khoá/i);
     const correctionId = await repository.createMonthlyCorrection(DEMO_IDS.operator, framework.id, 1, "Fix an approved example");
     await repository.decideReopenRequest(DEMO_IDS.manager, correctionId, "approved", "The correction is required and learners will be notified.");
     await repository.saveMonthlyCorrection(DEMO_IDS.operator, correctionId, { title: "Corrected budget words", parts: [] }, { severe: [], light: [], contractVersion: framework.version });
@@ -153,9 +155,18 @@ describe("monthly content persistence", () => {
 
   it("makes only approved monthly lessons at the learner's CEFR available to the learner", async () => {
     await client.query("update enrollments set cefr = 'A1' where learner_id = $1", [DEMO_IDS.learner]);
+    // Learners only see a published month, and publication needs the three lessons from "today" approved.
+    const framework = (await repository.getOverview(DEMO_IDS.operator, month)).frameworks[0]!;
+    await client.query(
+      `insert into organization_settings (organization_id, configuration) values ($1, jsonb_build_object('simulatedSystemDate', $2::text))
+       on conflict (organization_id) do update set configuration = organization_settings.configuration || excluded.configuration`,
+      [DEMO_IDS.organization, framework.lessons[0]!.lessonDate]
+    );
+    await repository.publishMonth(DEMO_IDS.operator, framework.id);
     const lessons = await createRepositories(client as unknown as Pool).learning.listMonthlyLessons(DEMO_IDS.learner, month);
 
-    expect(lessons).toHaveLength(1);
+    // Days 1–3 are approved; day 4 is still blocked by its light findings.
+    expect(lessons.map((lesson) => lesson.dayNumber)).toEqual([1, 2, 3]);
     expect(lessons[0]).toMatchObject({ dayNumber: 1, weekNumber: 0, cefr: "A1", weekTopic: "Preparing a quarterly budget review" });
   });
 
@@ -222,7 +233,7 @@ describe("monthly content persistence", () => {
     const rejected = await repository.decideFrameworkReopenRequest(DEMO_IDS.manager, first.id, "rejected", "Keep the current plan.");
     expect(rejected).toMatchObject({ status: "rejected", decisionReason: "Keep the current plan." });
     expect((await repository.getOverview(DEMO_IDS.operator, month)).frameworks[0]).toMatchObject({ status: "approved", version: approved.version });
-    await expect(repository.decideFrameworkReopenRequest(DEMO_IDS.manager, first.id, "approved", "Too late")).rejects.toMatchObject({ statusCode: 404 });
+    await expect(repository.decideFrameworkReopenRequest(DEMO_IDS.manager, first.id, "approved", "Too late")).rejects.toMatchObject({ statusCode: 409, code: "REOPEN_REQUEST_NOT_PENDING" });
 
     const second = await repository.requestFrameworkReopen(DEMO_IDS.operator, approved.id, "The allocation still needs skill exercises.");
     const reopened = await repository.decideFrameworkReopenRequest(DEMO_IDS.manager, second.id, "approved", "Reopen to re-plan the month.");
@@ -253,21 +264,50 @@ describe("monthly content persistence", () => {
   });
 });
 
+// Real standalone headwords, real example IPA that contains each target cluster and two
+// explicit daily objectives per grammar step: what the current curriculum and approval rules require.
+const CORE_WORDS = [
+  "deadline", "draft", "client", "feedback", "budget", "delay", "supplier", "delivery", "progress", "priority", "reschedule", "available",
+  "confirm", "agenda", "colleague", "online", "allocate", "attach", "book", "cancel", "clarify", "collect", "compare", "complete",
+  "contact", "discuss", "estimate", "explain", "prepare", "print", "reduce", "remind", "repair", "replace", "request", "share",
+  "accurate", "brief", "update", "report", "data", "missing", "extend", "approval", "propose", "alternative", "suitable", "confirmation"
+];
+const SOUNDS: Array<{ ipa: string; examples: Array<[string, string]> }> = [
+  { ipa: "/nt/", examples: [["client", "/ˈklaɪənt/"], ["rent", "/rent/"], ["want", "/wɒnt/"], ["paint", "/peɪnt/"], ["sent", "/sent/"], ["tent", "/tent/"], ["point", "/pɔɪnt/"], ["count", "/kaʊnt/"], ["print", "/prɪnt/"]] },
+  { ipa: "/ks/", examples: [["tasks", "/tɑːsks/"], ["desks", "/desks/"], ["risks", "/rɪsks/"], ["asks", "/ɑːsks/"], ["masks", "/mɑːsks/"], ["disks", "/dɪsks/"], ["kiosks", "/ˈkiːɒsks/"], ["flasks", "/flɑːsks/"], ["husks", "/hʌsks/"]] },
+  { ipa: "/st/", examples: [["list", "/lɪst/"], ["cost", "/kɒst/"], ["last", "/lɑːst/"], ["first", "/fɜːst/"], ["most", "/məʊst/"], ["past", "/pɑːst/"], ["test", "/test/"], ["rest", "/rest/"], ["best", "/best/"]] },
+  { ipa: "/ld/", examples: [["hold", "/həʊld/"], ["old", "/əʊld/"], ["told", "/təʊld/"], ["cold", "/kəʊld/"], ["fold", "/fəʊld/"], ["gold", "/gəʊld/"], ["sold", "/səʊld/"], ["bold", "/bəʊld/"], ["mild", "/maɪld/"]] }
+];
+const GRAMMAR_STEPS = [
+  [["Polite requests", "Could you (please) + V?", ["Could you send it?", "Could you check it?", "Could you call me?"]],
+    ["Obligation with have to", "have to / need to + V", ["I have to wait.", "We need to check.", "You have to sign."]],
+    ["Advice with should", "should + V", ["You should ask.", "We should start.", "They should wait."]]],
+  [["Real conditions", "If + present simple, will + V", ["If it rains, we will stay.", "If you call, I will answer.", "If they agree, we will start."]],
+    ["Unreal conditions", "If + past simple, would + V", ["If I had time, I would help.", "If we knew, we would say.", "If she came, we would meet."]],
+    ["Wishes about now", "I wish + past simple", ["I wish I had more time.", "I wish it was ready.", "I wish we knew."]]]
+] as const;
+
 function buildContract() {
-  const calendar = buildMonthlyCalendar(month);
-  const newDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar) === "new" ? [index + 1] : []);
+  const letters = "abcdef";
   const input: MonthlyCurriculumInput = {
     month,
     cefr: "A1",
     theme: { version: 1, title: "Preparing a quarterly budget review", brief: "Teams prepare and explain a quarterly budget review.", context: "Finance team planning meeting", communicationGoal: "Explain costs and request approval" },
-    coreTerms: Array.from({ length: newDays.length * 3 }, (_, index) => ({ id: `core-${index + 1}`, word: `term-${index + 1}`, meaning: `meaning ${index + 1}`, type: "noun", ipa: "/tɜːm/" })),
-    supportTerms: Array.from({ length: newDays.length * 27 }, (_, index) => {
-      const coreIndex = Math.floor(index / 9);
-      const relation = (["umbrella", "synonym", "antonym", "word_family", "umbrella", "synonym", "antonym", "word_family", "collocation"] as const)[index % 9]!;
-      return { id: `support-${index + 1}`, word: `support${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`, meaning: `meaning ${index + 1}`, type: "noun", relation, source: "example" as const, dayNumber: newDays[Math.floor(coreIndex / 3)]!, relatedCoreTermId: `core-${coreIndex + 1}` };
-    }),
-    grammarTopics: Array.from({ length: 2 }, (_, index) => ({ id: `grammar-${index + 1}`, title: `Grammar ${index + 1}`, steps: [{ id: `grammar-${index + 1}-step-1`, focus: "focus", formula: "S + V", usage: "usage", examples: ["Example sentence."] }] })),
-    sounds: Array.from({ length: 4 }, (_, index) => ({ id: `sound-${index + 1}`, ipa: "/t/", label: "T sound", examples: Array.from({ length: Math.ceil(calendar.lessonCount / 4) * 3 }, (_, exampleIndex) => ({ id: `sound-${index + 1}-example-${exampleIndex + 1}`, word: `soundword-${index + 1}-${exampleIndex + 1}`, ipa: "/t/" })) }))
+    coreTerms: CORE_WORDS.map((word, index) => ({ id: `core-${index}`, word, meaning: `nghĩa ${word}`, type: "noun", ipa: "/x/" })),
+    supportTerms: CORE_WORDS.flatMap((word, coreIndex) => Array.from({ length: 6 }, (_, index) => ({
+      id: `support-${coreIndex}-${index}`, word: `${word}${letters[index]}`, meaning: "nghĩa mở rộng", type: "noun",
+      relation: (["umbrella", "synonym", "word_family"] as const)[index % 3]!, source: "family" as const, dayNumber: 1, relatedCoreTermId: `core-${coreIndex}`
+    }))),
+    grammarTopics: GRAMMAR_STEPS.map((steps, topicIndex) => ({
+      id: `grammar-${topicIndex + 1}`, title: `Grammar ${topicIndex + 1}`,
+      steps: steps.map(([focus, formula, examples], stepIndex) => ({
+        id: `grammar-${topicIndex + 1}-step-${stepIndex + 1}`, focus, formula, usage: `Use ${focus.toLowerCase()} at work.`, examples: [...examples],
+        dailyObjectives: [`Recognise ${focus.toLowerCase()} in a short message.`, `Use ${focus.toLowerCase()} in one work sentence.`]
+      }))
+    })),
+    sounds: SOUNDS.map((sound, index) => ({ id: `sound-${index + 1}`, ipa: sound.ipa, label: `Final cluster ${index + 1}`, examples: sound.examples.map(([word, ipa], example) => ({ id: `sound-${index + 1}-ex-${example}`, word, ipa })) }))
   };
-  return buildMonthlyCurriculum(input);
+  const contract = buildMonthlyCurriculum(input);
+  const dayByCore = new Map(contract.coreTerms.map((term) => [term.id, term.dayNumber]));
+  return { ...contract, supportTerms: contract.supportTerms.map((term) => ({ ...term, dayNumber: dayByCore.get(term.relatedCoreTermId)! })) };
 }

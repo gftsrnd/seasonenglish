@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -10,6 +10,7 @@ import {
   type LearnerCallbacks,
   type LearnerScreen
 } from "../src/app/learner/index.js";
+import { ModalProvider } from "../src/app/shared/ModalProvider.js";
 
 afterEach(cleanup);
 
@@ -50,9 +51,9 @@ const callbacks = (): LearnerCallbacks => ({
 describe("new learner app frontend", () => {
   it("owns every learner route from the binding route matrix", () => {
     expect(LEARNER_ROUTES).toEqual([
-      "/home", "/onboard", "/test/:kind", "/lesson/:id", "/micro/:id",
-      "/coach", "/challenge", "/practice", "/survey", "/profile",
-      "/reward/:mode", "/games", "/games/:game", "/arena", "/duel/:id"
+      "/home", "/onboard", "/test/:kind", "/lesson/:id",
+      "/coach", "/monthly", "/challenge", "/survey", "/profile",
+      "/reward/:mode", "/games", "/games/:game"
     ]);
   });
 
@@ -76,18 +77,21 @@ describe("new learner app frontend", () => {
     };
     const { container } = render(<LearnerRouter screen={screenView} callbacks={callbacks()} />);
     expect(Array.from(container.querySelectorAll("[data-home-block]")).map((node) => node.getAttribute("data-home-block"))).toEqual([
-      "context", "primary", "metrics", "week-path", "attendance", "activities", "readiness", "micro", "reward"
+      "primary", "metrics", "activities", "readiness"
     ]);
     expect(screen.getByRole("heading", { name: "Chào Lan!" })).toBeInTheDocument();
     expect(screen.getByText("Hôm nay học gì nào?")).toBeInTheDocument();
+    // Learning is monthly: without an approved month framework the primary block keeps a calm preparing notice.
     const primary = container.querySelector('[data-home-block="primary"]');
-    expect(within(primary as HTMLElement).getByRole("link", { name: "Học ngay" })).toHaveAttribute("href", "/lesson/l1");
+    expect(within(primary as HTMLElement).getByRole("heading", { name: "Lộ trình tháng đang được chuẩn bị" })).toBeInTheDocument();
     const metrics = container.querySelector('[data-home-block="metrics"]');
-    expect(metrics).toHaveClass("stats");
-    expect(metrics?.querySelectorAll(".ring")).toHaveLength(4);
-    expect(within(metrics as HTMLElement).getByText("Bài tuần này")).toBeInTheDocument();
-    expect(within(metrics as HTMLElement).getByText("Ngày học (T2–T6)")).toBeInTheDocument();
-    expect(within(metrics as HTMLElement).getByText("Ngày liên tiếp")).toBeInTheDocument();
+    expect(within(metrics as HTMLElement).getByRole("heading", { name: "Tiến độ học tập" })).toBeInTheDocument();
+    expect(metrics?.querySelector(".stats")).not.toBeNull();
+    expect(metrics?.querySelectorAll(".ring")).toHaveLength(3);
+    expect(within(metrics as HTMLElement).getByText("Bài theo lịch")).toBeInTheDocument();
+    expect(within(metrics as HTMLElement).getByText("Bài ôn")).toBeInTheDocument();
+    expect(within(metrics as HTMLElement).getByText("Điểm danh")).toBeInTheDocument();
+    expect(within(metrics as HTMLElement).getByText("Điểm huy hiệu")).toBeInTheDocument();
     expect(container.querySelector("main")).toBeNull();
   });
 
@@ -106,7 +110,7 @@ describe("new learner app frontend", () => {
   });
 
   it("keeps the six exact app game identities and routes", () => {
-    render(<LearnerRouter screen={{
+    render(<ModalProvider><LearnerRouter screen={{
       kind: "games",
       view: {
         cefr: "B1",
@@ -120,7 +124,7 @@ describe("new learner app frontend", () => {
         games: [],
         arena: { eligible: true, requiredLevel: "B1", points: 50, pendingDuels: 0 }
       }
-    }} callbacks={callbacks()} />);
+    }} callbacks={callbacks()} /></ModalProvider>);
     expect(screen.getAllByRole("link", { name: /chơi/i }).map((link) => link.getAttribute("href"))).toEqual([
       "/games/scramble", "/games/crossword", "/games/eggs", "/games/mario", "/games/sort", "/games/typing"
     ]);
@@ -131,18 +135,23 @@ describe("new learner app frontend", () => {
   it("routes every visible game-set control through supplied callbacks", async () => {
     const user = userEvent.setup();
     const actions = callbacks();
-    render(<LearnerRouter screen={{
+    render(<ModalProvider><LearnerRouter screen={{
       kind: "games",
       view: {
-        cefr: "B1", aiAvailable: true,
+        cefr: "B1", aiAvailable: true, learnedVocabularyAvailable: true,
         wordSet: { id: "set-1", topic: "Meetings", cefr: "B1", source: "custom", words: [] },
         games: [], arena: { eligible: true, requiredLevel: "B1", points: 0, pendingDuels: 0 }
       }
-    }} callbacks={actions} />);
+    }} callbacks={actions} /></ModalProvider>);
+    // Replacing or removing the word set in use is confirmed in the shared popup first.
     await user.type(screen.getByLabelText("Chủ đề bộ từ"), "coffee shop");
     await user.click(screen.getByRole("button", { name: "Tạo bộ từ" }));
-    await user.click(screen.getByRole("button", { name: "Dùng từ vựng tuần này" }));
-    await user.click(screen.getByRole("button", { name: "Xoá bộ này" }));
+    await user.click(await screen.findByRole("button", { name: "Thay bộ từ" }));
+    await user.click(await screen.findByRole("button", { name: "Dùng từ đã học trong tháng" }));
+    await user.click(await screen.findByRole("button", { name: "Thay bộ từ" }));
+    await user.click(await screen.findByRole("button", { name: "Xoá bộ này" }));
+    await user.click(await screen.findByRole("button", { name: "Xoá bộ từ" }));
+    await waitFor(() => expect(actions.deleteGameSet).toHaveBeenCalledOnce());
     expect(actions.generateGameSet).toHaveBeenCalledWith("coffee shop");
     expect(actions.useWeeklyGameSet).toHaveBeenCalledOnce();
     expect(actions.deleteGameSet).toHaveBeenCalledOnce();

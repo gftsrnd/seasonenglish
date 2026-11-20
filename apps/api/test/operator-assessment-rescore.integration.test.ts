@@ -104,7 +104,7 @@ describe("Operator assessment AI rescore", () => {
 
   afterAll(async () => { await app.close(); await pool.end(); });
 
-  it("rescores a pending assessment once, persists AI evidence, and rejects only Learner", async () => {
+  it("rescores a pending assessment once, persists AI evidence, and rejects Manager and Learner", async () => {
     const request = {
       method: "POST" as const,
       url: `/api/v1/assessment-reviews/${DEMO_IDS.placementAttempt}/rescore`,
@@ -132,12 +132,15 @@ describe("Operator assessment AI rescore", () => {
       expect.objectContaining({ groupKey: "LB", taskKeys: expect.arrayContaining(["LB_Q9"]) })
     ]));
     expect(aiInput.objectiveScores.listening.groups.flatMap((group) => group.taskKeys).filter((key) => key === "LB_Q9")).toHaveLength(1);
-    expect(aiInput.speaking.filter((item) => item.evidenceType === "typed_proxy")).toEqual([
-      expect.objectContaining({ prompt: "How would you acknowledge the customer's frustration?" }),
-      expect.objectContaining({ prompt: "What technical issue has delayed the refund?" }),
-      expect.objectContaining({ prompt: "What clear next step would you propose?" }),
-      expect.objectContaining({ prompt: "When can the customer expect a follow-up?" })
-    ]);
+    // The placement form asks the four customer-refund questions as one recorded task (S3).
+    const typed = aiInput.speaking.filter((item) => item.evidenceType === "typed_proxy");
+    expect(typed).toEqual([expect.objectContaining({ taskKey: "S3" })]);
+    for (const question of [
+      "How would you acknowledge the customer's frustration?",
+      "What technical issue has delayed the refund?",
+      "What clear next step would you propose?",
+      "When can the customer expect a follow-up?"
+    ]) expect(typed[0]?.prompt).toContain(question);
 
     const storedScores = await pool.query<{ section: string; score: string; source: string }>(
       "select section, score::text, source from assessment_scores where attempt_id = $1 order by section",
@@ -156,8 +159,9 @@ describe("Operator assessment AI rescore", () => {
     expect(audit.rows).toHaveLength(1);
     expect(audit.rows[0]).toMatchObject({ payload: { requestId: "operator-rescore-1", suggestedLevel: "B1" } });
 
+    // Rescoring uses the Operator-only assessment guard; the Manager is read-only.
     const manager = await app.inject({ ...request, headers: { cookie: managerCookie } });
-    expect(manager.statusCode, manager.body).toBe(200);
+    expect(manager.statusCode, manager.body).toBe(403);
     const learner = await app.inject({ ...request, headers: { cookie: learnerCookie } });
     expect(learner.statusCode).toBe(403);
   });

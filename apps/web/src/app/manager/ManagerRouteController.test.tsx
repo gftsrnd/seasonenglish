@@ -428,9 +428,10 @@ describe("ManagerRouteController", () => {
     await vi.waitFor(() => expect(reset).toHaveBeenCalledWith("learner-1", "246802"));
     expect(await screen.findByText("••••••")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Hiện PIN của Học viên Demo" }));
-    expect(screen.getByText("246802")).toBeInTheDocument();
+    // A revealed PIN is shown in a read-only, selectable input (so it can be copied), not as plain text.
+    expect(screen.getByRole("textbox", { name: "Giá trị PIN của Học viên Demo" })).toHaveValue("246802");
     await user.click(screen.getByRole("button", { name: "Ẩn PIN của Học viên Demo" }));
-    expect(screen.queryByText("246802")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("246802")).not.toBeInTheDocument();
   });
 
   it("reveals the current learner PIN without opening the reset prompt", async () => {
@@ -449,7 +450,7 @@ describe("ManagerRouteController", () => {
     expect(reveal).toHaveBeenCalledWith("learner-1");
     expect(reset).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog", { name: "PIN mới cho Học viên Demo" })).not.toBeInTheDocument();
-    expect(screen.getByText("135790")).toBeInTheDocument();
+    expect(await screen.findByRole("textbox", { name: "Giá trị PIN của Học viên Demo" })).toHaveValue("135790");
   });
 
   it("returns to sign-in after resetting the signed-in Manager's password without reloading accounts", async () => {

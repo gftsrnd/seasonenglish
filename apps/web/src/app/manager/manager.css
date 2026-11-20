@@ -1768,3 +1768,11 @@ table[aria-label="Lịch sử nhắc học"] td:nth-child(3){overflow-wrap:anywh
 
 /* Owner 19/11: a long status ("Tự duyệt quá hạn") wraps inside its own cell instead of running over the date. */
 .manager-requests-card td .badge { white-space: normal; max-width: 100%; line-height: 1.25; text-align: center; }
+
+/* Account rows: the "chờ duyệt" / "chờ cấp lại" badge sits beside the name, centred, with a small gap (rule lost in e763136a). */
+.manager-operational-row .title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}

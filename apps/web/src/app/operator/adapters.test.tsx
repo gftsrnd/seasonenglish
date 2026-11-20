@@ -308,7 +308,8 @@ describe("lesson detail warnings", () => {
     expect(screen.getByText("Từ vựng · job")).toBeInTheDocument();
     expect(screen.getByRole("article", { name: "Từ bao trùm: work communication" })).toHaveTextContent("giao tiếp công việc");
     expect(screen.getByRole("button", { name: "Nghe từ bao trùm: work communication" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe từ cùng nhóm: job" })).toBeInTheDocument();
+    // The umbrella popup lists only the other words of the group, never the current word.
+    expect(screen.queryByRole("button", { name: "Nghe từ cùng nhóm: job" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Đóng" }));
     fireEvent.click(screen.getByRole("button", { name: "Word family (1)" }));
     expect(screen.getByRole("button", { name: "Nghe từ cùng họ: jobing" })).toBeInTheDocument();
@@ -342,7 +343,8 @@ describe("lesson detail warnings", () => {
     expect(screen.getByText("I give + feedback").closest("button")).toBeNull();
     expect(screen.queryByRole("button", { name: "Nghe mẫu ngữ pháp" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Mẫu câu trọng tâm:/)).not.toBeInTheDocument();
-    expect(screen.getByText("I give clear feedback.")).toHaveClass("lesson-example-card");
+    // The example text sits in a span inside the shared example card button.
+    expect(screen.getByText("I give clear feedback.").closest(".lesson-example-card")).not.toBeNull();
     expect(screen.getByText("PHÁT ÂM")).toBeInTheDocument();
     expect(screen.getByText(/Âm \/f\/ như trong/)).toBeInTheDocument();
     expect(screen.queryByText("3 từ chứa âm mục tiêu (học viên phải luyện đủ rồi mới ghi âm):")).not.toBeInTheDocument();
@@ -350,7 +352,8 @@ describe("lesson detail warnings", () => {
     expect(screen.getByLabelText("Luyện từ phát âm").firstElementChild).toHaveClass("lesson-pronunciation-word-chip");
     expect(screen.getByLabelText("Luyện từ phát âm").querySelectorAll(":scope > button")).toHaveLength(3);
     expect(screen.getByText("Cắn nhẹ môi dưới rồi thổi hơi.").closest("p")).toHaveClass("lesson-study-explanation");
-    expect(screen.getByText(/Âm \/f\/ như trong/).closest(".lesson-grammar-formula-row")).toBeInTheDocument();
+    // The operator preview reuses the learner pronunciation target heading.
+    expect(screen.getByText(/Âm \/f\/ như trong/).closest(".lesson-pronunciation-target-head")).not.toBeNull();
   });
 
   it("never renders the untrusted target-phoneme speaker", () => {
@@ -536,7 +539,8 @@ describe("review submissions", () => {
       }], coachSamples: [], weeklyPractices: [], microLessons: [], appeals: [], lessonAttempts: [], assessments: []
     }, "submissions");
 
-    expect(view.counts.subs).toBe(1);
+    // Weekly submissions are no longer counted on the monthly review tabs.
+    expect(view.counts.subs).toBe(0);
     expect(view.submissions[0]).toEqual(expect.objectContaining({
       guidance: "Use the weekly words.", requiredVocabulary: ["fall", "floor", "report"]
     }));

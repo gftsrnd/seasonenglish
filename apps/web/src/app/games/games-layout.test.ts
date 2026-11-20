@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 
 const stylesheet = readFileSync(fileURLToPath(new URL("./games.css", import.meta.url)), "utf8");
 
+const shellStylesheet = readFileSync(fileURLToPath(new URL("../shared/shared.css", import.meta.url)), "utf8");
+
 const responsiveStylesheet = readFileSync(fileURLToPath(new URL("../responsive-learner.css", import.meta.url)), "utf8");
 
 describe("game surface layout guardrails", () => {
@@ -20,9 +22,11 @@ describe("game surface layout guardrails", () => {
   });
 
   it("reserves the same safe bottom-nav clearance for the hub and every game route", () => {
-    expect(stylesheet).toMatch(
-      /\.app-learner-page\.game-page,\s*\.app-learner-page\.games-page\s*\{[^}]*padding-bottom:\s*calc\(128px\s*\+\s*env\(safe-area-inset-bottom\)\)/s
-    );
+    // The compact shell now gives the bottom nav its own row (main scrolls above it), so game routes no longer
+    // carry their own overlay padding; the shared shell is the single source of the clearance.
+    expect(shellStylesheet).toMatch(/body:has\(nav\.bottomnav\) > #root > main\s*\{[^}]*overflow-y:\s*auto !important/s);
+    expect(shellStylesheet).toMatch(/body:has\(nav\.bottomnav\) > #root > \.bottomnav\s*\{[^}]*position:\s*static !important[^}]*padding-block:\s*4px calc\(4px \+ env\(safe-area-inset-bottom, 0px\)\)/s);
+    expect(stylesheet).not.toMatch(/padding-bottom:\s*calc\(128px/);
   });
 
   it("keeps Season-rio controls out of the vocabulary modal layer", () => {
@@ -34,9 +38,7 @@ describe("game surface layout guardrails", () => {
   });
 
   it("keeps game controls touch-safe and separates active content from mobile navigation", () => {
-    expect(stylesheet).toMatch(
-      /\.app-learner-page\.game-page,\s*\.app-learner-page\.games-page\s*\{[^}]*padding-bottom:\s*calc\(128px\s*\+\s*env\(safe-area-inset-bottom\)\)/s,
-    );
+    expect(shellStylesheet).toMatch(/body:has\(nav\.bottomnav\) > #root > \.bottomnav\s*\{[^}]*position:\s*static !important/s);
     expect(stylesheet).toMatch(/\.game-runner\s*\{[^}]*gap:\s*16px/s);
     expect(stylesheet).toMatch(/\.game-runner button\s*\{[^}]*min-height:\s*44px/s);
     expect(stylesheet).toMatch(/\.virtual-keyboard button\s*\{[^}]*min-height:\s*44px/s);

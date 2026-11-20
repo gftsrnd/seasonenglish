@@ -26,3 +26,11 @@
 ## Test đang hỏng đã biết
 
 Danh sách cập nhật ở cuối file này, sau mỗi lần dọn test. Mục tiêu là `pnpm test` xanh hoàn toàn. Mỗi test hỏng phải được sửa, hoặc xoá kèm lý do; không bỏ qua bằng `skip`.
+
+### Trạng thái ngày 20/11/2026
+
+- Web: **1.521/1.521 pass**.
+- API + packages + scripts: **2.525/2.526 pass**. `pnpm typecheck` sạch.
+- Test còn hỏng: `apps/api/test/monthly-content.integration.test.ts` › "keeps one shared brief and locks a submitted framework through the Operator API". Bài học tháng trong fixture `approvableMonthlyContract` (`apps/api/test/support/monthly-final-fixture.ts`) chưa đạt chuẩn chất lượng hiện tại: 25 lỗi nặng (ngôn ngữ hướng dẫn A1, mục tiêu can-do, 3 collocation mỗi từ, phần ngữ pháp hằng ngày, phát âm). Muốn sửa phải viết bộ dựng bài riêng cho từng mức.
+- `monthly-final-quality-gate` chỉ chạy được khi chạy riêng (nó bỏ qua bước reset schema), nên chạy chung cả bộ có thể hỏng.
+- Ca test của luồng tuần và các route đã gỡ được chuyển vào `legacy/*/test` và `legacy/old-routes/removed-test-cases.txt`.

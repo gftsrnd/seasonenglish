@@ -135,7 +135,8 @@ describe("Staff level-up override (Thi lên mức)", () => {
 
     const started = await start();
     expect(started.statusCode, started.body).toBe(201);
-    expect(started.json()).toMatchObject({ definition: { kind: "level-up", targetLevel: "B1" } });
+    // The public level-up form names its target level in the key (it is prepared from the B1 bank).
+    expect(started.json()).toMatchObject({ definition: { kind: "level-up", key: "levelup-b1" } });
     await pool.query("delete from assessment_attempts where id = $1", [started.json().attempt.id]);
   });
 

@@ -27,16 +27,21 @@ describe("new binding-app shell", () => {
   it("uses the exact learner navigation order and original audio paths", () => {
     render(<MemoryRouter initialEntries={["/home"]}><AppShell session={learnerSession} onLogout={vi.fn()}><section>Trang học</section></AppShell></MemoryRouter>);
     const nav = screen.getByRole("navigation", { name: "Điều hướng người học" });
-    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual(["Trang chủ", "Luyện với Season", "Bài tuần", "Mini game", "Tiến độ & hồ sơ"]);
-    expect(screen.getByRole("button", { name: "Hiệu ứng âm thanh: bật" }).querySelector("svg")).toHaveClass("lucide-volume-2");
-    expect(screen.getByRole("button", { name: "Nhạc nền: bật" }).querySelector("svg")).toHaveClass("lucide-music-2");
-    expect(screen.getByRole("button", { name: "Hiệu ứng âm thanh: bật" }).querySelector("svg")).toHaveAttribute("width", "18");
+    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual(["Trang chủ", "Luyện với Season", "Bài tháng", "Game từ vựng", "Tiến độ & hồ sơ"]);
+    // The audio toggles live in the account popover ("Tài khoản và âm thanh").
+    const account = screen.getByRole("button", { name: "Tài khoản và âm thanh" });
+    const menu = document.getElementById(account.getAttribute("popovertarget")!)!;
+    menu.removeAttribute("popover"); // jsdom does not open native popovers.
+    expect(within(menu).getByRole("button", { name: "Hiệu ứng âm thanh: bật" }).querySelector("svg")).toHaveClass("lucide-volume-2");
+    expect(within(menu).getByRole("button", { name: "Nhạc nền: bật" }).querySelector("svg")).toHaveClass("lucide-music-2");
+    expect(within(menu).getByRole("button", { name: "Hiệu ứng âm thanh: bật" }).querySelector("svg")).toHaveAttribute("width", "18");
   });
 
   it("keeps Manager navigation free of the former nested Operator overlay", () => {
     const session = { ...learnerSession, role: "manager" as const, permissions: ["settings:manage" as const] };
-    render(<MemoryRouter initialEntries={["/op/lessons"]}><AppShell session={session} onLogout={vi.fn()}><section>Bài học</section></AppShell></MemoryRouter>);
-    expect(within(screen.getByRole("navigation", { name: "Điều hướng quản lý" })).getAllByRole("link").map((link) => link.textContent)).toEqual(["Tiến độ", "Vận hành", "Nhắc học", "Báo cáo", "Cài đặt"]);
+    // /op/lessons was moved to legacy/; the Manager's operator view lives under /mgr/ops.
+    render(<MemoryRouter initialEntries={["/mgr/ops"]}><AppShell session={session} onLogout={vi.fn()}><section>Bài học</section></AppShell></MemoryRouter>);
+    expect(within(screen.getByRole("navigation", { name: "Điều hướng quản lý" })).getAllByRole("link").map((link) => link.textContent)).toEqual(["Theo dõi", "Vận hành", "Yêu cầu", "Cài đặt"]);
     expect(screen.queryByText("Chế độ xem của Quản lý")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Đề lên mức" })).not.toBeInTheDocument();
   });

@@ -1,21 +1,28 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { levelUpDefinition, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
+import { createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 
+// Current Coach dialogue output: an evaluated, counted turn that used one lesson word.
 const goodCoachOutput = {
-  relevant: true,
-  relevanceNote: "",
-  reply: "Tell me one more detail about the problem and how you solved it.",
-  replyTranslation: "Hãy kể thêm một chi tiết về vấn đề và cách bạn đã giải quyết.",
-  rubric: { meaning: 4, vocabulary: 4, grammar: 4 },
-  suggestions: [],
+  evaluation: { status: "valid", result: "correct", countsTowardGoal: true, noteVi: "Đúng trọng tâm." },
+  seasonReply: "Thanks for explaining. How did you solve the problem?",
+  seasonReplyTranslation: "Cảm ơn bạn đã giải thích. Bạn đã giải quyết vấn đề như thế nào?",
+  nextQuestion: "How did you solve the problem?",
+  nextQuestionTranslation: "Bạn đã giải quyết vấn đề như thế nào?",
+  rubric: {
+    meaning: { score: 4, evidence: "Câu trả lời rõ ý.", improvement: "" },
+    vocabulary: { score: 4, evidence: "Từ vựng phù hợp ngữ cảnh.", improvement: "" },
+    grammar: { score: 4, evidence: "Ngữ pháp chính xác.", improvement: "" }
+  },
+  corrections: [],
   correctedText: "",
+  suggestedAnswer: { text: "Hãy kể bạn đã làm gì đầu tiên.", translation: "" },
   usedWords: ["colleague"]
 };
 
@@ -47,7 +54,45 @@ describe("learner lifecycle persistence", () => {
       await seedDemo(client);
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2)",
-        [DEMO_IDS.learner, await createCredentialHash("learner-pass")]
+        [DEMO_IDS.learner, await createPinHash("123456")]
+      );
+      await client.query("update enrollments set cefr = 'A2', cefr_approved = true where learner_id = $1", [DEMO_IDS.learner]);
+      // Coach vocabulary comes from the completed lessons of the learner's published, approved month.
+      const monthId = crypto.randomUUID();
+      const frameworkId = crypto.randomUUID();
+      await client.query(
+        `insert into program_months (id, organization_id, month, exam_date, lesson_count, brief_status)
+         select $1, $2, to_char(system_date, 'YYYY-MM'), (date_trunc('month', system_date) + interval '1 month - 1 day')::date, 1, 'approved'
+         from organization_system_date($2) system_date
+         on conflict (organization_id, month) do update set brief_status = 'approved'`, [monthId, DEMO_IDS.organization]
+      );
+      await client.query(
+        `insert into month_frameworks (id, program_month_id, cefr, status, curriculum_contract, published_at, published_on)
+         select $1, pm.id, 'A2', 'approved', '{"daySpecs":[{"lessonNumber":1,"kind":"new"}]}', now(), (pm.month || '-01')::date
+         from program_months pm where pm.organization_id = $2 and pm.month = to_char(organization_system_date($2), 'YYYY-MM')`,
+        [frameworkId, DEMO_IDS.organization]
+      );
+      await client.query(
+        `insert into month_lessons (id, framework_id, lesson_number, lesson_date, lesson_id, scope_hash, status)
+         values (gen_random_uuid(), $1, 1, organization_system_date($2), $3, '', 'approved')`,
+        [frameworkId, DEMO_IDS.organization, DEMO_IDS.lessons[0]]
+      );
+      await client.query(
+        `insert into progress_records (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at)
+         values (gen_random_uuid(), $1, $2, 'completed', 100, '{}'::jsonb, now(), now())
+         on conflict (learner_id, lesson_id) do update set status = 'completed', completed_at = now()`,
+        [DEMO_IDS.learner, DEMO_IDS.lessons[0]]
+      );
+      // A published B1 level-up form for the A2 learner (the demo seed no longer publishes one).
+      await client.query(
+        `insert into assessment_definitions (id, organization_id, assessment_key, kind, title)
+         values ($1, $2, 'level-up-b1-lifecycle-test', 'level_up', 'Đề lên B1 (kiểm thử)')`,
+        [DEMO_IDS.levelUpDefinition, DEMO_IDS.organization]
+      );
+      await client.query(
+        `insert into assessment_versions (id, definition_id, version, status, blueprint, published_at)
+         values ($1, $2, 1, 'published', $3::jsonb, now())`,
+        [DEMO_IDS.levelUpVersion, DEMO_IDS.levelUpDefinition, JSON.stringify(levelUpDefinition)]
       );
     } finally {
       client.release();
@@ -55,7 +100,7 @@ describe("learner lifecycle persistence", () => {
     await app.ready();
     const login = await app.inject({
       method: "POST", url: "/api/auth/learner/login",
-      payload: { email: "minh.anh.nguyen@e4s.local", password: "learner-pass" }
+      payload: { email: "minh.anh.nguyen@e4s.local", pin: "123456" }
     });
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
   }, 30_000);
@@ -81,8 +126,11 @@ describe("learner lifecycle persistence", () => {
     const word = before.json().vocabulary.find((item: { opened: boolean }) => !item.opened)?.word;
     expect(word).toEqual(expect.any(String));
 
+    expect(word).toBe("colleague");
+    // A word opens when the learner uses it in a counted Coach turn (there is no manual unlock route).
     const unlocked = await app.inject({
-      method: "POST", url: `/api/v1/coach/vocabulary/${encodeURIComponent(word)}/unlock`, headers: { cookie }
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie },
+      payload: { requestId: crypto.randomUUID(), message: `My ${word} and I solved the problem together.` }
     });
     expect(unlocked.statusCode, unlocked.body).toBe(200);
     expect(unlocked.json().vocabulary).toEqual(expect.arrayContaining([
@@ -96,8 +144,22 @@ describe("learner lifecycle persistence", () => {
   });
 
   it("creates one challenge result and one pending level request in the pass transaction", async () => {
+    // Readiness comes from six counted monthly cycles; the staff exception makes the next level available now.
+    await pool.query(
+      `insert into level_up_overrides (id, organization_id, learner_id, from_cefr, target_cefr, reason, granted_by)
+       values (gen_random_uuid(), $1, $2, 'A2', 'B1', 'Kiểm thử vòng đời học viên', $3)`,
+      [DEMO_IDS.organization, DEMO_IDS.learner, DEMO_IDS.operator]
+    );
     const started = await app.inject({ method: "POST", url: "/api/v1/assessments/levelup/start", headers: { cookie }, payload: {} });
     expect(started.statusCode, started.body).toBe(201);
+    // The six-turn challenge opens only after the level-up exam has passed.
+    const attemptId = started.json().attempt.id as string;
+    await pool.query("update assessment_attempts set status = 'pending_review', current_section = null, submitted_at = now() where id = $1", [attemptId]);
+    await pool.query(
+      `insert into assessment_scores (id, attempt_id, section, score, criteria, source)
+       select gen_random_uuid(), $1, section, 18, '{}'::jsonb, 'human' from unnest(array['listening', 'reading', 'writing', 'speaking']) section`,
+      [attemptId]
+    );
 
     for (let index = 0; index < 6; index += 1) {
       const result = await app.inject({
@@ -122,37 +184,6 @@ describe("learner lifecycle persistence", () => {
       [started.json().attempt.id]
     );
     expect(stored.rows[0]).toEqual({ results: "1", requests: "1" });
-  });
-
-  it("persists a weekly-practice appeal and returns the pending hidden state", async () => {
-    await pool.query(
-      `insert into progress_records (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at)
-       select gen_random_uuid(), $1, l.id, 'completed', 80, '{}'::jsonb, now(), now()
-       from lessons l
-       on conflict (learner_id, lesson_id) do update set status = 'completed', completed_at = now()`,
-      [DEMO_IDS.learner]
-    );
-    const submitted = await app.inject({
-      method: "POST", url: "/api/v1/engagement/practice/submit", headers: { cookie },
-      payload: { requestId: crypto.randomUUID(), text: "I explain my weekly project plan to my colleagues clearly." }
-    });
-    expect(submitted.statusCode, submitted.body).toBe(200);
-    const submissionId = submitted.json().submission.id as string;
-    await pool.query(
-      `update practice_submissions set status = 'reviewed', score = '{"total": 70}'::jsonb,
-         feedback = '{"message":"Please review the rubric."}'::jsonb where id = $1`,
-      [submissionId]
-    );
-
-    const appealed = await app.inject({
-      method: "POST", url: `/api/v1/engagement/practice/${submissionId}/appeals`, headers: { cookie },
-      payload: { reason: "Please review the grading against the submitted evidence." }
-    });
-    expect(appealed.statusCode, appealed.body).toBe(200);
-    expect(appealed.json()).toMatchObject({
-      submission: { id: submissionId },
-      appeal: { status: "pending", submissionId }
-    });
   });
 
   it("persists level-up celebration acknowledgement so a reload does not reopen it", async () => {

@@ -40,14 +40,32 @@ describe("learner notifications API", () => {
         `insert into organization_settings (organization_id, configuration) values ($1, '{"simulatedSystemDate":"2026-11-10"}')
          on conflict (organization_id) do update set configuration = excluded.configuration`, [DEMO_IDS.organization]
       );
-      await client.query(
+      const framework = await client.query<{ id: string }>(
         `with month as (
            insert into program_months (id, organization_id, month, exam_date, lesson_count)
            values (gen_random_uuid(), $1, '2026-11', '2026-11-30', 20) returning id
          )
-         insert into month_frameworks (id, program_month_id, cefr, status, published_at, published_on)
-         select gen_random_uuid(), id, 'A2', 'approved', now(), '2026-11-01' from month`, [DEMO_IDS.organization]
+         insert into month_frameworks (id, program_month_id, cefr, status, scope_hash, published_at, published_on)
+         select gen_random_uuid(), id, 'A2', 'approved', 'scope', now(), '2026-11-01' from month returning id`, [DEMO_IDS.organization]
       );
+      // A missed weekday counts as an absence only when an approved lesson was available on it.
+      const lessonSet = await client.query<{ id: string }>(
+        "insert into lesson_sets (id, month_framework_id, cefr) values (gen_random_uuid(), $1, 'A2') returning id", [framework.rows[0]!.id]
+      );
+      for (const [index, lessonDate] of ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-09", "2026-11-10"].entries()) {
+        await client.query(
+          `with version as (
+             insert into lesson_set_versions (id, lesson_set_id, version, status) values (gen_random_uuid(), $1, $2, 'published') returning id
+           ), lesson as (
+             insert into lessons (id, lesson_set_version_id, day_number, title) select gen_random_uuid(), id, $2, 'Lesson' from version returning id
+           ), lesson_version as (
+             insert into lesson_versions (id, lesson_id, version, status, content) select gen_random_uuid(), id, 1, 'published', '{}'::jsonb from lesson
+           )
+           insert into month_lessons (id, framework_id, lesson_number, lesson_date, lesson_id, scope_hash, status)
+           select gen_random_uuid(), $3, $2, $4::date, id, 'scope', 'approved' from lesson`,
+          [lessonSet.rows[0]!.id, index + 1, framework.rows[0]!.id, lessonDate]
+        );
+      }
       await client.query(
         `insert into enrollments (id, program_id, learner_id, cefr, cefr_approved, cefr_started_on)
          values (gen_random_uuid(), $1, $2, 'A2', true, '2026-11-04')

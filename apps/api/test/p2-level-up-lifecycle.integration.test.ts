@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createRepositories, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
+import { createRepositories, levelUpDefinition, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
@@ -33,6 +33,17 @@ describe("P2 level-up lifecycle", () => {
          set configuration = jsonb_set(organization_settings.configuration, '{levelUp}',
            '{"days":14,"lessons":0,"firstTry":0,"submission":0,"coach":0,"coachTurns":0,"wrong":100,"minParts":0}'::jsonb, true)`,
         [DEMO_IDS.organization]
+      );
+      // The demo seed no longer publishes a level-up form: publish the B1 fixture form here.
+      await client.query(
+        `insert into assessment_definitions (id, organization_id, assessment_key, kind, title)
+         values ($1, $2, 'level-up-b1-p2-test', 'level_up', 'Đề lên B1 (kiểm thử)')`,
+        [DEMO_IDS.levelUpDefinition, DEMO_IDS.organization]
+      );
+      await client.query(
+        `insert into assessment_versions (id, definition_id, version, status, blueprint, published_at)
+         values ($1, $2, 1, 'published', $3::jsonb, now())`,
+        [DEMO_IDS.levelUpVersion, DEMO_IDS.levelUpDefinition, JSON.stringify(levelUpDefinition)]
       );
       const definitionId = randomUUID();
       const versionId = randomUUID();
@@ -71,6 +82,16 @@ describe("P2 level-up lifecycle", () => {
     await pool.end();
   });
 
+  // Level-up readiness is computed from six counted monthly cycles; these cases need a ready
+  // learner, so they use the staff exception ("Thi lên mức") that makes the next level available now.
+  const setLevelUpOverride = async (allowed: boolean) => {
+    const response = await app.inject({
+      method: "PUT", url: `/api/v1/assessment-reviews/learners/${DEMO_IDS.learner}/level-up-override`,
+      headers: { cookie: operatorCookie }, payload: allowed ? { allowed, reason: "Kiểm thử vòng đời lên mức" } : { allowed }
+    });
+    expect(response.statusCode, response.body).toBe(200);
+  };
+
   it("enforces readiness and selects the published form for the exact next CEFR", async () => {
     await pool.query(
       `delete from assessment_attempts aa using assessment_versions av, assessment_definitions ad
@@ -78,28 +99,32 @@ describe("P2 level-up lifecycle", () => {
          and ad.kind = 'level_up' and aa.learner_id = $1`,
       [DEMO_IDS.learner]
     );
+    const notReady = await app.inject({
+      method: "POST", url: "/api/v1/assessments/level-up/start",
+      headers: { cookie: learnerCookie }, payload: {}
+    });
+    expect(notReady.statusCode, notReady.body).toBe(409);
+    expect(notReady.json()).toEqual({ code: "LEVEL_UP_NOT_READY" });
+    await setLevelUpOverride(true);
 
     const started = await app.inject({
       method: "POST", url: "/api/v1/assessments/level-up/start",
       headers: { cookie: learnerCookie }, payload: {}
     });
     expect(started.statusCode, started.body).toBe(201);
-    expect(started.json()).toMatchObject({ definition: { kind: "level-up", targetLevel: "B1" } });
+    // The A2 learner gets the B1 form (never the published B2 fixture); the key names the target level.
+    expect(started.json()).toMatchObject({ definition: { kind: "level-up", key: "levelup-b1" } });
 
     const duplicate = await app.inject({
       method: "POST", url: "/api/v1/assessments/level-up/start",
       headers: { cookie: learnerCookie }, payload: {}
     });
-    expect(duplicate.statusCode, duplicate.body).toBe(409);
-    expect(duplicate.json()).toEqual({ code: "LEVEL_UP_ALREADY_ACTIVE" });
+    // A second start resumes the in-progress attempt instead of opening another one.
+    expect(duplicate.statusCode, duplicate.body).toBe(201);
+    expect(duplicate.json().attempt.id).toBe(started.json().attempt.id);
 
     await pool.query("delete from assessment_attempts where id = $1", [started.json().attempt.id]);
-    await pool.query(
-      `update organization_settings
-       set configuration = jsonb_set(configuration, '{levelUp,coachTurns}', '99'::jsonb, true)
-       where organization_id = $1`,
-      [DEMO_IDS.organization]
-    );
+    await setLevelUpOverride(false);
     const ineligible = await app.inject({
       method: "POST", url: "/api/v1/assessments/level-up/start",
       headers: { cookie: learnerCookie }, payload: {}
@@ -118,13 +143,7 @@ describe("P2 level-up lifecycle", () => {
 
   it("opens one six-turn challenge only after the level-up exam passes and grants no reward", async () => {
     await pool.query("update enrollments set cefr = 'A2' where learner_id = $1", [DEMO_IDS.learner]);
-    await pool.query(
-      `update organization_settings
-       set configuration = jsonb_set(configuration, '{levelUp}',
-         '{"days":14,"lessons":0,"firstTry":0,"submission":0,"coach":0,"coachTurns":0,"wrong":100,"minParts":0}'::jsonb, true)
-       where organization_id = $1`,
-      [DEMO_IDS.organization]
-    );
+    await setLevelUpOverride(true);
     const started = await app.inject({
       method: "POST", url: "/api/v1/assessments/level-up/start",
       headers: { cookie: learnerCookie }, payload: {}
@@ -162,7 +181,7 @@ describe("P2 level-up lifecycle", () => {
       const offTopic = index === 2;
       await repositories.coach.saveAiTurn({
         learnerId: DEMO_IDS.learner, sessionId, challengeAttemptId: attemptId,
-        requestId: `p2-challenge-${index}`, message: `Challenge answer ${index + 1}`,
+        requestId: randomUUID(), message: `Challenge answer ${index + 1}`,
         taskId: prompt.rows[0]!.task_id, promptVersionId: prompt.rows[0]!.id,
         output: {
           evaluation: { status: offTopic ? "off_topic" : "valid", result: offTopic ? "off_topic" : "correct", countsTowardGoal: !offTopic, noteVi: offTopic ? "Lạc đề." : "Đúng trọng tâm." },
@@ -249,6 +268,14 @@ describe("P2 level-up lifecycle", () => {
   });
 
   it("persists a 14-day retry with weak-skill evidence when the exam fails", async () => {
+    // The challenge case leaves its A2 attempt pending with a suggested level request, which would block a new start.
+    const undecided = `select aa.id from assessment_attempts aa
+       join assessment_versions av on av.id = aa.assessment_version_id
+       join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'level_up'
+       where aa.learner_id = $1 and aa.status in ('in_progress', 'submitted', 'pending_review')`;
+    await pool.query(`delete from assessment_decisions where attempt_id in (${undecided})`, [DEMO_IDS.learner]);
+    await pool.query(`delete from assessment_attempts where id in (${undecided})`, [DEMO_IDS.learner]);
+    await setLevelUpOverride(true);
     const started = await app.inject({
       method: "POST", url: "/api/v1/assessments/level-up/start",
       headers: { cookie: learnerCookie }, payload: {}
@@ -283,6 +310,19 @@ describe("P2 level-up lifecycle", () => {
   });
 
   it("issues one immutable certificate snapshot", async () => {
+    // The certificate opens at C1 once a monthly final has been approved.
+    const finalDefinitionId = randomUUID();
+    const finalVersionId = randomUUID();
+    await pool.query("update enrollments set cefr = 'C1' where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query(
+      `insert into assessment_definitions (id, organization_id, assessment_key, kind, title)
+       values ($1, $2, 'monthly-final-certificate-fixture-c1', 'final', 'Fixture C1')`, [finalDefinitionId, DEMO_IDS.organization]
+    );
+    await pool.query("insert into assessment_versions (id, definition_id, version, status, blueprint) values ($1, $2, 1, 'published', '{}')", [finalVersionId, finalDefinitionId]);
+    await pool.query(
+      "insert into assessment_attempts (id, assessment_version_id, learner_id, status, submitted_at) values ($1, $2, $3, 'approved', now())",
+      [randomUUID(), finalVersionId, DEMO_IDS.learner]
+    );
     await pool.query(
       `insert into reward_events (id, learner_id, points, badge_id, source_type, source_id)
        select gen_random_uuid(), $1, 0, badge.id, 'p2_certificate_badge', badge.id

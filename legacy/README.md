@@ -34,3 +34,13 @@ Old URLs and screens that no longer had a link anywhere in the app.
 | `LearnerPractice.tsx.txt` | Learner weekly practice screen (`/practice`). It had redirected to Home since the monthly cycle. The `practice` link has also been removed from the learner home data. The practice API stays, because grading and appeals still use old submissions. |
 | `LearnerArena-duel.tsx.txt`, `engagement-duels-api.ts.txt`, `*-app-states.test.tsx.txt` | The first arena (duels) and its API, which only answered 410. The current arena is `/arena` plus `apps/api/src/modules/arena`. |
 | `removed-test-cases.txt` | Test cases for the URLs and screens above |
+
+## Later on 2026-11-20
+
+| Path | What it was |
+|---|---|
+| `weekly-content/web/operator-api-client-weekly.ts.txt` | Web API client calls for the removed weekly endpoints and screens |
+| `weekly-content/web/Review-weekly-components.tsx.txt` | Weekly submission card and weekly-practice editor (no longer rendered) |
+| `old-routes/learner-practice-plumbing.txt` | Learner weekly-practice client calls and callbacks |
+| `scripts/*.txt` | Scripts nothing referenced: old e2e runners, the 4300-only backup (replaced by `scripts/ops/e4s.ps1`), a one-off reward fix, QA account prep |
+| `weekly-content/api/test/removed-cases-backend.txt` | Backend test cases that only exercised the weekly learner flow |

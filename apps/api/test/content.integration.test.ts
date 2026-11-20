@@ -61,6 +61,36 @@ function lesson(dayNumber: number) {
   };
 }
 
+const dayVocabulary: Record<number, Array<[string, string, string]>> = {
+  1: [["department", "departmental", "division"], ["role", "role-playing", "position"], ["project", "projected", "assignment"]],
+  2: [["schedule", "scheduled", "timetable"], ["deadline", "deadlines", "due date"], ["meeting", "meet", "gathering"]],
+  3: [["report", "reporter", "account"], ["budget", "budgetary", "allowance"], ["client", "clientele", "customer"]],
+  4: [["contract", "contractual", "agreement"], ["invoice", "invoiced", "bill"], ["supplier", "supply", "vendor"]],
+  5: [["training", "trainee", "coaching"], ["feedback", "feed back", "comment"], ["goal", "goalless", "target"]]
+};
+
+/** A lesson whose core words, word families and synonyms are new on every day of the level. */
+function distinctVocabularyLesson(dayNumber: number) {
+  const base = lesson(dayNumber);
+  const words = dayVocabulary[dayNumber] ?? dayVocabulary[1]!;
+  return {
+    ...base,
+    parts: base.parts.map((part) => part.code !== "vocabulary" ? part : ({
+      ...part,
+      content: { items: words.map(([word, family, synonym]) => ({
+        word,
+        meaning: "từ công việc",
+        collocations: [`my ${word}`, `new ${word}`, `work ${word}`],
+        family: [{ word: family, type: "adjective", meaning: "từ cùng họ dùng trong ngữ cảnh công việc" }],
+        umbrella: { word: "workplace terms", meaning: "từ ngữ nơi làm việc", siblings: [] },
+        synonyms: [{ word: synonym, level: "A2" }],
+        antonyms: [],
+        relationStatus: "provided"
+      })) }
+    }))
+  };
+}
+
 function b1Lesson(dayNumber: number) {
   const base = lesson(dayNumber);
   const englishTitles: Record<string, string> = {
@@ -282,7 +312,7 @@ describe("content operations API", () => {
     expect(mediaRequests[0]?.term).toBeTruthy();
   });
 
-  it("lets the Manager administer the two-week topic frame", async () => {
+  it("lets the Manager read the two-week topic frame while only the Operator edits it", async () => {
     const read = await app.inject({ method: "GET", url: "/api/v1/content/weeks", headers: { cookie: managerCookie } });
     expect(read.statusCode, read.body).toBe(200);
     expect(read.json()).toMatchObject({
@@ -297,12 +327,19 @@ describe("content operations API", () => {
       method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: managerCookie },
       payload: { weeks: [{ weekNumber: 1, topic: "Changed", description: "", objectives: "", keyVocabHint: "" }] }
     });
-    expect(managerWrite.statusCode, managerWrite.body).toBe(200);
-    expect(managerWrite.json()).toMatchObject({ weeks: expect.arrayContaining([expect.objectContaining({ weekNumber: 1, topic: "Changed" })]) });
+    expect(managerWrite.statusCode, managerWrite.body).toBe(403);
+    expect(managerWrite.json()).toMatchObject({ code: "FORBIDDEN" });
+
+    const topicWrite = await app.inject({
+      method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: makerCookie },
+      payload: { weeks: [{ weekNumber: 1, topic: "Changed", description: "", objectives: "", keyVocabHint: "" }] }
+    });
+    expect(topicWrite.statusCode, topicWrite.body).toBe(200);
+    expect(topicWrite.json()).toMatchObject({ weeks: expect.arrayContaining([expect.objectContaining({ weekNumber: 1, topic: "Changed" })]) });
 
     const plan = { A2: ["T2", "T3", "T4", "T5", "T6"] };
     const planWrite = await app.inject({
-      method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: managerCookie },
+      method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: makerCookie },
       payload: { weeks: [{ weekNumber: 1, topic: "Changed", description: "", objectives: "", keyVocabHint: "", plan }] }
     });
     expect(planWrite.statusCode, planWrite.body).toBe(200);
@@ -310,14 +347,14 @@ describe("content operations API", () => {
 
     const replacementPlan = { A2: ["Mới 1", "Mới 2", "Mới 3", "Mới 4", "Mới 5"] };
     const replacementWrite = await app.inject({
-      method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: managerCookie },
+      method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: makerCookie },
       payload: { weeks: [{ weekNumber: 1, topic: "Changed", description: "", objectives: "", keyVocabHint: "", plan: replacementPlan }] }
     });
     expect(replacementWrite.statusCode, replacementWrite.body).toBe(200);
     expect(replacementWrite.json()).toMatchObject({ weeks: expect.arrayContaining([expect.objectContaining({ weekNumber: 1, plan: replacementPlan })]) });
 
     const metadataOnlyWrite = await app.inject({
-      method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: managerCookie },
+      method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: makerCookie },
       payload: { weeks: [{ weekNumber: 1, topic: "Changed again", description: "", objectives: "", keyVocabHint: "" }] }
     });
     expect(metadataOnlyWrite.statusCode, metadataOnlyWrite.body).toBe(200);
@@ -339,7 +376,7 @@ describe("content operations API", () => {
   it("allows an operator to publish their own lesson set and hides drafts from learners", async () => {
     const created = await app.inject({
       method: "PUT", url: "/api/v1/content/lesson-sets/1/A2/draft", headers: { cookie: makerCookie },
-      payload: { lessons: [1, 2, 3, 4, 5].map(lesson) }
+      payload: { lessons: [1, 2, 3, 4, 5].map(distinctVocabularyLesson) }
     });
     expect(created.statusCode, created.body).toBe(201);
     expect(created.json()).toMatchObject({ status: "draft", version: 2, createdBy: DEMO_IDS.operator });
@@ -379,8 +416,12 @@ describe("content operations API", () => {
       method: "POST", url: `/api/v1/content/lesson-set-versions/${versionId}/retirement`,
       headers: { cookie: managerCookie }, payload: {}
     });
-    expect(managerRetirement.statusCode, managerRetirement.body).toBe(200);
-    const retired = managerRetirement;
+    expect(managerRetirement.statusCode, managerRetirement.body).toBe(403);
+    expect(managerRetirement.json()).toMatchObject({ code: "FORBIDDEN" });
+    const retired = await app.inject({
+      method: "POST", url: `/api/v1/content/lesson-set-versions/${versionId}/retirement`,
+      headers: { cookie: makerCookie }, payload: {}
+    });
     expect(retired.statusCode, retired.body).toBe(200);
     expect(retired.json()).toMatchObject({ versionId, status: "retired" });
 

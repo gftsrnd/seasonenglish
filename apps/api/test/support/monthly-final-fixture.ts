@@ -17,30 +17,51 @@ const SOUND_WORDS = [
 ];
 
 /** A valid approved-plan contract for November 2026 (16 new days → N = 48). */
-export function monthlyFinalContract(cefr: CefrLevel = "B1"): MonthlyCurriculumContract {
+/** Sound examples with real IPA that contains the target cluster, as framework approval requires. */
+const APPROVABLE_SOUNDS: Array<{ ipa: string; examples: Array<[string, string]> }> = [
+  { ipa: "/nt/", examples: [["client", "/ˈklaɪənt/"], ["rent", "/rent/"], ["want", "/wɒnt/"], ["paint", "/peɪnt/"], ["sent", "/sent/"], ["tent", "/tent/"], ["point", "/pɔɪnt/"], ["count", "/kaʊnt/"], ["print", "/prɪnt/"]] },
+  { ipa: "/ks/", examples: [["tasks", "/tɑːsks/"], ["desks", "/desks/"], ["risks", "/rɪsks/"], ["asks", "/ɑːsks/"], ["masks", "/mɑːsks/"], ["disks", "/dɪsks/"], ["kiosks", "/ˈkiːɒsks/"], ["flasks", "/flɑːsks/"], ["husks", "/hʌsks/"]] },
+  { ipa: "/st/", examples: [["list", "/lɪst/"], ["cost", "/kɒst/"], ["last", "/lɑːst/"], ["first", "/fɜːst/"], ["most", "/məʊst/"], ["past", "/pɑːst/"], ["test", "/test/"], ["rest", "/rest/"], ["best", "/best/"]] },
+  { ipa: "/ld/", examples: [["hold", "/həʊld/"], ["old", "/əʊld/"], ["told", "/təʊld/"], ["cold", "/kəʊld/"], ["fold", "/fəʊld/"], ["gold", "/gəʊld/"], ["sold", "/səʊld/"], ["bold", "/bəʊld/"], ["mild", "/maɪld/"]] }
+];
+
+/**
+ * The same November 2026 contract, but complete enough to pass framework
+ * approval: real example IPA and two explicit daily objectives per grammar step.
+ */
+export function approvableMonthlyContract(cefr: CefrLevel = "B1", theme: MonthlyCurriculumContract["theme"] = MONTHLY_FINAL_THEME): MonthlyCurriculumContract {
+  return monthlyFinalContract(cefr, theme, true);
+}
+
+export const MONTHLY_FINAL_THEME = { version: 1, title: "Project updates and rescheduling meetings", brief: "Cập nhật tiến độ và dời lịch họp.", context: "Văn phòng dự án", communicationGoal: "Báo tiến độ và đề nghị lịch sự." };
+
+export function monthlyFinalContract(cefr: CefrLevel = "B1", theme: MonthlyCurriculumContract["theme"] = MONTHLY_FINAL_THEME, approvable = false): MonthlyCurriculumContract {
   const letters = "abcdef";
   const supportTerms = CORE_WORDS.flatMap((word, coreIndex) => Array.from({ length: 6 }, (_, index) => ({
     id: `support-${coreIndex}-${index}`, word: `${word}${letters[index]}`, meaning: "nghĩa mở rộng", type: "noun",
     relation: (["umbrella", "synonym", "word_family"] as const)[index % 3]!, source: "family" as const, dayNumber: 1, relatedCoreTermId: `core-${coreIndex}`
   })));
+  const grammarTopics = [
+    { id: "topic-a", title: "Polite requests and obligations", steps: [
+      { id: "ga-1", focus: "Polite requests", formula: "Could you (please) + V?", usage: "Ask politely.", examples: ["Could you send it?", "Could you check it?", "Could you call me?"] },
+      { id: "ga-2", focus: "Obligation with have to", formula: "have to / need to + V", usage: "Say what is necessary.", examples: ["I have to wait.", "We need to check.", "You have to sign."] },
+      { id: "ga-3", focus: "Advice with should", formula: "should + V", usage: "Give advice.", examples: ["You should ask.", "We should start.", "They should wait."] }
+    ] },
+    { id: "topic-b", title: "Conditionals and wishes", steps: [
+      { id: "gb-1", focus: "Real conditions", formula: "If + present simple, will + V", usage: "Talk about likely results.", examples: ["If it rains, we will stay.", "If you call, I will answer.", "If they agree, we will start."] },
+      { id: "gb-2", focus: "Unreal conditions", formula: "If + past simple, would + V", usage: "Talk about unreal results.", examples: ["If I had time, I would help.", "If we knew, we would say.", "If she came, we would meet."] },
+      { id: "gb-3", focus: "Wishes about now", formula: "I wish + past simple", usage: "Say what you want to be different.", examples: ["I wish I had more time.", "I wish it was ready.", "I wish we knew."] }
+    ] }
+  ];
   const contract = buildMonthlyCurriculum({
     month: "2026-11", cefr,
-    theme: { version: 1, title: "Project updates and rescheduling meetings", brief: "Cập nhật tiến độ và dời lịch họp.", context: "Văn phòng dự án", communicationGoal: "Báo tiến độ và đề nghị lịch sự." },
+    theme,
     coreTerms: CORE_WORDS.map((word, index) => ({ id: `core-${index}`, word, meaning: `nghĩa ${word}`, type: "noun", ipa: "/x/" })),
     supportTerms,
-    grammarTopics: [
-      { id: "topic-a", title: "Polite requests and obligations", steps: [
-        { id: "ga-1", focus: "Polite requests", formula: "Could you (please) + V?", usage: "Ask politely.", examples: ["Could you send it?", "Could you check it?", "Could you call me?"] },
-        { id: "ga-2", focus: "Obligation with have to", formula: "have to / need to + V", usage: "Say what is necessary.", examples: ["I have to wait.", "We need to check.", "You have to sign."] },
-        { id: "ga-3", focus: "Advice with should", formula: "should + V", usage: "Give advice.", examples: ["You should ask.", "We should start.", "They should wait."] }
-      ] },
-      { id: "topic-b", title: "Conditionals and wishes", steps: [
-        { id: "gb-1", focus: "Real conditions", formula: "If + present simple, will + V", usage: "Talk about likely results.", examples: ["If it rains, we will stay.", "If you call, I will answer.", "If they agree, we will start."] },
-        { id: "gb-2", focus: "Unreal conditions", formula: "If + past simple, would + V", usage: "Talk about unreal results.", examples: ["If I had time, I would help.", "If we knew, we would say.", "If she came, we would meet."] },
-        { id: "gb-3", focus: "Wishes about now", formula: "I wish + past simple", usage: "Say what you want to be different.", examples: ["I wish I had more time.", "I wish it was ready.", "I wish we knew."] }
-      ] }
-    ],
-    sounds: SOUND_WORDS.map((words, index) => ({ id: `sound-${index + 1}`, ipa: ["/nt/", "/ks/", "/st/", "/ld/"][index]!, label: `Final cluster ${index + 1}`, examples: words.map((word, example) => ({ id: `sound-${index + 1}-ex-${example}`, word, ipa: "/x/" })) }))
+    grammarTopics: approvable ? grammarTopics.map((topic) => ({ ...topic, steps: topic.steps.map((step) => ({ ...step, dailyObjectives: [`Recognise ${step.focus.toLowerCase()} in a short message.`, `Use ${step.focus.toLowerCase()} in one work sentence.`] })) })) : grammarTopics,
+    sounds: approvable
+      ? APPROVABLE_SOUNDS.map((sound, index) => ({ id: `sound-${index + 1}`, ipa: sound.ipa, label: `Final cluster ${index + 1}`, examples: sound.examples.map(([word, ipa], example) => ({ id: `sound-${index + 1}-ex-${example}`, word, ipa })) }))
+      : SOUND_WORDS.map((words, index) => ({ id: `sound-${index + 1}`, ipa: ["/nt/", "/ks/", "/st/", "/ld/"][index]!, label: `Final cluster ${index + 1}`, examples: words.map((word, example) => ({ id: `sound-${index + 1}-ex-${example}`, word, ipa: "/x/" })) }))
   });
   const dayByCore = new Map(contract.coreTerms.map((term) => [term.id, term.dayNumber]));
   return { ...contract, supportTerms: contract.supportTerms.map((term) => ({ ...term, dayNumber: dayByCore.get(term.relatedCoreTermId)! })) };

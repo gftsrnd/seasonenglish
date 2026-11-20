@@ -222,9 +222,11 @@ describe("app lesson evidence states", () => {
     const user = userEvent.setup();
     await openPractice(user);
     const reading = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "reading");
-    expect(within(reading as HTMLElement).getByText("Đã hết lượt thử")).toBeInTheDocument();
+    // One status line per part: the stored server feedback wins over the generic outcome label.
+    expect(within(reading as HTMLElement).getByText("Hãy xem lại đáp án.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /xem bản dịch/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /gửi kháng nghị/i })).toBeInTheDocument();
+    // The appeal entry point is now labelled as reporting an issue with the part.
+    expect(within(reading as HTMLElement).getByRole("button", { name: "Báo lỗi phần này" })).toBeInTheDocument();
   });
 
   it("keeps terminal feedback in its own card, counts an appeal, and excludes pending speaking review", async () => {
@@ -263,8 +265,9 @@ describe("app lesson evidence states", () => {
     const writing = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "writing");
     const wordUse = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "word_use");
     expect(within(reading as HTMLElement).getByText("Đã gửi kháng nghị")).toBeInTheDocument();
-    expect(within(writing as HTMLElement).getByText("Đã hết lượt thử")).toBeInTheDocument();
-    expect(within(wordUse as HTMLElement).getByText("Đã gửi để kiểm tra")).toBeInTheDocument();
+    // Stored feedback is the single status line for these parts.
+    expect(within(writing as HTMLElement).getByText("Đã hết lượt thử.")).toBeInTheDocument();
+    expect(within(wordUse as HTMLElement).getByText("Đã gửi để kiểm tra.")).toBeInTheDocument();
     expect(screen.getByText(/đã xong 5\/6 phần/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hoàn thành bài" })).toBeDisabled();
   });
@@ -284,15 +287,17 @@ describe("app lesson evidence states", () => {
     } }} actions={actions} />);
 
     await openPractice(user);
-    const appealButton = screen.getByRole("button", { name: /gửi kháng nghị/i });
+    const listening = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "listening");
+    const appealButton = within(listening as HTMLElement).getByRole("button", { name: "Báo lỗi phần này" });
     await user.click(appealButton);
     await user.type(screen.getByLabelText(/lý do kháng nghị phần nghe/i), "Đáp án cần được xem lại.");
     await user.click(screen.getByRole("button", { name: /xác nhận gửi kháng nghị/i }));
-    expect(screen.getByRole("button", { name: "Đang gửi…" })).toBeDisabled();
+    // While pending the confirm button keeps its label but is disabled.
+    expect(screen.getByRole("button", { name: /xác nhận gửi kháng nghị/i })).toBeDisabled();
 
     rejectAppeal(new Error("APPEAL_FAILED"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Chưa gửi được kháng nghị");
-    expect(screen.getByRole("button", { name: /^gửi kháng nghị$/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /xác nhận gửi kháng nghị/i })).toBeEnabled();
   });
 
   it("keeps lesson audio and speaking evidence recoverable when playback, mic or upload is unavailable", async () => {

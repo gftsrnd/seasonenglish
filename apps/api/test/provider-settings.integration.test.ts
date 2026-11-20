@@ -47,7 +47,7 @@ describe("Manager provider settings API", () => {
     delete process.env.E4S_SETTINGS_ENCRYPTION_KEY;
   });
 
-  it("returns a safe unconfigured provider view to both Manager and Operator", async () => {
+  it("returns a safe unconfigured provider view to the Manager and keeps the Operator out", async () => {
     const manager = await app.inject({ method: "GET", url: "/api/v1/manager/provider-settings", headers: { cookie: managerCookie } });
     const operator = await app.inject({ method: "GET", url: "/api/v1/manager/provider-settings", headers: { cookie: operatorCookie } });
 
@@ -62,8 +62,9 @@ describe("Manager provider settings API", () => {
       lastTest: { status: "never", testedAt: null }
     });
     expect(JSON.stringify(manager.json())).not.toMatch(/credential|secret|api.?key|ciphertext/i);
-    expect(operator.statusCode, operator.body).toBe(200);
-    expect(JSON.stringify(operator.json())).not.toMatch(/credential|secret|api.?key|ciphertext/i);
+    // Provider configuration is Manager-only (managerOnly guard).
+    expect(operator.statusCode, operator.body).toBe(403);
+    expect(operator.json()).toEqual({ code: "FORBIDDEN" });
   });
 
   it("encrypts a Manager secret, redacts it from responses, and retains it on blank replacement", async () => {
@@ -110,11 +111,15 @@ describe("Manager provider settings API", () => {
     expect(JSON.stringify(retained.json())).not.toContain(secret);
   });
 
-  it("lets Operator save the shared organization credential without exposing it", async () => {
-    const secret = "operator-provider-secret";
+  it("keeps the shared organization credential Manager-only and never exposes it", async () => {
+    const secret = "manager-shared-provider-secret";
+    const payload = { provider: "openai", baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo", credential: secret };
+    const operatorSave = await app.inject({
+      method: "PUT", url: "/api/v1/manager/provider-settings", headers: { cookie: operatorCookie }, payload
+    });
+    expect(operatorSave.statusCode, operatorSave.body).toBe(403);
     const save = await app.inject({
-      method: "PUT", url: "/api/v1/manager/provider-settings", headers: { cookie: operatorCookie },
-      payload: { provider: "openai", baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo", credential: secret }
+      method: "PUT", url: "/api/v1/manager/provider-settings", headers: { cookie: managerCookie }, payload
     });
     expect(save.statusCode, save.body).toBe(200);
     expect(save.json()).toMatchObject({ configured: true, model: "qwen/qwen3.8-27b" });

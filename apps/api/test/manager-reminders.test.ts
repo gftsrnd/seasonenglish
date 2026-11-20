@@ -27,15 +27,30 @@ describe("manager reminder channel API", () => {
       await resetPublicSchema(client);
       await migrateDatabase(client);
       await seedDemo(client);
-      await client.query(
+      const framework = await client.query<{ id: string }>(
         `with month as (
            insert into program_months (id, organization_id, month, exam_date, lesson_count)
            values (gen_random_uuid(), $1, '2026-11', '2026-11-30', 20) returning id
          )
-         insert into month_frameworks (id, program_month_id, cefr, status, published_at, published_on)
-         select gen_random_uuid(), id, 'A1', 'approved', now(), '2026-11-01' from month`,
+         insert into month_frameworks (id, program_month_id, cefr, status, scope_hash, published_at, published_on)
+         select gen_random_uuid(), id, 'A1', 'approved', 'scope', now(), '2026-11-01' from month returning id`,
         [DEMO_IDS.organization]
       );
+      // A missed weekday counts as an absence only when an approved lesson was available on it.
+      const lessonSetId = randomUUID();
+      await client.query("insert into lesson_sets (id, month_framework_id, cefr) values ($1, $2, 'A1')", [lessonSetId, framework.rows[0]!.id]);
+      const lessonDates = ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-09", "2026-11-10"];
+      for (const [index, lessonDate] of lessonDates.entries()) {
+        const versionId = randomUUID();
+        const lessonId = randomUUID();
+        await client.query("insert into lesson_set_versions (id, lesson_set_id, version, status) values ($1, $2, $3, 'published')", [versionId, lessonSetId, index + 1]);
+        await client.query("insert into lessons (id, lesson_set_version_id, day_number, title) values ($1, $2, $3, 'Lesson')", [lessonId, versionId, index + 1]);
+        await client.query("insert into lesson_versions (id, lesson_id, version, status, content) values ($1, $2, 1, 'published', '{}'::jsonb)", [randomUUID(), lessonId]);
+        await client.query(
+          "insert into month_lessons (id, framework_id, lesson_number, lesson_date, lesson_id, scope_hash, status) values ($1, $2, $3, $4, $5, 'scope', 'approved')",
+          [randomUUID(), framework.rows[0]!.id, index + 1, lessonDate, lessonId]
+        );
+      }
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2)",
         [DEMO_IDS.manager, await createCredentialHash("manager-pass")]

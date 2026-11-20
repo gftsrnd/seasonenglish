@@ -17,7 +17,8 @@ describe("Operator monthly planner", () => {
   it("renders an approved daily review with the legacy operator presentation and locked actions", () => {
     render(<MonthlyLessonPreview date="2026-11-06" cefr="A2" onClose={vi.fn()} lesson={{ lessonNumber: 5, lessonDate: "2026-11-06", kind: "review", status: "approved", scopeHash: "scope", locked: true, correctionCount: 0, quality: { severe: [], light: [] }, content: { title: "Ôn tập", parts: [{ code: "instruction", title: "Hướng dẫn", content: { guidance: "Ôn lại các bài trong tuần." } }, { code: "writing", title: "Viết", content: { prompt: "Write a recap.", answer: "A recap." } }, { code: "pronunciation", title: "Phát âm", content: { focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }], reviewTargets: [{ soundId: "k", focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }] }, { soundId: "s", focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }] }] } }] } }} />);
 
-    expect(screen.getByRole("heading", { level: 1, name: /06\/11.*Ôn tập/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: /06\/11 · Ôn tuần · Mức A2/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "Ôn tập" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /1\. Ôn/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Sinh bài cuối tuần/ })).not.toBeInTheDocument();
     expect(screen.getByText("/s/")).toBeInTheDocument();
@@ -75,7 +76,8 @@ describe("Operator monthly planner", () => {
     /></ToastProvider>);
 
     const cells = Array.from(container.querySelectorAll<HTMLElement>("[role='gridcell']"));
-    const firstReview = cells.find((cell) => cell.getAttribute("aria-label") === "07, Ôn tập");
+    // Before resources exist the calendar projects the weekly review on Friday (09/10) and numbers only new lessons.
+    const firstReview = cells.find((cell) => cell.getAttribute("aria-label") === "09, Ôn tuần");
     const nextNew = cells.find((cell) => cell.getAttribute("aria-label") === "08, Bài 5");
     expect(firstReview).toHaveClass("review");
     expect(within(firstReview!).getByRole("button", { name: "Sinh" })).toBeInTheDocument();
@@ -128,8 +130,15 @@ describe("Operator monthly planner", () => {
       actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
     /></ToastProvider>);
 
-    await user.click(screen.getByText("Phân bổ tài nguyên và trọng tâm kỹ năng"));
-    expect(screen.getByText("extra1 · extra2 · extra3")).toBeInTheDocument();
+    // The approved plan opens from its own button in the resource panel.
+    await user.click(screen.getByRole("button", { name: "Phân bổ tài nguyên & bài tập" }));
+    expect(screen.getByRole("dialog", { name: "Phân bổ tài nguyên và bài tập" })).toBeInTheDocument();
+    // Expanded words are now grouped under their core word by relation.
+    expect(screen.getByText("budget · cost · forecast")).toBeInTheDocument();
+    const budget = screen.getByText("budget").closest(".monthly-plan-resource-group") as HTMLElement;
+    expect(within(budget).getByText("extra1")).toBeInTheDocument();
+    expect(within(budget).getByText("extra2")).toBeInTheDocument();
+    expect(within(budget).getByText("extra3")).toBeInTheDocument();
     expect(screen.getByText("Ngữ pháp: Chưa gán · Phát âm: Chưa gán")).toBeInTheDocument();
   });
 
@@ -279,7 +288,7 @@ describe("Operator monthly planner", () => {
     /></ToastProvider>);
 
     expect(screen.getByRole("button", { name: "Xem bài 1" })).toBeInTheDocument();
-    const reviewCell = Array.from(container.querySelectorAll<HTMLElement>("[role='gridcell']")).find((cell) => cell.getAttribute("aria-label") === "06, Ôn tập")!;
+    const reviewCell = Array.from(container.querySelectorAll<HTMLElement>("[role='gridcell']")).find((cell) => cell.getAttribute("aria-label") === "06, Ôn tuần")!;
     const generate = within(reviewCell).getByRole("button", { name: "Sinh" });
     const compose = within(reviewCell).getByRole("button", { name: "Soạn tay bài ôn" });
     expect(generate).toHaveClass("monthly-generate-action");
@@ -299,7 +308,7 @@ describe("Operator monthly planner", () => {
       actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onGenerateReview: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
     /></ToastProvider>);
 
-    const scheduledReview = container.querySelector<HTMLElement>("[role='gridcell'][aria-label='03, Ôn tập']");
+    const scheduledReview = container.querySelector<HTMLElement>("[role='gridcell'][aria-label='03, Ôn tuần']");
     expect(scheduledReview).toHaveClass("review");
     expect(within(scheduledReview!).getByRole("button", { name: "Sinh" })).toBeInTheDocument();
   });
@@ -327,7 +336,7 @@ describe("Operator monthly planner", () => {
       actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay, onGenerateReview, onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
     /></ToastProvider>);
 
-    const reviewCell = Array.from(container.querySelectorAll<HTMLElement>("[role='gridcell']")).find((cell) => cell.getAttribute("aria-label") === "06, Ôn tập")!;
+    const reviewCell = Array.from(container.querySelectorAll<HTMLElement>("[role='gridcell']")).find((cell) => cell.getAttribute("aria-label") === "06, Ôn tuần")!;
     await user.click(within(reviewCell).getByRole("button", { name: "Sinh" }));
     const dialog = screen.getByRole("dialog", { name: "Tài nguyên cho bài ôn" });
     expect(dialog).toBeInTheDocument();

@@ -73,7 +73,8 @@ describe("lesson vocabulary relation modals", () => {
     expect(modal).toBeInTheDocument();
     expect(within(modal).getByRole("heading", { name: /Từ bao quát/i })).toBeInTheDocument();
     expect(modal).toHaveTextContent("people at work");
-    expect(within(modal).getByRole("article", { name: "Từ bao quát people at work" })).toHaveClass("vocabulary-umbrella-summary");
+    // The umbrella word itself is the first related-word card.
+    expect(within(modal).getByRole("article", { name: "Từ bao trùm: people at work" })).toHaveClass("vocabulary-umbrella-summary");
     expect(within(modal).getAllByRole("button", { name: /nghe/i }).length).toBeGreaterThan(0);
   });
 
@@ -148,17 +149,17 @@ describe("lesson vocabulary relation modals", () => {
     render(<LearnerLesson view={{ lesson: b1Lesson }} actions={callbacks} />);
 
     const card = screen.getByRole("article", { name: /colleague/i });
-    const collocations = within(card).getAllByRole("button", { name: /Nghe cụm từ:/i });
+    // B1+ learners get the English-only lesson UI.
+    const collocations = within(card).getAllByRole("button", { name: /Listen to common collocation:/i });
     expect(collocations).toHaveLength(3);
     expect(collocations.map((button) => button.textContent)).toEqual([
       "close colleague", "former colleague", "trusted colleague"
     ]);
 
-    await user.click(within(card).getByRole("button", { name: "Xem từ đồng nghĩa: coworker" }));
-    const synonymModal = screen.getByTestId("modal.vocab-lexical-detail");
-    expect(synonymModal).toHaveTextContent("Đồng nghĩa");
-    expect(synonymModal).toHaveTextContent("a person you work with");
-    await user.click(within(synonymModal).getByRole("button", { name: "Đóng" }));
+    // Synonym chips speak the word directly instead of opening a detail popup.
+    await user.click(within(card).getByRole("button", { name: "Listen to synonym: coworker" }));
+    expect(callbacks.speak).toHaveBeenLastCalledWith("coworker");
+    expect(screen.queryByTestId("modal.vocab-lexical-detail")).not.toBeInTheDocument();
 
     // 12/11: slang / poetic chips open the register modal (B1+ is English-only).
     await user.click(within(card).getByRole("button", { name: "Slang: workmate" }));

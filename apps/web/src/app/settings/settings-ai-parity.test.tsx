@@ -105,7 +105,11 @@ describe("Manager AI provider settings", () => {
     render(<App>{() => <div>settings test</div>}</App>);
 
     expect(await screen.findByText("settings test")).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Nhạc nền: tắt" })).toBeDisabled();
+    // The audio controls now live in the header account popover ("Tài khoản và âm thanh").
+    const account = screen.getByRole("button", { name: "Tài khoản và âm thanh" });
+    const menu = document.getElementById(account.getAttribute("popovertarget")!)!;
+    menu.removeAttribute("popover"); // jsdom does not open native popovers.
+    expect(await within(menu).findByRole("button", { name: "Nhạc nền: tắt" })).toBeDisabled();
   });
 
   it("wires Manager music actions without global Base controls and hides technical cards", async () => {

@@ -193,6 +193,15 @@ describe("manager progress and operations API", () => {
     await expect(pool.query(
       "select action, actor_user_id, entity_id from audit_events where action = 'account.role.changed' order by created_at desc limit 1"
     )).resolves.toMatchObject({ rows: [{ action: "account.role.changed", actor_user_id: DEMO_IDS.manager, entity_id: DEMO_IDS.operator }] });
+
+    // Role changes apply at session-guard time; restore the Operator so later Operator-denial checks stay meaningful.
+    const restored = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/manager/accounts/${DEMO_IDS.operator}/role`,
+      headers: { cookie: managerCookie },
+      payload: { role: "operator" }
+    });
+    expect(restored.statusCode, restored.body).toBe(200);
   });
 
   it("rejects a Manager's self-demotion", async () => {
@@ -386,6 +395,60 @@ describe("manager progress and operations API", () => {
     expect(accounts.json().accounts).toContainEqual(expect.objectContaining({ email, role: "learner", status: "active" }));
   });
 
+  let settingsBeforeReminders: unknown = null;
+  let reminderLessonId = "";
+
+  /**
+   * Reminder eligibility counts missed weekdays of the learner's approved level that had an approved
+   * monthly lesson. Test date 2026-11-10, level start 2026-11-04: four missed days (04, 05, 06, 09).
+   */
+  async function useReminderMonth() {
+    const learners = [reminderLearnerId, copiedReminderLearnerId, dismissedReminderLearnerId, staleReminderLearnerId];
+    settingsBeforeReminders = (await pool.query<{ configuration: unknown }>(
+      "select configuration from organization_settings where organization_id = $1", [DEMO_IDS.organization]
+    )).rows[0]?.configuration ?? null;
+    await pool.query(
+      `insert into organization_settings (organization_id, configuration) values ($1, jsonb_build_object('simulatedSystemDate', '2026-11-10'))
+       on conflict (organization_id) do update set configuration = organization_settings.configuration || excluded.configuration`,
+      [DEMO_IDS.organization]
+    );
+    for (const learnerId of learners) {
+      await pool.query(
+        `insert into enrollments (id, program_id, learner_id, cefr, cefr_approved, cefr_started_on)
+         values (gen_random_uuid(), $1, $2, 'A1', true, '2026-11-04')
+         on conflict (program_id, learner_id) do update set cefr = 'A1', cefr_approved = true, cefr_started_on = excluded.cefr_started_on`,
+        [DEMO_IDS.program, learnerId]
+      );
+    }
+    const framework = await pool.query<{ id: string }>(
+      `with month as (
+         insert into program_months (id, organization_id, month, exam_date, lesson_count)
+         values (gen_random_uuid(), $1, '2026-11', '2026-11-30', 20) returning id
+       )
+       insert into month_frameworks (id, program_month_id, cefr, status, scope_hash, published_at, published_on)
+       select gen_random_uuid(), id, 'A1', 'approved', 'scope', now(), '2026-11-01' from month returning id`,
+      [DEMO_IDS.organization]
+    );
+    const lessonSet = await pool.query<{ id: string }>(
+      "insert into lesson_sets (id, month_framework_id, cefr) values (gen_random_uuid(), $1, 'A1') returning id", [framework.rows[0]!.id]
+    );
+    for (const [index, lessonDate] of ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-09", "2026-11-10"].entries()) {
+      const lesson = await pool.query<{ id: string }>(
+        `with version as (
+           insert into lesson_set_versions (id, lesson_set_id, version, status) values (gen_random_uuid(), $1, $2, 'published') returning id
+         ), lesson as (
+           insert into lessons (id, lesson_set_version_id, day_number, title) select gen_random_uuid(), id, $2, 'Lesson' from version returning id
+         ), lesson_version as (
+           insert into lesson_versions (id, lesson_id, version, status, content) select gen_random_uuid(), id, 1, 'published', '{}'::jsonb from lesson
+         )
+         insert into month_lessons (id, framework_id, lesson_number, lesson_date, lesson_id, scope_hash, status)
+         select gen_random_uuid(), $3, $2, $4::date, id, 'scope', 'approved' from lesson returning lesson_id as id`,
+        [lessonSet.rows[0]!.id, index + 1, framework.rows[0]!.id, lessonDate]
+      );
+      if (lessonDate === "2026-11-09") reminderLessonId = lesson.rows[0]!.id;
+    }
+  }
+
   it("selects inactive learners and sends an idempotent audited reminder", async () => {
     await pool.query(
       `insert into users (id, organization_id, role, display_name, email, created_at)
@@ -397,6 +460,7 @@ describe("manager progress and operations API", () => {
        on conflict (id) do nothing`,
       [reminderLearnerId, DEMO_IDS.organization, copiedReminderLearnerId, dismissedReminderLearnerId, staleReminderLearnerId]
     );
+    await useReminderMonth();
     const candidates = await app.inject({ method: "GET", url: "/api/v1/manager/reminders", headers: { cookie: managerCookie } });
     expect(candidates.statusCode, candidates.body).toBe(200);
     expect(candidates.json()).toMatchObject({
@@ -412,11 +476,17 @@ describe("manager progress and operations API", () => {
     );
 
     const request = { method: "POST" as const, url: `/api/v1/manager/reminders/${reminderLearnerId}`, headers: { cookie: managerCookie }, payload: { requestId: "reminder-retry-1", channel: "email" } };
-    const [sent, retried] = await Promise.all([app.inject(request), app.inject(request)]);
-    expect(sent.statusCode, sent.body).toBe(200);
-    expect(retried.statusCode, retried.body).toBe(200);
+    const responses = await Promise.all([app.inject(request), app.inject(request)]);
+    for (const response of responses) expect(response.statusCode, response.body).toBe(200);
+    // Idempotent retry: both calls return the same reminder. Only the call that claims the email
+    // delivery sends it; a concurrent duplicate returns that reminder as still "queued" (or "sent"
+    // when the delivery already finished), so which response carries "sent" is not fixed.
+    const sent = responses.find((response) => response.json().status === "sent")!;
+    expect(sent, responses.map((response) => response.body).join(" | ")).toBeDefined();
     expect(sent.json()).toMatchObject({ learnerId: reminderLearnerId, status: "sent", deliveryStatus: "sent", provider: "resend" });
-    expect(retried.json()).toMatchObject({ reminderId: sent.json().reminderId });
+    for (const response of responses) {
+      expect(response.json()).toMatchObject({ reminderId: sent.json().reminderId, status: expect.stringMatching(/^(sent|queued)$/u) });
+    }
     const reusedForDifferentLearner = await app.inject({
       method: "POST", url: `/api/v1/manager/reminders/${copiedReminderLearnerId}`, headers: { cookie: managerCookie },
       payload: { requestId: "reminder-retry-1", channel: "email" }
@@ -445,10 +515,11 @@ describe("manager progress and operations API", () => {
   });
 
   it("rejects every reminder action when a previously listed learner is no longer eligible", async () => {
+    // The learner completes the 09/11 lesson, which ends the absence streak.
     await pool.query(
-      `insert into activities (id, learner_id, activity_type, reference_type, minutes, evidence, occurred_at)
-       values ('00000000-0000-4000-8000-000000000111', $1, 'lesson', 'lesson', 10, '{}'::jsonb, now())`,
-      [staleReminderLearnerId]
+      `insert into progress_records (id, learner_id, lesson_id, status, evidence, started_at, completed_at)
+       values (gen_random_uuid(), $1, $2, 'completed', '{}'::jsonb, '2026-11-09 09:00+07', '2026-11-09 09:10+07')`,
+      [staleReminderLearnerId, reminderLessonId]
     );
     const sent = await app.inject({
       method: "POST", url: `/api/v1/manager/reminders/${staleReminderLearnerId}`, headers: { cookie: managerCookie },
@@ -516,6 +587,10 @@ describe("manager progress and operations API", () => {
       "select count(*)::int as count from audit_events where action = 'reminder.dismissed' and entity_id = $1",
       [dismissedReminderLearnerId]
     )).resolves.toMatchObject({ rows: [{ count: 1 }] });
+    await pool.query(
+      "update organization_settings set configuration = coalesce($2::jsonb, configuration - 'simulatedSystemDate') where organization_id = $1",
+      [DEMO_IDS.organization, settingsBeforeReminders === null ? null : JSON.stringify(settingsBeforeReminders)]
+    );
   });
 
   it("returns only organisation data in the Manager report", async () => {
@@ -566,7 +641,8 @@ describe("manager progress and operations API", () => {
     const activeProgram = await pool.query("select name from programs where organization_id = $1 and status = 'active'", [DEMO_IDS.organization]);
     expect(activeProgram.rows[0]?.name).toBe("E4S Workplace");
     expect(JSON.stringify(reloaded.json())).not.toMatch(/secret|api.?key|provider.?key/i);
-  });  it("persists the Manager-selected system date and keeps it out of Operator writes", async () => {
+  });
+  it("persists the Manager-selected system date and keeps it out of Operator writes", async () => {
     const before = await app.inject({ method: "GET", url: "/api/v1/manager/settings", headers: { cookie: managerCookie } });
     expect(before.statusCode, before.body).toBe(200);
     const settings = before.json() as Record<string, unknown>;
@@ -598,13 +674,14 @@ describe("manager progress and operations API", () => {
 
     const screenshot = { mimeType: "image/png", base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jf2sAAAAASUVORK5CYII=" };
     const scope = "Điểm danh ngày 06/11";
+    // exam_eligibility complaints need an over-absence month; an attendance complaint exercises the same evidence and decision flow.
     const invalid = await app.inject({ method: "POST", url: "/api/v1/learner/complaints", headers: { cookie: learnerCookie },
-      payload: { kind: "exam_eligibility", reason: "Một ngày điểm danh bị thiếu.", screenshot: { ...screenshot, mimeType: "image/jpeg" } } });
+      payload: { kind: "attendance", reason: "Một ngày điểm danh bị thiếu.", screenshot: { ...screenshot, mimeType: "image/jpeg" } } });
     expect(invalid.statusCode).toBe(400);
     const complaint = await app.inject({ method: "POST", url: "/api/v1/learner/complaints", headers: { cookie: learnerCookie },
-      payload: { kind: "exam_eligibility", reason: "Một ngày điểm danh bị thiếu.", scope, screenshot } });
+      payload: { kind: "attendance", reason: "Một ngày điểm danh bị thiếu.", scope, screenshot } });
     expect(complaint.statusCode, complaint.body).toBe(201);
-    const duplicateComplaint = await app.inject({ method: "POST", url: "/api/v1/learner/complaints", headers: { cookie: learnerCookie }, payload: { kind: "exam_eligibility", reason: "Gửi trùng đơn." } });
+    const duplicateComplaint = await app.inject({ method: "POST", url: "/api/v1/learner/complaints", headers: { cookie: learnerCookie }, payload: { kind: "attendance", reason: "Gửi trùng đơn." } });
     expect(duplicateComplaint.statusCode).toBe(409);
     const complaintId = (complaint.json() as { complaint: { id: string } }).complaint.id;
     const url = `/api/v1/request-evidence/complaint/${complaintId}`;

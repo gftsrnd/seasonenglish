@@ -35,7 +35,7 @@ describe("E4S repositories", () => {
   it("exposes repositories for every planned domain", () => {
     expect(Object.keys(repositories).sort()).toEqual([
       "aiRuns", "assessments", "coach", "content", "engagement",
-      "files", "identity", "jobs", "learning", "manager", "notifications"
+      "files", "identity", "jobs", "learning", "manager", "monthlyContent", "notifications"
     ]);
   });
 
@@ -301,6 +301,13 @@ describe("E4S repositories", () => {
   });
 
   it("persists explicit Coach translations while keeping legacy turns readable", async () => {
+    // The monthly Coach retires a session without a month marker; keep the demo session in the current month.
+    await pool.query(
+      `update coach_sessions cs set scenario = coalesce(cs.scenario, '{}'::jsonb)
+         || jsonb_build_object('month', to_char(organization_system_date(u.organization_id), 'YYYY-MM'))
+       from users u where u.id = cs.learner_id and cs.id = $1`,
+      [DEMO_IDS.coachSession]
+    );
     const prompt = await pool.query<{ id: string; task_id: string }>(
       `select pv.id, task.id as task_id from prompt_versions pv
        join ai_tasks task on task.task_key = pv.task_key
@@ -413,6 +420,7 @@ describe("E4S repositories", () => {
         learnerId, sessionId, requestId: randomUUID()
       })).resolves.toBe("reserved");
     } finally {
+      await pool.query("delete from coach_sessions where learner_id = $1", [learnerId]);
       await pool.query("delete from users where id = $1", [learnerId]);
       await pool.query("update organization_settings set configuration = $2::jsonb where organization_id = $1", [
         DEMO_IDS.organization, JSON.stringify(priorConfiguration)
@@ -659,6 +667,55 @@ describe("E4S repositories", () => {
       .resolves.toMatchObject({ rows: [{ state: "dead", locked_by: null, last_error: "provider unavailable" }] });
   });
 
+  /**
+   * Reminder eligibility counts missed weekdays of an approved level that had an approved monthly
+   * lesson. Test date 2026-11-10 and level start 2026-11-04 give four missed days (04, 05, 06, 09).
+   */
+  async function makeReminderEligible(learnerId: string) {
+    await pool.query(
+      "update organization_settings set configuration = coalesce(configuration, '{}'::jsonb) || '{\"simulatedSystemDate\":\"2026-11-10\"}'::jsonb where organization_id = $1",
+      [DEMO_IDS.organization]
+    );
+    await pool.query(
+      `insert into enrollments (id, program_id, learner_id, cefr, cefr_approved, cefr_started_on)
+       values (gen_random_uuid(), $1, $2, 'A1', true, '2026-11-04')`,
+      [DEMO_IDS.program, learnerId]
+    );
+    const existing = await pool.query(
+      `select 1 from program_months pm join month_frameworks mf on mf.program_month_id = pm.id
+       where pm.organization_id = $1 and pm.month = '2026-11' and mf.cefr = 'A1'`,
+      [DEMO_IDS.organization]
+    );
+    if (existing.rowCount) return;
+    const framework = await pool.query<{ id: string }>(
+      `with month as (
+         insert into program_months (id, organization_id, month, exam_date, lesson_count)
+         values (gen_random_uuid(), $1, '2026-11', '2026-11-30', 20)
+         on conflict (organization_id, month) do update set exam_date = program_months.exam_date returning id
+       )
+       insert into month_frameworks (id, program_month_id, cefr, status, scope_hash, published_at, published_on)
+       select gen_random_uuid(), id, 'A1', 'approved', 'scope', now(), '2026-11-01' from month returning id`,
+      [DEMO_IDS.organization]
+    );
+    const lessonSet = await pool.query<{ id: string }>(
+      "insert into lesson_sets (id, month_framework_id, cefr) values (gen_random_uuid(), $1, 'A1') returning id", [framework.rows[0]!.id]
+    );
+    for (const [index, lessonDate] of ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-09", "2026-11-10"].entries()) {
+      await pool.query(
+        `with version as (
+           insert into lesson_set_versions (id, lesson_set_id, version, status) values (gen_random_uuid(), $1, $2, 'published') returning id
+         ), lesson as (
+           insert into lessons (id, lesson_set_version_id, day_number, title) select gen_random_uuid(), id, $2, 'Lesson' from version returning id
+         ), lesson_version as (
+           insert into lesson_versions (id, lesson_id, version, status, content) select gen_random_uuid(), id, 1, 'published', '{}'::jsonb from lesson
+         )
+         insert into month_lessons (id, framework_id, lesson_number, lesson_date, lesson_id, scope_hash, status)
+         select gen_random_uuid(), $3, $2, $4::date, id, 'scope', 'approved' from lesson`,
+        [lessonSet.rows[0]!.id, index + 1, framework.rows[0]!.id, lessonDate]
+      );
+    }
+  }
+
   it("queues email and Base.vn as independent same-day reminder deliveries", async () => {
     const learnerId = randomUUID();
     const settings = await pool.query<{ configuration: Record<string, unknown> }>(
@@ -671,6 +728,7 @@ describe("E4S repositories", () => {
          values ($1, $2, 'learner', 'Dual Channel Learner', 'dual-channel@example.com', 'active', now() - interval '5 days')`,
         [learnerId, DEMO_IDS.organization]
       );
+      await makeReminderEligible(learnerId);
       await repositories.manager.saveLearnerBaseNotification(DEMO_IDS.manager, learnerId, { webhookUrl: "https://base.example.test/reminders", webhookTemplate: '{"base_content":"{message}"}', destinationLabel: "Base riêng" });
 
       const email = await repositories.manager.queueReminder(DEMO_IDS.manager, learnerId, "email-request-1", "email");
@@ -690,6 +748,7 @@ describe("E4S repositories", () => {
       await pool.query("delete from audit_events where entity_id = $1", [learnerId]);
       await pool.query("delete from notification_deliveries where reminder_id in (select id from reminders where learner_id = $1)", [learnerId]);
       await pool.query("delete from reminders where learner_id = $1", [learnerId]);
+      await pool.query("delete from enrollments where learner_id = $1", [learnerId]);
       await pool.query("delete from users where id = $1", [learnerId]);
       await pool.query("update organization_settings set configuration = $2::jsonb where organization_id = $1", [DEMO_IDS.organization, JSON.stringify(settings.rows[0]?.configuration ?? {})]);
     }
@@ -697,22 +756,29 @@ describe("E4S repositories", () => {
 
   it("rejects email reminders without a learner email and records no delivery", async () => {
     const learnerId = randomUUID();
+    const settings = await pool.query<{ configuration: Record<string, unknown> }>(
+      "select configuration from organization_settings where organization_id = $1",
+      [DEMO_IDS.organization]
+    );
     try {
       await pool.query(
         `insert into users (id, organization_id, role, display_name, status, created_at)
          values ($1, $2, 'learner', 'No Email Learner', 'active', now() - interval '5 days')`,
         [learnerId, DEMO_IDS.organization]
       );
+      await makeReminderEligible(learnerId);
 
       await expect(repositories.manager.queueReminder(DEMO_IDS.manager, learnerId, "missing-email-request", "email"))
         .rejects.toThrow("MANAGER_REMINDER_EMAIL_MISSING");
       await expect(pool.query("select count(*)::int as count from reminders where learner_id = $1", [learnerId]))
         .resolves.toMatchObject({ rows: [{ count: 0 }] });
     } finally {
+      await pool.query("update organization_settings set configuration = $2::jsonb where organization_id = $1", [DEMO_IDS.organization, JSON.stringify(settings.rows[0]?.configuration ?? {})]);
       await pool.query("delete from jobs where payload->>'reminderId' in (select id::text from reminders where learner_id = $1)", [learnerId]);
       await pool.query("delete from audit_events where entity_id = $1", [learnerId]);
       await pool.query("delete from notification_deliveries where reminder_id in (select id from reminders where learner_id = $1)", [learnerId]);
       await pool.query("delete from reminders where learner_id = $1", [learnerId]);
+      await pool.query("delete from enrollments where learner_id = $1", [learnerId]);
       await pool.query("delete from users where id = $1", [learnerId]);
     }
   });
@@ -729,6 +795,7 @@ describe("E4S repositories", () => {
          values ($1, $2, 'learner', 'No Webhook Learner', 'no-webhook@example.com', 'active', now() - interval '5 days')`,
         [learnerId, DEMO_IDS.organization]
       );
+      await makeReminderEligible(learnerId);
       await pool.query(
         "update organization_settings set configuration = configuration || $2::jsonb where organization_id = $1",
         [DEMO_IDS.organization, JSON.stringify({ baseWebhookUrl: "" })]
@@ -743,6 +810,7 @@ describe("E4S repositories", () => {
       await pool.query("delete from audit_events where entity_id = $1", [learnerId]);
       await pool.query("delete from notification_deliveries where reminder_id in (select id from reminders where learner_id = $1)", [learnerId]);
       await pool.query("delete from reminders where learner_id = $1", [learnerId]);
+      await pool.query("delete from enrollments where learner_id = $1", [learnerId]);
       await pool.query("delete from users where id = $1", [learnerId]);
       await pool.query("update organization_settings set configuration = $2::jsonb where organization_id = $1", [DEMO_IDS.organization, JSON.stringify(settings.rows[0]?.configuration ?? {})]);
     }

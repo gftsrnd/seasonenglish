@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 
@@ -41,14 +41,14 @@ describe("micro-lesson regeneration API", () => {
       await seedDemo(client);
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2)",
-        [DEMO_IDS.learner, await createCredentialHash("learner-pass")]
+        [DEMO_IDS.learner, await createPinHash("123456")]
       );
     } finally { client.release(); }
     await app.ready();
     const login = await app.inject({
       method: "POST",
       url: "/api/auth/learner/login",
-      payload: { email: "minh.anh.nguyen@e4s.local", password: "learner-pass" }
+      payload: { email: "minh.anh.nguyen@e4s.local", pin: "123456" }
     });
     expect(login.statusCode, login.body).toBe(200);
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";

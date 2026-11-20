@@ -36,9 +36,11 @@ describe("onboarding and learner router fidelity", () => {
   it("keeps the canonical new-learner onboarding framing and choice groups", () => {
     const { container } = render(<LearnerOnboard view={{ mode: "new", profile: {} }} actions={actions()} />);
 
-    expect(screen.getByText("Hồ sơ")).toBeInTheDocument();
+    // Owner 19/11: no uppercase "Hồ sơ" eyebrow above the title any more.
+    expect(screen.queryByText("Hồ sơ", { selector: ".eyebrow" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Cho Season biết về bạn nhé" })).toBeInTheDocument();
-    expect(container.querySelector("img[data-product-art='mascot']")).toHaveAttribute("src", "/media/mascot/season-bear.png");
+    // The onboarding mascot is now the learner's avatar character art.
+    expect(container.querySelector(".learner-mascot--onboard img")?.getAttribute("src")).toMatch(/^\/media\/avatars\/[a-z-]+\.webp$/);
     expect(screen.queryByTestId("season-mark")).not.toBeInTheDocument();
     expect(screen.getByText(/dùng thông tin này để chọn ví dụ sát công việc và cách học hợp với bạn/i)).toBeInTheDocument();
     expect(screen.queryByText(/bước 1 · hồ sơ · đang làm/i)).not.toBeInTheDocument();
@@ -75,7 +77,8 @@ describe("onboarding and learner router fidelity", () => {
       device: "both", selfLevel: "A2", certificates: [{ type: "TOEIC", result: "650", year: "2023" }]
     } }} actions={actions()} />);
 
-    expect(screen.getByText("Hồ sơ")).toBeInTheDocument();
+    // Owner 19/11: no uppercase "Hồ sơ" eyebrow above the title any more.
+    expect(screen.queryByText("Hồ sơ", { selector: ".eyebrow" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Sửa hồ sơ của bạn" })).toBeInTheDocument();
     expect(screen.queryByText(/bước 1 · hồ sơ · đang làm/i)).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "← Quay lại" })).toHaveLength(2);
@@ -97,7 +100,9 @@ describe("onboarding and learner router fidelity", () => {
       cefr: "A2", wordSet: { id: "set-1", topic: "Meetings", cefr: "A2", source: "weekly", words: [] }, games: [],
       arena: { eligible: false, requiredLevel: "B1", points: 0, pendingDuels: 0 }
     } }} callbacks={actions()} />);
-    expect(screen.getByRole("note")).toHaveTextContent(/không tìm thấy trò chơi/i);
+    // Error pages use the shared NotFoundState card.
+    expect(screen.getByRole("heading", { name: "Chưa thể mở trang" })).toBeInTheDocument();
+    expect(screen.getByText(/không tìm thấy trò chơi/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /mini game/i })).toHaveAttribute("href", "/games");
   });
 });

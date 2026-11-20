@@ -26,6 +26,11 @@ describe("assessment runtime API", () => {
          values ($1, $2, 'learner', 'Runtime API Learner', 'runtime-api@e4s.local')`,
         [runtimeLearnerId, DEMO_IDS.organization]
       );
+      // Placement starts only after the learner profile is complete.
+      await client.query(
+        "insert into learner_profiles (user_id, profile, completed_at) select $1, profile, now() from learner_profiles where user_id = $2",
+        [runtimeLearnerId, DEMO_IDS.learner]
+      );
       await client.query(
         `insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)`,
         [runtimeLearnerId, await createPinHash("654321"), DEMO_IDS.learner, await createPinHash("123456")]

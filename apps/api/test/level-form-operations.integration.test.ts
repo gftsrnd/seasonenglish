@@ -1,15 +1,19 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { levelUpDefinition, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
+import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
+import { assembleLevelFormFromAi } from "../src/modules/assessment/routes.js";
+import { aiSlices, neutralQuestions } from "./support/level-form-fixture.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 const draftVersionId = "00000000-0000-4000-8000-000000000901";
 const inUseVersionId = "00000000-0000-4000-8000-000000000902";
 const inUseAttemptId = "00000000-0000-4000-8000-000000000903";
+// A canonical B1 level form (75 min; 20/40/2/4 tasks): the structure staff tools list and publish today.
+const levelUpDefinition = assembleLevelFormFromAi("B1", aiSlices(neutralQuestions("reading", 40)), { seed: "level-form-operations", now: new Date("2026-11-11T00:00:00Z") }).blueprint;
 
 describe("level-form preview/version/delete API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -23,6 +27,17 @@ describe("level-form preview/version/delete API", () => {
       await resetPublicSchema(client);
       await migrateDatabase(client);
       await seedDemo(client);
+      // The demo seed no longer ships the B1 level-up form (Pass Course replaced it); add it for these cases.
+      await client.query(
+        `insert into assessment_definitions (id, organization_id, assessment_key, kind, title)
+         values ($1, $2, 'levelup-b1', 'level_up', 'Đề thi lên mức B1')`,
+        [DEMO_IDS.levelUpDefinition, DEMO_IDS.organization]
+      );
+      await client.query(
+        `insert into assessment_versions (id, definition_id, version, status, blueprint, published_at)
+         values ($1, $2, 1, 'published', $3::jsonb, now())`,
+        [DEMO_IDS.levelUpVersion, DEMO_IDS.levelUpDefinition, JSON.stringify(levelUpDefinition)]
+      );
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)",
         [

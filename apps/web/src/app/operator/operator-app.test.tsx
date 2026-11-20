@@ -55,13 +55,12 @@ describe("Operator app rebuild", () => {
     const user = userEvent.setup();
     const onApprovePlacement = vi.fn();
     const onChangeLevel = vi.fn();
-    const onAssignWeeklyPractice = vi.fn();
     render(<OperatorDashboard view={{
       week: { current: 2, total: 5, topic: "Workplace communication" },
       aiConnected: false,
       openAppeals: 2,
       topicReports: [{ id: "r1", learnerName: "Lan", at: "14/10/2026 08:00", inputs: [{ input: "casino", reason: "Chủ đề không phù hợp" }] }],
-      pending: [{ id: "u1", name: "Lan", submittedAt: "14/10/2026 07:30", total: 72, rawLevel: "A2", aiSuggestedCefr: "B1", aiScored: true, humanScored: true, sectionScores: [{ label: "Nghe", percent: 75 }], suggestedLevel: "B1", levels: ["A1", "A2", "B1"], profileSummary: "Tester · QA", monthlyGoal: "Thuyết trình ngắn" }],
+      pending: [{ id: "u1", kind: "placement", name: "Lan", submittedAt: "14/10/2026 07:30", total: 72, rawLevel: "A2", aiSuggestedCefr: "B1", aiScored: true, humanScored: true, sectionScores: [{ label: "Nghe", percent: 75 }], suggestedLevel: "B1", levels: ["A1", "A2", "B1"], profileSummary: "Tester · QA", monthlyGoal: "Thuyết trình ngắn" }],
       levelRequests: [{ id: "q1", learnerName: "Minh", from: "A2", to: "B1", sentAt: "14/10/2026", testSummary: "80/100", challengeSummary: "4/5" }],
       ready: [{ id: "u2", name: "Hoa", cefr: "A2", metrics: "bài 12 · đúng lần 1 86%" }],
       weak: [{ id: "u3", name: "Nam", cefr: "B1", metrics: "tuần 1: 72% sai" }],
@@ -80,7 +79,6 @@ describe("Operator app rebuild", () => {
       onDemote: vi.fn(),
       onChangeLevel,
       onEditGoal: vi.fn(),
-      onAssignWeeklyPractice,
       onViewProfile: vi.fn(),
       onSetLevelDirect: vi.fn(),
       onOpenAppeals: vi.fn(),
@@ -122,10 +120,8 @@ describe("Operator app rebuild", () => {
     expect(onApprovePlacement).toHaveBeenCalledWith("u1", "A2");
     await user.click(within(screen.getByTestId("approved-u5")).getByRole("button", { name: "Đổi level" }));
     expect(onChangeLevel).toHaveBeenCalledWith("u5");
-    await user.click(within(screen.getByTestId("approved-u5")).getByRole("button", { name: "Giao bài tuần" }));
-    expect(onAssignWeeklyPractice).toHaveBeenCalledWith("u5");
-    expect(within(screen.getByTestId("approved-u5")).getByRole("button", { name: "Giao bài tuần" }).parentElement).toHaveClass("operator-approved-actions");
-    expect(within(screen.getByTestId("approved-u5")).getByRole("button", { name: "Giao bài tuần" })).toHaveClass("operator-approved-weekly-action");
+    // Weekly practice assignment ("Giao bài tuần") was removed with the weekly content flow.
+    expect(within(screen.getByTestId("approved-u5")).queryByRole("button", { name: "Giao bài tuần" })).not.toBeInTheDocument();
     expect(screen.getByRole("table")).toHaveClass("operator-action-table");
     expect(within(screen.getByTestId("approved-u5")).getByText("Vy").closest("td")).toHaveAttribute("data-label", "Người học");
     expect(within(screen.getByTestId("approved-u5")).getByRole("button", { name: "Đổi level" }).closest("td")).toHaveAttribute("data-label", "Thao tác");
@@ -298,78 +294,6 @@ describe("Operator app rebuild", () => {
     expect(onOpenSettings).not.toHaveBeenCalled();
   });
 
-
-  it("keeps AI regrade and an editable manual score with feedback available after a submission was graded", async () => {
-    const user = userEvent.setup();
-    const onGradeAi = vi.fn();
-    const onGradeManual = vi.fn();
-    render(<OperatorReview view={{
-      activeTab: "subs", counts: { subs: 1, coach: 0, weekly: 0, appeals: 0, attempts: 0, tests: 0 },
-      submissions: [{
-        id: "submission-graded", learnerName: "Việt", cefr: "A2", week: 2, type: "writing",
-        submittedAt: "27/10/2026 19:57", operatorChecked: false, task: "Write 3–5 sentences.",
-        guidance: "Dùng ít nhất 3 từ trong bài tuần này.", requiredVocabulary: ["incident", "corridor", "report"],
-        text: "A short answer.",
-        total: 100, rubric: { meaning: 5, vocab: 5, grammar: 5 }, aiGraded: false, feedback: "Nhận xét cũ", suggestions: []
-      }], coachTurns: [], weeklyPractices: [], appeals: [], attempts: [], tests: [], aiConnected: true
-    } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi, onGradeManual, onDecideAppeal: vi.fn(), onViewTest: vi.fn() } as any} />);
-
-    expect(screen.getByText("1 bài · 0 chưa chấm")).toBeInTheDocument();
-    const group = screen.getAllByText("Việt")[0]!.closest("details")!;
-    expect(group).not.toHaveAttribute("open");
-    await user.click(group.querySelector("summary")!);
-    expect(group).toHaveAttribute("open");
-    expect(screen.queryByRole("checkbox", { name: "Đã xem bài" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "Đã đọc mẫu" })).not.toBeInTheDocument();
-    expect(screen.getByText("Đề bài")).toBeInTheDocument();
-    expect(screen.getByText("Hướng dẫn")).toBeInTheDocument();
-    expect(screen.getByText("Từ bắt buộc")).toBeInTheDocument();
-    expect(screen.getByText("incident, corridor, report")).toBeInTheDocument();
-    expect(screen.getByText("Bài làm của học viên")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Nội dung bài nộp của Việt" })).toHaveClass("operator-submission-content");
-    expect(screen.getByRole("region", { name: "Kết quả và nhận xét của Việt" })).toHaveClass("operator-submission-result");
-    const resultSummary = screen.getByLabelText("Kết quả chấm");
-    expect(resultSummary).toHaveClass("operator-submission-result-summary");
-    expect(within(resultSummary).getByText("100/100")).toBeInTheDocument();
-    const aiDetail = screen.getByText("Nhận xét và gợi ý sửa (0)").closest("details")!;
-    expect(aiDetail).not.toHaveAttribute("open");
-    const grader = screen.getByText("Chấm lại / chỉnh kết quả").closest("details")!;
-    expect(grader).toHaveClass("operator-submission-grader");
-    expect(grader).not.toHaveAttribute("open");
-    await user.click(within(grader).getByText("Chấm lại / chỉnh kết quả"));
-    const scoreGroup = screen.getByRole("group", { name: "Ba tiêu chí chấm điểm" });
-    expect(scoreGroup).toHaveClass("operator-submission-score-grid");
-    expect(within(scoreGroup).getAllByRole("spinbutton")).toHaveLength(3);
-    await user.click(screen.getByRole("button", { name: "Chấm lại bằng AI" }));
-    expect(onGradeAi).toHaveBeenCalledWith("submission-graded");
-    expect(screen.getByRole("spinbutton", { name: "Đúng ý" })).toHaveValue(5);
-    expect(screen.getByRole("spinbutton", { name: "Từ vựng" })).toHaveValue(5);
-    expect(screen.getByRole("spinbutton", { name: "Ngữ pháp" })).toHaveValue(5);
-    const feedback = screen.getByRole("textbox", { name: "Nhận xét" });
-    expect(feedback).toHaveValue("Nhận xét cũ");
-    await user.clear(feedback);
-    await user.type(feedback, "Cần dùng câu tự nhiên hơn.");
-    await user.click(screen.getByRole("button", { name: "Lưu kết quả chấm" }));
-    expect(onGradeManual).toHaveBeenCalledWith("submission-graded", {
-      meaning: 5, vocabulary: 5, grammar: 5, feedback: "Cần dùng câu tự nhiên hơn."
-    });
-  });
-
-  it("separates the ungraded state from the submission brief", async () => {
-    const user = userEvent.setup();
-    render(<OperatorReview view={{
-      activeTab: "subs", counts: { subs: 1, coach: 0, weekly: 0, appeals: 0, attempts: 0, tests: 0 },
-      submissions: [{ id: "submission-new", learnerName: "An", cefr: "A1", week: 1, type: "writing",
-        submittedAt: "27/10/2026 20:00", operatorChecked: false, task: "Write three sentences.",
-        guidance: "Viết ba câu ngắn.", requiredVocabulary: ["fall", "floor", "report"], text: "A man fell down." }],
-      coachTurns: [], weeklyPractices: [], appeals: [], attempts: [], tests: [], aiConnected: true
-    } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn() } as any} />);
-
-    const group = screen.getAllByText("An")[0]!.closest("details")!;
-    await user.click(group.querySelector("summary")!);
-    expect(screen.getByText("Chưa chấm").closest(".operator-submission-status-row")).not.toBeNull();
-  });
-
   it("shows Coach conversations without the removed review checkbox", async () => {
     const user = userEvent.setup();
     render(<OperatorReview view={{
@@ -410,116 +334,9 @@ describe("Operator app rebuild", () => {
     render(<OperatorReview mode="assessment" view={{ activeTab: "tests", counts: { subs: 0, coach: 0, appeals: 0, attempts: 0, tests: 1 }, submissions: [], coachTurns: [], appeals: [], attempts: [], tests: [{ id: "test-1", learnerName: "Lan", kind: "placement", submittedAt: "15/10/2026", total: 78, rawLevel: "B1", aiSuggestedCefr: "B1" }] } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn() }} />);
 
     expect(screen.getByRole("table")).toHaveClass("operator-action-table");
-    expect(screen.getByRole("button", { name: "Xem" }).closest("td")).toHaveAttribute("data-label", "Thao tác");
-  });
-
-  it("edits weekly practice in its own review tab", async () => {
-    const user = userEvent.setup();
-    const onSaveWeeklyPractice = vi.fn();
-    render(<OperatorReview view={{
-      activeTab: "weekly", counts: { subs: 0, coach: 0, weekly: 1, appeals: 0, attempts: 0, tests: 0 },
-      submissions: [], coachTurns: [], appeals: [], attempts: [], tests: [],
-      weeklyPractices: [{ id: "1:A2", week: 1, cefr: "A2", topic: "Asking for directions", status: "approved", version: 3, task: "Old task", guidance: "Old guidance", requiredVocabulary: ["left", "right"] }]
-    } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn(), onSaveWeeklyPractice }} />);
-
-    expect(screen.getAllByRole("tab")[0]).toHaveAccessibleName("Đề bài tuần (1)");
-    expect(screen.getByRole("tab", { name: "Đề bài tuần (1)" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("Tuần 1 · Asking for directions")).toBeInTheDocument();
-    await user.clear(screen.getByRole("textbox", { name: "Đề bài · Tuần 1 · A2" }));
-    await user.type(screen.getByRole("textbox", { name: "Đề bài · Tuần 1 · A2" }), "Write four sentences.");
-    await user.clear(screen.getByRole("textbox", { name: "Từ bắt buộc · Tuần 1 · A2" }));
-    await user.type(screen.getByRole("textbox", { name: "Từ bắt buộc · Tuần 1 · A2" }), "left, right, left, straight");
-    await user.click(screen.getByRole("button", { name: "Lưu bản nháp · Tuần 1 · A2" }));
-
-    expect(onSaveWeeklyPractice).toHaveBeenCalledWith({
-      week: 1, cefr: "A2", expectedVersion: 3,
-      task: "Write four sentences.", guidance: "Old guidance", requiredVocabulary: ["left", "right", "straight"]
-    });
-  });
-
-  it("orders weekly-practice editors by week and then CEFR level", () => {
-    render(<OperatorReview view={{
-      activeTab: "weekly", counts: { subs: 0, coach: 0, weekly: 4, appeals: 0, attempts: 0, tests: 0 },
-      submissions: [], coachTurns: [], appeals: [], attempts: [], tests: [],
-      weeklyPractices: [
-        { id: "2:B1", week: 2, cefr: "B1", topic: "Week two", status: "draft", version: 1, task: "Task", guidance: "Guide", requiredVocabulary: [] },
-        { id: "1:B2", week: 1, cefr: "B2", topic: "Week one", status: "draft", version: 1, task: "Task", guidance: "Guide", requiredVocabulary: [] },
-        { id: "2:A1", week: 2, cefr: "A1", topic: "Week two", status: "draft", version: 1, task: "Task", guidance: "Guide", requiredVocabulary: [] },
-        { id: "1:A2", week: 1, cefr: "A2", topic: "Week one", status: "draft", version: 1, task: "Task", guidance: "Guide", requiredVocabulary: [] }
-      ]
-    } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn(), onSaveWeeklyPractice: vi.fn() }} />);
-
-    expect(screen.getAllByRole("button", { name: /Sinh bài cuối tuần ·/ }).map(button => button.getAttribute("aria-label"))).toEqual([
-      "Sinh bài cuối tuần · Tuần 1 · A2",
-      "Sinh bài cuối tuần · Tuần 1 · B2",
-      "Sinh bài cuối tuần · Tuần 2 · A1",
-      "Sinh bài cuối tuần · Tuần 2 · B1"
-    ]);
-  });
-
-  it("generates an independent weekly-practice draft for each level from the weekly topic and vocabulary", async () => {
-    const user = userEvent.setup();
-    render(<OperatorReview view={{
-      activeTab: "weekly", counts: { subs: 0, coach: 0, weekly: 2, appeals: 0, attempts: 0, tests: 0 },
-      submissions: [], coachTurns: [], appeals: [], attempts: [], tests: [],
-      weeklyPractices: [
-        { id: "1:A2", week: 1, cefr: "A2", topic: "Asking for directions", status: "draft", version: 3, task: "", guidance: "", requiredVocabulary: ["left", "right", "straight"] },
-        { id: "1:B1", week: 1, cefr: "B1", topic: "Asking for directions", status: "draft", version: 2, task: "", guidance: "", requiredVocabulary: ["route", "landmark"] }
-      ]
-    } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn(), onSaveWeeklyPractice: vi.fn() }} />);
-
-    expect(screen.getAllByRole("button", { name: /Sinh bài cuối tuần/ })).toHaveLength(2);
-    await user.click(screen.getByRole("button", { name: "Sinh bài cuối tuần · Tuần 1 · A2" }));
-
-    const task = screen.getByRole("textbox", { name: "Đề bài · Tuần 1 · A2" });
-    expect((task as HTMLTextAreaElement).value).toContain("Asking for directions");
-    expect((screen.getByRole("textbox", { name: "Hướng dẫn · Tuần 1 · A2" }) as HTMLTextAreaElement).value).toContain("left, right, straight");
-    expect(screen.queryByText("Nghe")).not.toBeInTheDocument();
-  });
-
-  it("generates a new weekly-practice option on every click", async () => {
-    const user = userEvent.setup();
-    render(<OperatorReview view={{
-      activeTab: "weekly", counts: { subs: 0, coach: 0, weekly: 1, appeals: 0, attempts: 0, tests: 0 },
-      submissions: [], coachTurns: [], appeals: [], attempts: [], tests: [],
-      weeklyPractices: [
-        { id: "1:A2", week: 1, cefr: "A2", topic: "Reporting a safety incident", status: "draft", version: 3, task: "Old task", guidance: "Old guidance", requiredVocabulary: ["fell", "corridor", "witness"] }
-      ]
-    } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn(), onSaveWeeklyPractice: vi.fn() }} />);
-
-    const generate = screen.getByRole("button", { name: "Sinh bài cuối tuần · Tuần 1 · A2" });
-    const task = screen.getByRole("textbox", { name: "Đề bài · Tuần 1 · A2" });
-    const guidance = screen.getByRole("textbox", { name: "Hướng dẫn · Tuần 1 · A2" });
-
-    await user.click(generate);
-    const first = `${(task as HTMLTextAreaElement).value}\n${(guidance as HTMLTextAreaElement).value}`;
-    await user.click(generate);
-    const second = `${(task as HTMLTextAreaElement).value}\n${(guidance as HTMLTextAreaElement).value}`;
-    await user.click(generate);
-    const third = `${(task as HTMLTextAreaElement).value}\n${(guidance as HTMLTextAreaElement).value}`;
-
-    expect(new Set([first, second, third]).size).toBe(3);
-    expect(generate).toBeEnabled();
-  });
-
-
-  it("keeps a weekly-practice edit visible and prevents duplicate saves when saving fails", async () => {
-    const user = userEvent.setup();
-    const onSaveWeeklyPractice = vi.fn().mockRejectedValue(new Error("Nội dung đã thay đổi ở nơi khác."));
-    render(<OperatorReview view={{
-      activeTab: "weekly", counts: { subs: 0, coach: 0, weekly: 1, appeals: 0, attempts: 0, tests: 0 },
-      submissions: [], coachTurns: [], appeals: [], attempts: [], tests: [],
-      weeklyPractices: [{ id: "1:A2", week: 1, cefr: "A2", topic: "Asking for directions", status: "approved", version: 3, task: "Old task", guidance: "Old guidance", requiredVocabulary: ["left"] }]
-    } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn(), onSaveWeeklyPractice }} />);
-
-    const task = screen.getByRole("textbox", { name: "Đề bài · Tuần 1 · A2" });
-    await user.clear(task);
-    await user.type(task, "Keep this draft");
-    await user.dblClick(screen.getByRole("button", { name: "Lưu bản nháp · Tuần 1 · A2" }));
-
-    await waitFor(() => expect(onSaveWeeklyPractice).toHaveBeenCalledTimes(1));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Nội dung đã thay đổi ở nơi khác.");
-    expect(task).toHaveValue("Keep this draft");
+    // The results table lays out phone rows with a grid on named cells instead of data-label captions.
+    expect(screen.getByRole("columnheader", { name: "Thao tác" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Xem" }).closest("td")).toHaveClass("operator-result-action");
   });
 
   it("groups lesson attempts by learner instead of repeating learner rows", async () => {

@@ -145,7 +145,8 @@ describe("operator granular lesson editor", () => {
     }));
   });
 
-  it("keeps relationship data and shows separate audio uploads for expanded words", async () => {
+  // Heavy form render: give it room when the whole suite runs in parallel (timed out at 5s under load).
+  it("keeps relationship data and shows separate audio uploads for expanded words", { timeout: 20_000 }, async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);

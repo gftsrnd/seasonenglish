@@ -13,7 +13,7 @@ function lesson(dayNumber: number) {
     dayNumber, title: `Bài soạn T${dayNumber + 1}`, durationMinutes: 10,
     parts: [
       "objective", "instruction", "vocabulary", "grammar", "pronunciation",
-      "listening", "reading", "writing", "speaking"
+      "listening", "reading", "writing", "word_class", "word_use", "speaking"
     ].map(code => ({ code, title: code, content: { text: `Nội dung ${code}` } }))
   };
 }
@@ -94,12 +94,13 @@ describe("granular lesson-set authoring", () => {
     expect(inUse.json()).toMatchObject({ code: "CONTENT_DRAFT_IN_USE" });
   });
 
-  it("allows Manager mutations on shared lesson-authoring routes", async () => {
+  it("keeps Manager read-only on lesson-authoring routes", async () => {
     const response = await app.inject({
       method: "PUT", url: "/api/v1/content/lesson-sets/2/B1/draft/lessons/1",
       headers: { cookie: managerCookie }, payload: { expectedVersion: 0, ...lesson(1) }
     });
-    expect(response.statusCode, response.body).toBe(200);
+    expect(response.statusCode, response.body).toBe(403);
+    expect(response.json()).toMatchObject({ code: "FORBIDDEN" });
   });
 
 });

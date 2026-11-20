@@ -12,7 +12,15 @@ describe("frozen monthly illustrations", () => {
       monthly_core_terms: [{ id: "core-1", word: "client" }], frozen_illustrations: [{ word: "client", artifactKey: "content-media/client.png" }],
       progress_status: null, progress_score: null, progress_evidence: null, progress_updated_at: null
     };
-    const query = vi.fn(async (sql: string) => ({ rows: sql.includes("monthly_core_terms") ? [row] : [], rowCount: sql.includes("monthly_core_terms") ? 1 : 0 }));
+    // Monthly lessons are listed only after the learner's monthly access check succeeds.
+    const access = {
+      system_date: "2026-11-06", month: "2026-11", cefr: "A1", level_started_on: "2026-11-02", exam_date: "2026-11-30",
+      published_on: "2026-11-01", reset_on: null, unlocked_on: null, graduated: false
+    };
+    const query = vi.fn(async (sql: string) => {
+      const rows = sql.includes("monthly_core_terms") ? [row] : sql.includes("as unlocked_on") ? [access] : [];
+      return { rows, rowCount: rows.length };
+    });
     const learning = createRepositories({ query } as unknown as Pool).learning;
     const list = await learning.listMonthlyLessons("learner-1", "2026-11");
     const opened = await learning.findLesson("learner-1", "lesson-1");

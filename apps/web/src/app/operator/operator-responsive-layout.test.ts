@@ -55,7 +55,9 @@ describe("Operator responsive layout guardrails", () => {
   it("wraps long prompt tokens and keeps narrow detail tables inside dialogs", () => {
     expect(appCss).toMatch(/\.app-operator\[aria-label="Prompt"\] > \.card > \.row\.between > h3\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
     expect(appCss).toMatch(/\.operator-modal-scope \.list \.item\s*\{[\s\S]*?display:\s*flex/);
-    expect(appCss).toMatch(/\.operator-detail-modal \.table-wrap table\s*\{[\s\S]*?table-layout:\s*fixed/);
+    // Phone detail tables keep natural column widths and scroll sideways inside their own box instead of a fixed layout.
+    expect(appCss).toMatch(/\.operator-detail-modal \.table-wrap\s*\{[^}]*overflow-x:\s*auto/);
+    expect(appCss).toMatch(/\.operator-detail-modal \.table-wrap table\s*\{[^}]*width:\s*max-content[^}]*table-layout:\s*auto/);
   });
 
   it("applies roomy lesson-editor rules to the body-level portal", () => {
@@ -102,7 +104,8 @@ describe("Operator responsive layout guardrails", () => {
   it("keeps every app Operator destination reachable in the tablet header", () => {
     expect(appCss).toMatch(/@media \(min-width:\s*761px\) and \(max-width:\s*960px\)[\s\S]*?body:has\(\.app-operator\) \.topbar nav\s*\{[\s\S]*?flex:\s*1 1 auto[\s\S]*?max-width:\s*none[\s\S]*?overflow-x:\s*auto/);
     expect(appCss).toMatch(/body:has\(\.app-operator\) \.topbar nav a\s*\{[\s\S]*?display:\s*inline-flex[\s\S]*?flex:\s*0 0 auto/);
-    expect(appCss).not.toMatch(/body:has\(\.app-operator\) \.topbar nav a\s*\{[\s\S]*?display:\s*none/);
+    // Only check inside the nav-link rule itself; [\s\S] used to run on into unrelated later rules.
+    expect(appCss).not.toMatch(/body:has\(\.app-operator\) \.topbar nav a\s*\{[^}]*display:\s*none/);
   });
 
 });

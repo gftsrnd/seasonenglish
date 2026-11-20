@@ -1142,7 +1142,9 @@ describe("OperatorRouteController", () => {
     const table = await screen.findByRole("table", { name: "Lượt làm bài thi" });
     const row = within(table).getByRole("row", { name: /Lan.*Bài thi tháng/ });
     expect(monthlyTab).toHaveAttribute("aria-selected", "true");
-    expect(within(row).getAllByText("—")).toHaveLength(3);
+    // Only the total column remains for the score; it shows a neutral dash before scoring.
+    expect(within(row).getAllByText("—")).toHaveLength(1);
+    expect(row.querySelector(".operator-result-score")).toHaveTextContent("—");
     expect(within(table).queryByText("Vy")).not.toBeInTheDocument();
     expect(client.getAssessmentFormPreviews).toHaveBeenCalledWith("final");
   });

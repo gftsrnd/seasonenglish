@@ -81,7 +81,9 @@ describe("monthly content publication", () => {
     });
     const publication = await repositories.monthlyContent.publishMonth(DEMO_IDS.operator, frameworkId);
     expect(publication.publishedOn).toBe("2026-11-10");
-    expect(await repositories.learning.listMonthlyLessons(DEMO_IDS.learner, month)).toEqual([]);
+    // A learner published mid-month studies the month as uncounted ("học thử") instead of waiting for the next month.
+    expect((await repositories.learning.listMonthlyLessons(DEMO_IDS.learner, month)).map((lesson) => lesson.id))
+      .toEqual(days.slice(0, 2).map((day) => day.lessonId));
     expect(await repositories.monthlyContent.publishMonth(DEMO_IDS.operator, frameworkId)).toEqual(publication);
     expect((await pool.query("select count(*)::int as count from audit_events where action = 'monthly.framework_published' and entity_id = $1", [frameworkId])).rows[0]?.count).toBe(1);
   });
