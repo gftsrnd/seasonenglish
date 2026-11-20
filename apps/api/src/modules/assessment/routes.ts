@@ -1072,7 +1072,9 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
           message: "Bài test cũ không thể chuyển an toàn sang phiên bản mới. Bấm bắt đầu lại để dùng đúng cấu trúc đề mới."
         });
       }
-      if (resumed.attempt) return reply.code(201).send(assessmentView(definition, resumed.attempt));
+      // Resume with the attempt's own form. `definition` was read before this request found the attempt; when two starts race,
+      // it can be a different bank mix than the one the attempt stored (seen as a flaky concurrent-start test in CI).
+      if (resumed.attempt) return reply.code(201).send(assessmentView(await definitionForAttempt(repositories.assessments, resumed.attempt) ?? definition, resumed.attempt));
       const profile = await repositories.learning.getProfile(learnerId);
       if (!profile || !isLearnerProfileComplete(profile.profile)) {
         return reply.code(409).send({ code: "PLACEMENT_PROFILE_INCOMPLETE", message: "Hãy lưu đủ các mục bắt buộc trong hồ sơ trước khi làm bài kiểm tra đầu vào." });

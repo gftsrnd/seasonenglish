@@ -170,6 +170,10 @@ describe("assessment bank API lifecycle and immutable grading", () => {
       expect(r.json().attempt.id).toBe(id);
       expect(r.json().definition).toEqual(view.definition);
     }
+    // A later start (reload / second click) resumes the same mixed form, never the published default.
+    const resumedLater = await request("POST", "/api/v1/assessments/placement/start", student, {});
+    expect(resumedLater.statusCode, resumedLater.body).toBe(201);
+    expect(resumedLater.json().definition).toEqual(view.definition);
     expect(JSON.stringify(view)).not.toContain("correctAnswer");
     const result = await pool.query<{ manifest: BankManifest }>(
       "select manifest from assessment_bank_attempts where attempt_id=$1",
