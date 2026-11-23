@@ -2,6 +2,10 @@
 
 This folder holds code removed from the running app but kept for reference. It is **not compiled, tested or deployed**: every file has a `.txt` suffix so TypeScript and Vitest ignore it.
 
+## monthly-cycle/ (from 2026-11-23)
+
+The monthly learning cycle is being replaced by weekly courses (2 or 4 weeks). `monthly-cycle/README.md` lists every monthly file, which ones are reused for weekly courses and which will be moved here once replaced. The full monthly app is preserved as tag `legacy-monthly-cycle-2026-11-23` and branch `legacy/monthly-cycle`.
+
 ## weekly-content/ (moved 2026-11-20)
 
 The weekly content flow was replaced by the monthly cycle (`/op/months`, migration `0081_monthly_learning_cycle`).
